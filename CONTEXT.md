@@ -42,6 +42,23 @@ _Avoid_: Static data, constants
 Opinions layered over game data: skill ranks, builds and synergies, which may differ by context. Game data never depends on it.
 _Avoid_: Tier list, meta
 
+### Builds
+
+**Play context**:
+What the player is building for: Apotheosis, Main story (Lunatic/Lunatic+), Full route, or All. Filters which build templates apply; one global selection.
+_Avoid_: Mode, difficulty
+
+**Full route**:
+A single playthrough that weaves the non-grind DLC xenologues into the main campaign and paralogues, with Apotheosis as the capstone. No grind maps; DLC skills are reachable. Its build templates are curated from the user's own play, not community sources.
+_Avoid_: Hybrid run, DLC run
+
+**Build template**:
+A curated 5-slot skill loadout for one role, tagged with the play contexts it suits. Each slot is a fixed skill or an ordered preference group. Matched against a pairing's reachable skills to produce a coverage tier (5/5, 4/5, 3/5).
+_Avoid_: Build (alone, when the template is meant), preset (a preset weights stats)
+
+**Reclass cost**:
+The number of distinct classes a unit must pass through, beyond its starting class line, to learn every class skill in a build.
+
 ### Verification
 
 **Assumption**:
