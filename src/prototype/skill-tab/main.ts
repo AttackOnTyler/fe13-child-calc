@@ -17,6 +17,7 @@ export type SkState = State & {
   poolSort: 'rank' | 'skill' | 'source' | 'cost';
   showUnranked: boolean;
   panelTab: 'scoring' | 'skills';
+  skill: string | null; // skill inspected in the sidebar
 };
 
 type Variant = { name: string; hooks: (s: SkState, a: Analysis | null, row: Row | null) => Host.Hooks };
@@ -25,7 +26,7 @@ const KEYS = Object.keys(VARIANTS);
 
 const app = document.getElementById('app')!;
 const bar = document.getElementById('switcher')!;
-const s: SkState = { ...initialState(), ctx: 'All', sel: null, openBuild: null, poolSort: 'rank', showUnranked: false, panelTab: 'scoring' };
+const s: SkState = { ...initialState(), ctx: 'All', sel: null, openBuild: null, poolSort: 'rank', showUnranked: false, panelTab: 'scoring', skill: null };
 const all = enumerate();
 const byKey = new Map(all.map((r) => [r.key, r]));
 let variant = new URLSearchParams(location.search).get('variant') ?? 'D';
@@ -51,6 +52,8 @@ function render() {
   Host.render(app, s, rows, rows.length, all, VARIANTS[variant].hooks(s, a, row));
   const el = app.querySelector<HTMLElement>('.vb-scroll');
   if (el) el.scrollTop = sc;
+  if (el) app.style.setProperty('--centre-w', `${el.clientWidth}px`); // drawer spans the centre column
+  if (s.skill) app.querySelectorAll(`[data-ctl="skill"][data-v="${CSS.escape(s.skill)}"]`).forEach((x) => x.classList.add('sel-skill'));
   if (fk) app.querySelector<HTMLInputElement>(fk)?.focus();
   bar.innerHTML = import.meta.env.PROD
     ? ''
@@ -106,7 +109,7 @@ function apply(el: HTMLElement) {
     case 'dlc': s.dlc = input.checked; break;
     case 'secondGen': s.secondGen = input.checked; break;
     case 'parentQuery': s.parentQuery = v; break;
-    case 'selectChild': s.selectedChild = v; s.panelOpen = false; s.sel = null; s.panelTab = 'scoring'; break;
+    case 'selectChild': s.selectedChild = v; s.panelOpen = false; s.sel = null; s.skill = null; s.panelTab = 'scoring'; break;
     case 'col': s.cols[v as keyof State['cols']] = input.checked; break;
     case 'sort': s.sort = s.sort.col === v ? { col: v, dir: (s.sort.dir * -1) as 1 | -1 } : { col: v, dir: -1 }; break;
     case 'pickAF': {
@@ -125,6 +128,10 @@ function apply(el: HTMLElement) {
       s.sel = s.sel === v && variant !== 'C' ? null : v;
       s.openBuild = null;
       if (variant === 'C') { s.panelTab = 'skills'; s.panelOpen = true; }
+      break;
+    case 'skill':
+      s.skill = !v || s.skill === v ? null : v;
+      if (s.skill) s.panelOpen = true; // phone: bottom sheet
       break;
     case 'openBuild': s.openBuild = s.openBuild === v ? null : v; break;
     case 'poolSort': s.poolSort = v as SkState['poolSort']; break;
@@ -155,6 +162,8 @@ app.addEventListener('input', (e) => {
   if (el.dataset.ctl === 'parentQuery') apply(el);
   if (el.dataset.ctl === 'w') el.nextElementSibling!.textContent = el.value;
 });
+
+addEventListener('resize', () => render());
 
 rescore();
 render();

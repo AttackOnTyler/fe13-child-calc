@@ -81,13 +81,19 @@ tr.selrow td { background: #1d2a3b !important; }
 }
 
 /* ---- D: A drawer + B cards + C skills ---- */
-.vd-drawer { max-width: none; width: min(1100px, calc(100vw - 520px)); }
+.vd-drawer { max-width: none; min-width: 0; width: calc(var(--centre-w, 900px) - 12px); box-sizing: border-box; }
+[data-ctl="skill"] { cursor: pointer; } .skl:hover, .sk[data-ctl="skill"]:hover, .slot[data-ctl="skill"]:hover { text-decoration: underline; }
+.sel-skill { outline: 2px solid #ffe14d !important; outline-offset: 1px; border-radius: 3px; }
+.vd-skillcard { background: #15191e; border: 1px solid var(--accent); border-radius: 6px; padding: 8px 10px; margin-bottom: 10px; }
+.vd-skillcard header { display: flex; justify-content: space-between; align-items: center; font-size: 15px; }
+.vd-skillcard p { margin: 6px 0; } .vd-skillcard h5 { margin: 8px 0 2px; font-size: 11px; text-transform: uppercase; color: var(--muted); }
+.vd-skillcard ul { margin: 0; padding-left: 16px; } .vd-skillcard ul.rel { list-style: none; padding-left: 0; } .vd-skillcard li { margin: 2px 0; }
+.vd-ranks { display: flex; gap: 8px; flex-wrap: wrap; font-size: 11px; color: var(--muted); } .vd-ranks .cur { color: var(--text); font-weight: 700; }
 .vd-cols { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(240px, 1fr); gap: 16px; }
 .vd-cols h4 { margin: 6px 0 4px; font-size: 11px; text-transform: uppercase; color: var(--muted); }
 .vd-open { margin: 2px 0 6px; } .vd-close { cursor: pointer; }
 .vd-skills { border-left: 1px solid var(--line); padding-left: 12px; }
 @media (max-width: 700px) {
-  .vd-drawer { width: calc(100vw - 16px); }
   .vd-cols { grid-template-columns: 1fr; }
   .vd-skills { border-left: 0; padding-left: 0; }
 }

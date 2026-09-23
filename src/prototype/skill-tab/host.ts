@@ -13,6 +13,7 @@ export type Hooks = {
   centreHead?: string | null; // replaces the centre header
   panel?: string | null; // replaces the scoring panel body
   panelHead?: string; // extra bits in the panel head (tabs)
+  panelTop?: string | null; // pinned above the panel body
 };
 let H: Hooks = {};
 
@@ -136,6 +137,7 @@ export function render(root: HTMLElement, s: State, rows: Row[], total: number, 
     </main>
     <aside class="vb-panel ${s.panelOpen ? 'open' : ''}">
       <div class="vb-panel-head">${H.panelHead ?? '<strong>Scoring</strong>'}<button class="ghost only-phone" data-ctl="panel">✕</button></div>
+      ${H.panelTop ?? ''}
       ${H.panel ?? `<label class="blk">Preset ${W.presetSelect(s)}</label>
       <div class="blk">Context ${W.seg('ctx', ['All', 'Apotheosis', 'Main story', 'Full route'], (s as State & { ctx: string }).ctx)}</div>
       <div class="blk">Role ${W.roleSeg(s)} ${s.role === 'Support' ? W.rankSeg(s) : ''}</div>

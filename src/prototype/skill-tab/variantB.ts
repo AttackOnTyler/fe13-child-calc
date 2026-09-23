@@ -2,7 +2,7 @@
 // pairing (breadcrumb back to the table). Build-first: tiered build CARDS with one source line per
 // slot, then the skill pool as a sortable TABLE (skill · rank · best source · reclass · other sources).
 import type { Row } from '../pairing-table/data';
-import { RANK_LETTER, rank, rankChip, srcShort, srcText, type Analysis, type BuildMatch } from './skills';
+import { RANK_LETTER, rank, rankChip, skillLink, srcShort, srcText, type Analysis, type BuildMatch } from './skills';
 import type { Hooks } from './host';
 import type { SkState } from './main';
 
@@ -15,8 +15,8 @@ export const card = (b: BuildMatch, s: SkState) => `<article class="vbk-card t${
   <ol>${b.slots
     .map((sl) =>
       sl.skill
-        ? `<li>${rankChip(sl.skill, s.ctx)} <b>${sl.skill}</b>${sl.pref > 0 ? ` <span class="muted small">(fallback for ${sl.options[0]})</span>` : ''} <span class="muted">— ${srcText(sl.src)}</span></li>`
-        : `<li class="miss-slot">✕ <b>${sl.options.join(' / ')}</b> <span>— ${sl.reason}</span></li>`,
+        ? `<li>${rankChip(sl.skill, s.ctx)} <b>${skillLink(sl.skill)}</b>${sl.pref > 0 ? ` <span class="muted small">(fallback for ${sl.options[0]})</span>` : ''} <span class="muted">— ${srcText(sl.src)}</span></li>`
+        : `<li class="miss-slot">✕ <b>${sl.options.map((o) => skillLink(o)).join(' / ')}</b> <span>— ${sl.reason}</span></li>`,
     )
     .join('')}</ol>
   ${b.notes.length ? `<div class="notes">${b.notes.map((n) => `<div>★ ${n}</div>`).join('')}</div>` : ''}

@@ -2,7 +2,7 @@
 // panel flips to a Skills tab (Scoring is the other tab). Narrow, source-first: rally dots, then
 // "what each parent can give", then class skills bucketed by rank, then builds as an accordion.
 import type { Row } from '../pairing-table/data';
-import { RANK_LETTER, rank, srcShort, srcText, type Analysis } from './skills';
+import { RANK_LETTER, rank, skillLink, srcShort, srcText, type Analysis } from './skills';
 import type { Hooks } from './host';
 import type { SkState } from './main';
 
@@ -14,14 +14,14 @@ export function body(a: Analysis, s: SkState, opts: { builds?: boolean; title?: 
     const ks = [...p.skills].sort((x, y) => rank(y, s.ctx) - rank(x, s.ctx));
     const only = new Set(a.pool.filter((e) => e.onlyVia === label).map((e) => e.skill));
     return `<div class="vc-par"><div><b>${label}</b> <span class="muted small">${p.forced ? 'fixed' : 'passes 1'}</span></div>
-      <div class="chips">${ks.filter((k) => rank(k, s.ctx) >= 3 || only.has(k)).map((k) => `<span class="sk rk${rank(k, s.ctx)} ${only.has(k) ? 'only' : ''}" title="${only.has(k) ? 'only via ' + label : 'also learnable by class'}">${k}</span>`).join('') || '<span class="muted">nothing useful</span>'}</div>
+      <div class="chips">${ks.filter((k) => rank(k, s.ctx) >= 3 || only.has(k)).map((k) => `<span class="sk rk${rank(k, s.ctx)} ${only.has(k) ? 'only' : ''}" data-ctl="skill" data-v="${k}" title="${only.has(k) ? 'only via ' + label : 'also learnable by class'}">${k}</span>`).join('') || '<span class="muted">nothing useful</span>'}</div>
       <div class="muted small">${p.note}${only.size ? ` · outlined = only via ${label}` : ''}</div></div>`;
   };
   const classSkills = a.pool.filter((e) => e.via[0].kind !== 'parent');
   const buckets = [5, 4, 3, 2, 1]
     .map((r) => [r, classSkills.filter((e) => e.rank === r)] as const)
     .filter(([, es]) => es.length)
-    .map(([r, es]) => `<div class="vc-bucket"><b class="rk rk${r}">${RANK_LETTER[r]}</b><div>${es.map((e) => `<div>${e.skill} <span class="muted small">${srcShort(e.via[0])}${e.via[0].kind === 'class' && !e.via[0].start ? ' ⟳' : ''}</span></div>`).join('')}</div></div>`)
+    .map(([r, es]) => `<div class="vc-bucket"><b class="rk rk${r}">${RANK_LETTER[r]}</b><div>${es.map((e) => `<div>${skillLink(e.skill)} <span class="muted small">${srcShort(e.via[0])}${e.via[0].kind === 'class' && !e.via[0].start ? ' ⟳' : ''}</span></div>`).join('')}</div></div>`)
     .join('');
   const builds = a.builds
     .map((b) => {

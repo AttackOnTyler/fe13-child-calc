@@ -10,9 +10,9 @@ export const name = 'Inline drawer under the row';
 
 export const chip = (b: BuildMatch, i: number, s: SkState) => {
   const sl = b.slots[i];
-  if (!sl.skill) return `<span class="slot empty" title="${sl.options.join(' / ')} — ${sl.reason}">${sl.options[0]}</span>`;
+  if (!sl.skill) return `<span class="slot empty" data-ctl="skill" data-v="${sl.options[0]}" title="${sl.options.join(' / ')} — ${sl.reason}">${sl.options[0]}</span>`;
   const k = sl.src!.kind === 'parent' ? '↑' : sl.src!.kind === 'book' ? '◇' : sl.src!.kind === 'class' && sl.src!.start ? '' : '⟳';
-  return `<span class="slot rk${rank(sl.skill, s.ctx)}" title="${srcText(sl.src)}">${sl.skill}${k ? `<sup>${k}</sup>` : ''}${sl.pref > 0 ? '<sup class="muted">2nd</sup>' : ''}</span>`;
+  return `<span class="slot rk${rank(sl.skill, s.ctx)}" data-ctl="skill" data-v="${sl.skill}" title="${srcText(sl.src)}">${sl.skill}${k ? `<sup>${k}</sup>` : ''}${sl.pref > 0 ? '<sup class="muted">2nd</sup>' : ''}</span>`;
 };
 
 function builds(a: Analysis, s: SkState) {

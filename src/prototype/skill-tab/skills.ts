@@ -298,3 +298,84 @@ export const rankChip = (skill: string, ctx: Ctx) => {
   const r = rank(skill, ctx);
   return `<span class="rk rk${r}" title="rank ${RANK_LETTER[r]} in ${ctx}">${RANK_LETTER[r]}</span>`;
 };
+
+// ---- skill detail (descriptions PARAPHRASED from SF/FEW skill lists, not game text; rates from research §1) ----
+const INFO: Record<string, [string, string?]> = {
+  Galeforce: ['After the unit starts a fight and defeats the enemy, it can move again (once per turn).'],
+  Aether: ["Hits twice: the first strike heals half the damage dealt (Sol), the second ignores half the foe's Def/Res (Luna).", 'Skl/2 %'],
+  Luna: ["The attack ignores half of the enemy's Def/Res.", 'Skl %'],
+  Astra: ['Strikes five times in a row at half damage.', 'Skl/2 %'],
+  Sol: ['Heals the unit for half the damage dealt.', 'Skl %'],
+  Ignis: ['Adds half of Mag to damage for physical attacks, or half of Str for magical ones.', 'Skl %'],
+  Vengeance: ["Adds half the unit's missing HP to damage.", 'Skl × 2 %'],
+  Lethality: ['Defeats the enemy in one hit.', 'Skl/4 %'],
+  'Rightful King': ["+10 % to the activation rate of the unit's other skills."],
+  Vantage: ['Below half HP, the unit attacks first even when the enemy starts the fight.'],
+  Wrath: ['+20 crit while below half HP.'],
+  Lifetaker: ["Heals 50 % of max HP after defeating an enemy on the unit's own turn."],
+  Pavise: ['Halves damage from swords, lances, axes and beaststones.', 'Skl %'],
+  Aegis: ['Halves damage from bows, tomes and dragonstones.', 'Skl %'],
+  Renewal: ['Recovers 30 % of max HP at the start of each turn.'],
+  Armsthrift: ["The weapon doesn't lose a use on this attack.", 'Luck × 2 %'],
+  Counter: ['Returns damage taken from an adjacent attacker.'],
+  Miracle: ['Survives a would-be lethal hit with 1 HP if HP was above 1.', 'Luck %'],
+  Bowfaire: ['+5 Str when using a bow.'], Swordfaire: ['+5 Str when using a sword.'], Axefaire: ['+5 Str when using an axe.'],
+  Lancefaire: ['+5 Str when using a lance.'], Tomefaire: ['+5 Mag when using a tome.'],
+  'Dual Strike+': ['+10 % Dual Strike rate while this unit is paired.'], 'Dual Guard+': ['+10 % Dual Guard rate while this unit is paired.'],
+  'Dual Support+': ['Raises the support bonuses this unit gives and receives.'],
+  'Limit Breaker': ['+10 to every max stat except HP. DLC.'], Aggressor: ['+10 Atk when the unit or its partner starts the fight. DLC.'],
+  'All Stats +2': ['+2 to every stat. DLC.'], 'Speed +2': ['+2 Spd.'], 'Strength +2': ['+2 Str.'], 'Magic +2': ['+2 Mag.'], 'Skill +2': ['+2 Skl.'],
+  Defender: ['+1 to all stats while this unit leads a pair.'], Anathema: ['−10 Avoid and Dodge to enemies within 3 tiles.'],
+  'Hit Rate +20': ['+20 Hit.'], Prescience: ['+15 Hit and Avoid when the unit starts the fight.'], 'Even Rhythm': ['+10 Hit and Avoid on even turns.'],
+  Hex: ['−15 Avoid to adjacent enemies.'], Patience: ['+10 Hit and Avoid on the enemy phase.'], Focus: ['+10 crit when no ally is within 3 tiles.'],
+  Gamble: ['+10 crit, −5 Hit.'], Axebreaker: ['+50 Hit and Avoid against axe users.'], Swordbreaker: ['+50 Hit and Avoid against sword users.'],
+  Lancebreaker: ['+50 Hit and Avoid against lance users.'], Bowbreaker: ['+50 Hit and Avoid against bow users.'], Tomebreaker: ['+50 Hit and Avoid against tome users.'],
+  'Rally Strength': ['Rally: +4 Str to allies within 3 tiles for one turn.'], 'Rally Magic': ['Rally: +4 Mag.'], 'Rally Skill': ['Rally: +4 Skl.'],
+  'Rally Speed': ['Rally: +4 Spd.'], 'Rally Luck': ['Rally: +8 Luck.'], 'Rally Defence': ['Rally: +4 Def.'], 'Rally Resistance': ['Rally: +4 Res.'],
+  'Rally Movement': ['Rally: +1 Move.'], 'Rally Spectrum': ['Rally: +4 to every stat except Move.'], 'Rally Heart': ['Rally: +2 to every stat and +1 Move. DLC.'],
+  Charm: ['+5 Hit and Avoid to allies within 3 tiles.'], Solidarity: ['+10 crit and crit-avoid to adjacent allies.'],
+  Acrobat: ['Every passable tile costs only 1 Move.'], 'Movement +1': ['+1 Move.'], Deliverer: ['+2 Move while paired as the lead.'],
+  Veteran: ['1.5× EXP while paired as the lead.'], Discipline: ['Weapon rank rises twice as fast.'], 'Avoid +10': ['+10 Avoid.'],
+  'HP +5': ['+5 max HP.'], Zeal: ['+5 crit.'], Despoil: ['Chance to take a Bullion (S) on defeating an enemy.', 'Luck %'],
+  'Luck +4': ['+4 Luck.'], 'Resistance +2': ['+2 Res.'], 'Defence +2': ['+2 Def.'], Demoiselle: ['−2 damage taken by male allies within 3 tiles.'],
+  Relief: ['Recovers 20 % HP at turn start if no unit is within 3 tiles.'], Tantivy: ['+10 Hit and Avoid when no ally is within 3 tiles.'],
+  Healtouch: ['Healing staves restore 5 more HP.'], Locktouch: ['Opens doors and chests without keys.'], 'Outdoor Fighter': ['+10 Hit and Avoid outdoors.'],
+  'Indoor Fighter': ['+10 Hit and Avoid indoors.'], 'Lucky Seven': ['+20 Hit and Avoid for the first 7 turns.'], Pass: ['Can move through enemy units.'],
+  'Quick Burn': ['+15 Hit and Avoid on turn 1, fading by 1 each turn.'], 'Slow Burn': ['Hit and Avoid rise by 1 each turn, up to +15.'],
+  Beastbane: ['Effective damage against beast and cavalry units.'], Wyrmsbane: ['Effective damage against dragons.'], 'Odd Rhythm': ['+10 Hit and Avoid on odd turns.'],
+  Aptitude: ['+20 % to every growth rate.'], Underdog: ['+15 Hit and Avoid against a higher-level enemy.'], 'Resistance +10': ['+10 Res. DLC.'],
+  Bond: ['Heals adjacent allies 10 HP at turn start. DLC.'], Shadowgift: ['Lets the unit use dark tomes in any magic class.'], Conquest: ['Negates bonus damage against armoured and horseback units.'],
+};
+const ANTI: [string, string, string][] = [
+  ['Vengeance', 'Luna', 'Only one proc fires per attack and Vengeance is last in line, so other procs steal its near-certain trigger.'],
+  ['Vengeance', 'Astra', 'Only one proc per attack; Astra pre-empts Vengeance.'],
+  ['Sol', 'Luna', "Sol is above Luna in priority, so a Sol trigger uses up the attack's one proc."],
+  ['Sol', 'Vantage', 'Healing on enemy phase pushes HP back above the Vantage threshold.'],
+  ['Renewal', 'Vantage', 'Healing each turn pushes HP back above the Vantage threshold.'],
+];
+
+export type SkillDetail = {
+  skill: string; desc: string; rate: string | null; ranks: { ctx: Ctx; r: number }[]; via: Source[]; reachable: boolean;
+  syn: { other: string; note: string; ok: boolean }[]; anti: { other: string; note: string; ok: boolean }[];
+  builds: { name: string; tier: number; slot: number; got: boolean }[]; inheritable: boolean;
+};
+export function skillDetail(k: string, a: Analysis): SkillDetail {
+  const reach = new Set(a.pool.map((e) => e.skill));
+  const pair = (list: [string, string, string][]) =>
+    list.filter(([x, y]) => x === k || y === k).map(([x, y, note]) => {
+      const other = x === k ? y : x;
+      return { other, note, ok: reach.has(other) };
+    });
+  const [desc, rate] = INFO[k] ?? ['(no description yet)'];
+  return {
+    skill: k, desc, rate: rate ?? null, ranks: CTXS.map((c) => ({ ctx: c, r: rank(k, c) })),
+    via: a.pool.find((e) => e.skill === k)?.via ?? [], reachable: reach.has(k),
+    syn: pair(SYN), anti: pair(ANTI),
+    builds: a.builds.flatMap((b) => {
+      const i = b.slots.findIndex((s) => s.skill === k || s.options.includes(k));
+      return i < 0 ? [] : [{ name: b.t.name, tier: b.tier, slot: i + 1, got: b.slots[i].skill === k }];
+    }),
+    inheritable: !NEVER_INHERIT.has(k),
+  };
+}
+export const skillLink = (k: string, text = k) => `<span class="skl" data-ctl="skill" data-v="${k}">${text}</span>`;

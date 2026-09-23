@@ -1,8 +1,10 @@
 // PROTOTYPE — Variant D "A + B + C": A's inline drawer under the row. Left: builds grouped by tier,
 // each one A's compact chip line that expands into B's build card (the best build starts open).
 // Right: C's source-first skills layout (rally dots, what each parent gives, class skills by rank).
+// Clicking ANY skill pins a Skill card at the top of the scoring sidebar: description, ranks per
+// context, how this pairing gets it, synergies / conflicts (✓ = partner reachable), builds using it.
 import type { Row } from '../pairing-table/data';
-import type { Analysis } from './skills';
+import { RANK_LETTER, skillDetail, skillLink, srcText, type Analysis } from './skills';
 import type { Hooks } from './host';
 import type { SkState } from './main';
 import { chip } from './variantA';
@@ -32,8 +34,26 @@ function builds(a: Analysis, s: SkState) {
     .join('');
 }
 
+function skillCard(a: Analysis, s: SkState) {
+  const d = skillDetail(s.skill!, a);
+  const rel = (xs: typeof d.syn, cls: string) =>
+    xs.map((x) => `<li class="${cls}"><span class="${x.ok ? 'pos' : 'muted'}" title="${x.ok ? 'reachable for this pairing' : 'not reachable for this pairing'}">${x.ok ? '✓' : '✕'}</span> ${skillLink(x.other)} <div class="muted small">${x.note}</div></li>`).join('');
+  return `<section class="vd-skillcard">
+    <header><b>${d.skill}</b> <button class="ghost small" data-ctl="skill" data-v="">✕</button></header>
+    <div class="vd-ranks">${d.ranks.map((r) => `<span class="${r.ctx === s.ctx ? 'cur' : ''}" title="${r.ctx}"><b class="rk rk${r.r}">${RANK_LETTER[r.r]}</b> ${r.ctx === 'Main story' ? 'Main' : r.ctx === 'Full route' ? 'Full' : r.ctx === 'Apotheosis' ? 'Apoth.' : 'All'}</span>`).join('')}</div>
+    <p>${d.desc}${d.rate ? ` <span class="muted">Rate: ${d.rate}.</span>` : ''}</p>
+    <h5>How ${a.child} gets it</h5>
+    ${d.via.length ? `<ul>${d.via.map((v) => `<li>${srcText(v)}</li>`).join('')}</ul>` : `<p class="neg small">Not reachable for ${a.child} × ${a.variable}.</p>`}
+    ${d.inheritable ? '' : '<p class="muted small">Never inherited (DLC / Special Dance).</p>'}
+    ${d.syn.length ? `<h5>Synergies</h5><ul class="rel">${rel(d.syn, 'syn')}</ul>` : ''}
+    ${d.anti.length ? `<h5>Conflicts</h5><ul class="rel">${rel(d.anti, 'anti')}</ul>` : ''}
+    ${d.builds.length ? `<h5>In this pairing's builds</h5><ul>${d.builds.map((b) => `<li><b class="tier t${b.tier}">${b.tier}/5</b> ${b.name} <span class="muted small">slot ${b.slot}${b.got ? '' : ' · unfilled/fallback'}</span></li>`).join('')}</ul>` : ''}
+  </section>`;
+}
+
 export function hooks(s: SkState, a: Analysis | null): Hooks {
   return {
+    panelTop: a && s.skill ? skillCard(a, s) : null,
     selectedKey: s.sel,
     rowCell: (r: Row) => `<button class="ghost small" data-ctl="sel" data-v="${r.key}">${s.sel === r.key ? 'Skills ▾' : 'Skills ▸'}</button>`,
     afterRow: (r: Row) =>
