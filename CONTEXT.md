@@ -96,6 +96,28 @@ _Avoid_: Buffer, overhead
 The class chosen per row as the one that scores highest under the current preset, role and basis, from the child's final-tier reachable classes.
 _Avoid_: Best class (alone), default class (the child's starting class)
 
+### Planning
+
+**Run facts**:
+Facts fixed at the start of a playthrough — Robin's gender and asset/flaw. They remove pairings from the run entirely rather than blocking them.
+_Avoid_: Settings, run config
+
+**Unit state**:
+Where a unit stands in the current run: Available, Not yet recruited (prunes nothing), Benched (soft), Missed or Dead (hard).
+_Avoid_: Status (alone), availability
+
+**Pin**:
+A planned marriage the player has locked. Soft: it can be broken, and it breaks by itself when either unit is benched, missed or dead, freeing the partner.
+_Avoid_: Lock (alone), reservation
+
+**Marriage plan**:
+One spouse per unit for the whole roster, chosen by the solver to maximise the sum of each child's priority × score (each child scored with its own preset), with marriages and pins fixed. Re-solved around losses and compared with the saved plan.
+_Avoid_: Backup (alone), optimal pairing
+
+**Blocked pairing**:
+A pairing that contradicts the roster: hard when it can no longer happen (a unit is dead or missed, or married to someone else), soft when it only contradicts a pin or a bench.
+_Avoid_: Invalid, disabled
+
 ### Verification
 
 **Assumption**:
