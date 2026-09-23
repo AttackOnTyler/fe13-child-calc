@@ -24,6 +24,7 @@ import {
   type SavedPlan,
 } from './roster';
 import type { PresetId } from '../curated/presets';
+import type { DeploymentRole } from '../curated/deployment';
 import type { Pairing, ParentRef, RobinRef } from './types';
 
 /** A child the plan produces, valued as priority × score in its plan preset. */
@@ -34,6 +35,8 @@ export type PlannedChild = {
   /** The variable parent, e.g. `Sumia`, `Robin (M) +Spd −HP`, `Lucina ← Sumia`. */
   readonly parent: string;
   readonly preset: PresetId;
+  /** Its plan preset's deployment role (a saved plan's: the role when adopted). Never Dancer. */
+  readonly deploymentRole: DeploymentRole;
   /** 0–3. */
   readonly priority: number;
   /** Rounded; undefined for a preset without a score (Rallybot / Dancer). */
@@ -79,6 +82,8 @@ export type PlanDiff = {
   readonly moves: readonly { readonly unit: RosterUnit; readonly from: RosterUnit | undefined; readonly to: RosterUnit | undefined }[];
   /** Children in both whose pairing or score changed. */
   readonly changes: readonly { readonly child: ChildId; readonly before: PlannedChild; readonly after: PlannedChild }[];
+  /** Children in both whose deployment role changed, e.g. Lucina: Lead → Battery. */
+  readonly roleMoves: readonly { readonly child: ChildId; readonly name: string; readonly from: DeploymentRole; readonly to: DeploymentRole }[];
   readonly same: boolean;
 };
 
@@ -190,9 +195,16 @@ function savedRobin(run: Roster['run'], saved: SavedPlan): RobinRef {
   return robin;
 }
 
-/** Values a saved plan's marriages. */
+/** Values a saved plan's marriages, each child in the deployment role it had when adopted. */
 export function evaluatePlan(ctx: PlanContext, saved: SavedPlan): MarriagePlan {
-  return evaluate(ctx, saved.marriages, savedRobin(ctx.roster.run, saved), { robinOpen: false, brokenPins: [] });
+  const plan = evaluate(ctx, saved.marriages, savedRobin(ctx.roster.run, saved), { robinOpen: false, brokenPins: [] });
+  const roles = saved.deploymentRoles;
+  if (!roles) return plan;
+  const marriages = plan.marriages.map((m) => ({
+    ...m,
+    children: m.children.map((c) => ({ ...c, deploymentRole: roles[c.child] ?? c.deploymentRole })),
+  }));
+  return { ...plan, marriages };
 }
 
 /** Whether a marriage can be pinned or ruled out: Robin's only once the run says which Robin it is. */
@@ -200,14 +212,16 @@ export const canPin = (roster: Roster, m: Pick<PlanMarriage, 'husband' | 'wife'>
   !!roster.run.gender || (m.husband !== 'robin' && m.wife !== 'robin');
 
 /**
- * Adopts a plan: saves it as the baseline (with its Robin, when Robin marries) and pins every marriage it proposes,
+ * Adopts a plan: saves it as the baseline (with its Robin, when Robin marries, and each child's deployment role) and
+ * pins every marriage it proposes,
  * so a later loss breaks the pin and the plan re-solves around it. Pins it moves are replaced.
  */
 export function adoptPlan(roster: Roster, plan: MarriagePlan): Roster {
   const { gender, asset, flaw } = plan.robin;
   const robinMarries = plan.marriages.some((m) => m.husband === 'robin' || m.wife === 'robin');
   const marriages = plan.marriages.map((m): Couple => [m.husband, m.wife]);
-  let next = withSavedPlan(roster, { robin: robinMarries ? { gender, asset, flaw } : null, marriages });
+  const deploymentRoles = Object.fromEntries(plan.marriages.flatMap((m) => m.children.map((c) => [c.child, c.deploymentRole])));
+  let next = withSavedPlan(roster, { robin: robinMarries ? { gender, asset, flaw } : null, marriages, deploymentRoles });
   for (const m of plan.marriages) if (!m.bond && canPin(roster, m)) next = withSpouse(next, m.husband, m.wife, 'pinned');
   return next;
 }
@@ -369,8 +383,12 @@ export function diffPlans(before: MarriagePlan, after: MarriagePlan): PlanDiff {
     const a = ka.get(b.child);
     return a && (a.key !== b.key || a.score !== b.score) ? [{ child: b.child, before: b, after: a }] : [];
   });
-  const same = lost.length === 0 && gained.length === 0 && moves.length === 0 && changes.length === 0;
-  return { before: before.total, after: after.total, lost, gained, moves, changes, same };
+  const roleMoves = [...kb.values()].flatMap((b) => {
+    const a = ka.get(b.child);
+    return a && a.deploymentRole !== b.deploymentRole ? [{ child: b.child, name: b.name, from: b.deploymentRole, to: a.deploymentRole }] : [];
+  });
+  const same = lost.length === 0 && gained.length === 0 && moves.length === 0 && changes.length === 0 && roleMoves.length === 0;
+  return { before: before.total, after: after.total, lost, gained, moves, changes, roleMoves, same };
 }
 
 /**

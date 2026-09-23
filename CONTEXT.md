@@ -138,7 +138,7 @@ The job a deployed unit does in the army: Lead, Battery, Staff/Rally or Dancer. 
 _Avoid_: Role (alone — ambiguous with scoring role and build template role), job, position
 
 **Composition quotas**:
-Per play context, a min–max range of deployed units for each deployment role plus a deploy cap, curated and editable. Counted over deployed first-gen units and all children; out-of-range is a warning, never a block.
+Per play context, a min–max range of deployed units for each deployment role plus a deploy cap, curated and editable. Counted over deployed first-gen units and every child the marriage plan produces, leaving out benched, missed and dead units; All uses Main story's. Out-of-range is a warning, never a block.
 _Avoid_: Slots, army limits
 
 **Suggest roles**:

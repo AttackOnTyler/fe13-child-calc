@@ -7,6 +7,8 @@ import {
   RANK_LETTERS,
   buildSortKey,
   createEngine,
+  quotaContext,
+  quotasFor,
   describeSource,
   resolveAssumptions,
   EMPTY_ROSTER,
@@ -75,7 +77,7 @@ import { validationPanel, withOverride } from './validation';
 import { rosterPage } from './roster-page';
 import { clearRoster, loadRoster, saveRoster } from './roster-store';
 import { planPage, planSidebar, type ChildPlanControls, type PlanPageContext } from './plan-page';
-import { DEFAULT_PLAN_PREFS, loadPlanPrefs, savePlanPrefs, withPlanPreset, withPriority, type PlanPrefs } from './plan-prefs';
+import { DEFAULT_PLAN_PREFS, loadPlanPrefs, savePlanPrefs, withPlanPreset, withPriority, withQuotas, type PlanPrefs } from './plan-prefs';
 
 let overrides: Overrides = loadOverrides();
 let assumptions: Assumptions = resolveAssumptions(overrides);
@@ -88,6 +90,8 @@ let roster: Roster = loadRoster();
 let planPrefs: PlanPrefs = loadPlanPrefs(engine);
 /** The Plan view's Free re-plan toggle. */
 let freeReplan = false;
+/** The Plan sidebar's quota editor is open. */
+let editingQuotas = false;
 
 // View state only; all domain answers come from the engine.
 /** A child's table, or the All children leaderboard. */
@@ -239,6 +243,7 @@ const planControls = (): ChildPlanControls => ({
   setPriority: (child, priority) => setPlanPrefs(withPriority(planPrefs, child, priority)),
   setPlanPreset: (child, preset) => setPlanPrefs(withPlanPreset(planPrefs, child, preset)),
   presetLabel: (id: PresetId) => presetLabel(engine.presets().find((p) => p.id === id)!),
+  quotas: quotasFor(prefs.context, planPrefs.quotas),
 });
 
 const planContext = (): PlanPageContext => ({
@@ -251,6 +256,13 @@ const planContext = (): PlanPageContext => ({
     renderParts(['main']);
   },
   resetPlanPrefs: () => setPlanPrefs(DEFAULT_PLAN_PREFS),
+  quotasEdited: !!planPrefs.quotas[quotaContext(prefs.context)],
+  setQuotas: (quotas) => setPlanPrefs(withQuotas(planPrefs, quotaContext(prefs.context), quotas)),
+  editingQuotas,
+  setEditingQuotas: (open) => {
+    editingQuotas = open;
+    renderParts(['panel']);
+  },
 });
 
 /** The child's plan preset as a chip on its table: the tables keep the global preset, and this sets it. */

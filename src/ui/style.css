@@ -338,3 +338,23 @@ button.chip.plan-preset:disabled { cursor: default; color: var(--muted); border-
 .lstatus.unborn, .lstatus.dead { color: var(--neg); }
 .grid.ledger tr.ledger-dead td.uname, .grid.ledger tr.ledger-unborn td.uname { text-decoration: line-through; color: var(--muted); }
 .prio .seg button { padding: 0 6px; }
+
+/* Deployment composition */
+.unit .deploy { display: flex; gap: 6px; align-items: center; margin-top: 2px; font-size: 11px; font-weight: normal; }
+.unit .deploy label { display: inline-flex; align-items: center; gap: 2px; cursor: pointer; }
+.unit .deploy select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 2px; }
+.comp { display: flex; gap: 6px; align-items: flex-start; margin: 0 0 6px; }
+.comp-strip { font-size: 12px; line-height: 1.6; font-variant-numeric: tabular-nums; }
+.ledger .comp-strip { margin-top: 6px; }
+.q { white-space: nowrap; }
+.q-ok { color: var(--pos); }
+.q-under { color: var(--warn); }
+.q-over { color: var(--neg); font-weight: 700; }
+.quota-edit { display: grid; gap: 3px; margin: 0 0 8px; font-size: 12px; }
+.quota-edit label { display: flex; gap: 4px; align-items: center; }
+.quota-edit label > span { width: 80px; }
+.quota-edit input { width: 44px; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 2px; }
+.quota-edit button { justify-self: start; }
+.chip.role { margin-left: 2px; color: var(--muted); cursor: help; }
+.chip.role-battery { color: var(--accent); border-color: #3a6394; }
+.chip.role-staff { color: #c59bff; border-color: #6a4f94; }

@@ -2,14 +2,19 @@ import {
   DEFAULT_PRIORITY,
   PLAN_PRIORITIES,
   STAT_LABELS,
+  DEPLOYMENT_ROLES,
   adoptPlan,
   canPin,
+  composition,
   diffPlans,
+  deploymentRoleOf,
   rosterUnits,
   unitName,
   withRuleOut,
   withSpouse,
   type ChildId,
+  type Composition,
+  type DeploymentRole,
   type Engine,
   type MarriagePlan,
   type PlanDiff,
@@ -17,10 +22,12 @@ import {
   type PlanSettings,
   type PlannedChild,
   type PresetId,
+  type Quotas,
   type Roster,
   type RosterUnit,
 } from '../engine';
 import { h } from './dom';
+import { editQuota } from './plan-prefs';
 
 /** A child's plan controls (priority, plan preset), shared by the Plan sidebar and the Roster page's ledger. */
 export type ChildPlanControls = {
@@ -31,6 +38,8 @@ export type ChildPlanControls = {
   readonly setPlanPreset: (child: ChildId, preset: PresetId | null) => void;
   /** A preset's name, with `*` when the user edited it. */
   readonly presetLabel: (id: PresetId) => string;
+  /** The play context's composition quotas (the user's, else the curated seed). */
+  readonly quotas: Quotas;
 };
 
 /** What the Plan view reads, and how it changes the roster and the plan preferences. */
@@ -41,7 +50,83 @@ export type PlanPageContext = ChildPlanControls & {
   readonly free: boolean;
   readonly setFree: (free: boolean) => void;
   readonly resetPlanPrefs: () => void;
+  /** The user edited this play context's quotas. */
+  readonly quotasEdited: boolean;
+  /** Sets this play context's quotas; null resets them to the curated seed. */
+  readonly setQuotas: (quotas: Quotas | null) => void;
+  /** The quota editor is open (view state). */
+  readonly editingQuotas: boolean;
+  readonly setEditingQuotas: (open: boolean) => void;
 };
+
+export const ROLE_UI: Readonly<Record<DeploymentRole, { readonly label: string; readonly short: string }>> = {
+  lead: { label: 'Lead', short: 'L' },
+  battery: { label: 'Battery', short: 'B' },
+  staff: { label: 'Staff/Rally', short: 'S' },
+  dancer: { label: 'Dancer', short: 'D' },
+};
+
+const QUOTA_HINT = { ok: 'In range', under: 'Below the minimum', over: 'Over the maximum' } as const;
+
+/** `Lead n / min–max · … · Deployed n / cap`: green in range, amber below min, red over max or over the cap. Never blocks. */
+export function compositionStrip(c: Composition): HTMLElement {
+  const parts = c.roles.map((r) =>
+    h(
+      'span',
+      { class: `q q-${r.status}`, title: `${ROLE_UI[r.role].label}: ${QUOTA_HINT[r.status]} (${r.min}–${r.max})` },
+      `${ROLE_UI[r.role].label} ${r.count} / ${r.min === r.max ? r.min : `${r.min}–${r.max}`}`,
+    ),
+  );
+  const d = c.deployed;
+  const deployed = h(
+    'span',
+    { class: `q q-${d.status}`, title: d.status === 'over' ? 'Over the deploy cap' : 'Within the deploy cap' },
+    `Deployed ${d.count} / ${d.cap}`,
+  );
+  return h('div', { class: 'comp-strip', 'aria-label': 'Deployment composition' }, ...[...parts, deployed].flatMap((p, i) => (i ? [h('span', { class: 'muted' }, ' · '), p] : [p])));
+}
+
+/** A child's deployment role, from its plan preset: read-only. */
+export function roleChip(ctl: ChildPlanControls, id: ChildId): HTMLElement {
+  const role = deploymentRoleOf(ctl.engine.planPreset(id, ctl.settings));
+  return h('span', { class: `chip role role-${role}`, title: `Deployment role: ${ROLE_UI[role].label} (from its plan preset)` }, ROLE_UI[role].short);
+}
+
+/** The composition quotas for the play context: min–max per role and the deploy cap. */
+function quotaEditor(ctx: PlanPageContext): HTMLElement {
+  const q = ctx.quotas;
+  const num = (label: string, value: number, set: (n: number) => void) =>
+    h('input', {
+      type: 'number',
+      min: '0',
+      max: '99',
+      value: String(value),
+      'aria-label': label,
+      onchange: (e: Event) => set(Number((e.target as HTMLInputElement).value)),
+    });
+  return h(
+    'div',
+    { class: 'quota-edit' },
+    ...DEPLOYMENT_ROLES.map((role) => {
+      const { label } = ROLE_UI[role];
+      const r = q.roles[role];
+      return h(
+        'label',
+        {},
+        h('span', {}, label),
+        num(`${label} minimum`, r.min, (n) => ctx.setQuotas(editQuota(q, role, n, 'min'))),
+        '–',
+        num(`${label} maximum`, r.max, (n) => ctx.setQuotas(editQuota(q, role, n, 'max'))),
+      );
+    }),
+    h('label', {}, h('span', {}, 'Deploy cap'), num('Deploy cap', q.cap, (n) => ctx.setQuotas(editQuota(q, 'cap', n)))),
+    h(
+      'button',
+      { class: 'ghost small', disabled: !ctx.quotasEdited, title: 'Back to the curated quotas for this play context', onclick: () => ctx.setQuotas(null) },
+      '↺ Curated quotas',
+    ),
+  );
+}
 
 const fmt = (n: number) => String(Math.round(n));
 const signed = (n: number) => (n > 0 ? `+${fmt(n)}` : fmt(n));
@@ -130,6 +215,9 @@ function diffBanner(ctx: PlanPageContext, plan: MarriagePlan, diff: PlanDiff | u
       : null,
     diff.gained.length ? h('div', { class: 'pos' }, '+ New children: ', diff.gained.map((c) => `${c.name} (${c.score ?? '—'})`).join(', ')) : null,
     diff.moves.length ? h('div', {}, '⇄ ', diff.moves.map((m) => `${name(m.unit)}: ${name(m.from)} → ${name(m.to)}`).join(' · ')) : null,
+    diff.roleMoves.length
+      ? h('div', {}, 'Roles: ', diff.roleMoves.map((m) => `${m.name}: ${ROLE_UI[m.from].label} → ${ROLE_UI[m.to].label}`).join(' · '))
+      : null,
     diff.changes.length
       ? h(
           'div',
@@ -268,9 +356,10 @@ export function presetControl(ctl: ChildPlanControls, id: ChildId, name: string)
   );
 }
 
-/** The Plan sidebar: each child's priority and plan preset. */
+/** The Plan sidebar: the composition strip, then each child's priority, plan preset and deployment role. */
 export function planSidebar(ctx: PlanPageContext): HTMLElement {
   const children = rosterUnits(ctx.roster.run).filter((u) => u.kind === 'child');
+  const comp = composition(ctx.roster, ctx.engine.plan(ctx.roster, ctx.settings, { free: ctx.free }), ctx.quotas);
   return h(
     'section',
     { class: 'plan-side', 'aria-label': 'Child priorities and plan presets' },
@@ -278,12 +367,38 @@ export function planSidebar(ctx: PlanPageContext): HTMLElement {
       'div',
       { class: 'panel-head' },
       h('h3', {}, 'Plan'),
-      h('button', { class: 'ghost small', title: 'Reset every child’s priority and plan preset', onclick: ctx.resetPlanPrefs }, 'Reset plan preferences'),
+      h(
+        'button',
+        { class: 'ghost small', title: 'Reset every child’s priority and plan preset, and the quotas of every play context', onclick: ctx.resetPlanPrefs },
+        'Reset plan preferences',
+      ),
     ),
+    h(
+      'div',
+      { class: 'comp' },
+      compositionStrip(comp),
+      h(
+        'button',
+        {
+          class: `mini${ctx.editingQuotas ? ' on' : ''}`,
+          'aria-pressed': String(ctx.editingQuotas),
+          title: ctx.quotasEdited ? 'Edit the quotas (edited for this play context)' : 'Edit the quotas for this play context',
+          onclick: () => ctx.setEditingQuotas(!ctx.editingQuotas),
+        },
+        ctx.quotasEdited ? '✎*' : '✎',
+      ),
+    ),
+    ctx.editingQuotas ? quotaEditor(ctx) : null,
     h('p', { class: 'muted small' }, 'Priority 0 = don’t care · 3 = must be great. Each child scores in its plan preset, in Auto class.'),
     ...children.map((u) => {
       const id = u.id as ChildId;
-      return h('div', { class: 'prio' }, h('span', { class: 'pname' }, u.name), priorityControl(ctx, id, u.name), presetControl(ctx, id, u.name));
+      return h(
+        'div',
+        { class: 'prio' },
+        h('span', { class: 'pname' }, u.name, ' ', roleChip(ctx, id)),
+        priorityControl(ctx, id, u.name),
+        presetControl(ctx, id, u.name),
+      );
     }),
   );
 }

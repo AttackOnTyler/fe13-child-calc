@@ -46,6 +46,7 @@ import { PRESETS, type PresetId, type ScoringRole } from '../curated/presets';
 import { PLAN_PRESETS } from '../curated/plan-presets';
 import { DEFAULT_PRIORITY, childLedger, evaluatePlan, savedPairings, solvePlan, type LedgerEntry, type MarriagePlan, type PlanContext, type PlannedChild } from './plan';
 import type { SavedPlan } from './roster';
+import { deploymentRoleOf } from './composition';
 import type {
   AssumptionStatus,
   BuildMatch,
@@ -97,6 +98,8 @@ export { buildSortKey } from './builds';
 export {
   EMPTY_ROSTER,
   UNIT_STATES,
+  deploymentOf,
+  isDeployable,
   isRuledOut,
   parseRoster,
   rosterUnits,
@@ -108,7 +111,10 @@ export {
   withSavedPlan,
   withSpouse,
   withState,
+  withDeploy,
+  withDeployRole,
   type Blocking,
+  type DeployableUnit,
   type Bond,
   type Couple,
   type SavedPlan,
@@ -120,6 +126,8 @@ export {
   type UnitState,
 } from './roster';
 export type { PresetId, ScoringRole, Weights } from '../curated/presets';
+export { DEPLOYMENT_ROLES, type DeploymentRole, type DeploymentTag, type QuotaRange, type Quotas } from '../curated/deployment';
+export { composition, deploymentRoleOf, quotaContext, quotasFor, type Composition, type QuotaStatus, type RoleCount } from './composition';
 export {
   DEFAULT_PRIORITY,
   PLAN_PRIORITIES,
@@ -638,6 +646,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         key,
         parent: parentName(pairing.variableParent),
         preset,
+        deploymentRole: deploymentRoleOf(preset),
         priority,
         score: sc?.score,
         scaled: sc?.scaled,

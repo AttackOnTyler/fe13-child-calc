@@ -1,15 +1,23 @@
 import {
   STATS,
+  DEPLOYMENT_ROLES,
   STAT_LABELS,
   UNIT_STATES,
+  composition,
+  deploymentOf,
+  isDeployable,
   rosterUnits,
   stateOf,
   unitName,
   voidPinReason,
+  withDeploy,
+  withDeployRole,
   withRun,
   withSpouse,
   withState,
   type Bond,
+  type DeployableUnit,
+  type DeploymentRole,
   type Engine,
   type Gender,
   type LedgerEntry,
@@ -21,7 +29,7 @@ import {
   type UnitState,
 } from '../engine';
 import { h } from './dom';
-import { presetControl, priorityControl, type ChildPlanControls } from './plan-page';
+import { ROLE_UI, compositionStrip, presetControl, priorityControl, roleChip, type ChildPlanControls } from './plan-page';
 
 /** What the Roster page reads, and how it changes the roster. */
 export type RosterContext = {
@@ -118,8 +126,37 @@ function spousePicker(ctx: RosterContext, u: RosterEntry): HTMLElement {
   );
 }
 
+/** A first-gen unit's Deploy flag and deployment-role tag (defaulted from the curated table). */
+function deployControl(ctx: RosterContext, u: RosterEntry & { id: DeployableUnit }): HTMLElement {
+  const tag = deploymentOf(ctx.roster, u.id);
+  return h(
+    'span',
+    { class: 'deploy' },
+    h(
+      'label',
+      { title: 'Deploy: counts toward the composition quotas in its role' },
+      h('input', {
+        type: 'checkbox',
+        checked: tag.deploy,
+        'aria-label': `${u.name}: deploy`,
+        onchange: (e) => ctx.setRoster(withDeploy(ctx.roster, u.id, (e.target as HTMLInputElement).checked)),
+      }),
+      ' Deploy',
+    ),
+    h(
+      'select',
+      {
+        'aria-label': `${u.name}: deployment role`,
+        onchange: (e) => ctx.setRoster(withDeployRole(ctx.roster, u.id, (e.target as HTMLSelectElement).value as DeploymentRole)),
+      },
+      ...DEPLOYMENT_ROLES.map((r) => h('option', { value: r, selected: r === tag.role }, ROLE_UI[r].label)),
+    ),
+  );
+}
+
 function unitRow(ctx: RosterContext, u: RosterEntry): HTMLElement {
   const st = stateOf(ctx.roster, u.id);
+  const deployable = u.kind !== 'child' && isDeployable(u.id);
   return h(
     'div',
     { class: `unit st-${st}`, 'data-unit': u.id },
@@ -128,6 +165,7 @@ function unitRow(ctx: RosterContext, u: RosterEntry): HTMLElement {
       { class: 'uname' },
       u.name,
       u.robinOnly ? h('span', { class: 'chip', title: 'Can S-support only Robin' }, 'Robin only') : null,
+      deployable ? deployControl(ctx, u as RosterEntry & { id: DeployableUnit }) : null,
     ),
     stateStrip(ctx, u),
     spousePicker(ctx, u),
@@ -154,7 +192,7 @@ function ledgerRow(ctx: RosterContext, e: LedgerEntry): HTMLElement {
   return h(
     'tr',
     { class: `ledger-${e.status}` },
-    h('td', { class: 'uname' }, e.name),
+    h('td', { class: 'uname' }, e.name, ' ', roleChip(ctx.plan, e.child)),
     h('td', { class: 'muted' }, unitName(e.fixedParent, gender)),
     h('td', { title: e.status === 'married' ? 'Its parents’ marriage' : 'The marriage plan’s pairing' }, ...pairing(e.planned)),
     h(
@@ -201,6 +239,7 @@ function childrenLedger(ctx: RosterContext): HTMLElement {
         h('tbody', {}, ...ledger.map((e) => ledgerRow(ctx, e))),
       ),
     ),
+    compositionStrip(composition(ctx.roster, ctx.engine.plan(ctx.roster, ctx.plan.settings), ctx.plan.quotas)),
   );
 }
 

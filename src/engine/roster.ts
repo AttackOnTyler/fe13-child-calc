@@ -6,6 +6,7 @@ import { CHILD_UNITS, type ChildId } from '../game-data/children';
 import { FIRST_GEN_UNITS, type UnitId } from '../game-data/units';
 import { STATS, type Gender, type Stat } from '../game-data/stats';
 import { CHROM_FALLBACK_PARTNER, ROBIN_SUPPORTS, S_SUPPORTS } from '../game-data/supports';
+import { DEPLOYMENT_ROLES, FIRST_GEN_DEPLOYMENT, type DeploymentRole, type DeploymentTag } from '../curated/deployment';
 import type { Assumptions } from './assumptions';
 import type { Pairing, ParentRef } from './types';
 
@@ -27,11 +28,16 @@ export type Spouse = { readonly partner: RosterUnit; readonly bond: Bond };
 /** Two units who could marry, in either order. */
 export type Couple = readonly [RosterUnit, RosterUnit];
 
-/** A marriage plan the player adopted: its marriages, and the Robin it was solved for. */
+/** A marriage plan the player adopted: its marriages, the Robin it was solved for, and each child's deployment role. */
 export type SavedPlan = {
   readonly robin: { readonly gender: Gender; readonly asset: Stat; readonly flaw: Stat } | null;
   readonly marriages: readonly Couple[];
+  /** Each planned child's deployment role when adopted, so the diff can show role moves. */
+  readonly deploymentRoles?: Readonly<Partial<Record<ChildId, DeploymentRole>>>;
 };
+
+/** A unit with a Deploy flag and a deployment-role tag: Robin and the first-gen units the roster lists. */
+export type DeployableUnit = keyof typeof FIRST_GEN_DEPLOYMENT;
 
 export type Roster = {
   readonly run: RunFacts;
@@ -43,9 +49,36 @@ export type Roster = {
   readonly ruleOuts: readonly Couple[];
   /** The adopted marriage plan the solver's plan is compared with. */
   readonly savedPlan: SavedPlan | null;
+  /** First-gen Deploy flags; units not listed follow the curated table. */
+  readonly deploy: Readonly<Partial<Record<DeployableUnit, boolean>>>;
+  /** First-gen deployment-role tags; units not listed follow the curated table. */
+  readonly deployRoles: Readonly<Partial<Record<DeployableUnit, DeploymentRole>>>;
 };
 
-export const EMPTY_ROSTER: Roster = { run: { gender: null, asset: null, flaw: null }, states: {}, spouses: {}, ruleOuts: [], savedPlan: null };
+export const EMPTY_ROSTER: Roster = {
+  run: { gender: null, asset: null, flaw: null },
+  states: {},
+  spouses: {},
+  ruleOuts: [],
+  savedPlan: null,
+  deploy: {},
+  deployRoles: {},
+};
+
+export const isDeployable = (u: RosterUnit): u is DeployableUnit => u in FIRST_GEN_DEPLOYMENT;
+
+/** A first-gen unit's Deploy flag and role tag: the roster's, else the curated default. */
+export function deploymentOf(roster: Roster, u: DeployableUnit): DeploymentTag {
+  const curated = FIRST_GEN_DEPLOYMENT[u];
+  return { deploy: roster.deploy[u] ?? curated.deploy, role: roster.deployRoles[u] ?? curated.role };
+}
+
+export const withDeploy = (roster: Roster, u: DeployableUnit, deploy: boolean): Roster => ({ ...roster, deploy: { ...roster.deploy, [u]: deploy } });
+
+export const withDeployRole = (roster: Roster, u: DeployableUnit, role: DeploymentRole): Roster => ({
+  ...roster,
+  deployRoles: { ...roster.deployRoles, [u]: role },
+});
 
 export const UNIT_STATES: readonly UnitState[] = ['available', 'not-recruited', 'benched', 'missed', 'dead'];
 
@@ -255,8 +288,16 @@ export function parseRoster(raw: unknown): Roster {
   for (const c of Array.isArray(raw.ruleOuts) ? raw.ruleOuts : []) {
     if (isCouple(c) && !ruleOuts.some((d) => sameCouple(d, c[0], c[1]))) ruleOuts.push([c[0], c[1]]);
   }
-  return { run, states, spouses, ruleOuts, savedPlan: parseSavedPlan(raw.savedPlan, run) };
+  const deploy: Partial<Record<DeployableUnit, boolean>> = {};
+  for (const [id, v] of Object.entries(isObject(raw.deploy) ? raw.deploy : {})) if (isDeployable(id as RosterUnit) && typeof v === 'boolean') deploy[id as DeployableUnit] = v;
+  const deployRoles: Partial<Record<DeployableUnit, DeploymentRole>> = {};
+  for (const [id, v] of Object.entries(isObject(raw.deployRoles) ? raw.deployRoles : {})) {
+    if (isDeployable(id as RosterUnit) && isRole(v)) deployRoles[id as DeployableUnit] = v;
+  }
+  return { run, states, spouses, ruleOuts, savedPlan: parseSavedPlan(raw.savedPlan, run), deploy, deployRoles };
 }
+
+const isRole = (v: unknown): v is DeploymentRole => (DEPLOYMENT_ROLES as readonly unknown[]).includes(v);
 
 /**
  * A saved plan, or null when it is missing or corrupt. Marriages that can't exist in this run are dropped; while
@@ -283,7 +324,11 @@ function parseSavedPlan(raw: unknown, run: RunFacts): SavedPlan | null {
     taken.add(c[0]).add(c[1]);
     marriages.push([c[0], c[1]]);
   }
-  return { robin, marriages };
+  if (!isObject(raw.deploymentRoles)) return { robin, marriages };
+  // No child can be a Dancer.
+  const deploymentRoles: Partial<Record<ChildId, DeploymentRole>> = {};
+  for (const [id, v] of Object.entries(raw.deploymentRoles)) if (id in CHILD_UNITS && isRole(v) && v !== 'dancer') deploymentRoles[id as ChildId] = v;
+  return { robin, marriages, deploymentRoles };
 }
 
 /**
