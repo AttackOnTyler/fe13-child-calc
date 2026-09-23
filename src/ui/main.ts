@@ -7,6 +7,7 @@ import {
   createEngine,
   type ChildId,
   type ChildResult,
+  type PairingGroup,
   type SelfTestReport,
 } from '../engine';
 
@@ -16,6 +17,8 @@ const selfTest = engine.selfTest();
 // View state only; all domain answers come from the engine.
 let selected: ChildId = 'lucina';
 let selfTestOpen = !selfTest.passed;
+/** Group rows (by group key) currently listing one row per Robin asset/flaw. */
+const expanded = new Set<string>();
 
 type Attrs = Record<string, string | boolean | undefined | ((e: Event) => void)>;
 
@@ -79,10 +82,9 @@ function rail(): HTMLElement {
         'button',
         {
           class: `rail-item${c.id === selected ? ' on' : ''}`,
-          disabled: c.pairingCount === 0,
-          title: c.pairingCount === 0 ? 'Robin pairings are not enumerated yet' : undefined,
           onclick: () => {
             selected = c.id;
+            expanded.clear();
             render();
           },
         },
@@ -93,15 +95,16 @@ function rail(): HTMLElement {
   );
 }
 
-function row(r: ChildResult): HTMLElement {
-  const warn =
-    r.assumptionsUsed.length > 0
-      ? h('span', { class: 'warn', title: r.assumptionsUsed.map((a) => ASSUMPTION_NOTES[a]).join('\n') }, ' ⚠')
-      : null;
+function warnMark(results: readonly ChildResult[]): HTMLElement | null {
+  const used = [...new Set(results.flatMap((r) => r.assumptionsUsed))];
+  return used.length > 0 ? h('span', { class: 'warn', title: used.map((a) => ASSUMPTION_NOTES[a]).join('\n') }, ' ⚠') : null;
+}
+
+function row(r: ChildResult, label: string, cls = ''): HTMLElement {
   return h(
     'tr',
-    { 'data-key': r.key },
-    h('th', { class: 'stick', scope: 'row' }, engine.parentName(r.pairing.variableParent), warn),
+    { 'data-key': r.key, class: cls || undefined },
+    h('th', { class: 'stick', scope: 'row' }, label, warnMark([r])),
     ...STATS.map((s, i) => h('td', { class: `num${i === 0 ? ' gstart' : ''}` }, String(r.growths[s]))),
     ...MOD_STATS.map((s, i) =>
       h('td', { class: `num gmod ${tone(r.modifiers[s])}${i === 0 ? ' gstart' : ''}` }, signed(r.modifiers[s])),
@@ -109,18 +112,65 @@ function row(r: ChildResult): HTMLElement {
   );
 }
 
+/** `lo–hi` over a group's rows, or one value when they agree. */
+function range(values: number[], fmt: (n: number) => string): string {
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+  return lo === hi ? fmt(lo) : `${fmt(lo)}–${fmt(hi)}`;
+}
+
+/** A group row over Robin's asset/flaw pairings, showing each stat's range; expands into one row per asset/flaw. */
+function groupRows(g: PairingGroup): HTMLElement[] {
+  const open = expanded.has(g.key);
+  const head = h(
+    'tr',
+    { class: 'group-row', 'data-group': g.key },
+    h(
+      'th',
+      { class: 'stick', scope: 'row' },
+      h(
+        'button',
+        {
+          class: 'expander',
+          'aria-expanded': String(open),
+          title: `${open ? 'Hide' : 'List'} Robin’s ${g.results.length} asset/flaw pairings`,
+          onclick: () => {
+            if (open) expanded.delete(g.key);
+            else expanded.add(g.key);
+            render();
+          },
+        },
+        open ? '▾ ' : '▸ ',
+        g.label,
+      ),
+      h('span', { class: 'muted count' }, ` ×${g.results.length}`),
+      warnMark(g.results),
+    ),
+    ...STATS.map((s, i) =>
+      h('td', { class: `num range${i === 0 ? ' gstart' : ''}` }, range(g.results.map((r) => r.growths[s]), String)),
+    ),
+    ...MOD_STATS.map((s, i) =>
+      h('td', { class: `num gmod range${i === 0 ? ' gstart' : ''}` }, range(g.results.map((r) => r.modifiers[s]), signed)),
+    ),
+  );
+  if (!open) return [head];
+  return [head, ...g.results.map((r) => row(r, engine.robinLabel(r.pairing) ?? r.key, 'robin-row'))];
+}
+
 function childTable(child: ChildId): HTMLElement {
   const summary = engine.children().find((c) => c.id === child)!;
-  const results = engine.pairings(child);
+  const groups = engine.groups(child);
   const head = h(
     'div',
     { class: 'main-head' },
     h('h2', {}, summary.name),
-    h('span', { class: 'muted' }, `Fixed parent: ${summary.fixedParentName} · ${results.length} pairings`),
+    h(
+      'span',
+      { class: 'muted' },
+      `Fixed parent: ${summary.fixedParentName} · ${summary.pairingCount} pairings` +
+        (groups.length < summary.pairingCount ? ` in ${groups.length} rows` : ''),
+    ),
   );
-  if (results.length === 0) {
-    return h('section', { class: 'main' }, head, h('p', { class: 'empty muted' }, 'No pairings enumerated yet.'));
-  }
   const table = h(
     'table',
     { class: 'grid' },
@@ -142,7 +192,13 @@ function childTable(child: ChildId): HTMLElement {
         ...MOD_STATS.map((s, i) => h('th', { class: `num gmod${i === 0 ? ' gstart' : ''}`, scope: 'col' }, STAT_LABELS[s])),
       ),
     ),
-    h('tbody', {}, ...results.map(row)),
+    h(
+      'tbody',
+      {},
+      ...groups.flatMap((g) =>
+        g.results.length === 1 ? [row(g.results[0]!, g.label)] : groupRows(g),
+      ),
+    ),
   );
   return h('section', { class: 'main' }, head, h('div', { class: 'scroll' }, table));
 }

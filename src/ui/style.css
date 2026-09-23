@@ -24,13 +24,11 @@ button { font: inherit; color: inherit; background: var(--panel); border: 1px so
 .rail { border-right: 1px solid var(--line); overflow: auto; padding: 6px; display: flex; flex-direction: column; gap: 2px; }
 .rail-item { display: flex; justify-content: space-between; gap: 6px; border: 0; background: transparent; text-align: left; padding: 5px 8px; }
 .rail-item.on { background: #243349; }
-.rail-item:disabled { opacity: .4; cursor: default; }
 
 .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .main-head { display: flex; gap: 12px; align-items: baseline; padding: 8px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .main-head h2 { margin: 0; font-size: 18px; }
 .scroll { flex: 1; overflow: auto; }
-.empty { padding: 16px 12px; }
 
 table.grid { border-collapse: separate; border-spacing: 0; white-space: nowrap; }
 .grid th, .grid td { padding: 2px 6px; border-bottom: 1px solid var(--line); }
@@ -44,6 +42,10 @@ table.grid { border-collapse: separate; border-spacing: 0; white-space: nowrap; 
 .grid thead .stick { z-index: 3; background: var(--panel); }
 .grid .gmod { background: var(--mods); }
 .grid .gstart { border-left: 1px solid var(--line); }
+.grid .expander { border: 0; background: transparent; padding: 0; font-weight: 600; }
+.grid .count { font-size: 11px; }
+.grid td.range { color: var(--muted); }
+.grid tr.robin-row th.stick { padding-left: 22px; font-weight: 400; }
 
 .panel { border-left: 1px solid var(--line); padding: 10px; overflow: auto; background: var(--panel); }
 .panel h3 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; color: var(--muted); }
