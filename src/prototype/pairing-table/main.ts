@@ -1,21 +1,22 @@
 /// <reference types="vite/client" />
 // PROTOTYPE — throwaway. "Three variants of the pairing table + scoring panel, switchable via
-// ?variant=A|B|C, on a throwaway page." State is in memory only.
+// ?variant=D|A|B|C (D merges the three), on a throwaway page." State is in memory only.
 import { PRESETS, enumerate, filtered, initialState, score, type Row, type State } from './data';
 import * as A from './variantA';
 import * as B from './variantB';
 import * as C from './variantC';
+import * as D from './variantD';
 
 type Variant = { name: string; render: (root: HTMLElement, s: State, rows: Row[], total: number, all: Row[]) => void };
-const VARIANTS: Record<string, Variant> = { A, B, C };
+const VARIANTS: Record<string, Variant> = { D, A, B, C };
 const KEYS = Object.keys(VARIANTS);
 
 const app = document.getElementById('app')!;
 const bar = document.getElementById('switcher')!;
 const s = initialState();
 const all = enumerate();
-let variant = new URLSearchParams(location.search).get('variant') ?? 'A';
-if (!VARIANTS[variant]) variant = 'A';
+let variant = new URLSearchParams(location.search).get('variant') ?? 'D';
+if (!VARIANTS[variant]) variant = 'D';
 
 function rescore() {
   const t = performance.now();
@@ -96,6 +97,13 @@ function apply(el: HTMLElement) {
     case 'selectChild': s.selectedChild = v; s.panelOpen = false; break;
     case 'col': s.cols[v as keyof State['cols']] = input.checked; break;
     case 'sort': s.sort = s.sort.col === v ? { col: v, dir: (s.sort.dir * -1) as 1 | -1 } : { col: v, dir: -1 }; break;
+    case 'pickAF': {
+      const cut = v.lastIndexOf('|');
+      const [gk, af] = [v.slice(0, cut), v.slice(cut + 1)];
+      if (s.pickedAF[gk] === af) delete s.pickedAF[gk];
+      else s.pickedAF[gk] = af;
+      break;
+    }
     case 'expand': s.expanded[v] = !s.expanded[v]; break;
     case 'panel': s.panelOpen = !s.panelOpen; break;
     case 'more': s.limit += 500; break;

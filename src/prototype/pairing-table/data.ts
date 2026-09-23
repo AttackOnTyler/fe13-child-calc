@@ -1,4 +1,5 @@
-// PROTOTYPE — throwaway. Real marriage graph (research/marriage-and-classes), MOCK numbers
+// PROTOTYPE — throwaway. Real marriage graph (research/marriage-and-classes), real Robin asset/flaw
+// tables + Robin/Morgan growths (research/stat-inheritance); everything else MOCK numbers
 // (seeded random growths/modifiers, approximate class maxes). Scoring follows the decision on
 // "Decide scoring and effective-cap semantics" closely enough to judge layout, not values.
 
@@ -123,7 +124,8 @@ export const CHILDREN: Child[] = [
   K('Inigo', 'M', 'Olivia', ['Mercenary', 'Myrmidon', 'Fighter']), K('Brady', 'M', 'Maribelle', ['Priest', 'Cavalier', 'Mage']),
   K('Kjelle', 'F', 'Sully', ['Knight', 'Cavalier', 'Myrmidon', 'Wyvern Rider']), K('Cynthia', 'F', 'Sumia', ['Pegasus Knight', 'Knight', 'Priest']),
   K('Severa', 'F', 'Cordelia', ['Mercenary', 'Pegasus Knight', 'Dark Mage']), K('Gerome', 'M', 'Cherche', ['Wyvern Rider', 'Fighter', 'Priest']),
-  K('Morgan (F)', 'F', 'Robin (M)', []), K('Morgan (M)', 'M', 'Robin (F)', []),
+  { ...K('Morgan (F)', 'F', 'Robin (M)', []), personal: [35, 35, 40, 40, 40, 50, 25, 25] }, // real (SF-GR)
+  { ...K('Morgan (M)', 'M', 'Robin (F)', []), personal: [35, 35, 40, 40, 40, 50, 25, 25] },
   K('Yarne', 'M', 'Panne', ['Taguel', 'Thief', 'Barbarian']), K('Laurent', 'M', 'Miriel', ['Mage', 'Barbarian', 'Dark Mage']),
   K('Noire', 'F', 'Tharja', ['Archer', 'Dark Mage', 'Knight']), K('Nah', 'F', 'Nowi', ['Manakete', 'Mage', 'Wyvern Rider']),
 ];
@@ -141,12 +143,22 @@ const ROBIN_F_HUSBANDS = ['Chrom', ...GEN_M, 'Basilio', 'Gangrel', 'Walhart', "Y
 const CHILD_DAUGHTERS = ['Lucina', 'Kjelle', 'Cynthia', 'Severa', 'Noire', 'Nah'];
 const CHILD_SONS = ['Owain', 'Inigo', 'Brady', 'Gerome', 'Yarne', 'Laurent'];
 
-// ---- Robin asset / flaw (mock deltas) ----
+// ---- Robin asset / flaw (REAL: research/stat-inheritance §(d), SF-GR / SF-MOD) ----
 export const AF_STATS = ['HP', 'Str', 'Mag', 'Skl', 'Spd', 'Lck', 'Def', 'Res'];
+//                                  HP  Str Mag Skl Spd Lck Def Res
+const ROBIN_BASE_GROWTH: Stats =    [40, 40, 35, 35, 35, 55, 30, 20];
+const ASSET_GROWTH: Stats[] = [[30, 0, 0, 0, 0, 0, 5, 5], [0, 15, 0, 5, 0, 0, 5, 0], [0, 0, 15, 0, 5, 0, 0, 5], [0, 5, 0, 15, 0, 0, 5, 0],
+  [0, 0, 0, 5, 15, 5, 0, 0], [0, 5, 5, 0, 0, 15, 0, 0], [0, 0, 0, 0, 0, 5, 15, 5], [0, 0, 5, 0, 5, 0, 0, 15]];
+const FLAW_GROWTH: Stats[] = [[20, 0, 0, 0, 0, 0, 5, 5], [0, 10, 0, 5, 0, 0, 5, 0], [0, 0, 10, 0, 5, 0, 0, 5], [0, 5, 0, 10, 0, 0, 5, 0],
+  [0, 0, 0, 5, 10, 5, 0, 0], [0, 5, 5, 0, 0, 10, 0, 0], [0, 0, 0, 0, 0, 5, 10, 5], [0, 0, 5, 0, 5, 0, 0, 10]];
+const ASSET_MOD: Stats[] = [[0, 1, 1, 0, 0, 2, 2, 2], [0, 4, 0, 2, 0, 0, 2, 0], [0, 0, 4, 0, 2, 0, 0, 2], [0, 2, 0, 4, 0, 0, 2, 0],
+  [0, 0, 0, 2, 4, 2, 0, 0], [0, 2, 2, 0, 0, 4, 0, 0], [0, 0, 0, 0, 0, 2, 4, 2], [0, 0, 2, 0, 2, 0, 0, 4]];
+const FLAW_MOD: Stats[] = [[0, 1, 1, 0, 0, 1, 1, 1], [0, 3, 0, 1, 0, 0, 1, 0], [0, 0, 3, 0, 1, 0, 0, 1], [0, 1, 0, 3, 0, 0, 1, 0],
+  [0, 0, 0, 1, 3, 1, 0, 0], [0, 1, 1, 0, 0, 3, 0, 0], [0, 0, 0, 0, 0, 1, 3, 1], [0, 0, 1, 0, 1, 0, 0, 3]];
 const robinProfile = (g: 'M' | 'F', asset: string, flaw: string): Unit => {
   const a = AF_STATS.indexOf(asset), f = AF_STATS.indexOf(flaw);
-  const growths = STATS.map((_, i) => 40 + (i === 0 ? 45 : 0) + (i === a ? 15 : 0) - (i === f ? 10 : 0));
-  const mods = STATS.map((_, i) => (i === 0 ? 0 : (i === a ? 3 : 0) - (i === f ? 2 : 0)));
+  const growths = STATS.map((_, i) => ROBIN_BASE_GROWTH[i] + ASSET_GROWTH[a][i] - FLAW_GROWTH[f][i]);
+  const mods = STATS.map((_, i) => ASSET_MOD[a][i] - FLAW_MOD[f][i]);
   return { name: `Robin (${g})`, g, classes: REGULAR, growths, mods };
 };
 
@@ -170,6 +182,7 @@ export type Row = {
   caps: Stats | null;
   value: Stats | null;
   score: number | null;
+  raw: number | null; // unrounded score, for the heatmap
   tag: 'S' | 'M' | '';
   spd: { total: number; bp: number | null; margin: number } | null;
   build: string;
@@ -195,7 +208,7 @@ function makeRow(child: Child, fixed: Unit, variable: Unit, parentLabel: string,
     groupKey, secondGen, growths, mods,
     classSet: finalClasses(bases, child.g),
     assumptions: [fixed.assumption, variable.assumption].filter(Boolean) as string[],
-    cls: null, caps: null, value: null, score: null, tag: '', spd: null,
+    cls: null, caps: null, value: null, score: null, raw: null, tag: '', spd: null,
     build: BUILDS[Math.floor(r() * BUILDS.length)],
   };
   void robinU;
@@ -286,6 +299,7 @@ export type State = {
   // variant-local UI state
   selectedChild: string;
   expanded: Record<string, boolean>;
+  pickedAF: Record<string, string>; // groupKey -> 'Asset/Flaw' chosen in the heatmap (D)
   panelOpen: boolean;
   limit: number;
 };
@@ -295,7 +309,7 @@ export const initialState = (): State => ({
   rally: 8, tonic: true, pairSpd: 8, breakpoints: [55, 60, 66, 69, 75],
   children: [], parentQuery: '', secondGen: true, dlc: false, robinMode: 'best', asset: 'Spd', flaw: 'Lck',
   sort: { col: 'score', dir: -1 }, cols: { growths: false, mods: true, caps: true, speed: true, build: true },
-  selectedChild: 'Lucina', expanded: {}, panelOpen: false, limit: 200,
+  selectedChild: 'Lucina', expanded: {}, pickedAF: {}, panelOpen: false, limit: 200,
 });
 
 export const presetModified = (s: State) => {
@@ -337,7 +351,7 @@ export function score(rows: Row[], s: State) {
   const noPreset = PRESETS[s.preset].role === null;
   const sumW = s.mixed ? w.reduce((a, b, i) => (i === 2 ? a : a + (i === 1 ? Math.max(w[1], w[2]) : b)), 0) : w.reduce((a, b) => a + b, 0);
   for (const r of rows) {
-    let best: { cls: string; caps: Stats; value: Stats; score: number; tag: 'S' | 'M' | '' } | null = null;
+    let best: { cls: string; caps: Stats; value: Stats; score: number; raw: number; tag: 'S' | 'M' | '' } | null = null;
     for (const x of cache.get(r)!) {
       let tot = 0;
       let tag: 'S' | 'M' | '' = '';
@@ -350,15 +364,15 @@ export function score(rows: Row[], s: State) {
         tag = ns >= nm ? 'S' : 'M';
         tot += Math.max(w[1], w[2]) * Math.max(ns, nm);
       }
-      const sc = sumW ? Math.round((tot / sumW) * 100) : 0;
-      if (!best || sc > best.score) best = { ...x, score: sc, tag };
+      const raw = sumW ? (tot / sumW) * 100 : 0;
+      if (!best || raw > best.raw) best = { ...x, score: Math.round(raw), raw, tag };
     }
     if (!best) {
-      Object.assign(r, { cls: null, caps: null, value: null, score: null, tag: '', spd: null });
+      Object.assign(r, { cls: null, caps: null, value: null, score: null, raw: null, tag: '', spd: null });
       continue;
     }
     r.cls = best.cls; r.caps = best.caps; r.value = best.value;
-    r.score = noPreset ? null : best.score; r.tag = best.tag;
+    r.score = noPreset ? null : best.score; r.raw = noPreset ? null : best.raw; r.tag = best.tag;
     if (s.role === 'Support') r.spd = { total: best.value[4], bp: null, margin: 0 };
     else {
       const capSpd = CLASSES[best.cls].max[4] + r.mods[4] + (s.basis === 'Caps' ? 0 : 10);

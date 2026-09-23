@@ -26,7 +26,8 @@ const matrix = (r: Row, s: State) => `<table class="matrix">
 </table>
 <div class="muted small">Reachable final classes: ${r.classSet.join(', ')} · Best build: ${r.build}${r.assumptions.length ? ` · ⚠ ${r.assumptions.join(', ')}` : ''}</div>`;
 
-export function render(root: HTMLElement, s: State, rows: Row[], total: number) {
+// Also reused by Variant D's "All children" view.
+export function board(rows: Row[], s: State) {
   const shown = rows.slice(0, s.limit);
   const list = shown
     .map((r, idx) => {
@@ -42,7 +43,11 @@ export function render(root: HTMLElement, s: State, rows: Row[], total: number) 
       </li>`;
     })
     .join('');
+  return `<ol class="board">${list}</ol>
+    ${rows.length > shown.length ? `<div class="count"><button class="ghost" data-ctl="more">Show more (${(rows.length - shown.length).toLocaleString()} left)</button></div>` : ''}`;
+}
 
+export function render(root: HTMLElement, s: State, rows: Row[], total: number) {
   root.innerHTML = `<div class="vc">
     <header class="vc-top">
       <div class="pills">${W.presetPills(s)}</div>
@@ -58,7 +63,6 @@ export function render(root: HTMLElement, s: State, rows: Row[], total: number) 
     ${s.panelOpen ? `<div class="sheet"><div class="sheet-inner"><div class="vb-panel-head"><strong>Tune ${W.presetLabel(s)}</strong><button class="ghost" data-ctl="panel">Done</button></div>
       ${s.role === 'Support' ? `<div>Support rank ${W.rankSeg(s)}</div>` : ''}${W.weightSliders(s)}<h4>Speed</h4>${W.speedInputs(s)}</div></div>` : ''}
     <div class="count">${total.toLocaleString()} pairings · ranked by ${s.sort.col === 'spd' ? 'Speed' : W.presetLabel(s)}</div>
-    <ol class="board">${list}</ol>
-    ${rows.length > shown.length ? `<div class="count"><button class="ghost" data-ctl="more">Show more (${(rows.length - shown.length).toLocaleString()} left)</button></div>` : ''}
+    ${board(rows, s)}
   </div>`;
 }
