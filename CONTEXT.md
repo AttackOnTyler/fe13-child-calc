@@ -84,6 +84,14 @@ _Avoid_: Position, front/back
 The stats a support unit adds to its lead: a tier from the support's raw stat, plus its class's pair-up bonus, plus a support-rank bonus where the class bonus is non-zero.
 _Avoid_: Dual bonus (Dual Support gives hit/avoid, not stats)
 
+**Target breakpoint**:
+The Speed total a unit should reach to be "fast enough": one global value picked from the breakpoint list, defaulted by play context. Spd points up to it (plus the speed margin) score at the preset's steep to-target weight; points beyond score at its small beyond weight.
+_Avoid_: Speed tier, threshold (alone)
+
+**Speed margin**:
+Extra Speed above the target breakpoint that still scores at the to-target weight, as a buffer against debuffs and faster enemies.
+_Avoid_: Buffer, overhead
+
 **Auto class**:
 The class chosen per row as the one that scores highest under the current preset, role and basis, from the child's final-tier reachable classes.
 _Avoid_: Best class (alone), default class (the child's starting class)
