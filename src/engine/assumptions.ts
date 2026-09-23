@@ -4,8 +4,7 @@
  * user's overrides) is passed into the calculation so it stays pure.
  *
  * Data that holds an assumed value references an assumption id (`Assumed`) and is read through `assumed()`.
- * Later tickets add their own entries (skill-inheritance edge cases, breakpoints, the Main story target
- * breakpoint, death after marriage).
+ * Later tickets add their own entries (skill-inheritance edge cases, death after marriage).
  */
 import {
   FEW_CONQUEROR,
@@ -18,6 +17,9 @@ import {
   SF_GROWTH_JS,
   SF_MAX_JS,
   SF_MODIFIERS,
+  SF_CALCULATIONS,
+  SOLY_APOTHEOSIS,
+  RESEARCH_FIXTURES_SPEED,
   type Assumed,
   type Citation,
 } from '../game-data/citations';
@@ -31,6 +33,9 @@ type AssumptionValues = {
   /** Largest |child modifier| per stat, or null for no cap. */
   'modifier-cap': number | null;
   'morgan-second-gen-start-class': 'partner-start-class' | 'tactician';
+  /** Ascending Speed breakpoints. */
+  'spd-breakpoints': readonly number[];
+  'main-story-target-breakpoint': number;
 };
 
 export type AssumptionId = keyof AssumptionValues;
@@ -45,7 +50,7 @@ export function assumed<K extends AssumptionId>(ref: Assumed<K>, assumptions: As
 }
 
 /** How the override control edits the value, beyond picking a listed option. */
-export type AssumptionInput = 'choice' | 'growths' | 'cap';
+export type AssumptionInput = 'choice' | 'growths' | 'cap' | 'list';
 
 export type AssumptionDef<K extends AssumptionId = AssumptionId> = {
   readonly id: K;
@@ -58,6 +63,8 @@ export type AssumptionDef<K extends AssumptionId = AssumptionId> = {
   readonly format: (v: AssumptionValues[K]) => string;
   /** Validates a stored override; undefined if it isn't a valid value. */
   readonly parse: (raw: unknown) => AssumptionValues[K] | undefined;
+  /** What the assumption feeds, for one that no pairing's result rests on (it feeds settings instead). */
+  readonly affects?: string;
 };
 
 const isInt = (x: unknown): x is number => typeof x === 'number' && Number.isInteger(x);
@@ -67,6 +74,12 @@ function parseGrowths(raw: unknown): Growths | undefined {
   if (typeof raw !== 'object' || raw === null) return undefined;
   const r = raw as Record<string, unknown>;
   return STATS.every((s) => isPercent(r[s])) ? (Object.fromEntries(STATS.map((s) => [s, r[s]])) as Growths) : undefined;
+}
+
+/** Ascending positive integers, at least one. */
+function parseBreakpoints(raw: unknown): readonly number[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  return raw.every((x, i) => isInt(x) && x > 0 && x < 100 && (i === 0 || x > raw[i - 1])) ? [...(raw as number[])] : undefined;
 }
 
 const ZERO_GROWTHS: Growths = { hp: 0, str: 0, mag: 0, skl: 0, spd: 0, lck: 0, def: 0, res: 0 };
@@ -127,6 +140,38 @@ export const ASSUMPTION_REGISTRY: { readonly [K in AssumptionId]: AssumptionDef<
     input: 'choice',
     format: (v) => (v === 'tactician' ? 'Tactician' : 'The partner’s own start class'),
     parse: (raw) => (raw === 'partner-start-class' || raw === 'tactician' ? raw : undefined),
+  }),
+  'spd-breakpoints': entry({
+    id: 'spd-breakpoints',
+    label: 'Speed breakpoints',
+    why:
+      'Each is an Apotheosis enemy’s Spd + 5 (you double at a 5-point lead): 60 doubles most enemies and isn’t doubled by Thronie (64), ' +
+      '66 isn’t doubled by Anna (70), 69 doubles Thronie, 75 doubles Anna, 55 is the breakpoint below for runs without Rally or DLC. ' +
+      'The enemy Spd values come from soly’s guide and weren’t checked against a datamined enemy table.',
+    sources: [SOLY_APOTHEOSIS, SF_CALCULATIONS, RESEARCH_FIXTURES_SPEED],
+    default: [55, 60, 66, 69, 75],
+    alternatives: [],
+    input: 'list',
+    format: (v) => v.join('/'),
+    parse: parseBreakpoints,
+    affects: 'every Speed cell and the target breakpoint choices',
+  }),
+  'main-story-target-breakpoint': entry({
+    id: 'main-story-target-breakpoint',
+    label: 'Main story target breakpoint',
+    why:
+      'The 60/66/69 breakpoints are for Apotheosis; nothing sources a Speed target for main-story Lunatic/Lunatic+. ' +
+      '60 (“doubles most enemies”) is an unsourced stand-in; it is only the Main story context’s default, and the target can be set by hand.',
+    sources: [SOLY_APOTHEOSIS, RESEARCH_FIXTURES_SPEED],
+    default: 60,
+    alternatives: [
+      { label: '55 (the breakpoint below)', value: 55 },
+      { label: '66 (the Apotheosis default)', value: 66 },
+    ],
+    input: 'choice',
+    format: String,
+    parse: (raw) => (isInt(raw) && raw > 0 && raw < 100 ? raw : undefined),
+    affects: 'the default target breakpoint in the Main story context',
   }),
 };
 

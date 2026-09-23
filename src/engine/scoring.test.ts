@@ -1,16 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { STATS, createEngine, type ClassId, type PresetId, type ScoreSettings, type Stat } from './index';
+import { DEFAULT_SPEED, STATS, createEngine, type ClassId, type PresetId, type ScoreSettings, type Stat } from './index';
 
 const engine = createEngine();
 const preset = (id: PresetId) => engine.presets().find((p) => p.id === id)!;
 
-/** Settings for a curated preset: Caps + LB, Auto class, no DLC unless overridden. */
+/**
+ * Settings for a curated preset: Caps + LB, Auto class, no DLC, and no Speed buffs with no target (Spd linear at
+ * its to-target weight on the cap) unless overridden. The Spd curve has its own tests.
+ */
 const settings = (id: PresetId, over: Partial<ScoreSettings> = {}): ScoreSettings => ({
   weights: preset(id).weights,
   mixed: preset(id).mixed,
   basis: 'caps-lb',
   classMode: 'auto',
   dlc: false,
+  speed: { ...DEFAULT_SPEED, rally: 0, tonic: false, pairUp: 0, target: null },
   ...over,
 });
 

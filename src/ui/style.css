@@ -118,3 +118,18 @@ table.grid { border-collapse: separate; border-spacing: 0; white-space: nowrap; 
   .dtable, .dtable tbody, .dtable tr, .dtable th, .dtable td { display: block; }
   .dtable thead { display: none; }
 }
+
+/* Speed column: tinted by the breakpoint cleared, from none (bp0) through the lowest (bp1) to the fifth (bp5). */
+.grid td.spd { font-variant-numeric: tabular-nums; }
+.grid td.spd.bp0 { color: var(--muted); }
+.grid td.spd.bp1 { background: rgba(90, 169, 255, 0.06); }
+.grid td.spd.bp2 { background: rgba(90, 169, 255, 0.14); }
+.grid td.spd.bp3 { background: rgba(111, 207, 122, 0.12); }
+.grid td.spd.bp4 { background: rgba(111, 207, 122, 0.24); }
+.grid td.spd.bp5 { background: rgba(240, 184, 77, 0.22); }
+.panel input.numin { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 3px 4px; width: 56px; }
+.panel .helper { margin: 0 0 8px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 4px; }
+.panel .helper summary { cursor: pointer; }
+.panel .helper[open] summary { margin-bottom: 6px; }
+.topbar .context select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 2px 4px; }
+.a-control .list-input { width: 160px; }

@@ -117,6 +117,19 @@ function assumptionControl(a: AssumptionStatus, ctx: ValidationContext): HTMLEle
           },
         }),
       );
+    case 'list':
+      return h('input', {
+        type: 'text',
+        class: 'list-input',
+        value: (value as readonly number[]).join('/'),
+        placeholder: 'e.g. 55/60/66',
+        title: 'Ascending whole numbers, separated by / or commas',
+        'aria-label': label,
+        onchange: (e) => {
+          const parts = (e.target as HTMLInputElement).value.split(/[\s,/]+/).filter(Boolean);
+          commit(parts.map(Number));
+        },
+      });
   }
 }
 
@@ -140,7 +153,13 @@ function assumptionsSection(ctx: ValidationContext): HTMLElement {
           'div',
           {},
           h('strong', {}, a.label),
-          h('span', { class: 'muted' }, ` · ${a.pairingsAffected} ${a.pairingsAffected === 1 ? 'pairing' : 'pairings'} ⚠`),
+          h(
+            'span',
+            { class: 'muted' },
+            a.affects
+              ? ` · affects ${a.affects} ⚠`
+              : ` · ${a.pairingsAffected} ${a.pairingsAffected === 1 ? 'pairing' : 'pairings'} ⚠`,
+          ),
         ),
         h(
           'div',

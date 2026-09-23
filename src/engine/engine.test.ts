@@ -408,6 +408,7 @@ describe('assumption overrides', () => {
     const status = (e: Engine, id: AssumptionId) => e.assumptions().find((a) => a.id === id)!;
     expect(engine.assumptions().map((a) => a.id)).toEqual([
       'conqueror-skl-spd-growth', 'maiden-growths', 'modifier-cap', 'morgan-second-gen-start-class',
+      'spd-breakpoints', 'main-story-target-breakpoint',
     ]);
     expect(engine.assumptions().every((a) => a.sources.length > 0 && a.why.length > 0)).toBe(true);
     expect(status(engine, 'maiden-growths')).toMatchObject({ isDefault: true, pairingsAffected: 1 + ASSET_FLAWS });

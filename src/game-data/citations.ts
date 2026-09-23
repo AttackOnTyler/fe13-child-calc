@@ -14,6 +14,7 @@ export const SF_MAX_JS: Citation = { label: 'SF calculator fe13maxstats.js', url
 export const SF_CLASS_GROWTHS: Citation = { label: 'SF class growth rates', url: 'https://serenesforest.net/awakening/classes/growth-rates/' };
 export const SF_CLASS_CAPS: Citation = { label: 'SF class max stats', url: 'https://serenesforest.net/awakening/classes/maximum-stats/' };
 export const SF_CLASS_BASES: Citation = { label: 'SF class base stats', url: 'https://serenesforest.net/awakening/classes/base-stats/' };
+export const SF_CALCULATIONS: Citation = { label: 'SF calculations (doubling)', url: 'https://serenesforest.net/awakening/miscellaneous/calculations/' };
 export const SF_CHILDREN: Citation = { label: 'SF children', url: 'https://serenesforest.net/awakening/characters/children/' };
 
 export const FEW_GROWTH_MODULE: Citation = {
@@ -38,6 +39,11 @@ export const JP_CAPS: Citation = { label: 'JP 2ch wiki caps (p.79)', url: 'https
 export const JP_CLASSES: Citation = { label: 'JP 2ch wiki classes (p.107)', url: 'https://w.atwiki.jp/fireemblem3ds/pages/107.html' };
 export const JP_PK: Citation = { label: '天馬騎士団 FE13 class list', url: 'https://www.pegasusknight.com/wiki/fe13/クラス/一覧' };
 
+export const SOLY_APOTHEOSIS: Citation = {
+  label: 'soly, Apotheosis build guide §2.5, §6.8',
+  url: 'https://docs.google.com/document/d/13b2KxYlWGqnMPbXMqjGj850dKa88sAytTCCJw7gpaS4/',
+};
+
 const RESEARCH = 'https://github.com/AttackOnTyler/fe13-child-calc/blob';
 export const RESEARCH_STAT_INHERITANCE: Citation = {
   label: 'Research: stat inheritance (#2)',
@@ -50,4 +56,8 @@ export const RESEARCH_CLASSES: Citation = {
 export const RESEARCH_DISAGREEMENTS: Citation = {
   label: 'Research: data disagreements (#13)',
   url: `${RESEARCH}/research/data-disagreements/docs/research/data-disagreements.md`,
+};
+export const RESEARCH_FIXTURES_SPEED: Citation = {
+  label: 'Research: fixtures and Speed (#7)',
+  url: `${RESEARCH}/research/fixtures-and-speed/docs/research/fixtures-and-speed.md`,
 };

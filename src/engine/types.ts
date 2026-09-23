@@ -76,6 +76,8 @@ export type AssumptionStatus = {
   readonly isDefault: boolean;
   /** How many pairings list this assumption in `assumptionsUsed`. */
   readonly pairingsAffected: number;
+  /** What it feeds instead, for an assumption that feeds settings rather than pairing results. */
+  readonly affects: string | undefined;
 };
 
 /** A class as the class selector lists it. */
@@ -97,6 +99,34 @@ export type ScoreBasis = 'caps-lb' | 'caps' | 'growths';
 /** Auto (the best final-tier class per row) or one pinned class. */
 export type ClassMode = 'auto' | ClassId;
 
+/** What the player is building for; one global selection. */
+export type PlayContext = 'apotheosis' | 'main-story' | 'full-route' | 'all';
+
+export type SupportRank = 'none' | 'C' | 'B' | 'A' | 'S';
+
+/** Speed inputs: the buffs added to the Spd cap, and the Spd curve's target breakpoint and margin. */
+export type SpeedSettings = {
+  /** Rally Spd: 0, +4, +8 or +10. */
+  readonly rally: number;
+  /** Speed Tonic, +2. */
+  readonly tonic: boolean;
+  /** Pair-up Spd, 0–10. */
+  readonly pairUp: number;
+  /** The target breakpoint, or null for none (Spd scores linearly). */
+  readonly target: number | null;
+  /** Speed margin above the target that still scores at the to-target weight. */
+  readonly margin: number;
+};
+
+/** A Speed total and the highest breakpoint it clears. */
+export type SpeedReading = {
+  readonly total: number;
+  /** Undefined when the total is below every breakpoint. */
+  readonly cleared: number | undefined;
+  /** How far the total is over the breakpoint it clears (total − cleared); not the Speed margin setting. */
+  readonly over: number | undefined;
+};
+
 export type ScoreSettings = {
   /** Per-point weights; null for Rallybot / Dancer, which gets no score. */
   readonly weights: Weights | null;
@@ -105,6 +135,7 @@ export type ScoreSettings = {
   readonly classMode: ClassMode;
   /** DLC classes are Auto candidates. */
   readonly dlc: boolean;
+  readonly speed: SpeedSettings;
 };
 
 export type PairingScore = {
@@ -115,7 +146,12 @@ export type PairingScore = {
   readonly auto: boolean;
   /** Per-stat values in that class under the basis: effective caps, or growth in class. */
   readonly values: Readonly<Record<Stat, number>> | undefined;
-  /** Σ weight × stat points; undefined when unreachable or without weights. */
+  /**
+   * Spd effective cap (with Limit Breaker unless the basis is Caps) + Rally + Tonic + Pair-up, against the
+   * breakpoints; undefined when unreachable.
+   */
+  readonly speed: SpeedReading | undefined;
+  /** Σ weight × stat points, Spd through the Spd curve; undefined when unreachable or without weights. */
   readonly raw: number | undefined;
   /** Raw min-max scaled over every pairing to 0–100, unrounded. */
   readonly scaled: number | undefined;

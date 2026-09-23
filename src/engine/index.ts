@@ -33,6 +33,7 @@ import {
 } from './classes';
 import { inheritGrowths, inheritModifiers, type ParentProfile } from './inheritance';
 import { createScorer } from './scoring';
+import { contextReachesDlc, defaultTargetBreakpoint, pairUpSpd } from './speed';
 import { runSelfTest } from './self-test';
 import { PRESETS, type PresetId } from '../curated/presets';
 import type {
@@ -42,6 +43,7 @@ import type {
   ChildSummary,
   Pairing,
   PairingFilter,
+  PlayContext,
   PairingGroup,
   PairingScore,
   ParentRef,
@@ -50,6 +52,7 @@ import type {
   Scoring,
   ScoreSettings,
   SelfTestReport,
+  SupportRank,
 } from './types';
 
 export type * from './types';
@@ -63,6 +66,7 @@ export {
   type Assumptions,
   type Overrides,
 } from './assumptions';
+export { DEFAULT_SPEED, RALLY_OPTIONS, TONIC_SPD } from './speed';
 export type { Citation } from '../game-data/citations';
 export type { ResolvedDisagreement } from '../game-data/disagreements';
 // Stat vocabulary, re-exported so the UI only talks to the engine.
@@ -111,6 +115,14 @@ export type Engine = {
    * There is no filter input, so filtering a table never changes a score.
    */
   score(settings: ScoreSettings): Scoring;
+  /** The Speed breakpoints, ascending (an assumption). */
+  breakpoints(): readonly number[];
+  /** The play context's default target breakpoint, and the assumption it rests on, if any. */
+  defaultTargetBreakpoint(context: PlayContext): { readonly value: number; readonly assumption: AssumptionId | undefined };
+  /** Whether DLC classes are reachable in a play context (they are Auto candidates there). */
+  contextReachesDlc(context: PlayContext): boolean;
+  /** The Spd part of the Pair-up bonus from a support in this class, at this rank, with this raw Spd. */
+  pairUpSpd(supportClass: ClassId, rank: SupportRank, rawSpd: number): number;
 };
 
 /** Stats with a non-zero weight; under Mixed, Str and Mag are both scored at the attack weight. */
@@ -343,6 +355,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       default: d.format(d.default as never),
       isDefault: isDefaultValue(id, value),
       pairingsAffected: affected.get(id) ?? 0,
+      affects: d.affects,
     };
   });
 
@@ -405,6 +418,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         reachOf,
         classMaxStats,
         classGrowths: (id, g) => classGrowths(id, g, assumptions),
+        breakpoints: assumptions['spd-breakpoints'],
       });
       const scores = scorer(settings);
       const best = new Map<ChildId, PairingScore>();
@@ -437,5 +451,9 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         weightedStats: weightedStats(settings),
       };
     },
+    breakpoints: () => assumptions['spd-breakpoints'],
+    defaultTargetBreakpoint: (context) => defaultTargetBreakpoint(context, assumptions),
+    contextReachesDlc,
+    pairUpSpd,
   };
 }

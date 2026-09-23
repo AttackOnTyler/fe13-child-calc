@@ -1,6 +1,7 @@
 import './style.css';
 import {
   MOD_STATS,
+  RALLY_OPTIONS,
   STATS,
   STAT_LABELS,
   createEngine,
@@ -9,6 +10,7 @@ import {
   type Assumptions,
   type ChildId,
   type ChildResult,
+  type ClassId,
   type ClassMode,
   type ClassSummary,
   type Engine,
@@ -17,22 +19,30 @@ import {
   type PairingFilter,
   type PairingGroup,
   type PairingScore,
+  type PlayContext,
   type Preset,
   type ScoreBasis,
   type ScoreSettings,
   type Scoring,
   type SelfTestReport,
+  type SpeedReading,
   type Stat,
+  type SupportRank,
   type Weights,
 } from '../engine';
 import { h } from './dom';
 import { loadOverrides, saveOverrides } from './overrides';
 import {
   BASES,
+  CONTEXTS,
+  CONTEXT_LABELS,
+  dlcReachable,
   effectivePreset,
   isModified,
   loadPrefs,
   savePrefs,
+  speedSettings,
+  targetOf,
   type ColumnGroup,
   type ScoringPrefs,
 } from './scoring-prefs';
@@ -50,13 +60,15 @@ let view: 'table' | 'validation' = selfTest.passed ? 'table' : 'validation';
 /** Group rows (by group key) currently listing one row per Robin asset/flaw. */
 const expanded = new Set<string>();
 let filter: { parent: string; secondGen: boolean } = { parent: '', secondGen: true };
-type SortCol = 'parent' | 'class' | 'score' | 'count' | `cap:${Stat}` | `mod:${Stat}` | `growth:${Stat}`;
+type SortCol = 'parent' | 'class' | 'score' | 'speed' | 'count' | `cap:${Stat}` | `mod:${Stat}` | `growth:${Stat}`;
 let sort: { col: SortCol; dir: 1 | -1 } = { col: 'score', dir: -1 };
 const FIRST_PAGE = 200;
 const MORE = 500;
 let limit = FIRST_PAGE;
 /** The scoring panel as a bottom sheet (phone width only). */
 let sheetOpen = false;
+/** The Pair-up Spd helper's inputs: a support class, rank and raw Spd. */
+let helper: { cls: ClassId; rank: SupportRank; rawSpd: number } = { cls: 'swordmaster', rank: 'S', rawSpd: 30 };
 
 // ---- scoring ----
 
@@ -64,7 +76,7 @@ const currentPreset = (): Preset => engine.presets().find((p) => p.id === prefs.
 
 const scoreSettings = (): ScoreSettings => {
   const { weights, mixed } = effectivePreset(currentPreset(), prefs);
-  return { weights, mixed, basis: prefs.basis, classMode: prefs.classMode, dlc: prefs.dlc };
+  return { weights, mixed, basis: prefs.basis, classMode: prefs.classMode, dlc: dlcReachable(prefs, engine), speed: speedSettings(prefs, engine) };
 };
 
 let scoringCache: { settings: string; engine: Engine; scoring: Scoring } | undefined;
@@ -183,6 +195,7 @@ function sortValue(line: Line, col: SortCol, gender: Gender): number | string | 
   if (col === 'parent') return line.label.toLowerCase();
   if (col === 'class') return score.class && engine.className(score.class, gender);
   if (col === 'score') return score.raw;
+  if (col === 'speed') return score.speed?.total;
   if (col === 'count') return result.classSet.length;
   const [kind, stat] = col.split(':') as ['cap' | 'mod' | 'growth', Stat];
   if (kind === 'cap') return score.values?.[stat];
@@ -224,6 +237,25 @@ function scoreCell(line: Line): HTMLElement {
   );
 }
 
+/** `63 · 60 (+3)`, tinted by the breakpoint cleared (none: below every breakpoint). */
+function speedCell(speed: SpeedReading | undefined): HTMLElement {
+  if (!speed) return h('td', { class: 'num spd gstart' }, '');
+  const bps = engine.breakpoints();
+  // One tint per breakpoint cleared (bp1 = the lowest); a list longer than five shares the top tint.
+  const step = speed.cleared === undefined ? 0 : Math.min(5, bps.indexOf(speed.cleared) + 1);
+  const target = targetOf(prefs, engine);
+  const title =
+    speed.cleared === undefined
+      ? `Below every breakpoint (${bps[0]})`
+      : `Clears ${speed.cleared} by ${speed.over}` + (target === null ? '' : speed.total >= target ? ` · meets target ${target}` : ` · ${target - speed.total} short of target ${target}`);
+  return h(
+    'td',
+    { class: `num spd gstart bp${step}`, title },
+    h('b', {}, String(speed.total)),
+    speed.cleared === undefined ? h('span', { class: 'muted' }, ' · —') : ` · ${speed.cleared} (+${speed.over})`,
+  );
+}
+
 function lineRow(line: Line, gender: Gender, cls: string, head: HTMLElement): HTMLElement {
   const { score, result: r } = line;
   const values = score.values;
@@ -236,6 +268,7 @@ function lineRow(line: Line, gender: Gender, cls: string, head: HTMLElement): HT
     ),
     scoreCell(line),
   ];
+  if (prefs.cols.speed) cells.push(speedCell(score.speed));
   if (prefs.cols.caps) {
     cells.push(
       ...STATS.map((s, i) =>
@@ -338,6 +371,7 @@ const COLUMN_GROUPS: readonly { id: ColumnGroup; label: string }[] = [
   { id: 'caps', label: 'caps' },
   { id: 'mods', label: 'mods' },
   { id: 'growths', label: 'growths' },
+  { id: 'speed', label: 'speed' },
 ];
 
 function columnToggles(): HTMLElement {
@@ -370,7 +404,7 @@ function childTable(child: ChildId): HTMLElement[] {
   const rows = lines.flatMap((l) => rowsFor(l, summary.gender, sc));
   const shown = rows.slice(0, limit);
   const cols = prefs.cols;
-  const ncols = 1 + 2 + (cols.caps ? STATS.length : 0) + (cols.mods ? MOD_STATS.length : 0) + (cols.growths ? STATS.length : 0) + 1;
+  const ncols = 1 + 2 + (cols.speed ? 1 : 0) + (cols.caps ? STATS.length : 0) + (cols.mods ? MOD_STATS.length : 0) + (cols.growths ? STATS.length : 0) + 1;
 
   const head = h(
     'div',
@@ -402,6 +436,7 @@ function childTable(child: ChildId): HTMLElement[] {
         { class: 'grp' },
         h('th', { class: 'stick' }, ''),
         h('th', { colspan: '2', class: 'gstart' }, 'Result'),
+        cols.speed ? h('th', { class: 'gstart' }, '') : null,
         cols.caps
           ? h('th', { colspan: String(STATS.length), class: 'gcap gstart', title: capsTitle() }, `${capsHeader()} (${BASIS_LABELS[prefs.basis]})`)
           : null,
@@ -417,6 +452,7 @@ function childTable(child: ChildId): HTMLElement[] {
         sortHeader('parent', 'Variable parent', 'stick'),
         sortHeader('class', classHead, 'gstart'),
         sortHeader('score', 'Score', 'num gstart'),
+        ...(cols.speed ? [sortHeader('speed', 'Speed', 'num gstart', speedTitle())] : []),
         ...(cols.caps
           ? STATS.map((s, i) => sortHeader(`cap:${s}`, STAT_LABELS[s], `num gcap${i === 0 ? ' gstart' : ''}${weighted(s) ? ' weighted' : ''}`))
           : []),
@@ -450,6 +486,11 @@ function childTable(child: ChildId): HTMLElement[] {
   return [head, h('div', { class: 'scroll' }, table)];
 }
 
+function speedTitle(): string {
+  const lb = prefs.basis === 'caps' ? '' : ' + 10 (Limit Breaker)';
+  return `Spd cap in the class${lb} + Rally ${prefs.rally} + Tonic ${prefs.tonic ? 2 : 0} + Pair-up ${prefs.pairUp} · highest breakpoint cleared (by how much)`;
+}
+
 function capsTitle(): string {
   if (prefs.basis === 'growths') return 'inherited growth + class growth';
   return `class max + modifier${prefs.basis === 'caps-lb' ? ' + 10 (not HP) with Limit Breaker' : ''}`;
@@ -457,11 +498,16 @@ function capsTitle(): string {
 
 // ---- scoring panel ----
 
-const WEIGHT_STATS: readonly { stat: Stat; max: number; label: string }[] = STATS.map((s) => ({
-  stat: s,
-  max: s === 'spd' ? 20 : 10,
-  label: s === 'spd' ? 'Spd→T' : STAT_LABELS[s],
-}));
+/** One slider per weight; Spd has two, to target (0–20) and beyond (0–10). */
+type WeightSlider = { stat: keyof Weights; max: number; label: string; title?: string };
+const WEIGHT_STATS: readonly WeightSlider[] = STATS.flatMap((s): WeightSlider[] =>
+  s === 'spd'
+    ? [
+        { stat: 'spd', max: 20, label: 'Spd→T', title: 'Per Spd point up to the target breakpoint + margin' },
+        { stat: 'spdBeyond', max: 10, label: 'Spd+', title: 'Per Spd point beyond the target breakpoint + margin' },
+      ]
+    : [{ stat: s, max: 10, label: STAT_LABELS[s] }],
+);
 
 const withoutEdit = (id: Preset['id']): ScoringPrefs['edits'] => {
   const { [id]: _, ...rest } = prefs.edits;
@@ -515,11 +561,11 @@ function panel(): HTMLElement[] {
     ? h(
         'div',
         { class: 'weights' },
-        ...WEIGHT_STATS.map(({ stat, max, label }) => {
+        ...WEIGHT_STATS.map(({ stat, max, label, title }) => {
           const out = h('b', { class: 'num' }, String(weights[stat]));
           return h(
             'label',
-            { class: 'w' },
+            { class: 'w', title },
             h('span', {}, label),
             h('input', {
               type: 'range',
@@ -605,6 +651,7 @@ function panel(): HTMLElement[] {
     ),
     h('h4', {}, 'Weights ', h('span', { class: 'muted small' }, 'per stat point')),
     sliders,
+    ...speedControls(),
     h('h4', {}, 'Filters'),
     h(
       'div',
@@ -636,12 +683,161 @@ function panel(): HTMLElement[] {
       ),
       h(
         'label',
-        { title: 'Let Auto pick DLC classes (Dread Fighter, Bride)' },
-        h('input', { type: 'checkbox', checked: prefs.dlc, onchange: (e) => setPrefs({ dlc: (e.target as HTMLInputElement).checked }) }),
+        {
+          title: engine.contextReachesDlc(prefs.context)
+            ? `DLC is reachable in ${CONTEXT_LABELS[prefs.context]}: Auto can pick DLC classes`
+            : 'Let Auto pick DLC classes (Dread Fighter, Bride)',
+        },
+        h('input', {
+          type: 'checkbox',
+          checked: dlcReachable(prefs, engine),
+          disabled: engine.contextReachesDlc(prefs.context),
+          onchange: (e) => setPrefs({ dlc: (e.target as HTMLInputElement).checked }),
+        }),
         ' DLC classes',
       ),
     ),
   ];
+}
+
+// ---- speed ----
+
+const RALLY_NAMES: Record<string, string> = { '0': 'None', '4': '+4', '8': '+8', '10': '+10' };
+const RANKS: readonly SupportRank[] = ['none', 'C', 'B', 'A', 'S'];
+const RANK_NAMES: Record<SupportRank, string> = { none: '—', C: 'C', B: 'B', A: 'A', S: 'S' };
+const RAW_SPD_TIERS: readonly { value: number; label: string }[] = [
+  { value: 0, label: 'under 10' },
+  { value: 10, label: '10+' },
+  { value: 20, label: '20+' },
+  { value: 30, label: '30+' },
+];
+
+/** An integer input 0–max; an invalid entry is discarded on re-render. */
+function numberInput(label: string, value: number, max: number, onset: (v: number) => void): HTMLElement {
+  return h('input', {
+    type: 'number',
+    min: '0',
+    max: String(max),
+    step: '1',
+    value: String(value),
+    'aria-label': label,
+    class: 'numin',
+    onchange: (e) => {
+      const v = Number((e.target as HTMLInputElement).value);
+      if (Number.isInteger(v) && v >= 0 && v <= max) onset(v);
+      else renderParts(['panel']);
+    },
+  });
+}
+
+/** Pair-up Spd from a support's class, rank and raw Spd; "Use" copies it into Pair-up Spd. */
+function pairUpHelper(): HTMLElement {
+  const classes = engine.classes().filter((c) => engine.pairUpSpd(c.id, 'none', 0) > 0);
+  const value = engine.pairUpSpd(helper.cls, helper.rank, helper.rawSpd);
+  const setHelper = (next: Partial<typeof helper>) => {
+    helper = { ...helper, ...next };
+    renderParts(['panel']);
+  };
+  return h(
+    'details',
+    { class: 'helper' },
+    h('summary', { class: 'muted small' }, 'Helper: from a support’s class and rank'),
+    h(
+      'div',
+      { class: 'blk' },
+      h(
+        'select',
+        { 'aria-label': 'Support class', onchange: (e) => setHelper({ cls: (e.target as HTMLSelectElement).value as ClassId }) },
+        ...classes.map((c) =>
+          h('option', { value: c.id, selected: c.id === helper.cls }, `${c.name} (Spd +${engine.pairUpSpd(c.id, 'none', 0)})`),
+        ),
+      ),
+      h(
+        'select',
+        { 'aria-label': 'Support’s raw Spd', onchange: (e) => setHelper({ rawSpd: Number((e.target as HTMLSelectElement).value) }) },
+        ...RAW_SPD_TIERS.map((t) => h('option', { value: String(t.value), selected: t.value === helper.rawSpd }, `raw Spd ${t.label}`)),
+      ),
+    ),
+    segmented('Rank', RANKS, helper.rank, RANK_NAMES, (rank) => setHelper({ rank })),
+    h(
+      'div',
+      { class: 'blk' },
+      h('span', {}, 'Pair-up Spd ', h('b', { class: 'num' }, `+${value}`)),
+      h('button', { disabled: value === prefs.pairUp, onclick: () => setPrefs({ pairUp: value }) }, 'Use'),
+    ),
+  );
+}
+
+/** Rally, Tonic, Pair-up Spd, the target breakpoint and the speed margin. */
+function speedControls(): HTMLElement[] {
+  const def = engine.defaultTargetBreakpoint(prefs.context);
+  const target = targetOf(prefs, engine);
+  const bps = engine.breakpoints();
+  const listed = target === null || bps.includes(target) ? bps : [...bps, target].sort((a, b) => a - b);
+  const assumedDefault = def.assumption && engine.assumptions().find((a) => a.id === def.assumption);
+  const warn =
+    prefs.target === 'context' && assumedDefault
+      ? h('span', { class: 'warn', title: `Assumption: ${assumedDefault.label} = ${assumedDefault.current}` }, ' ⚠')
+      : null;
+  return [
+    h('h4', {}, 'Speed ', h('span', { class: 'muted small' }, 'Speed column and Spd curve')),
+    segmented('Rally', RALLY_OPTIONS.map(String), String(prefs.rally), RALLY_NAMES, (v) => setPrefs({ rally: Number(v) })),
+    h(
+      'label',
+      { class: 'blk' },
+      h('input', { type: 'checkbox', checked: prefs.tonic, onchange: (e) => setPrefs({ tonic: (e.target as HTMLInputElement).checked }) }),
+      ' Speed Tonic (+2)',
+    ),
+    h(
+      'label',
+      { class: 'blk' },
+      h('span', { class: 'lbl' }, 'Pair-up Spd'),
+      numberInput('Pair-up Spd', prefs.pairUp, 10, (pairUp) => setPrefs({ pairUp })),
+    ),
+    pairUpHelper(),
+    h(
+      'label',
+      { class: 'blk', title: 'Spd up to target + margin scores at Spd→T, beyond it at Spd+. None: Spd is linear at Spd→T.' },
+      h('span', { class: 'lbl' }, 'Target'),
+      h(
+        'select',
+        {
+          'aria-label': 'Target breakpoint',
+          onchange: (e) => {
+            const v = (e.target as HTMLSelectElement).value;
+            setPrefs({ target: v === 'context' ? 'context' : v === 'none' ? null : Number(v) });
+          },
+        },
+        h('option', { value: 'context', selected: prefs.target === 'context' }, `${def.value} (${CONTEXT_LABELS[prefs.context]} default)`),
+        h('option', { value: 'none', selected: prefs.target === null }, 'None (Spd linear)'),
+        ...listed.map((bp) => h('option', { value: String(bp), selected: prefs.target === bp }, String(bp))),
+      ),
+      warn,
+      prefs.target === 'context'
+        ? null
+        : h('button', { class: 'ghost', title: 'Follow the play context’s default', onclick: () => setPrefs({ target: 'context' }) }, '↺'),
+    ),
+    h(
+      'label',
+      { class: 'blk', title: 'Extra Spd above the target that still scores at Spd→T' },
+      h('span', { class: 'lbl' }, 'Margin'),
+      '+',
+      numberInput('Speed margin', prefs.margin, 10, (margin) => setPrefs({ margin })),
+    ),
+  ];
+}
+
+function contextSelect(): HTMLElement {
+  return h(
+    'label',
+    { class: 'context', title: 'What you’re building for: sets the default target breakpoint and whether DLC is reachable' },
+    h('span', { class: 'muted' }, 'Play context '),
+    h(
+      'select',
+      { 'aria-label': 'Play context', onchange: (e) => setPrefs({ context: (e.target as HTMLSelectElement).value as PlayContext }) },
+      ...CONTEXTS.map((c) => h('option', { value: c, selected: c === prefs.context }, CONTEXT_LABELS[c])),
+    ),
+  );
 }
 
 // ---- shell ----
@@ -675,7 +871,7 @@ function render(): void {
     h(
       'div',
       { class: 'shell' },
-      h('header', { class: 'topbar' }, h('span', { class: 'brand' }, 'FE13 Child Calc'), validationButton(selfTest)),
+      h('header', { class: 'topbar' }, h('span', { class: 'brand' }, 'FE13 Child Calc'), contextSelect(), validationButton(selfTest)),
       regions.rail,
       regions.main,
       regions.panel,

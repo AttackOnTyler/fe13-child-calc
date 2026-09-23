@@ -1,9 +1,21 @@
-import { STATS, type ClassMode, type Engine, type Preset, type PresetId, type ScoreBasis, type Weights } from '../engine';
+import {
+  DEFAULT_SPEED,
+  RALLY_OPTIONS,
+  STATS,
+  type ClassMode,
+  type Engine,
+  type PlayContext,
+  type Preset,
+  type PresetId,
+  type ScoreBasis,
+  type SpeedSettings,
+  type Weights,
+} from '../engine';
 
 /** A user's edit to a preset: it belongs to the preset (shown as `Name*`) until reset. */
 export type PresetEdit = { readonly weights: Weights; readonly mixed: boolean };
 
-export type ColumnGroup = 'caps' | 'mods' | 'growths';
+export type ColumnGroup = 'caps' | 'mods' | 'growths' | 'speed';
 
 /** Scoring settings and preset edits; saved in localStorage. Filters are view state and aren't saved. */
 export type ScoringPrefs = {
@@ -14,6 +26,16 @@ export type ScoringPrefs = {
   /** DLC classes are Auto candidates. */
   readonly dlc: boolean;
   readonly cols: Readonly<Record<ColumnGroup, boolean>>;
+  readonly context: PlayContext;
+  /** Rally Spd: one of RALLY_OPTIONS. */
+  readonly rally: number;
+  readonly tonic: boolean;
+  /** Pair-up Spd, 0–10. */
+  readonly pairUp: number;
+  /** A user-set target breakpoint (null = none), or 'context' to follow the play context's default. */
+  readonly target: number | null | 'context';
+  /** The speed margin, 0–10. */
+  readonly margin: number;
 };
 
 export const DEFAULT_PREFS: ScoringPrefs = {
@@ -22,12 +44,41 @@ export const DEFAULT_PREFS: ScoringPrefs = {
   basis: 'caps-lb',
   classMode: 'auto',
   dlc: false,
-  cols: { caps: true, mods: true, growths: false },
+  cols: { caps: true, mods: true, growths: false, speed: true },
+  context: 'all',
+  rally: DEFAULT_SPEED.rally,
+  tonic: DEFAULT_SPEED.tonic,
+  pairUp: DEFAULT_SPEED.pairUp,
+  target: 'context',
+  margin: DEFAULT_SPEED.margin,
 };
+
+export const CONTEXTS: readonly PlayContext[] = ['apotheosis', 'main-story', 'full-route', 'all'];
+export const CONTEXT_LABELS: Readonly<Record<PlayContext, string>> = {
+  apotheosis: 'Apotheosis',
+  'main-story': 'Main story',
+  'full-route': 'Full route',
+  all: 'All',
+};
+
+/** The target breakpoint in force: the user's, or the play context's default. */
+export function targetOf(prefs: ScoringPrefs, engine: Engine): number | null {
+  return prefs.target === 'context' ? engine.defaultTargetBreakpoint(prefs.context).value : prefs.target;
+}
+
+/** The Speed inputs as the engine takes them, with the target breakpoint resolved. */
+export function speedSettings(prefs: ScoringPrefs, engine: Engine): SpeedSettings {
+  return { rally: prefs.rally, tonic: prefs.tonic, pairUp: prefs.pairUp, target: targetOf(prefs, engine), margin: prefs.margin };
+}
+
+/** DLC classes are Auto candidates when the toggle is on, or when the play context reaches DLC. */
+export const dlcReachable = (prefs: ScoringPrefs, engine: Engine): boolean => prefs.dlc || engine.contextReachesDlc(prefs.context);
 
 export const BASES: readonly ScoreBasis[] = ['caps-lb', 'caps', 'growths'];
 
 const KEY = 'fe13-child-calc:scoring:v1';
+
+const isIntIn = (v: unknown, lo: number, hi: number): v is number => Number.isInteger(v) && (v as number) >= lo && (v as number) <= hi;
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const WEIGHT_KEYS = [...STATS, 'spdBeyond'] as const;
@@ -68,7 +119,13 @@ export function loadPrefs(engine: Engine): ScoringPrefs {
         ? (raw.classMode as ClassMode)
         : DEFAULT_PREFS.classMode,
     dlc: typeof raw.dlc === 'boolean' ? raw.dlc : DEFAULT_PREFS.dlc,
-    cols: { caps: col('caps'), mods: col('mods'), growths: col('growths') },
+    cols: { caps: col('caps'), mods: col('mods'), growths: col('growths'), speed: col('speed') },
+    context: CONTEXTS.includes(raw.context as PlayContext) ? (raw.context as PlayContext) : DEFAULT_PREFS.context,
+    rally: RALLY_OPTIONS.includes(raw.rally as number) ? (raw.rally as number) : DEFAULT_PREFS.rally,
+    tonic: typeof raw.tonic === 'boolean' ? raw.tonic : DEFAULT_PREFS.tonic,
+    pairUp: isIntIn(raw.pairUp, 0, 10) ? raw.pairUp : DEFAULT_PREFS.pairUp,
+    target: raw.target === null || raw.target === 'context' || isIntIn(raw.target, 1, 99) ? (raw.target as ScoringPrefs['target']) : DEFAULT_PREFS.target,
+    margin: isIntIn(raw.margin, 0, 10) ? raw.margin : DEFAULT_PREFS.margin,
   };
 }
 

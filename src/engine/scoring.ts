@@ -1,11 +1,13 @@
 /**
  * Scoring: a pairing's raw value is Σ weight × stat points in a class, under a score basis; the total is min-max
- * scaled over every enumerated pairing to 0–100 (#11, revised by #15). Pure: settings in, scores out.
+ * scaled over every enumerated pairing to 0–100 (#11, revised by #15). Spd scores through the Spd curve around the
+ * target breakpoint. Pure: settings in, scores out.
  */
 import { CLASSES, type ClassData, type ClassId } from '../game-data/classes';
 import { STATS, type Gender, type Stat } from '../game-data/stats';
 import type { Weights } from '../curated/presets';
-import type { ChildResult, PairingScore, ScoreSettings } from './types';
+import { readSpeed, speedBuffs, spdCurve } from './speed';
+import type { ChildResult, PairingScore, ScoreSettings, SpeedReading } from './types';
 
 /** What scoring needs from the engine, per row and per class. */
 export type ScoringContext = {
@@ -14,11 +16,14 @@ export type ScoringContext = {
   readonly reachOf: (r: ChildResult) => ReadonlySet<ClassId>;
   readonly classMaxStats: (id: ClassId, gender: Gender) => Readonly<Record<Stat, number>>;
   readonly classGrowths: (id: ClassId, gender: Gender) => Readonly<Record<Stat, number>>;
+  /** Ascending Speed breakpoints. */
+  readonly breakpoints: readonly number[];
 };
 
 const CLASS_IDS = Object.keys(CLASSES) as ClassId[];
 const STR = STATS.indexOf('str');
 const MAG = STATS.indexOf('mag');
+const SPD = STATS.indexOf('spd');
 
 /**
  * Auto candidates: promoted classes and single-tier specials, never Villager; DLC ones only when DLC is reachable.
@@ -29,11 +34,14 @@ function isAutoCandidate(id: ClassId, dlc: boolean): boolean {
   return c.tier !== 'base' && id !== 'villager' && (dlc || !c.dlc);
 }
 
-/** Raw value of per-stat values (in STATS order) under the weights; Mixed scores max(Str, Mag) at the attack weight. */
+/**
+ * Raw value of per-stat values (in STATS order) under the weights; Mixed scores max(Str, Mag) at the attack weight.
+ * Spd is left out: the caller adds its curve term.
+ */
 function rawValue(w: readonly number[], v: readonly number[], mixed: boolean): number {
   let sum = 0;
   for (let i = 0; i < v.length; i++) {
-    if (mixed && (i === STR || i === MAG)) continue;
+    if (i === SPD || (mixed && (i === STR || i === MAG))) continue;
     sum += w[i]! * v[i]!;
   }
   if (mixed) sum += Math.max(w[STR]!, w[MAG]!) * Math.max(v[STR]!, v[MAG]!);
@@ -46,7 +54,7 @@ const toRecord = (v: readonly number[]): Record<Stat, number> => {
   return out;
 };
 
-/** Per-point weights in STATS order. Spd is linear at its to-target weight until the Spd curve lands. */
+/** Per-point weights in STATS order; Spd's is the to-target weight (the curve adds `spdBeyond`). */
 const weightVector = (w: Weights): number[] => STATS.map((s) => w[s]);
 
 /** A row's scoring inputs as vectors in STATS order, prepared once per engine. */
@@ -85,10 +93,13 @@ export function createScorer(ctx: ScoringContext): (settings: ScoreSettings) => 
   const candidateCache = new Map<string, Map<ReadonlySet<ClassId>, ClassId[]>>();
 
   return (settings) => {
-    const { weights, mixed, basis, classMode, dlc } = settings;
+    const { weights, mixed, basis, classMode, dlc, speed } = settings;
     const w = weights && weightVector(weights);
     const growthsBasis = basis === 'growths';
     const lb = basis === 'caps-lb' ? 10 : 0;
+    // The Speed total uses Limit Breaker unless the basis is Caps (Growths reads Caps + LB).
+    const speedLb = basis === 'caps' ? 0 : 10;
+    const buffs = speedBuffs(speed);
 
     // Auto candidates per reach set (rows share reach sets).
     let byReach = candidateCache.get(String(dlc));
@@ -112,30 +123,50 @@ export function createScorer(ctx: ScoringContext): (settings: ScoreSettings) => 
       }
       return values;
     };
+    /** Spd effective cap in the class + buffs. */
+    const speedTotal = (row: PreparedRow, id: ClassId): number => maxOf(id, row.gender)[SPD]! + row.mods[SPD]! + speedLb + buffs;
+    /** Raw value of the values `fill` just wrote, with Spd through the curve. */
+    const score = (w: readonly number[], row: PreparedRow, id: ClassId, v: readonly number[]): number =>
+      rawValue(w, v, mixed) +
+      spdCurve(speedTotal(row, id), w[SPD]!, weights!.spdBeyond, speed, growthsBasis ? v[SPD] : undefined);
 
-    type Pick = { r: ChildResult; cls: ClassId | undefined; auto: boolean; raw: number | undefined; v: number[] | undefined };
+    type Pick = {
+      r: ChildResult;
+      cls: ClassId | undefined;
+      auto: boolean;
+      raw: number | undefined;
+      v: number[] | undefined;
+      spd: SpeedReading | undefined;
+    };
     const picks: Pick[] = [];
+    const pick = (row: PreparedRow, cls: ClassId | undefined, auto: boolean, raw: number | undefined): Pick => ({
+      r: row.r,
+      cls,
+      auto,
+      raw,
+      v: cls && [...fill(row, cls)],
+      spd: cls && readSpeed(speedTotal(row, cls), ctx.breakpoints),
+    });
     for (const row of rows) {
-      const { r } = row;
       if (classMode !== 'auto') {
-        const v = row.reach.has(classMode) ? [...fill(row, classMode)] : undefined;
-        picks.push({ r, cls: v && classMode, auto: false, raw: w && v ? rawValue(w, v, mixed) : undefined, v });
+        const cls = row.reach.has(classMode) ? classMode : undefined;
+        picks.push(pick(row, cls, false, w && cls ? score(w, row, cls, fill(row, cls)) : undefined));
         continue;
       }
       if (!w) {
-        picks.push({ r, cls: r.startClass, auto: false, raw: undefined, v: [...fill(row, r.startClass)] });
+        picks.push(pick(row, row.r.startClass, false, undefined));
         continue;
       }
       let best: ClassId | undefined;
       let bestRaw = -Infinity;
       for (const id of candidatesOf(row.reach)) {
-        const raw = rawValue(w, fill(row, id), mixed);
+        const raw = score(w, row, id, fill(row, id));
         if (raw > bestRaw) {
           best = id;
           bestRaw = raw;
         }
       }
-      picks.push({ r, cls: best, auto: true, raw: best && bestRaw, v: best && [...fill(row, best)] });
+      picks.push(pick(row, best, true, best && bestRaw));
     }
 
     let lo = Infinity;
@@ -148,13 +179,14 @@ export function createScorer(ctx: ScoringContext): (settings: ScoreSettings) => 
     const scale = (raw: number) => (hi > lo ? ((raw - lo) / (hi - lo)) * 100 : 0);
 
     const out = new Map<string, PairingScore>();
-    for (const { r, cls, auto, raw, v } of picks) {
+    for (const { r, cls, auto, raw, v, spd } of picks) {
       const scaled = raw === undefined ? undefined : scale(raw);
       out.set(r.key, {
         key: r.key,
         class: cls,
         auto,
         values: v && toRecord(v),
+        speed: spd,
         raw,
         scaled,
         score: scaled === undefined ? undefined : Math.round(scaled),
