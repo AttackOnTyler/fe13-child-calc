@@ -40,6 +40,8 @@ export type ChildPlanControls = {
   readonly presetLabel: (id: PresetId) => string;
   /** The play context's composition quotas (the user's, else the curated seed). */
   readonly quotas: Quotas;
+  /** Children whose plan preset Suggest roles picked. */
+  readonly suggested: ReadonlySet<ChildId>;
 };
 
 /** What the Plan view reads, and how it changes the roster and the plan preferences. */
@@ -50,6 +52,8 @@ export type PlanPageContext = ChildPlanControls & {
   readonly free: boolean;
   readonly setFree: (free: boolean) => void;
   readonly resetPlanPrefs: () => void;
+  /** Rewrites the plan preset of every child on its default (or on an earlier suggestion) to meet the quotas. */
+  readonly suggestRoles: () => void;
   /** The user edited this play context's quotas. */
   readonly quotasEdited: boolean;
   /** Sets this play context's quotas; null resets them to the curated seed. */
@@ -351,7 +355,11 @@ export function presetControl(ctl: ChildPlanControls, id: ChildId, name: string)
       h('option', { value: '', selected: !own }, `default (${ctl.presetLabel(fallback)})`),
       ...engine.presets().map((p) => h('option', { value: p.id, selected: p.id === own }, ctl.presetLabel(p.id))),
     ),
-    own ? h('span', { class: 'chip set', title: 'Set by you: holds in every play context' }, 'set') : null,
+    own
+      ? ctl.suggested.has(id)
+        ? h('span', { class: 'chip suggested', title: 'Picked by Suggest roles: the next run may change it; ↺ resets it' }, 'suggested')
+        : h('span', { class: 'chip set', title: 'Set by you: holds in every play context' }, 'set')
+      : null,
     h('button', { class: 'mini', disabled: !own, title: own ? 'Reset to the default' : 'On the default', onclick: () => ctl.setPlanPreset(id, null) }, '↺'),
   );
 }
@@ -386,6 +394,15 @@ export function planSidebar(ctx: PlanPageContext): HTMLElement {
           onclick: () => ctx.setEditingQuotas(!ctx.editingQuotas),
         },
         ctx.quotasEdited ? '✎*' : '✎',
+      ),
+      h(
+        'button',
+        {
+          class: 'ghost small',
+          title: 'Pick a plan preset for every child on its default so the army meets the quotas, then re-plan. Your own presets stay.',
+          onclick: ctx.suggestRoles,
+        },
+        'Suggest roles',
       ),
     ),
     ctx.editingQuotas ? quotaEditor(ctx) : null,

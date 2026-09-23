@@ -77,7 +77,17 @@ import { validationPanel, withOverride } from './validation';
 import { rosterPage } from './roster-page';
 import { clearRoster, loadRoster, saveRoster } from './roster-store';
 import { planPage, planSidebar, type ChildPlanControls, type PlanPageContext } from './plan-page';
-import { DEFAULT_PLAN_PREFS, loadPlanPrefs, savePlanPrefs, withPlanPreset, withPriority, withQuotas, type PlanPrefs } from './plan-prefs';
+import {
+  DEFAULT_PLAN_PREFS,
+  loadPlanPrefs,
+  savePlanPrefs,
+  userOverrides,
+  withPlanPreset,
+  withPriority,
+  withQuotas,
+  withSuggestedPresets,
+  type PlanPrefs,
+} from './plan-prefs';
 
 let overrides: Overrides = loadOverrides();
 let assumptions: Assumptions = resolveAssumptions(overrides);
@@ -244,6 +254,7 @@ const planControls = (): ChildPlanControls => ({
   setPlanPreset: (child, preset) => setPlanPrefs(withPlanPreset(planPrefs, child, preset)),
   presetLabel: (id: PresetId) => presetLabel(engine.presets().find((p) => p.id === id)!),
   quotas: quotasFor(prefs.context, planPrefs.quotas),
+  suggested: new Set(planPrefs.suggested),
 });
 
 const planContext = (): PlanPageContext => ({
@@ -256,6 +267,10 @@ const planContext = (): PlanPageContext => ({
     renderParts(['main']);
   },
   resetPlanPrefs: () => setPlanPrefs(DEFAULT_PLAN_PREFS),
+  suggestRoles: () => {
+    const s = engine.suggestRoles(roster, { ...planSettings(), overrides: userOverrides(planPrefs) }, quotasFor(prefs.context, planPrefs.quotas));
+    setPlanPrefs(withSuggestedPresets(planPrefs, s.overrides));
+  },
   quotasEdited: !!planPrefs.quotas[quotaContext(prefs.context)],
   setQuotas: (quotas) => setPlanPrefs(withQuotas(planPrefs, quotaContext(prefs.context), quotas)),
   editingQuotas,

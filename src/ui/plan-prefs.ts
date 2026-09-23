@@ -12,16 +12,19 @@ import {
 import { CONTEXTS } from './scoring-prefs';
 
 /**
- * Plan preferences: each child's priority (0–3), the user's plan presets, which hold in every play context, and the
+ * Plan preferences: each child's priority (0–3), the plan preset overrides, which hold in every play context, and the
  * user's composition quotas per play context (All uses Main story's). Preferences, not run state: Clear all leaves them alone.
  */
 export type PlanPrefs = {
   readonly priorities: Readonly<Partial<Record<ChildId, number>>>;
+  /** The user's plan presets and Suggest roles' picks. */
   readonly overrides: Readonly<Partial<Record<ChildId, PresetId>>>;
+  /** The overrides Suggest roles wrote: the next run may rewrite them. */
+  readonly suggested: readonly ChildId[];
   readonly quotas: Readonly<Partial<Record<PlayContext, Quotas>>>;
 };
 
-export const DEFAULT_PLAN_PREFS: PlanPrefs = { priorities: {}, overrides: {}, quotas: {} };
+export const DEFAULT_PLAN_PREFS: PlanPrefs = { priorities: {}, overrides: {}, suggested: [], quotas: {} };
 
 /** The most a quota or the cap can be. */
 const QUOTA_LIMIT = 99;
@@ -35,10 +38,24 @@ export const withPriority = (prefs: PlanPrefs, child: ChildId, priority: number)
   priorities: { ...prefs.priorities, [child]: priority },
 });
 
-/** Sets a child's plan preset, or with null resets it to the default. */
+/** Sets a child's plan preset as the user's, or with null resets it to the default. */
 export function withPlanPreset(prefs: PlanPrefs, child: ChildId, preset: PresetId | null): PlanPrefs {
   const { [child]: _, ...rest } = prefs.overrides;
-  return { ...prefs, overrides: preset ? { ...rest, [child]: preset } : rest };
+  return { ...prefs, overrides: preset ? { ...rest, [child]: preset } : rest, suggested: prefs.suggested.filter((c) => c !== child) };
+}
+
+/** The plan presets the user set, without Suggest roles' picks. */
+export function userOverrides(prefs: PlanPrefs): Partial<Record<ChildId, PresetId>> {
+  const out = { ...prefs.overrides };
+  for (const c of prefs.suggested) delete out[c];
+  return out;
+}
+
+/** Writes Suggest roles' picks as suggested overrides, replacing the last run's; the user's own are left alone. */
+export function withSuggestedPresets(prefs: PlanPrefs, picks: Readonly<Partial<Record<ChildId, PresetId>>>): PlanPrefs {
+  const mine = userOverrides(prefs);
+  const suggested = (Object.keys(picks) as ChildId[]).filter((c) => !(c in mine));
+  return { ...prefs, overrides: { ...mine, ...Object.fromEntries(suggested.map((c) => [c, picks[c]])) }, suggested };
 }
 
 /** Sets a play context's quotas, or with null resets them to the curated seed. */
@@ -84,13 +101,16 @@ export function parsePlanPrefs(raw: unknown, engine: Engine): PlanPrefs {
   for (const [id, v] of Object.entries(isObject(raw.overrides) ? raw.overrides : {})) {
     if (children.has(id) && presets.has(v as string)) overrides[id as ChildId] = v as PresetId;
   }
+  const suggested = (Array.isArray(raw.suggested) ? raw.suggested : []).filter(
+    (c, i, all): c is ChildId => typeof c === 'string' && c in overrides && all.indexOf(c) === i,
+  );
   const quotas: Partial<Record<PlayContext, Quotas>> = {};
   const savedQuotas = isObject(raw.quotas) ? raw.quotas : {};
   for (const context of CONTEXTS.filter((c) => c !== 'all')) {
     const q = parseQuotas(savedQuotas[context]);
     if (q) quotas[context] = q;
   }
-  return { priorities, overrides, quotas };
+  return { priorities, overrides, suggested, quotas };
 }
 
 export function loadPlanPrefs(engine: Engine): PlanPrefs {

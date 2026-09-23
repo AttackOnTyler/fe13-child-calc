@@ -47,6 +47,10 @@ import { PLAN_PRESETS } from '../curated/plan-presets';
 import { DEFAULT_PRIORITY, childLedger, evaluatePlan, savedPairings, solvePlan, type LedgerEntry, type MarriagePlan, type PlanContext, type PlannedChild } from './plan';
 import type { SavedPlan } from './roster';
 import { deploymentRoleOf } from './composition';
+import { suggestRoles, type RoleSuggestion } from './suggest-roles';
+import type { Quotas } from '../curated/deployment';
+import { RALLY_SKILLS } from '../game-data/skills';
+import { STAFF_CLASSES } from '../game-data/classes';
 import type {
   AssumptionStatus,
   BuildMatch,
@@ -128,6 +132,8 @@ export {
 export type { PresetId, ScoringRole, Weights } from '../curated/presets';
 export { DEPLOYMENT_ROLES, type DeploymentRole, type DeploymentTag, type QuotaRange, type Quotas } from '../curated/deployment';
 export { composition, deploymentRoleOf, quotaContext, quotasFor, type Composition, type QuotaStatus, type RoleCount } from './composition';
+export { SUGGEST_PASS_CAP, type RoleSuggestion } from './suggest-roles';
+export { STAFF_CLASSES } from '../game-data/classes';
 export {
   DEFAULT_PRIORITY,
   PLAN_PRIORITIES,
@@ -238,6 +244,12 @@ export type Engine = {
    * its best pairing that can still happen with Δ vs the plan, and its status.
    */
   ledger(roster: Roster, settings: PlanSettings): readonly LedgerEntry[];
+  /**
+   * Suggest roles: plan presets for the children still on their default (every child without an override in
+   * `settings`: pass only the user's own), chosen so the army meets the quotas, and the plan they make. Never
+   * Dancer; Staff/Rally only for a pairing that reaches a staff class or a rally skill.
+   */
+  suggestRoles(roster: Roster, settings: PlanSettings, quotas: Quotas): RoleSuggestion;
 };
 
 /**
@@ -602,29 +614,30 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     if (lastPlan?.roster !== roster || lastPlan.settings !== k) lastPlan = { roster, settings: k, ctx: newPlanContext(roster, s) };
     return lastPlan.ctx;
   };
+  /** A plan preset's scores, in its own role, Auto class and the global rest (undefined: no score). */
+  const presetScores = (preset: PresetId, s: PlanSettings): Map<string, PairingScore> | undefined => {
+    const data = PRESETS[preset];
+    const edit = s.edits[preset];
+    const role = data.role ?? 'lead';
+    return data.weights
+      ? planScoresFor({
+          weights: edit?.weights ?? data.weights,
+          mixed: edit?.mixed ?? data.mixed,
+          basis: BASES[role].includes(s.basis) ? s.basis : 'caps-lb',
+          classMode: 'auto',
+          dlc: s.dlc,
+          speed: s.speed,
+          role,
+          supportRank: s.supportRank,
+        })
+      : undefined;
+  };
   const newPlanContext = (roster: Roster, s: PlanSettings): PlanContext => {
     const memo = new Map<string, PlannedChild | undefined>();
-    // Each plan preset's scores, in its own role, Auto class and the global rest (undefined: no score).
     const byPreset = new Map<PresetId, Map<string, PairingScore> | undefined>();
     const scoresOf = (preset: PresetId) => {
-      if (byPreset.has(preset)) return byPreset.get(preset);
-      const data = PRESETS[preset];
-      const edit = s.edits[preset];
-      const role = data.role ?? 'lead';
-      const scores = data.weights
-        ? planScoresFor({
-            weights: edit?.weights ?? data.weights,
-            mixed: edit?.mixed ?? data.mixed,
-            basis: BASES[role].includes(s.basis) ? s.basis : 'caps-lb',
-            classMode: 'auto',
-            dlc: s.dlc,
-            speed: s.speed,
-            role,
-            supportRank: s.supportRank,
-          })
-        : undefined;
-      byPreset.set(preset, scores);
-      return scores;
+      if (!byPreset.has(preset)) byPreset.set(preset, presetScores(preset, s));
+      return byPreset.get(preset);
     };
     // Blocking reads only which units a pairing needs, never Robin's asset/flaw: share it across the 56.
     const hard = new Map<string, boolean>();
@@ -806,6 +819,29 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       const ctx = planContext(roster, settings);
       const candidates = (child: ChildId) => narrowAll(groupsByChild.get(child) ?? [], { run: roster.run }).flatMap((g) => g.results.map((r) => r.pairing));
       return childLedger(ctx, solvePlan(ctx), candidates, (p) => evaluateBlocking(p, roster, assumptions));
+    },
+    suggestRoles: (roster, settings, quotas) => {
+      const reach = { context: settings.context, dlc: settings.dlc };
+      const dlc = dlcOf(reach);
+      const scores = new Map<PresetId, Map<string, PairingScore> | undefined>();
+      return suggestRoles({
+        roster,
+        quotas,
+        userSet: new Set(Object.keys(settings.overrides) as ChildId[]),
+        plan: (suggested) => solvePlan(newPlanContext(roster, { ...settings, overrides: { ...settings.overrides, ...suggested } })),
+        defaultPlanPreset: (child) => defaultPlanPreset(child, settings),
+        value: (c, preset) => {
+          if (!scores.has(preset)) scores.set(preset, presetScores(preset, settings));
+          return c.priority * (scores.get(preset)?.get(c.key)?.scaled ?? 0);
+        },
+        staffEligible: (c) => {
+          const r = byKey.get(c.key);
+          if (!r) return false;
+          if ([...reachOf(r)].some((id) => (STAFF_CLASSES as readonly ClassId[]).includes(id) && (dlc || !CLASSES[id].dlc))) return true;
+          const skills = reachFor(r, reach);
+          return RALLY_SKILLS.some((id) => skills.sourcesOf(id).length > 0);
+        },
+      });
     },
   };
 }

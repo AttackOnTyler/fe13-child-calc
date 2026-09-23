@@ -42,19 +42,21 @@ export function quotasFor(context: PlayContext, edits: Readonly<Partial<Record<P
 /** Units that can't take the field. Not yet recruited prunes nothing: the plan counts on them joining. */
 const OUT_OF_PLAY = ['benched', 'missed', 'dead'];
 
+/** The unit can take the field: not benched, missed or dead. */
+export const inPlay = (roster: Roster, u: RosterUnit): boolean => !OUT_OF_PLAY.includes(stateOf(roster, u));
+
 const statusOf = (count: number, { min, max }: QuotaRange): QuotaStatus => (count < min ? 'under' : count > max ? 'over' : 'ok');
 
 export function composition(roster: Roster, plan: MarriagePlan, quotas: Quotas): Composition {
-  const inPlay = (u: RosterUnit) => !OUT_OF_PLAY.includes(stateOf(roster, u));
   const counts = new Map<DeploymentRole, number>(DEPLOYMENT_ROLES.map((r) => [r, 0]));
   const add = (role: DeploymentRole) => counts.set(role, counts.get(role)! + 1);
   // Robin is deployed whether or not the run has set Robin's gender yet.
   const firstGen = rosterUnits({ ...roster.run, gender: roster.run.gender ?? plan.robin.gender }).map((u) => u.id).filter(isDeployable);
   for (const u of firstGen) {
     const tag = deploymentOf(roster, u);
-    if (tag.deploy && inPlay(u)) add(tag.role);
+    if (tag.deploy && inPlay(roster, u)) add(tag.role);
   }
-  for (const m of plan.marriages) for (const c of m.children) if (inPlay(c.child)) add(c.deploymentRole);
+  for (const m of plan.marriages) for (const c of m.children) if (inPlay(roster, c.child)) add(c.deploymentRole);
   const roles = DEPLOYMENT_ROLES.map((role): RoleCount => {
     const count = counts.get(role)!;
     return { role, count, ...quotas.roles[role], status: statusOf(count, quotas.roles[role]) };

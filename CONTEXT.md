@@ -142,7 +142,7 @@ Per play context, a min–max range of deployed units for each deployment role p
 _Avoid_: Slots, army limits
 
 **Suggest roles**:
-A one-shot action that rewrites the plan preset of every child still on its default so the army meets the composition quotas, valuing each child at priority × score in the pairing the marriage plan gives it, then re-plans. Its picks are ordinary overrides marked "suggested"; the solver itself always scores each child in one role.
+A one-shot action that rewrites the plan preset of every child still on its default so the army meets the composition quotas, valuing each child at priority × score in the pairing the marriage plan gives it, then re-plans. Its picks are ordinary overrides marked "suggested", which the next run may rewrite and ↺ resets; the solver itself always scores each child in one role.
 _Avoid_: Auto-roles, role solver
 
 **Blocked pairing**:

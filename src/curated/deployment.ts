@@ -12,6 +12,9 @@ export type DeploymentRole = 'lead' | 'battery' | 'staff' | 'dancer';
 
 export const DEPLOYMENT_ROLES: readonly DeploymentRole[] = ['lead', 'battery', 'staff', 'dancer'];
 
+/** The deployment roles a child can take. */
+export type ChildDeploymentRole = Exclude<DeploymentRole, 'dancer'>;
+
 export type DeploymentTag = { readonly deploy: boolean; readonly role: DeploymentRole };
 
 /** A min–max count of deployed units. */

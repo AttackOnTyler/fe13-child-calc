@@ -10,6 +10,7 @@
  */
 import type { ChildId } from '../game-data/children';
 import type { PresetId } from './presets';
+import type { ChildDeploymentRole } from './deployment';
 
 export type PlanPresetEntry = {
   readonly default: PresetId;
@@ -31,4 +32,14 @@ export const PLAN_PRESETS: Readonly<Partial<Record<ChildId, PlanPresetEntry>>> =
   laurent: { default: 'magical-hard-support' },
   noire: { default: 'physical-lead' },
   nah: { default: 'battery', mainStory: 'nostank' },
+};
+
+/**
+ * What Suggest roles scores a child with in a role its plan preset isn't in (#37): a per-child entry, else the global
+ * table. Nah, a battery by default, leads as the Nosferatu tank it is in the main story.
+ */
+export const DEPLOYMENT_ROLE_PRESETS: Readonly<Record<ChildDeploymentRole, PresetId>> = { lead: 'physical-lead', battery: 'battery', staff: 'rallybot' };
+
+export const CHILD_DEPLOYMENT_ROLE_PRESETS: Readonly<Partial<Record<ChildId, Partial<Record<ChildDeploymentRole, PresetId>>>>> = {
+  nah: { lead: 'nostank' },
 };

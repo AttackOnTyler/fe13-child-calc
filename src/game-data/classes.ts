@@ -165,3 +165,9 @@ export const allowsGender = (id: ClassId, gender: Gender): boolean => {
 
 /** The regular classes for a gender, in data order. */
 export const regularClasses = (gender: Gender): readonly ClassId[] => REGULAR_CLASSES.filter((c) => allowsGender(c, gender));
+
+/**
+ * Classes that wield staves (SF https://serenesforest.net/awakening/classes/introduction/ weapon ranks): the healers a
+ * Staff/Rally deployment role needs. Bride is DLC.
+ */
+export const STAFF_CLASSES = ['priest', 'troubadour', 'falcon-knight', 'war-monk', 'sage', 'valkyrie', 'bride'] as const satisfies readonly ClassId[];
