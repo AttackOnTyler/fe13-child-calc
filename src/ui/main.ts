@@ -1,76 +1,68 @@
 import './style.css';
 import {
-  ASSUMPTION_NOTES,
   MOD_STATS,
   STATS,
   STAT_LABELS,
   createEngine,
+  resolveAssumptions,
+  type AssumptionId,
+  type Assumptions,
   type ChildId,
   type ChildResult,
+  type Engine,
+  type Overrides,
   type PairingGroup,
   type SelfTestReport,
 } from '../engine';
+import { h } from './dom';
+import { loadOverrides, saveOverrides } from './overrides';
+import { validationPanel, withOverride } from './validation';
 
-const engine = createEngine();
-const selfTest = engine.selfTest();
+let overrides: Overrides = loadOverrides();
+let assumptions: Assumptions = resolveAssumptions(overrides);
+let engine: Engine = createEngine(assumptions);
+let selfTest = engine.selfTest();
 
 // View state only; all domain answers come from the engine.
 let selected: ChildId = 'lucina';
-let selfTestOpen = !selfTest.passed;
+let view: 'table' | 'validation' = selfTest.passed ? 'table' : 'validation';
 /** Group rows (by group key) currently listing one row per Robin asset/flaw. */
 const expanded = new Set<string>();
 
-type Attrs = Record<string, string | boolean | undefined | ((e: Event) => void)>;
-
-function h(tag: string, attrs: Attrs = {}, ...children: (Node | string | null)[]): HTMLElement {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (v === undefined || v === false) continue;
-    if (typeof v === 'function') el.addEventListener(k.replace(/^on/, ''), v);
-    else if (v === true) el.setAttribute(k, '');
-    else el.setAttribute(k, v);
-  }
-  for (const c of children) if (c !== null) el.append(c);
-  return el;
+/** Replaces the overrides, saves them and recomputes every pairing. */
+function applyOverrides(next: Overrides): void {
+  overrides = next;
+  saveOverrides(overrides);
+  assumptions = resolveAssumptions(overrides);
+  engine = createEngine(assumptions);
+  selfTest = engine.selfTest();
+  render();
 }
+
+const setOverride = (id: AssumptionId, value: unknown) => applyOverrides(withOverride(overrides, id, value));
 
 const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
 const tone = (n: number) => (n > 0 ? 'pos' : n < 0 ? 'neg' : 'muted');
 
-function selfTestBadge(report: SelfTestReport): HTMLElement {
+/** Topbar toggle for the validation panel, showing the self-test result and how many assumptions are overridden. */
+function validationButton(report: SelfTestReport): HTMLElement {
   const passed = report.cases.filter((c) => c.passed).length;
-  const badge = h(
+  const overridden = engine.assumptions().filter((a) => !a.isDefault).length;
+  return h(
     'button',
     {
-      class: `selftest ${report.passed ? 'ok' : 'fail'}`,
-      title: 'Sourced inheritance fixtures, run against the engine on load',
-      'aria-expanded': String(selfTestOpen),
+      class: `validation-toggle${report.passed ? '' : ' fail'}${view === 'validation' ? ' on' : ''}`,
+      title: 'Assumptions, resolved source disagreements and the self-test',
+      'aria-pressed': String(view === 'validation'),
       onclick: () => {
-        selfTestOpen = !selfTestOpen;
+        view = view === 'validation' ? 'table' : 'validation';
         render();
       },
     },
-    `Self-test ${report.passed ? '✓' : '✕'} ${passed}/${report.cases.length}`,
+    'Validation ',
+    h('span', { class: report.passed ? 'pos' : 'neg' }, `Self-test ${report.passed ? '✓' : '✕'} ${passed}/${report.cases.length}`),
+    overridden > 0 ? h('span', { class: 'warn' }, ` · ${overridden} overridden`) : null,
   );
-  if (!selfTestOpen) return badge;
-  const detail = h(
-    'div',
-    { class: 'selftest-detail', onclick: (e) => e.stopPropagation() },
-    h(
-      'ul',
-      {},
-      ...report.cases.map((c) =>
-        h(
-          'li',
-          {},
-          h('span', { class: c.passed ? 'pos' : 'neg' }, c.passed ? '✓ ' : '✕ '),
-          `${c.id} ${c.label}`,
-          ...c.mismatches.map((m) => h('div', { class: 'mm' }, m)),
-        ),
-      ),
-    ),
-  );
-  return h('span', { class: 'selftest-wrap' }, badge, detail);
 }
 
 function rail(): HTMLElement {
@@ -81,9 +73,10 @@ function rail(): HTMLElement {
       h(
         'button',
         {
-          class: `rail-item${c.id === selected ? ' on' : ''}`,
+          class: `rail-item${c.id === selected && view === 'table' ? ' on' : ''}`,
           onclick: () => {
             selected = c.id;
+            view = 'table';
             expanded.clear();
             render();
           },
@@ -95,9 +88,16 @@ function rail(): HTMLElement {
   );
 }
 
+/** ⚠ on a row that rests on an assumption, naming each one (and its current value) on hover. */
 function warnMark(results: readonly ChildResult[]): HTMLElement | null {
-  const used = [...new Set(results.flatMap((r) => r.assumptionsUsed))];
-  return used.length > 0 ? h('span', { class: 'warn', title: used.map((a) => ASSUMPTION_NOTES[a]).join('\n') }, ' ⚠') : null;
+  const used = new Set(results.flatMap((r) => r.assumptionsUsed));
+  if (used.size === 0) return null;
+  const title = engine
+    .assumptions()
+    .filter((a) => used.has(a.id))
+    .map((a) => `Assumption: ${a.label} = ${a.current}${a.isDefault ? '' : ' (overridden)'}`)
+    .join('\n');
+  return h('span', { class: 'warn', title, 'aria-label': title }, ' ⚠');
 }
 
 function row(r: ChildResult, label: string, cls = ''): HTMLElement {
@@ -209,9 +209,11 @@ function render(): void {
     h(
       'div',
       { class: 'shell' },
-      h('header', { class: 'topbar' }, h('span', { class: 'brand' }, 'FE13 Child Calc'), selfTestBadge(selfTest)),
+      h('header', { class: 'topbar' }, h('span', { class: 'brand' }, 'FE13 Child Calc'), validationButton(selfTest)),
       rail(),
-      childTable(selected),
+      view === 'validation'
+        ? validationPanel({ engine, assumptions, selfTest, setOverride, resetAll: () => applyOverrides({}), render })
+        : childTable(selected),
       h('aside', { class: 'panel', 'aria-label': 'Scoring' }, h('h3', {}, 'Scoring'), h('p', { class: 'muted' }, 'No scoring controls yet.')),
     ),
   );

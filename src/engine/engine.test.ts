@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createEngine, DEFAULT_ASSUMPTIONS, type ChildId } from './index';
+import { createEngine, DEFAULT_ASSUMPTIONS, resolveAssumptions, type AssumptionId, type ChildId, type Engine } from './index';
 import { INHERITANCE_FIXTURES } from './fixtures';
 
 const engine = createEngine();
@@ -210,7 +210,7 @@ describe('assumptions', () => {
 
   it('takes the Maiden’s growths from the assumptions passed in, changing only her pairing', () => {
     const maidenGrowths = { hp: 30, str: 30, mag: 30, skl: 30, spd: 30, lck: 30, def: 30, res: 30 };
-    const other = createEngine({ ...DEFAULT_ASSUMPTIONS, maidenGrowths });
+    const other = createEngine({ ...DEFAULT_ASSUMPTIONS, 'maiden-growths': maidenGrowths });
     // Lucina 45 + Chrom 40 + Maiden 30 = 115 → 38 Spd.
     expect(other.result('lucina|maiden')?.growths.spd).toBe(38);
     const changed = other.pairings().filter((r) => r.growths.spd !== engine.result(r.key)?.growths.spd);
@@ -221,6 +221,74 @@ describe('assumptions', () => {
 
   it('keeps the Maiden’s published modifiers: Lucina+Maiden = Chrom + 1', () => {
     expect(engine.result('lucina|maiden')?.modifiers).toEqual({ str: 2, mag: 1, skl: 2, spd: 2, lck: 2, def: 0, res: 0 });
+  });
+
+  it('clamps modifiers only where an overridden modifier cap binds, and flags exactly those pairings', () => {
+    const capped = createEngine(resolveAssumptions({ 'modifier-cap': 5 }));
+    // Kjelle × Robin (M) +Spd −Lck: Skl +5, Spd +7 uncapped (SF worked example) → Spd clamps to +5.
+    expect(capped.result('kjelle|robin:spd/lck')?.modifiers).toEqual({ str: -1, mag: -1, skl: 5, spd: 5, lck: 0, def: 0, res: 1 });
+    expect(capped.result('kjelle|robin:spd/lck')?.assumptionsUsed).toContain('modifier-cap');
+    // Severa (Cordelia × Henry) peaks at Skl +5, so the cap doesn't bind.
+    expect(capped.result('severa|henry')?.modifiers).toEqual({ str: 3, mag: 1, skl: 5, spd: 3, lck: -2, def: 2, res: -1 });
+    expect(capped.result('severa|henry')?.assumptionsUsed).not.toContain('modifier-cap');
+    for (const r of capped.pairings()) {
+      const before = engine.result(r.key)!;
+      const changed = JSON.stringify(r.modifiers) !== JSON.stringify(before.modifiers);
+      expect(r.assumptionsUsed.includes('modifier-cap'), r.key).toBe(changed);
+      expect(Object.values(r.modifiers).every((m) => Math.abs(m) <= 5)).toBe(true);
+    }
+  });
+
+  it('by default applies no modifier cap and flags no pairing with it', () => {
+    expect(engine.pairings().some((r) => r.assumptionsUsed.includes('modifier-cap'))).toBe(false);
+    expect(engine.result('kjelle|robin:spd/lck')?.modifiers.spd).toBe(7);
+  });
+
+  it('changes no pairing when the Conqueror growth is overridden (15 → 20), since Conqueror is never inherited', () => {
+    const other = createEngine(resolveAssumptions({ 'conqueror-skl-spd-growth': 20 }));
+    expect(other.pairings().map((r) => [r.key, r.growths, r.modifiers, r.assumptionsUsed])).toEqual(
+      engine.pairings().map((r) => [r.key, r.growths, r.modifiers, r.assumptionsUsed]),
+    );
+  });
+});
+
+describe('assumption overrides', () => {
+  it('resolves defaults, applies valid overrides and ignores invalid or unknown ones', () => {
+    expect(resolveAssumptions({})).toEqual(DEFAULT_ASSUMPTIONS);
+    expect(DEFAULT_ASSUMPTIONS['conqueror-skl-spd-growth']).toBe(15);
+    expect(DEFAULT_ASSUMPTIONS['modifier-cap']).toBeNull();
+    const resolved = resolveAssumptions({
+      'conqueror-skl-spd-growth': 20,
+      'modifier-cap': 'lots',
+      'maiden-growths': { hp: 10 },
+      'no-such-assumption': 3,
+    });
+    expect(resolved['conqueror-skl-spd-growth']).toBe(20);
+    expect(resolved['modifier-cap']).toBeNull();
+    expect(resolved['maiden-growths']).toEqual(DEFAULT_ASSUMPTIONS['maiden-growths']);
+  });
+
+  it('reports each assumption’s current value against its default, with sources and how many pairings rest on it', () => {
+    const status = (e: Engine, id: AssumptionId) => e.assumptions().find((a) => a.id === id)!;
+    expect(engine.assumptions().map((a) => a.id)).toEqual([
+      'conqueror-skl-spd-growth', 'maiden-growths', 'modifier-cap', 'morgan-second-gen-start-class',
+    ]);
+    expect(engine.assumptions().every((a) => a.sources.length > 0 && a.why.length > 0)).toBe(true);
+    expect(status(engine, 'maiden-growths')).toMatchObject({ isDefault: true, pairingsAffected: 1 + ASSET_FLAWS });
+    expect(status(engine, 'conqueror-skl-spd-growth')).toMatchObject({ isDefault: true, current: '15', default: '15', pairingsAffected: 0 });
+    const other = createEngine(resolveAssumptions({ 'conqueror-skl-spd-growth': 20 }));
+    expect(status(other, 'conqueror-skl-spd-growth')).toMatchObject({ isDefault: false, current: '20', default: '15' });
+  });
+
+  it('lists the resolved source disagreements with winning and losing values and links', () => {
+    const ds = engine.disagreements();
+    expect(ds.map((d) => d.id)).toEqual(expect.arrayContaining(['D1a', 'D2', 'D3', 'D4', 'D5', 'D6', 'maiden-modifiers']));
+    const flavia = ds.find((d) => d.id === 'D2')!;
+    expect(flavia.winning.value).toBe('+2');
+    expect(flavia.losing.map((l) => l.value)).toEqual(['+1']);
+    for (const d of ds) {
+      for (const s of [...d.winning.sources, ...d.losing.flatMap((l) => l.sources)]) expect(s.url).toMatch(/^https?:\/\//);
+    }
   });
 });
 

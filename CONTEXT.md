@@ -139,3 +139,11 @@ _Avoid_: Invalid, disabled
 **Assumption**:
 A game value or rule the sources couldn't verify. It has a default and known alternatives, and the user can override it.
 _Avoid_: Guess, setting, config
+
+**Assumption override**:
+The user's replacement for an assumption's default. It recomputes every pairing, and it is saved in the browser until reset.
+_Avoid_: Setting, preference (preferences are a wider set that includes overrides)
+
+**Resolved disagreement**:
+A value where the sources conflicted and the research picked a winner. It is listed with the winning and losing values and their sources. It is not an assumption, because it can't be overridden.
+_Avoid_: Conflict, discrepancy

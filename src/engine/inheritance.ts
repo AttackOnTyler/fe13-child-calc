@@ -23,10 +23,20 @@ export function inheritGrowths(a: ParentProfile, b: ParentProfile, personal: Gro
 /**
  * Modifier = father + mother + 1, per stat (SF children page; SF fe13maxstats.js), with no +1 when a parent is
  * itself a child (Morgan with a second-gen parent; SF modifiers page, FEW Inheritance).
+ * `cap` (the modifier-cap assumption, null for none) clamps each stat to ±cap; `capped` says whether it bound.
  */
-export function inheritModifiers(a: ParentProfile, b: ParentProfile): Modifiers {
+export function inheritModifiers(
+  a: ParentProfile,
+  b: ParentProfile,
+  cap: number | null,
+): { readonly modifiers: Modifiers; readonly capped: boolean } {
   const bonus = a.secondGen || b.secondGen ? 0 : 1;
   const out = {} as Record<(typeof MOD_STATS)[number], number>;
-  for (const s of MOD_STATS) out[s] = a.modifiers[s] + b.modifiers[s] + bonus;
-  return out;
+  let capped = false;
+  for (const s of MOD_STATS) {
+    const sum = a.modifiers[s] + b.modifiers[s] + bonus;
+    out[s] = cap === null ? sum : Math.max(-cap, Math.min(cap, sum));
+    capped ||= out[s] !== sum;
+  }
+  return { modifiers: out, capped };
 }

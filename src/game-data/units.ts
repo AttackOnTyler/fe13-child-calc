@@ -12,13 +12,14 @@
  *
  * Robin is not listed here: Robin's profile depends on the asset/flaw and is built separately.
  */
+import type { Assumed } from './citations';
 import type { Gender, Growths, Modifiers } from './stats';
 
 export type FirstGenUnitData = {
   readonly name: string;
   readonly gender: Gender;
-  /** `null` where no source publishes them; the engine takes a value from the assumptions. */
-  readonly growths: Growths | null;
+  /** An assumption reference where no source publishes them. */
+  readonly growths: Growths | Assumed<'maiden-growths'>;
   readonly modifiers: Modifiers;
 };
 
@@ -65,7 +66,7 @@ export const FIRST_GEN_UNITS = {
   // Chrom's default wife if he has no S-support by the end of Chapter 11. Not an S-support partner.
   // #13: modifiers resolved to all 0 (JP 2ch wiki p.79 "MOB村娘", FEW Lucina/Stats, SF-JS `'Maiden': empty`).
   // Growths are published nowhere (SF-JS `'Maiden': unknown`, FEW "??"), so they come from the assumptions.
-  maiden: { name: "Maiden", gender: 'F', growths: null, modifiers: { str: 0, mag: 0, skl: 0, spd: 0, lck: 0, def: 0, res: 0 } },
+  maiden: { name: "Maiden", gender: 'F', growths: { assumption: 'maiden-growths' }, modifiers: { str: 0, mag: 0, skl: 0, spd: 0, lck: 0, def: 0, res: 0 } },
 } as const satisfies Record<string, FirstGenUnitData>;
 
 export type UnitId = keyof typeof FIRST_GEN_UNITS;

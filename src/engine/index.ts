@@ -7,16 +7,47 @@ import { ASSET_FLAW, ROBIN_GROWTHS, ROBIN_MODIFIERS } from '../game-data/robin';
 import { MOD_STATS, STATS, STAT_LABELS, type Gender } from '../game-data/stats';
 import { CHROM_FALLBACK_PARTNER, ROBIN_SUPPORTS, S_SUPPORTS } from '../game-data/supports';
 import { FIRST_GEN_UNITS, type FirstGenUnitData, type UnitId } from '../game-data/units';
-import { DEFAULT_ASSUMPTIONS, type AssumptionId, type Assumptions } from './assumptions';
+import { RESOLVED_DISAGREEMENTS, type ResolvedDisagreement } from '../game-data/disagreements';
+import {
+  ASSUMPTION_IDS,
+  ASSUMPTION_REGISTRY,
+  DEFAULT_ASSUMPTIONS,
+  assumed,
+  isAssumed,
+  isDefaultValue,
+  type AssumptionDef,
+  type AssumptionId,
+  type Assumptions,
+} from './assumptions';
 import { INHERITANCE_FIXTURES } from './fixtures';
 import { inheritGrowths, inheritModifiers, type ParentProfile } from './inheritance';
 import { runSelfTest } from './self-test';
-import type { ChildResult, ChildSummary, Pairing, PairingGroup, ParentRef, RobinRef, SelfTestReport } from './types';
+import type {
+  AssumptionStatus,
+  ChildResult,
+  ChildSummary,
+  Pairing,
+  PairingGroup,
+  ParentRef,
+  RobinRef,
+  SelfTestReport,
+} from './types';
 
 export type * from './types';
-export { ASSUMPTION_NOTES, DEFAULT_ASSUMPTIONS, type AssumptionId, type Assumptions } from './assumptions';
+export {
+  ASSUMPTION_REGISTRY,
+  DEFAULT_ASSUMPTIONS,
+  isDefaultValue,
+  resolveAssumptions,
+  type AssumptionDef,
+  type AssumptionId,
+  type Assumptions,
+  type Overrides,
+} from './assumptions';
+export type { Citation } from '../game-data/citations';
+export type { ResolvedDisagreement } from '../game-data/disagreements';
 // Stat vocabulary, re-exported so the UI only talks to the engine.
-export { MOD_STATS, STATS, STAT_LABELS, type ModStat, type Stat } from '../game-data/stats';
+export { MOD_STATS, STATS, STAT_LABELS, type Growths, type ModStat, type Modifiers, type Stat } from '../game-data/stats';
 export type { ChildId } from '../game-data/children';
 
 export type Engine = {
@@ -33,6 +64,10 @@ export type Engine = {
   robinLabel(pairing: Pairing): string | undefined;
   /** Runs the sourced fixtures against this engine. */
   selfTest(): SelfTestReport;
+  /** Every registered assumption: its current value against the default, and how many pairings rest on it. */
+  assumptions(): readonly AssumptionStatus[];
+  /** Source disagreements resolved in the game data, for the validation panel. */
+  disagreements(): readonly ResolvedDisagreement[];
 };
 
 const CHILD_IDS = Object.keys(CHILD_UNITS) as ChildId[];
@@ -87,11 +122,12 @@ type ResolvedParent = { readonly profile: ParentProfile; readonly assumptionsUse
 
 function unitProfile(id: UnitId, assumptions: Assumptions): ResolvedParent {
   const unit: FirstGenUnitData = FIRST_GEN_UNITS[id];
-  if (unit.growths) return { profile: { growths: unit.growths, modifiers: unit.modifiers, secondGen: false }, assumptionsUsed: [] };
-  if (id !== 'maiden') throw new Error(`No growths and no assumption for ${id}`);
+  if (!isAssumed(unit.growths)) {
+    return { profile: { growths: unit.growths, modifiers: unit.modifiers, secondGen: false }, assumptionsUsed: [] };
+  }
   return {
-    profile: { growths: assumptions.maidenGrowths, modifiers: unit.modifiers, secondGen: false },
-    assumptionsUsed: ['maiden-growths'],
+    profile: { growths: assumed(unit.growths, assumptions), modifiers: unit.modifiers, secondGen: false },
+    assumptionsUsed: [unit.growths.assumption],
   };
 }
 
@@ -186,12 +222,15 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     if (!fixedRef) throw new Error(`Morgan pairing without Robin's asset/flaw: ${pairing.child}`);
     const fixed = profileOf(fixedRef);
     const variable = profileOf(pairing.variableParent);
+    const { modifiers, capped } = inheritModifiers(fixed.profile, variable.profile, assumptions['modifier-cap']);
+    const used: AssumptionId[] = [...fixed.assumptionsUsed, ...variable.assumptionsUsed];
+    if (capped) used.push('modifier-cap');
     return {
       pairing,
       key: pairingKey(pairing),
       growths: inheritGrowths(fixed.profile, variable.profile, child.growths),
-      modifiers: inheritModifiers(fixed.profile, variable.profile),
-      assumptionsUsed: [...new Set([...fixed.assumptionsUsed, ...variable.assumptionsUsed])],
+      modifiers,
+      assumptionsUsed: [...new Set(used)],
     };
   };
 
@@ -208,6 +247,23 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
   const all = [...byKey.values()];
 
   const result = (key: string) => byKey.get(key);
+
+  const affected = new Map<AssumptionId, number>();
+  for (const r of all) for (const id of r.assumptionsUsed) affected.set(id, (affected.get(id) ?? 0) + 1);
+  const statuses: AssumptionStatus[] = ASSUMPTION_IDS.map((id) => {
+    const d = ASSUMPTION_REGISTRY[id] as AssumptionDef;
+    const value = assumptions[id];
+    return {
+      id,
+      label: d.label,
+      why: d.why,
+      sources: d.sources,
+      current: d.format(value as never),
+      default: d.format(d.default as never),
+      isDefault: isDefaultValue(id, value),
+      pairingsAffected: affected.get(id) ?? 0,
+    };
+  });
 
   return {
     children: () =>
@@ -230,5 +286,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       return ref && assetFlawLabel(ref);
     },
     selfTest: () => runSelfTest(INHERITANCE_FIXTURES, result),
+    assumptions: () => statuses,
+    disagreements: () => RESOLVED_DISAGREEMENTS,
   };
 }

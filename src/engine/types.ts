@@ -1,6 +1,7 @@
 import type { ChildId } from '../game-data/children';
 import type { Gender, Growths, Modifiers, Stat } from '../game-data/stats';
 import type { UnitId } from '../game-data/units';
+import type { Citation } from '../game-data/citations';
 import type { AssumptionId } from './assumptions';
 
 export type RobinRef = { readonly kind: 'robin'; readonly gender: Gender; readonly asset: Stat; readonly flaw: Stat };
@@ -56,3 +57,17 @@ export type SelfTestCase = {
 };
 
 export type SelfTestReport = { readonly passed: boolean; readonly cases: readonly SelfTestCase[] };
+
+/** An assumption as the validation panel shows it. */
+export type AssumptionStatus = {
+  readonly id: AssumptionId;
+  readonly label: string;
+  readonly why: string;
+  readonly sources: readonly Citation[];
+  /** The resolved value and the default, formatted for display. */
+  readonly current: string;
+  readonly default: string;
+  readonly isDefault: boolean;
+  /** How many pairings list this assumption in `assumptionsUsed`. */
+  readonly pairingsAffected: number;
+};
