@@ -24,15 +24,28 @@ export type Bond = 'married' | 'pinned';
 /** A unit's spouse and how they are bound. */
 export type Spouse = { readonly partner: RosterUnit; readonly bond: Bond };
 
+/** Two units who could marry, in either order. */
+export type Couple = readonly [RosterUnit, RosterUnit];
+
+/** A marriage plan the player adopted: its marriages, and the Robin it was solved for. */
+export type SavedPlan = {
+  readonly robin: { readonly gender: Gender; readonly asset: Stat; readonly flaw: Stat } | null;
+  readonly marriages: readonly Couple[];
+};
+
 export type Roster = {
   readonly run: RunFacts;
   /** Units not listed are Available. */
   readonly states: Readonly<Partial<Record<RosterUnit, UnitState>>>;
   /** Each unit's one spouse, recorded both ways. */
   readonly spouses: Readonly<Partial<Record<RosterUnit, Spouse>>>;
+  /** Marriages the player ruled out of the marriage plan. */
+  readonly ruleOuts: readonly Couple[];
+  /** The adopted marriage plan the solver's plan is compared with. */
+  readonly savedPlan: SavedPlan | null;
 };
 
-export const EMPTY_ROSTER: Roster = { run: { gender: null, asset: null, flaw: null }, states: {}, spouses: {} };
+export const EMPTY_ROSTER: Roster = { run: { gender: null, asset: null, flaw: null }, states: {}, spouses: {}, ruleOuts: [], savedPlan: null };
 
 export const UNIT_STATES: readonly UnitState[] = ['available', 'not-recruited', 'benched', 'missed', 'dead'];
 
@@ -59,6 +72,20 @@ export function withSpouse(roster: Roster, a: RosterUnit, b: RosterUnit | null, 
   }
   return { ...roster, spouses };
 }
+
+const sameCouple = (c: Couple, a: RosterUnit, b: RosterUnit) => (c[0] === a && c[1] === b) || (c[0] === b && c[1] === a);
+
+export const isRuledOut = (roster: Roster, a: RosterUnit, b: RosterUnit): boolean => roster.ruleOuts.some((c) => sameCouple(c, a, b));
+
+/** Rules a marriage out of the plan (dropping a pin between the two), or back in. */
+export function withRuleOut(roster: Roster, a: RosterUnit, b: RosterUnit, out: boolean): Roster {
+  const ruleOuts = roster.ruleOuts.filter((c) => !sameCouple(c, a, b));
+  if (!out) return { ...roster, ruleOuts };
+  const pinned = roster.spouses[a]?.partner === b && roster.spouses[a]?.bond === 'pinned';
+  return { ...(pinned ? withSpouse(roster, a, null) : roster), ruleOuts: [...ruleOuts, [a, b]] };
+}
+
+export const withSavedPlan = (roster: Roster, savedPlan: SavedPlan | null): Roster => ({ ...roster, savedPlan });
 
 /** A unit that can no longer take part in a planned marriage (benched, missed or dead). */
 const outOfPlay = (roster: Roster, u: RosterUnit) => ['dead', 'missed', 'benched'].includes(stateOf(roster, u));
@@ -222,7 +249,41 @@ export function parseRoster(raw: unknown): Roster {
     if (!isObject(back) || back.partner !== id || back.bond !== s.bond || !partnersOf(id).includes(s.partner)) continue;
     spouses[id as RosterUnit] = { partner: s.partner as RosterUnit, bond: s.bond };
   }
-  return { run, states, spouses };
+  const isCouple = (c: unknown): c is Couple =>
+    Array.isArray(c) && c.length === 2 && typeof c[0] === 'string' && typeof c[1] === 'string' && partnersOf(c[0]).includes(c[1]);
+  const ruleOuts: Couple[] = [];
+  for (const c of Array.isArray(raw.ruleOuts) ? raw.ruleOuts : []) {
+    if (isCouple(c) && !ruleOuts.some((d) => sameCouple(d, c[0], c[1]))) ruleOuts.push([c[0], c[1]]);
+  }
+  return { run, states, spouses, ruleOuts, savedPlan: parseSavedPlan(raw.savedPlan, run) };
+}
+
+/**
+ * A saved plan, or null when it is missing or corrupt. Marriages that can't exist in this run are dropped; while
+ * Robin's gender is open, the plan's own Robin decides who Robin can marry.
+ */
+function parseSavedPlan(raw: unknown, run: RunFacts): SavedPlan | null {
+  if (!isObject(raw) || !Array.isArray(raw.marriages)) return null;
+  const r = raw.robin;
+  const robin =
+    isObject(r) && (r.gender === 'M' || r.gender === 'F') && isStat(r.asset) && isStat(r.flaw) && r.asset !== r.flaw
+      ? { gender: r.gender as Gender, asset: r.asset, flaw: r.flaw }
+      : null;
+  const units = new Map(rosterUnits({ ...run, gender: run.gender ?? robin?.gender ?? null }).map((u) => [u.id as string, u]));
+  const isCouple = (c: unknown): c is Couple =>
+    Array.isArray(c) &&
+    c.length === 2 &&
+    typeof c[0] === 'string' &&
+    typeof c[1] === 'string' &&
+    (c[0] === CHROM_FALLBACK_PARTNER ? c[1] === 'chrom' : (units.get(c[0])?.partners ?? []).includes(c[1] as RosterUnit));
+  const taken = new Set<string>();
+  const marriages: Couple[] = [];
+  for (const c of raw.marriages) {
+    if (!isCouple(c) || taken.has(c[0]) || taken.has(c[1])) continue;
+    taken.add(c[0]).add(c[1]);
+    marriages.push([c[0], c[1]]);
+  }
+  return { robin, marriages };
 }
 
 /**

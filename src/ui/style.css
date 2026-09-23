@@ -300,3 +300,26 @@ button.skill.linkish { padding: 0 6px; font-size: 11px; }
 @media (max-width: 700px) {
   .unit { grid-template-columns: 1fr; gap: 4px; }
 }
+
+/* Plan: the whole-roster marriage plan, its diff against the saved plan, and child priorities in the sidebar. */
+.chip.block.in-plan { color: #c59bff; border-color: #6a4f94; }
+.plan-view { padding: 8px 12px 24px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.plan-view > div { max-width: 1000px; }
+.banner { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
+.banner.ok { border-color: #3f7a47; color: var(--pos); }
+.banner.warn-b { border-color: #8a6a2c; }
+.banner.hard { border-color: #7a3a3a; color: var(--neg); display: block; }
+.banner .adopt { margin-top: 4px; border-color: var(--accent); }
+table.plan td { padding: 4px 6px; vertical-align: middle; }
+table.plan td.uname { font-weight: 600; }
+table.plan td.children { white-space: normal; }
+table.plan tr.married td.bond { color: var(--pos); }
+.pchild { display: inline-block; margin: 1px 8px 1px 0; }
+.mini { padding: 0 5px; font-size: 11px; margin-left: 2px; }
+.mini.on { background: #243349; border-color: var(--accent); }
+.ruleouts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.plan-side { margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.plan-side p { margin: 0 0 6px; }
+.prio { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: center; padding: 2px 0; }
+.prio .ppreset { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px; }
+.prio .seg button { padding: 0 6px; }

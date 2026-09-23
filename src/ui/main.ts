@@ -28,7 +28,9 @@ import {
   type PairingFilter,
   type PairingGroup,
   type PairingScore,
+  type PlanSettings,
   type PlayContext,
+  type PresetId,
   type RobinMode,
   type Roster,
   type Preset,
@@ -72,6 +74,8 @@ import {
 import { validationPanel, withOverride } from './validation';
 import { rosterPage } from './roster-page';
 import { clearRoster, loadRoster, saveRoster } from './roster-store';
+import { planPage, planSidebar, type PlanPageContext } from './plan-page';
+import { DEFAULT_PLAN_PREFS, loadPlanPrefs, savePlanPrefs, type PlanPrefs } from './plan-prefs';
 
 let overrides: Overrides = loadOverrides();
 let assumptions: Assumptions = resolveAssumptions(overrides);
@@ -80,11 +84,15 @@ let selfTest = engine.selfTest();
 let prefs: ScoringPrefs = loadPrefs(engine);
 /** Run state: read by the tables and the leaderboard, never by scoring. */
 let roster: Roster = loadRoster();
+/** Plan preferences (priorities): survive Clear all. */
+let planPrefs: PlanPrefs = loadPlanPrefs(engine);
+/** The Plan view's Free re-plan toggle. */
+let freeReplan = false;
 
 // View state only; all domain answers come from the engine.
 /** A child's table, or the All children leaderboard. */
 let selected: ChildId | 'all' = 'lucina';
-let view: 'table' | 'validation' | 'roster' = selfTest.passed ? 'table' : 'validation';
+let view: 'table' | 'validation' | 'roster' | 'plan' = selfTest.passed ? 'table' : 'validation';
 /** A Robin group row's identity across children: `child|group key`. */
 const groupId = (child: ChildId, group: PairingGroup) => `${child}|${group.key}`;
 /** Robin group rows (by group id) with their asset × flaw heatmap open. */
@@ -188,16 +196,71 @@ const setOverride = (id: AssumptionId, value: unknown) => applyOverrides(withOve
 
 // ---- roster ----
 
+/** The parts a roster change refreshes: the Plan sidebar lists the run's children. */
+const rosterParts = (): Part[] => (view === 'plan' ? ['rail', 'main', 'panel'] : ['rail', 'main']);
+
 function setRoster(next: Roster): void {
   roster = next;
   saveRoster(roster);
-  renderParts(['rail', 'main']);
+  renderParts(rosterParts());
 }
 
 function clearRosterState(): void {
   roster = EMPTY_ROSTER;
   clearRoster();
-  renderParts(['rail', 'main']);
+  renderParts(rosterParts());
+}
+
+// ---- marriage plan ----
+
+function setPlanPrefs(next: PlanPrefs): void {
+  planPrefs = next;
+  savePlanPrefs(planPrefs);
+  renderParts(['main', 'panel']);
+}
+
+/** Each child scores in its plan preset (with the user's weight edits), Auto class, and the global rest. */
+const planSettings = (): PlanSettings => ({
+  context: prefs.context,
+  preset: prefs.preset,
+  edits: prefs.edits,
+  basis: prefs.basis,
+  dlc: dlcReachable(prefs, engine),
+  speed: speedSettings(prefs, engine),
+  supportRank: prefs.supportRank,
+  priorities: planPrefs.priorities,
+  overrides: {},
+});
+
+const planContext = (): PlanPageContext => ({
+  engine,
+  roster,
+  setRoster,
+  settings: planSettings(),
+  free: freeReplan,
+  setFree: (free) => {
+    freeReplan = free;
+    renderParts(['main']);
+  },
+  setPriority: (child, priority) => setPlanPrefs({ priorities: { ...planPrefs.priorities, [child]: priority } }),
+  resetPlanPrefs: () => setPlanPrefs(DEFAULT_PLAN_PREFS),
+  presetLabel: (id: PresetId) => presetLabel(engine.presets().find((p) => p.id === id)!),
+});
+
+let planKeysCache: { roster: Roster; engine: Engine; keys: ReadonlySet<string> } | undefined;
+/** The saved plan's pairings, which the tables mark ◆. */
+function planKeys(): ReadonlySet<string> {
+  if (planKeysCache?.roster !== roster || planKeysCache.engine !== engine) planKeysCache = { roster, engine, keys: engine.planKeys(roster) };
+  return planKeysCache.keys;
+}
+
+/** ◆ when any of the results is in the saved plan. */
+function planChip(results: readonly ChildResult[]): HTMLElement | null {
+  const inPlan = results.find((r) => planKeys().has(r.key));
+  if (!inPlan) return null;
+  const af = results.length > 1 ? engine.robinLabel(inPlan.pairing) : undefined;
+  const title = `In the saved marriage plan${af ? ` (${af})` : ''}`;
+  return h('span', { class: 'chip block in-plan', title, 'aria-label': title }, '◆');
 }
 
 const BLOCK_CHIPS: Readonly<Record<Blocking['status'], { mark: string; label: string } | undefined>> = {
@@ -288,6 +351,19 @@ function rail(): HTMLElement[] {
       },
       h('span', {}, 'Roster'),
       h('b', { class: 'num muted', title: 'Marriages' }, married ? `✓${married}` : ''),
+    ),
+    h(
+      'button',
+      {
+        class: `rail-item roster-item${view === 'plan' ? ' on' : ''}`,
+        title: 'The whole-roster marriage plan',
+        onclick: () => {
+          view = 'plan';
+          render();
+        },
+      },
+      h('span', {}, 'Plan'),
+      h('b', { class: 'num muted', title: 'A saved plan' }, roster.savedPlan ? '◆' : ''),
     ),
     h('div', { class: 'muted small rail-head' }, `Best · ${presetLabel(currentPreset())}`),
     item('all', 'All children', 'Leaderboard of every child’s pairings', top.length ? Math.max(...top) : undefined),
@@ -873,6 +949,7 @@ function lineRows(child: ChildId, line: Line, gender: Gender, sc: Scoring, ncols
       af ? h('span', { class: 'af' }, ` ${af}`) : null,
       warnMark([line.result]),
       blockChip(line.blocking),
+      planChip([line.result]),
       skills,
     );
     return [lineRow(line, gender, '', head)];
@@ -905,6 +982,7 @@ function lineRows(child: ChildId, line: Line, gender: Gender, sc: Scoring, ncols
     line.pinned ? h('span', { class: 'muted small' }, ' 📌') : null,
     warnMark(g.results),
     blockChip(line.blocking),
+    planChip(g.results),
     skills,
   );
   const rows = [lineRow(line, gender, 'group-row', head)];
@@ -1203,6 +1281,7 @@ function card(e: LeaderboardEntry, statMax: Readonly<Record<Stat, number>>): HTM
       e.robin ? h('span', { class: 'chip af' }, e.robin) : null,
       warnMark([r]),
       e.blocking ? blockChip(e.blocking) : null,
+      planChip([r]),
     ),
     h(
       'div',
@@ -1499,6 +1578,7 @@ function panel(): HTMLElement[] {
 
   const inspecting = currentCard();
   return [
+    ...(view === 'plan' ? [planSidebar(planContext())] : []),
     ...(inspecting ? [skillCardEl(inspecting.card, inspecting.title)] : []),
     h(
       'div',
@@ -1774,6 +1854,8 @@ function renderParts(parts: readonly Part[]): void {
         ? [validationPanel({ engine, assumptions, selfTest, setOverride, resetAll: () => applyOverrides({}), render })]
         : view === 'roster'
           ? rosterPage({ engine, roster, setRoster, clearAll: clearRosterState })
+          : view === 'plan'
+          ? planPage(planContext())
           : selected === 'all'
           ? leaderboard()
           : childTable(selected)),

@@ -41,8 +41,11 @@ import { createScorer } from './scoring';
 import { pairUpSpd } from './pair-up';
 import { contextReachesDlc, defaultTargetBreakpoint } from './speed';
 import { runSelfTest } from './self-test';
-import { evaluateBlocking, type Blocking, type Roster, type RunFacts } from './roster';
+import { EMPTY_ROSTER, evaluateBlocking, type Blocking, type Roster, type RunFacts } from './roster';
 import { PRESETS, type PresetId, type ScoringRole } from '../curated/presets';
+import { PLAN_PRESETS } from '../curated/plan-presets';
+import { DEFAULT_PRIORITY, evaluatePlan, savedPairings, solvePlan, type MarriagePlan, type PlanContext, type PlannedChild } from './plan';
+import type { SavedPlan } from './roster';
 import type {
   AssumptionStatus,
   BuildMatch,
@@ -59,6 +62,7 @@ import type {
   ScoreBasis,
   PairingScore,
   ParentRef,
+  PlanSettings,
   Preset,
   RobinRef,
   Scoring,
@@ -93,16 +97,21 @@ export { buildSortKey } from './builds';
 export {
   EMPTY_ROSTER,
   UNIT_STATES,
+  isRuledOut,
   parseRoster,
   rosterUnits,
   stateOf,
   unitName,
   voidPinReason,
+  withRuleOut,
   withRun,
+  withSavedPlan,
   withSpouse,
   withState,
   type Blocking,
   type Bond,
+  type Couple,
+  type SavedPlan,
   type Spouse,
   type Roster,
   type RosterEntry,
@@ -111,6 +120,7 @@ export {
   type UnitState,
 } from './roster';
 export type { PresetId, ScoringRole, Weights } from '../curated/presets';
+export { DEFAULT_PRIORITY, PLAN_PRIORITIES, adoptPlan, canPin, diffPlans, type MarriagePlan, type PlanDiff, type PlanMarriage, type PlannedChild } from './plan';
 
 export type Engine = {
   /** Every child unit, in game-data order. */
@@ -187,6 +197,20 @@ export type Engine = {
   skillCard(result: ChildResult, id: SkillId, settings: SkillViewSettings): SkillCard;
   /** Whether the roster blocks a pairing (hard: it can no longer happen; soft: it contradicts a pin or a bench), and why. */
   blocking(result: ChildResult, roster: Roster): Blocking;
+  /** A child's plan preset: the user's, else the curated default for the play context, else the global preset. */
+  planPreset(child: ChildId, settings: Pick<PlanSettings, 'context' | 'preset' | 'overrides'>): PresetId;
+  /**
+   * The marriage plan: max Σ priority × score, each child in its plan preset (Auto class), with marriages and pins
+   * fixed, void pins dropped and rule-outs never planned. `free` ignores the pins.
+   */
+  plan(roster: Roster, settings: PlanSettings, options?: { readonly free?: boolean }): MarriagePlan;
+  /**
+   * A saved plan as it was adopted, valued under today's settings: only the run facts apply, not the losses and
+   * marriages since, so a diff against today's plan shows what they cost.
+   */
+  evaluatePlan(saved: SavedPlan, run: RunFacts, settings: PlanSettings): MarriagePlan;
+  /** The keys of the saved plan's pairings (the tables' ◆ in plan); empty without a saved plan. */
+  planKeys(roster: Roster): ReadonlySet<string>;
 };
 
 /**
@@ -511,6 +535,105 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
 
   /** Built on first use: rows prepared once, rescored per settings. */
   let scorer: ReturnType<typeof createScorer> | undefined;
+  const scoreAll = (settings: ScoreSettings) =>
+    (scorer ??= createScorer({
+      results: all,
+      genderOf,
+      reachOf,
+      classMaxStats,
+      classGrowths: (id, g) => classGrowths(id, g, assumptions),
+      breakpoints: assumptions['spd-breakpoints'],
+    }))(settings);
+
+  // The plan scores each child in its own preset: keep each preset's scores until the settings change.
+  const planScores = new Map<string, Map<string, PairingScore>>();
+  const planScoresFor = (settings: ScoreSettings) => {
+    const k = JSON.stringify(settings);
+    let found = planScores.get(k);
+    if (!found) {
+      if (planScores.size >= 32) planScores.clear();
+      planScores.set(k, (found = scoreAll(settings)));
+    }
+    return found;
+  };
+  const planPreset = (child: ChildId, { context, preset, overrides }: Pick<PlanSettings, 'context' | 'preset' | 'overrides'>): PresetId => {
+    const own = overrides[child];
+    if (own) return own;
+    const entry = PLAN_PRESETS[child];
+    if (!entry) return preset;
+    const k = context === 'all' ? undefined : ({ apotheosis: 'apotheosis', 'main-story': 'mainStory', 'full-route': 'fullRoute' } as const)[context];
+    return (k && entry[k]) ?? entry.default;
+  };
+  // A saved plan is valued on a roster with only the run facts; one object per run, so its values are shared.
+  let lastSaved: Roster | undefined;
+  const savedRoster = (run: RunFacts): Roster =>
+    lastSaved && JSON.stringify(lastSaved.run) === JSON.stringify(run) ? lastSaved : (lastSaved = { ...EMPTY_ROSTER, run });
+  // The Plan view asks for the plan and the free re-plan under one roster and settings: share values.
+  let lastPlan: { roster: Roster; settings: string; ctx: PlanContext } | undefined;
+  const planContext = (roster: Roster, s: PlanSettings): PlanContext => {
+    const k = JSON.stringify(s);
+    if (lastPlan?.roster !== roster || lastPlan.settings !== k) lastPlan = { roster, settings: k, ctx: newPlanContext(roster, s) };
+    return lastPlan.ctx;
+  };
+  const newPlanContext = (roster: Roster, s: PlanSettings): PlanContext => {
+    const memo = new Map<string, PlannedChild | undefined>();
+    // Each plan preset's scores, in its own role, Auto class and the global rest (undefined: no score).
+    const byPreset = new Map<PresetId, Map<string, PairingScore> | undefined>();
+    const scoresOf = (preset: PresetId) => {
+      if (byPreset.has(preset)) return byPreset.get(preset);
+      const data = PRESETS[preset];
+      const edit = s.edits[preset];
+      const role = data.role ?? 'lead';
+      const scores = data.weights
+        ? planScoresFor({
+            weights: edit?.weights ?? data.weights,
+            mixed: edit?.mixed ?? data.mixed,
+            basis: BASES[role].includes(s.basis) ? s.basis : 'caps-lb',
+            classMode: 'auto',
+            dlc: s.dlc,
+            speed: s.speed,
+            role,
+            supportRank: s.supportRank,
+          })
+        : undefined;
+      byPreset.set(preset, scores);
+      return scores;
+    };
+    // Blocking reads only which units a pairing needs, never Robin's asset/flaw: share it across the 56.
+    const hard = new Map<string, boolean>();
+    const isHard = (pairing: Pairing, key: string) => {
+      const units = key.replace(/robin:\w+\/\w+/g, 'robin');
+      let found = hard.get(units);
+      if (found === undefined) hard.set(units, (found = evaluateBlocking(pairing, roster, assumptions).status === 'hard'));
+      return found;
+    };
+    const value = (pairing: Pairing, key: string): PlannedChild | undefined => {
+      if (!byKey.has(key) || isHard(pairing, key)) return undefined;
+      const { child } = pairing;
+      const preset = planPreset(child, s);
+      const sc = scoresOf(preset)?.get(key);
+      const priority = s.priorities[child] ?? DEFAULT_PRIORITY;
+      return {
+        child,
+        name: CHILD_UNITS[child].name,
+        key,
+        parent: parentName(pairing.variableParent),
+        preset,
+        priority,
+        score: sc?.score,
+        scaled: sc?.scaled,
+        value: priority * (sc?.scaled ?? 0),
+      };
+    };
+    return {
+      roster,
+      child: (pairing) => {
+        const key = pairingKey(pairing);
+        if (!memo.has(key)) memo.set(key, value(pairing, key));
+        return memo.get(key);
+      },
+    };
+  };
 
   return {
     children: () =>
@@ -545,15 +668,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     classGrowths: (id, gender) => classGrowths(id, gender, assumptions),
     presets: () => PRESET_LIST,
     score: (settings) => {
-      scorer ??= createScorer({
-        results: all,
-        genderOf,
-        reachOf,
-        classMaxStats,
-        classGrowths: (id, g) => classGrowths(id, g, assumptions),
-        breakpoints: assumptions['spd-breakpoints'],
-      });
-      const scores = scorer(settings);
+      const scores = scoreAll(settings);
       const groupBest = (group: PairingGroup): GroupBest => {
         let top = group.results[0]!;
         let topRaw = scores.get(top.key)?.raw ?? -Infinity;
@@ -653,5 +768,10 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     },
     skillCard: (r, id, settings) => skillCard(id, reachFor(r, settings), settings.context, builds(r, settings)),
     blocking: (r, roster) => evaluateBlocking(r.pairing, roster, assumptions),
+    planPreset,
+    plan: (roster, settings, options) => solvePlan(planContext(roster, settings), options?.free),
+    evaluatePlan: (saved, run, settings) => evaluatePlan(planContext(savedRoster(run), settings), saved),
+    planKeys: (roster) =>
+      new Set(roster.savedPlan ? savedPairings(roster, roster.savedPlan).map(pairingKey).filter((k) => byKey.has(k)) : []),
   };
 }

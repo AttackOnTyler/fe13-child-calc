@@ -156,6 +156,25 @@ export type ScoreSettings = {
   readonly supportRank: SupportRank;
 };
 
+/** The marriage plan's scoring inputs: each child scores in its plan preset, in Auto class, with the global rest. */
+export type PlanSettings = {
+  readonly context: PlayContext;
+  /** The global preset: a child with no curated plan preset uses it. */
+  readonly preset: PresetId;
+  /** The user's preset edits, which apply wherever a preset is used. */
+  readonly edits: Readonly<Partial<Record<PresetId, { readonly weights: Weights; readonly mixed: boolean }>>>;
+  /** The global basis; a Support-role plan preset scores on Caps+LB when it is Growths. */
+  readonly basis: ScoreBasis;
+  /** DLC classes are Auto candidates. */
+  readonly dlc: boolean;
+  readonly speed: SpeedSettings;
+  readonly supportRank: SupportRank;
+  /** 0–3 per child; 1 when unset. */
+  readonly priorities: Readonly<Partial<Record<ChildId, number>>>;
+  /** The user's plan presets, which hold in every play context. */
+  readonly overrides: Readonly<Partial<Record<ChildId, PresetId>>>;
+};
+
 export type PairingScore = {
   readonly key: string;
   /** The class scored in; undefined when the child can't reach the pinned class. */
