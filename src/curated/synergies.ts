@@ -35,3 +35,24 @@ export const SYNERGIES: readonly SkillEdge[] = [
   { a: 'lancebreaker', b: 'avoid-plus-10', note: 'Stacks Avoid to zero out a lance user’s hit rate.' },
   { a: 'rally-spectrum', b: 'rally-heart', note: 'Rallies stack with Spectrum and Heart, and rallying uses the turn: keep them on one unit.' },
 ];
+
+/**
+ * Curated conflict (anti-synergy) edges: "A gets in B's way, because…". Shown on the Skill card, never scored; the
+ * template lint fails if a build template holds both ends of one in different slots (#10). Seeded from the research's
+ * anti-synergy list (research/builds-and-synergies §2, #6). Only one proc fires per hit, in a fixed priority.
+ */
+export const CONFLICTS: readonly SkillEdge[] = [
+  ...(['lethality', 'aether', 'astra', 'sol', 'luna', 'ignis'] as const).map((b) => ({
+    a: 'vengeance' as const,
+    b,
+    note: 'Vengeance is last in the proc order: any other proc that fires replaces its near-certain trigger.',
+  })),
+  ...(['luna', 'ignis', 'astra', 'lethality'] as const).map((b) => ({
+    a: 'sol' as const,
+    b,
+    note: 'Only one proc fires per hit, so a heal proc and a damage proc crowd each other out: pick heal or damage.',
+  })),
+  { a: 'sol', b: 'vantage', note: 'Healing on enemy phase lifts HP back above the half-HP Vantage threshold; Lifetaker heals on your turn only.' },
+  { a: 'renewal', b: 'vantage', note: 'Renewal heals 30% each turn, pulling HP back above the half-HP Vantage threshold.' },
+  { a: 'renewal', b: 'vengeance', note: 'Renewal heals 30% each turn, shrinking the missing HP Vengeance adds.' },
+];

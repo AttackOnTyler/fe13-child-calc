@@ -34,6 +34,9 @@ import {
   type Scoring,
   type ScoringRole,
   type SelfTestReport,
+  type SkillCard,
+  type SkillCardEdge,
+  type SkillId,
   type SkillRef,
   type SkillSource,
   type SpeedReading,
@@ -85,6 +88,10 @@ const pinned = new Map<string, string>();
 let openSkills: string | undefined;
 /** The build card expanded in the open drawer (by line id); null when the user collapsed it, else the best build. */
 let openBuild: { line: string; id: string | null } | undefined;
+/** The skill whose Skill card is pinned atop the scoring panel, for the drawer of this line. */
+let inspected: { line: string; id: SkillId } | undefined;
+/** The open drawer's pairing as last rendered, which the Skill card reads; cleared on each render of the main part. */
+let drawerPairing: { line: string; result: ChildResult; title: string } | undefined;
 /** `template`: a build template id to match every row against, or '' for each row's best build. */
 let filter: { parent: string; secondGen: boolean; template: string } = { parent: '', secondGen: true, template: '' };
 type SortCol = 'parent' | 'class' | 'score' | 'speed' | 'build' | 'count' | `cap:${Stat}` | `mod:${Stat}` | `growth:${Stat}`;
@@ -509,6 +516,7 @@ function skillsButton(id: string): HTMLElement {
       onclick: () => {
         openSkills = open ? undefined : id;
         openBuild = undefined;
+        inspected = undefined;
         renderParts(['main']);
       },
     },
@@ -525,15 +533,18 @@ const sourceMark = (s: SkillSource): string => (s.kind === 'parent' ? ' ↑' : s
 function slotChip(slot: BuildSlotMatch): HTMLElement {
   if (!slot.skill) {
     const names = slot.options.map((o) => o.name).join(' / ');
-    return h('span', { class: `skill r${slot.options[0]!.rank} miss`, title: `${names}: ${slot.reason}` }, slot.options[0]!.name);
+    return inspectable(h('span', { class: `skill r${slot.options[0]!.rank} miss`, title: `${names}: ${slot.reason}` }, slot.options[0]!.name), slot.options[0]!.id);
   }
   return skillChip(slot.skill, [sourceMark(slot.source!)], `${slot.skill.name} — ${describeSource(slot.source!)}`);
 }
 
 /** One slot's source line, or why it stays empty. */
 function slotLine(slot: BuildSlotMatch): HTMLElement {
-  if (!slot.skill) return h('li', { class: 'miss' }, h('s', {}, slot.options.map((o) => o.name).join(' / ')), ` — ${slot.reason}`);
-  return h('li', {}, h('b', {}, slot.skill.name), ` — ${describeSource(slot.source!)}`);
+  if (!slot.skill) {
+    const names = slot.options.flatMap((o, i) => [...(i ? [' / '] : []), inspectable(h('s', {}, o.name), o.id)]);
+    return h('li', { class: 'miss' }, ...names, ` — ${slot.reason}`);
+  }
+  return h('li', {}, inspectable(h('b', {}, slot.skill.name), slot.skill.id), ` — ${describeSource(slot.source!)}`);
 }
 
 /** The expanded build: role, contexts, confidence, reclass cost, where each slot comes from, synergies, its preset. */
@@ -605,19 +616,52 @@ function buildsSection(line: Line, id: string): HTMLElement {
   );
 }
 
-/** A skill chip coloured by rank, followed by its source markers. */
+/** A skill chip coloured by rank, followed by its source markers; clicking it opens its Skill card. */
 function skillChip(skill: SkillRef, marks: (HTMLElement | string)[], title: string, cls = ''): HTMLElement {
-  return h('span', { class: `skill r${skill.rank}${cls ? ` ${cls}` : ''}`, title }, skill.name, ...marks);
+  return inspectable(h('span', { class: `skill r${skill.rank}${cls ? ` ${cls}` : ''}`, title }, skill.name, ...marks), skill.id);
+}
+
+/**
+ * Makes a skill name in the drawer open its Skill card atop the scoring panel (the bottom sheet on phone). The
+ * inspected skill is outlined wherever it appears. Stops the click so a chip inside a build line doesn't toggle it.
+ */
+function inspectable(el: HTMLElement, id: SkillId): HTMLElement {
+  el.classList.add('pick');
+  if (inspected?.id === id && inspected.line === openSkills) el.classList.add('sel');
+  el.setAttribute('role', 'button');
+  el.tabIndex = 0;
+  const go = (e: Event) => {
+    e.stopPropagation();
+    inspect(id);
+  };
+  el.addEventListener('click', go);
+  el.addEventListener('keydown', (e) => {
+    const k = (e as KeyboardEvent).key;
+    if (k === 'Enter' || k === ' ') {
+      e.preventDefault();
+      go(e);
+    }
+  });
+  return el;
+}
+
+function inspect(id: SkillId): void {
+  if (!openSkills) return;
+  inspected = { line: openSkills, id };
+  sheetOpen = true;
+  renderParts(['main', 'panel']);
 }
 
 /** The drawer under a pairing row: header and legend, matched builds, rally coverage, parents, class skills by rank. */
 function skillsRow(line: Line, id: string, ncols: number): HTMLElement {
   const v = engine.skillView(line.result, skillSettings());
+  const robin = line.group ? engine.robinLabel(line.result.pairing) : undefined;
+  drawerPairing = { line: id, result: line.result, title: `${v.child} × ${line.label}${robin ? ` ${robin}` : ''}` };
   const head = h(
     'div',
     { class: 'drawer-head' },
     h('b', {}, `${v.child} × ${line.label}`),
-    line.group ? h('span', { class: 'af' }, engine.robinLabel(line.result.pairing) ?? '') : null,
+    robin ? h('span', { class: 'af' }, robin) : null,
     h('span', { class: 'muted' }, `Starts as ${v.startClass} · ${v.classCount} classes · ${CONTEXT_LABELS[v.context]} · DLC ${v.dlc ? 'on' : 'off'}`),
     h(
       'span',
@@ -625,7 +669,7 @@ function skillsRow(line: Line, id: string, ncols: number): HTMLElement {
       '⟳ reclass · ↑ inherited · ◇ DLC skill book · colour = rank ',
       ...[5, 4, 3, 2, 1].map((r) => h('span', { class: `skill r${r}` }, RANK_LETTERS[r]!)),
     ),
-    h('button', { class: 'ghost close', title: 'Close the Skills drawer', onclick: () => ((openSkills = undefined), renderParts(['main'])) }, '✕'),
+    h('button', { class: 'ghost close', title: 'Close the Skills drawer', onclick: () => ((openSkills = inspected = undefined), renderParts(['main'])) }, '✕'),
   );
 
   const covered = v.rallies.filter((r) => r.sources.length).length;
@@ -637,11 +681,14 @@ function skillsRow(line: Line, id: string, ncols: number): HTMLElement {
       'div',
       { class: 'dots' },
       ...v.rallies.map((r) =>
-        h(
-          'span',
-          { class: `dot${r.sources.length ? ' on' : ''}`, title: `${r.skill.name}: ${r.sources.length ? sourcesTitle(r.sources) : r.reason}` },
-          h('i', {}),
-          r.skill.name.replace(/^Rally /, ''),
+        inspectable(
+          h(
+            'span',
+            { class: `dot${r.sources.length ? ' on' : ''}`, title: `${r.skill.name}: ${r.sources.length ? sourcesTitle(r.sources) : r.reason}` },
+            h('i', {}),
+            r.skill.name.replace(/^Rally /, ''),
+          ),
+          r.skill.id,
         ),
       ),
     ),
@@ -1110,6 +1157,86 @@ function capsTitle(): string {
   return caps;
 }
 
+// ---- Skill card ----
+
+/** The inspected skill and the open drawer's pairing, when the card belongs to that drawer. */
+const cardTarget = () => (inspected && drawerPairing?.line === inspected.line ? { id: inspected.id, ...drawerPairing } : undefined);
+
+/** The inspected skill's card, when its drawer is the open one. */
+function currentCard(): { card: SkillCard; title: string } | undefined {
+  const t = cardTarget();
+  return t && { card: engine.skillCard(t.result, t.id, skillSettings()), title: t.title };
+}
+
+/** What the Skill card depends on, so the panel refreshes when it changes. */
+const cardKey = (): string => {
+  const t = cardTarget();
+  if (!t) return '';
+  const { context, dlc } = skillSettings();
+  return `${t.id}|${t.result.key}|${context}|${dlc}`;
+};
+
+/** One synergy or conflict: ✓/✕ for this pairing reaching the partner (clickable), and why the edge exists. */
+function edgeLine(e: SkillCardEdge): HTMLElement {
+  const partner = h(
+    'button',
+    { class: `skill r${e.skill.rank} linkish`, title: `Show ${e.skill.name}’s card`, onclick: () => inspect(e.skill.id) },
+    e.skill.name,
+  );
+  return h(
+    'li',
+    {},
+    h('span', { class: e.reachable ? 'pos' : 'neg', title: e.reachable ? 'This pairing can reach it' : 'This pairing can’t reach it' }, e.reachable ? '✓ ' : '✕ '),
+    partner,
+    ` ${e.note}`,
+    e.reason ? h('div', { class: 'muted small' }, `Out of reach: ${e.reason}.`) : null,
+    e.oneParent ? h('div', { class: 'warn small' }, `⚠ Both come only from ${e.oneParent}, who passes one skill: not together.`) : null,
+  );
+}
+
+/** The Skill card pinned atop the scoring panel: the inspected skill seen from the open drawer's pairing. */
+function skillCardEl(card: SkillCard, title: string): HTMLElement {
+  const edges = (label: string, list: readonly SkillCardEdge[]) =>
+    list.length ? [h('h4', {}, label), h('ul', { class: 'edges' }, ...list.map(edgeLine))] : [];
+  return h(
+    'section',
+    { class: 'skill-card', 'aria-label': `${card.name} skill card` },
+    h(
+      'div',
+      { class: 'panel-head' },
+      h('h3', {}, 'Skill'),
+      h('button', { class: 'ghost', 'aria-label': 'Close the Skill card', onclick: () => ((inspected = undefined), (sheetOpen = false), renderParts(['main', 'panel'])) }, '✕'),
+    ),
+    h('div', { class: 'card-name' }, h('b', {}, card.name), card.dlc ? h('span', { class: 'chip' }, 'DLC') : null),
+    h('div', { class: 'muted small' }, `for ${title}`),
+    h('p', {}, card.description),
+    h('div', { class: 'small' }, card.rally ? 'Rally: a command, used instead of acting' : card.rate ? `Activation: ${card.rate}` : 'Always on'),
+    h(
+      'div',
+      { class: 'ranks small' },
+      ...card.ranks.map((r) =>
+        h(
+          r.current ? 'b' : 'span',
+          { title: r.current ? 'The current play context' : undefined },
+          `${CONTEXT_LABELS[r.context]} `,
+          h('span', { class: `rank-badge r${r.rank}` }, r.letter),
+        ),
+      ),
+    ),
+    h('h4', {}, 'How this pairing gets it'),
+    card.sources.length
+      ? h('ul', { class: 'sources small' }, ...card.sources.map((src) => h('li', {}, describeSource(src))))
+      : h('p', { class: 'small neg' }, `Unreachable: ${card.reason}.`),
+    h('div', { class: 'muted small' }, card.inheritance.note),
+    ...edges('Synergies', card.synergies),
+    ...edges('Conflicts', card.conflicts),
+    h('h4', {}, 'Builds using it'),
+    card.builds.length
+      ? h('ul', { class: 'small' }, ...card.builds.map((b) => h('li', {}, h('span', { class: `tier t${b.tier}` }, `${b.tier}/5`), ` ${b.name} · slot ${b.slot}`)))
+      : h('p', { class: 'muted small' }, `None of this pairing’s builds (3/5 and up) in ${CONTEXT_LABELS[prefs.context]}.`),
+  );
+}
+
 // ---- scoring panel ----
 
 /** One slider per weight; Spd has two, to target (0–20) and beyond (0–10). */
@@ -1261,7 +1388,9 @@ function panel(): HTMLElement[] {
     '↺ Reset',
   );
 
+  const inspecting = currentCard();
   return [
+    ...(inspecting ? [skillCardEl(inspecting.card, inspecting.title)] : []),
     h(
       'div',
       { class: 'panel-head' },
@@ -1514,7 +1643,9 @@ function renderParts(parts: readonly Part[]): void {
   const { rail: railEl, main, panel: panelEl } = regions;
   if (!railEl || !main || !panelEl) return render();
   if (parts.includes('rail')) railEl.replaceChildren(...rail());
+  const card = cardKey();
   if (parts.includes('main')) {
+    drawerPairing = undefined;
     main.replaceChildren(
       ...(view === 'validation'
         ? [validationPanel({ engine, assumptions, selfTest, setOverride, resetAll: () => applyOverrides({}), render })]
@@ -1523,7 +1654,8 @@ function renderParts(parts: readonly Part[]): void {
           : childTable(selected)),
     );
   }
-  if (parts.includes('panel')) {
+  // The Skill card lives in the panel but follows the drawer: refresh the panel when the card would change.
+  if (parts.includes('panel') || cardKey() !== card) {
     panelEl.replaceChildren(...panel());
     panelEl.classList.toggle('open', sheetOpen);
   }

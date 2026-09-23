@@ -255,3 +255,15 @@ table.matrix { grid-column: 1 / -1; border-collapse: collapse; font-size: 11px; 
   .drawer-cols { grid-template-columns: 1fr; }
   .drawer .builds { border-right: 0; padding-right: 0; }
 }
+/* Skill card: pinned atop the scoring panel; clickable skill names; the inspected skill outlined across the drawer. */
+.pick { cursor: pointer; }
+.skill.sel, .dot.sel, .build-card .sel { outline: 2px solid var(--warn); outline-offset: 1px; border-radius: 10px; }
+.skill-card { margin: 0 0 12px; padding: 0 0 10px; border-bottom: 1px solid var(--line); }
+.skill-card .card-name { font-size: 14px; display: flex; gap: 6px; align-items: center; }
+.skill-card p { margin: 6px 0; }
+.skill-card .ranks { display: flex; gap: 10px; flex-wrap: wrap; margin: 6px 0; }
+.skill-card .rank-badge { min-width: 16px; }
+.skill-card ul { margin: 2px 0 6px; padding-left: 16px; }
+.skill-card .edges { list-style: none; padding-left: 0; }
+.skill-card .edges li { margin: 0 0 5px; }
+button.skill.linkish { padding: 0 6px; font-size: 11px; }

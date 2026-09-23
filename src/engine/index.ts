@@ -34,6 +34,7 @@ import {
 import { inheritGrowths, inheritModifiers, type ParentProfile } from './inheritance';
 import { buildSkillView, candidatesFor, firstGenSkills, secondGenSkills, skillRank, skillReach, type SkillViewInput, type SkillViewSettings } from './skills';
 import { BUILD_TEMPLATES } from '../curated/builds';
+import { skillCard } from './skill-card';
 import { matchBuilds, matchTemplate, shownMatch, templateSummary, templatesFor } from './builds';
 import type { SkillId } from '../game-data/skills';
 import { createScorer } from './scoring';
@@ -62,6 +63,7 @@ import type {
   Scoring,
   ScoreSettings,
   SelfTestReport,
+  SkillCard,
   SkillView,
   SupportRank,
 } from './types';
@@ -157,6 +159,11 @@ export type Engine = {
    * when it is below 3/5 (the filter then hides the row).
    */
   bestBuild(result: ChildResult, settings: SkillViewSettings, templateId?: string): BuildMatch | undefined;
+  /**
+   * The Skill card for one skill in one pairing: description, rate, rank per context, every source or why not,
+   * whether it can ever be inherited, synergy and conflict partners with reachability, and the builds that use it.
+   */
+  skillCard(result: ChildResult, id: SkillId, settings: SkillViewSettings): SkillCard;
 };
 
 /**
@@ -602,5 +609,6 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       if (!filteredCache.has(k)) filteredCache.set(k, shownMatch(template(id), reachFor(r, settings), settings.context));
       return filteredCache.get(k);
     },
+    skillCard: (r, id, settings) => skillCard(id, reachFor(r, settings), settings.context, builds(r, settings)),
   };
 }

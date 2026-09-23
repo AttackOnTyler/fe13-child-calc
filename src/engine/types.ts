@@ -363,3 +363,39 @@ export type BuildMatch = {
   /** `A + B: why`, for synergy edges between filled skills. */
   readonly synergies: readonly string[];
 };
+
+/** A synergy or conflict partner on the Skill card, and whether this pairing can reach it. */
+export type SkillCardEdge = {
+  readonly skill: SkillRef;
+  readonly reachable: boolean;
+  /** The edge's one-line reason. */
+  readonly note: string;
+  /** Why the partner is out of reach. */
+  readonly reason: string | undefined;
+  /** Both skills hang on one parent's single pick (e.g. `Sumia`), so the pairing can't have both. */
+  readonly oneParent: string | undefined;
+};
+
+/** Everything the Skill card shows about one skill for one pairing. */
+export type SkillCard = {
+  readonly id: SkillId;
+  readonly name: string;
+  readonly description: string;
+  /** Activation rate, e.g. `Skl %`; absent for an always-on skill. */
+  readonly rate: string | undefined;
+  readonly dlc: boolean;
+  /** A Rally command (its `rate` is `Command`). */
+  readonly rally: boolean;
+  /** Its curated rank in each play context, the current one marked. */
+  readonly ranks: readonly { readonly context: PlayContext; readonly rank: number; readonly letter: string; readonly current: boolean }[];
+  /** Every way this pairing gets it, best first; empty when unreachable. */
+  readonly sources: readonly SkillSource[];
+  /** Why this pairing can't get it. */
+  readonly reason: string | undefined;
+  /** Whether any parent can ever pass it, and how. */
+  readonly inheritance: { readonly inheritable: boolean; readonly note: string };
+  readonly synergies: readonly SkillCardEdge[];
+  readonly conflicts: readonly SkillCardEdge[];
+  /** This pairing's shown builds (3/5 and up) that fill a slot with it; `slot` is 1-based. */
+  readonly builds: readonly { readonly id: string; readonly name: string; readonly tier: number; readonly slot: number }[];
+};

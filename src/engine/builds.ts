@@ -7,7 +7,7 @@
  */
 import { BUILD_TEMPLATES, type BuildTemplate } from '../curated/builds';
 import { PRESETS } from '../curated/presets';
-import { SYNERGIES } from '../curated/synergies';
+import { CONFLICTS, SYNERGIES, type SkillEdge } from '../curated/synergies';
 import type { ClassId } from '../game-data/classes';
 import type { SkillId } from '../game-data/skills';
 import { ref, skillData, type SkillReach } from './skills';
@@ -188,3 +188,12 @@ export const shownMatch = (t: BuildTemplate, reach: SkillReach, context: PlayCon
   const m = matchTemplate(t, reach, context);
   return m.tier >= SHOWN_TIER ? m : undefined;
 };
+
+/**
+ * The template lint: conflict edges whose two skills sit in different slots of a template (alternatives in one slot
+ * never meet). The test suite fails on any (#10).
+ */
+export function templateConflicts(t: BuildTemplate): SkillEdge[] {
+  const slotsWith = (id: SkillId) => t.slots.flatMap((s, i) => (s.includes(id) ? [i] : []));
+  return CONFLICTS.filter((e) => slotsWith(e.a).some((i) => slotsWith(e.b).some((j) => i !== j)));
+}
