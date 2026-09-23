@@ -32,7 +32,9 @@ import {
   startClass,
 } from './classes';
 import { inheritGrowths, inheritModifiers, type ParentProfile } from './inheritance';
-import { buildSkillView, candidatesFor, firstGenSkills, secondGenSkills, skillRank, type SkillViewSettings } from './skills';
+import { buildSkillView, candidatesFor, firstGenSkills, secondGenSkills, skillRank, skillReach, type SkillViewInput, type SkillViewSettings } from './skills';
+import { BUILD_TEMPLATES } from '../curated/builds';
+import { matchBuilds, matchTemplate, shownMatch, templateSummary, templatesFor } from './builds';
 import type { SkillId } from '../game-data/skills';
 import { createScorer } from './scoring';
 import { pairUpSpd } from './pair-up';
@@ -41,6 +43,8 @@ import { runSelfTest } from './self-test';
 import { PRESETS, type PresetId, type ScoringRole } from '../curated/presets';
 import type {
   AssumptionStatus,
+  BuildMatch,
+  BuildTemplateSummary,
   ClassSummary,
   ChildResult,
   ChildSummary,
@@ -82,6 +86,7 @@ export type { ChildId } from '../game-data/children';
 export type { ClassId } from '../game-data/classes';
 export type { SkillId } from '../game-data/skills';
 export { RANK_LETTERS, describeSource, type SkillViewSettings } from './skills';
+export { buildSortKey } from './builds';
 export type { PresetId, ScoringRole, Weights } from '../curated/presets';
 
 export type Engine = {
@@ -138,6 +143,20 @@ export type Engine = {
   skillRank(id: SkillId, context: PlayContext): number;
   /** The Skills drawer's facts for a pairing: rally coverage, what each parent can pass, class skills by rank. */
   skillView(result: ChildResult, settings: SkillViewSettings): SkillView;
+  /** The build templates for a play context (All: every one), in catalog order. */
+  buildTemplates(context: PlayContext): readonly BuildTemplateSummary[];
+  /**
+   * The pairing's matched build templates for the play context, ranked tier → quality → first preferences → reclass
+   * cost; below 3/5 left out. DLC skills are reachable when the settings say so or the context reaches DLC.
+   */
+  builds(result: ChildResult, settings: SkillViewSettings): readonly BuildMatch[];
+  /** One template matched against the pairing, whatever its tier or context. */
+  buildMatch(result: ChildResult, templateId: string, settings: SkillViewSettings): BuildMatch;
+  /**
+   * The Best build column: the pairing's top-ranked build, or with a template filter that template's match; undefined
+   * when it is below 3/5 (the filter then hides the row).
+   */
+  bestBuild(result: ChildResult, settings: SkillViewSettings, templateId?: string): BuildMatch | undefined;
 };
 
 /**
@@ -412,6 +431,38 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     return { id, name: className(id), tier: c.tier, dlc: c.dlc, genderLock: c.genderLock };
   });
 
+  const skillInput = (r: ChildResult): SkillViewInput => {
+    const child = CHILD_UNITS[r.pairing.child];
+    const fixedRef: ParentRef = child.fixedParent === 'robin' ? r.pairing.fixedRobin! : { kind: 'unit', id: child.fixedParent };
+    return {
+      childName: child.name,
+      gender: child.gender,
+      fixedParent: parentName(fixedRef),
+      variableParent: parentName(r.pairing.variableParent),
+      candidates: r.skillCandidates,
+      startClass: r.startClass,
+      reachable: [...reachOf(r)],
+      classCount: r.classSet.length,
+    };
+  };
+  /** DLC skills and classes are reachable by the toggle, or in a context that reaches DLC. */
+  const dlcOf = (s: SkillViewSettings) => s.dlc || contextReachesDlc(s.context);
+  const reachFor = (r: ChildResult, s: SkillViewSettings) => skillReach(skillInput(r), dlcOf(s));
+  const template = (id: string) => {
+    const t = BUILD_TEMPLATES.find((t) => t.id === id);
+    if (!t) throw new Error(`No build template ${id}`);
+    return t;
+  };
+  // The table's Best build column asks for many pairings; cache by pairing, context, DLC reach (and template).
+  const buildCache = new Map<string, readonly BuildMatch[]>();
+  const filteredCache = new Map<string, BuildMatch | undefined>();
+  const builds = (r: ChildResult, settings: SkillViewSettings): readonly BuildMatch[] => {
+    const k = `${r.key}|${settings.context}|${dlcOf(settings)}`;
+    let found = buildCache.get(k);
+    if (!found) buildCache.set(k, (found = matchBuilds(reachFor(r, settings), settings.context)));
+    return found;
+  };
+
   /** Built on first use: rows prepared once, rescored per settings. */
   let scorer: ReturnType<typeof createScorer> | undefined;
 
@@ -541,24 +592,15 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     contextReachesDlc,
     pairUpSpd,
     skillRank,
-    skillView: (r, settings) => {
-      const child = CHILD_UNITS[r.pairing.child];
-      const fixedRef: ParentRef = child.fixedParent === 'robin' ? r.pairing.fixedRobin! : { kind: 'unit', id: child.fixedParent };
-      const gender = child.gender;
-      return buildSkillView(
-        {
-          childName: child.name,
-          gender,
-          fixedParent: parentName(fixedRef),
-          variableParent: parentName(r.pairing.variableParent),
-          candidates: r.skillCandidates,
-          startClass: r.startClass,
-          reachable: [...reachOf(r)],
-          classCount: r.classSet.length,
-        },
-        settings,
-        assumptions,
-      );
+    skillView: (r, settings) => buildSkillView(skillInput(r), settings, assumptions),
+    buildTemplates: (context) => templatesFor(context).map(templateSummary),
+    builds,
+    buildMatch: (r, id, settings) => matchTemplate(template(id), reachFor(r, settings), settings.context),
+    bestBuild: (r, settings, id) => {
+      if (!id) return builds(r, settings)[0];
+      const k = `${r.key}|${settings.context}|${dlcOf(settings)}|${id}`;
+      if (!filteredCache.has(k)) filteredCache.set(k, shownMatch(template(id), reachFor(r, settings), settings.context));
+      return filteredCache.get(k);
     },
   };
 }

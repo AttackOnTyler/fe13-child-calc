@@ -32,7 +32,7 @@ export type InheritableSkills =
 const SKILL_IDS = Object.keys(SKILLS) as SkillId[];
 const SKILL_ORDER = new Map(SKILL_IDS.map((id, i) => [id, i]));
 const byData = (a: SkillId, b: SkillId) => SKILL_ORDER.get(a)! - SKILL_ORDER.get(b)!;
-const skillData = (id: SkillId): SkillData => SKILLS[id];
+export const skillData = (id: SkillId): SkillData => SKILLS[id];
 
 /** Skills in data order, once each. */
 export const skillSet = (...lists: (readonly SkillId[])[]): SkillId[] => [...new Set(lists.flat())].sort(byData);
@@ -116,21 +116,41 @@ export type SkillViewSettings = {
   readonly dlc: boolean;
 };
 
-const ref = (id: SkillId, context: PlayContext): SkillRef => ({ id, name: skillData(id).name, rank: skillRank(id, context) });
+export const ref = (id: SkillId, context: PlayContext): SkillRef => ({ id, name: skillData(id).name, rank: skillRank(id, context) });
 
-/** Fixed inheritance first, then the starting class line, other classes, a parent's pick, a DLC class. */
-const sourceWeight = (s: SkillSource) => (s.kind === 'parent' ? (s.fixed ? 0 : 3) : s.dlc ? 4 : s.reclass ? 2 : 1);
+/** Fixed inheritance first, then the starting class line or a skill book, other classes, a parent's pick, a DLC class. */
+const sourceWeight = (s: SkillSource) =>
+  s.kind === 'parent' ? (s.fixed ? 0 : 3) : s.kind === 'book' ? 1 : s.dlc ? 4 : s.reclass ? 2 : 1;
 
 export const describeSource = (s: SkillSource): string =>
   s.kind === 'class'
     ? `${s.className} Lv ${s.level}${s.reclass ? ' ⟳' : ''}`
-    : s.fixed
-      ? `fixed from ${s.parent}`
-      : `inherit from ${s.parent} (must be ${s.parent}’s last equipped)`;
+    : s.kind === 'book'
+      ? 'DLC skill book ◇'
+      : s.fixed
+        ? `fixed from ${s.parent}`
+        : `inherit from ${s.parent} (must be ${s.parent}’s last equipped)`;
 
-export function buildSkillView(input: SkillViewInput, settings: SkillViewSettings, assumptions: Assumptions): SkillView {
-  const { context, dlc } = settings;
-  const { gender, childName } = input;
+/** How a pairing reaches skills: each skill's sources, best first, and why not when it has none. */
+export type SkillReach = {
+  /** Class-learned skills, each with the classes that teach it. */
+  readonly classSources: ReadonlyMap<SkillId, readonly SkillSource[]>;
+  /** Every way to get a skill (classes, parents, DLC skill book), best first; empty when unreachable. */
+  sourcesOf(id: SkillId): SkillSource[];
+  /** Why no class, parent or skill book gives it. */
+  whyNot(id: SkillId): string;
+};
+
+const sidesOf = (input: SkillViewInput) =>
+  [
+    { side: 'fixed', parent: input.fixedParent, offer: input.candidates.fromFixed },
+    { side: 'variable', parent: input.variableParent, offer: input.candidates.fromVariable },
+  ] as const;
+
+const BOOKS: ReadonlySet<SkillId> = new Set(DLC_SKILL_BOOKS);
+
+export function skillReach(input: SkillViewInput, dlc: boolean): SkillReach {
+  const { gender } = input;
   const startLine = new Set<ClassId>([input.startClass, ...promotionsOf(input.startClass)]);
   const classes = input.reachable.filter((c) => dlc || !isDlcClass(c));
 
@@ -148,19 +168,24 @@ export function buildSkillView(input: SkillViewInput, settings: SkillViewSetting
       classSources.set(skill, [...(classSources.get(skill) ?? []), src]);
     }
   }
-  const classLearned = new Set(classSources.keys());
-
-  const sides = [
-    { side: 'fixed', parent: input.fixedParent, offer: input.candidates.fromFixed },
-    { side: 'variable', parent: input.variableParent, offer: input.candidates.fromVariable },
-  ] as const;
+  const sides = sidesOf(input);
   const sourcesOf = (id: SkillId): SkillSource[] =>
     [
       ...(classSources.get(id) ?? []),
       ...sides.flatMap(({ side, parent, offer }): SkillSource[] =>
         offer.skills.includes(id) ? [{ kind: 'parent', side, parent, fixed: offer.fixed }] : [],
       ),
+      ...(dlc && BOOKS.has(id) ? [{ kind: 'book' } as const] : []),
     ].sort((x, y) => sourceWeight(x) - sourceWeight(y));
+  return { classSources, sourcesOf, whyNot: (id) => whyNot(id, input, dlc) };
+}
+
+export function buildSkillView(input: SkillViewInput, settings: SkillViewSettings, assumptions: Assumptions): SkillView {
+  const { context, dlc } = settings;
+  const { childName } = input;
+  const { classSources, sourcesOf } = skillReach(input, dlc);
+  const classLearned = new Set(classSources.keys());
+  const sides = sidesOf(input);
 
   const parents = sides.map(({ side, parent, offer }, i): ParentSkills => {
     const other = sides[1 - i]!.offer.skills;
@@ -215,7 +240,7 @@ export function buildSkillView(input: SkillViewInput, settings: SkillViewSetting
     child: childName,
     fixedParent: input.fixedParent,
     variableParent: input.variableParent,
-    startClass: className(input.startClass, gender),
+    startClass: className(input.startClass, input.gender),
     classCount: input.classCount,
     context,
     dlc,

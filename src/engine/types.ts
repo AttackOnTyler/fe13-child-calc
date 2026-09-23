@@ -6,6 +6,7 @@ import type { SkillId } from '../game-data/skills';
 import type { Citation } from '../game-data/citations';
 import type { AssumptionId } from './assumptions';
 import type { PresetData, PresetId, ScoringRole, Weights } from '../curated/presets';
+import type { BuildContext, Confidence } from '../curated/builds';
 
 export type RobinRef = { readonly kind: 'robin'; readonly gender: Gender; readonly asset: Stat; readonly flaw: Stat };
 
@@ -273,7 +274,9 @@ export type SkillSource =
       readonly reclass: boolean;
       readonly dlc: boolean;
     }
-  | { readonly kind: 'parent'; readonly side: 'fixed' | 'variable'; readonly parent: string; readonly fixed: boolean };
+  | { readonly kind: 'parent'; readonly side: 'fixed' | 'variable'; readonly parent: string; readonly fixed: boolean }
+  /** A DLC skill book (◇), when DLC is reachable. */
+  | { readonly kind: 'book' };
 
 export type RallyCoverage = {
   readonly skill: SkillRef;
@@ -314,4 +317,49 @@ export type SkillView = {
   readonly ranks: readonly { readonly rank: number; readonly letter: string; readonly skills: readonly RankedSkill[] }[];
   /** DLC skill books (◇), when DLC is reachable. */
   readonly books: readonly SkillRef[];
+};
+
+/** A curated build template as the drawer and the template filter list it. */
+export type BuildTemplateSummary = {
+  readonly id: string;
+  readonly name: string;
+  /** The preset its role maps to. */
+  readonly preset: PresetId;
+  /** That preset's name, e.g. `Physical lead`. */
+  readonly presetName: string;
+  readonly contexts: readonly BuildContext[];
+  /** The research sources it rests on, e.g. `S3, S4`. */
+  readonly source: string;
+  readonly confidence: Confidence;
+};
+
+/** One slot of a matched build: the skill that fills it and how, or why nothing can. */
+export type BuildSlotMatch = {
+  /** The slot's skill, or its preference group, first preferred. */
+  readonly options: readonly SkillRef[];
+  readonly skill: SkillRef | undefined;
+  /** Index of `skill` in `options`. */
+  readonly preference: number | undefined;
+  /** The one source the build uses for it: the lowest-effort class, a parent's pick, the fixed skill or a book. */
+  readonly source: SkillSource | undefined;
+  /** Why the slot stays empty. */
+  readonly reason: string | undefined;
+};
+
+/** A build template matched against one pairing's reachable skills. */
+export type BuildMatch = {
+  readonly template: BuildTemplateSummary;
+  /** Filled slots, 0–5; the drawer shows 3/5 and up. */
+  readonly tier: number;
+  /** Sum of the filled skills' ranks in the play context. */
+  readonly quality: number;
+  /** Sum of the filled slots' preference indexes (0 = every first preference). */
+  readonly preferenceMisses: number;
+  /** Distinct classes outside the starting class line the build's class skills need. */
+  readonly reclassCost: number;
+  /** Those classes, by name, in slot order. */
+  readonly reclassClasses: readonly string[];
+  readonly slots: readonly BuildSlotMatch[];
+  /** `A + B: why`, for synergy edges between filled skills. */
+  readonly synergies: readonly string[];
 };

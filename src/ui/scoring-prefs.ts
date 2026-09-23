@@ -17,7 +17,7 @@ import {
 /** A user's edit to a preset: it belongs to the preset (shown as `Name*`) until reset. */
 export type PresetEdit = { readonly weights: Weights; readonly mixed: boolean };
 
-export type ColumnGroup = 'caps' | 'mods' | 'growths' | 'speed';
+export type ColumnGroup = 'caps' | 'mods' | 'growths' | 'speed' | 'build';
 
 /** Scoring settings and preset edits; saved in localStorage. Filters are view state and aren't saved. */
 export type ScoringPrefs = {
@@ -53,7 +53,7 @@ export const DEFAULT_PREFS: ScoringPrefs = {
   supportRank: 'A',
   classMode: 'auto',
   dlc: false,
-  cols: { caps: true, mods: true, growths: false, speed: true },
+  cols: { caps: true, mods: true, growths: false, speed: true, build: true },
   context: 'all',
   rally: DEFAULT_SPEED.rally,
   tonic: DEFAULT_SPEED.tonic,
@@ -145,7 +145,7 @@ export function loadPrefs(engine: Engine): ScoringPrefs {
         ? (raw.classMode as ClassMode)
         : DEFAULT_PREFS.classMode,
     dlc: typeof raw.dlc === 'boolean' ? raw.dlc : DEFAULT_PREFS.dlc,
-    cols: { caps: col('caps'), mods: col('mods'), growths: col('growths'), speed: col('speed') },
+    cols: { caps: col('caps'), mods: col('mods'), growths: col('growths'), speed: col('speed'), build: col('build') },
     context: CONTEXTS.includes(raw.context as PlayContext) ? (raw.context as PlayContext) : DEFAULT_PREFS.context,
     rally: RALLY_OPTIONS.includes(raw.rally as number) ? (raw.rally as number) : DEFAULT_PREFS.rally,
     tonic: typeof raw.tonic === 'boolean' ? raw.tonic : DEFAULT_PREFS.tonic,

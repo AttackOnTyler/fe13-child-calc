@@ -5,10 +5,13 @@ import {
   STATS,
   STAT_LABELS,
   RANK_LETTERS,
+  buildSortKey,
   createEngine,
   describeSource,
   resolveAssumptions,
   type AssumptionId,
+  type BuildMatch,
+  type BuildSlotMatch,
   type Assumptions,
   type ChildId,
   type ChildResult,
@@ -80,8 +83,11 @@ const expanded = new Set<string>();
 const pinned = new Map<string, string>();
 /** The one table line (by line id) with its Skills drawer open. */
 let openSkills: string | undefined;
-let filter: { parent: string; secondGen: boolean } = { parent: '', secondGen: true };
-type SortCol = 'parent' | 'class' | 'score' | 'speed' | 'count' | `cap:${Stat}` | `mod:${Stat}` | `growth:${Stat}`;
+/** The build card expanded in the open drawer (by line id); null when the user collapsed it, else the best build. */
+let openBuild: { line: string; id: string | null } | undefined;
+/** `template`: a build template id to match every row against, or '' for each row's best build. */
+let filter: { parent: string; secondGen: boolean; template: string } = { parent: '', secondGen: true, template: '' };
+type SortCol = 'parent' | 'class' | 'score' | 'speed' | 'build' | 'count' | `cap:${Stat}` | `mod:${Stat}` | `growth:${Stat}`;
 let sort: { col: SortCol; dir: 1 | -1 } = { col: 'score', dir: -1 };
 const FIRST_PAGE = 200;
 const MORE = 500;
@@ -240,12 +246,23 @@ type Line = {
   readonly pinned?: boolean;
 };
 
+/** What the Skills drawer and the builds are matched under: the play context and whether DLC is reachable. */
+const skillSettings = () => ({ context: prefs.context, dlc: dlcReachable(prefs, engine) });
+
+/** The template filter, if it names a template of the current play context. */
+const templateFilter = (): string | undefined =>
+  engine.buildTemplates(prefs.context).some((t) => t.id === filter.template) ? filter.template : undefined;
+
+/** A line's Best build: its best-ranked build, or the filtered template's match. */
+const buildOf = (line: Line): BuildMatch | undefined => engine.bestBuild(line.result, skillSettings(), templateFilter());
+
 function sortValue(line: Line, col: SortCol, gender: Gender): number | string | undefined {
   const { score, result } = line;
   if (col === 'parent') return line.label.toLowerCase();
   if (col === 'class') return score.class && engine.className(score.class, gender);
   if (col === 'score') return score.raw;
   if (col === 'speed') return support() ? score.values?.spd : score.speed?.total;
+  if (col === 'build') return buildSortKey(buildOf(line));
   if (col === 'count') return result.classSet.length;
   const [kind, stat] = col.split(':') as ['cap' | 'mod' | 'growth', Stat];
   if (kind === 'cap') return score.values?.[stat];
@@ -318,6 +335,12 @@ function pairUpSpdCell(values: PairingScore['values']): HTMLElement {
   return h('td', { class: 'num spd gstart' }, values ? h('b', {}, `+${values.spd}`) : '');
 }
 
+function buildCell(m: BuildMatch | undefined): HTMLElement {
+  if (!m) return h('td', { class: 'build gstart muted', title: 'No build template reaches 3/5' }, '—');
+  const title = `${m.template.presetName} · quality ${m.quality} · reclass ${m.reclassCost}`;
+  return h('td', { class: 'build gstart', title }, h('span', { class: `tier t${m.tier}` }, `${m.tier}/5`), ` ${m.template.name}`);
+}
+
 /** The class scored in, `(Auto)` when Auto chose it; undefined when unreachable. */
 const classLabel = (score: PairingScore, gender: Gender) =>
   score.class && `${engine.className(score.class, gender)}${score.auto ? ' (Auto)' : ''}`;
@@ -335,6 +358,7 @@ function lineRow(line: Line, gender: Gender, cls: string, head: HTMLElement): HT
     scoreCell(line),
   ];
   if (prefs.cols.speed) cells.push(support() ? pairUpSpdCell(values) : speedCell(score.speed));
+  if (prefs.cols.build) cells.push(buildCell(buildOf(line)));
   if (prefs.cols.caps) {
     // In the Support role the values are pair-up bonuses, and HP gets none.
     const cap = (s: Stat) => (!values ? '' : !support() ? String(values[s]) : s === 'hp' ? '—' : `+${values[s]}`);
@@ -484,6 +508,7 @@ function skillsButton(id: string): HTMLElement {
       title: `${open ? 'Hide' : 'Show'} this pairing’s skills`,
       onclick: () => {
         openSkills = open ? undefined : id;
+        openBuild = undefined;
         renderParts(['main']);
       },
     },
@@ -493,14 +518,101 @@ function skillsButton(id: string): HTMLElement {
 
 const sourcesTitle = (sources: readonly SkillSource[]) => sources.map(describeSource).join('\n');
 
+/** ⟳ reclass, ↑ inherited, ◇ DLC skill book. */
+const sourceMark = (s: SkillSource): string => (s.kind === 'parent' ? ' ↑' : s.kind === 'book' ? ' ◇' : s.reclass ? ' ⟳' : '');
+
+/** A build slot as a chip: the skill with its source marker, or its first choice dashed and struck through. */
+function slotChip(slot: BuildSlotMatch): HTMLElement {
+  if (!slot.skill) {
+    const names = slot.options.map((o) => o.name).join(' / ');
+    return h('span', { class: `skill r${slot.options[0]!.rank} miss`, title: `${names}: ${slot.reason}` }, slot.options[0]!.name);
+  }
+  return skillChip(slot.skill, [sourceMark(slot.source!)], `${slot.skill.name} — ${describeSource(slot.source!)}`);
+}
+
+/** One slot's source line, or why it stays empty. */
+function slotLine(slot: BuildSlotMatch): HTMLElement {
+  if (!slot.skill) return h('li', { class: 'miss' }, h('s', {}, slot.options.map((o) => o.name).join(' / ')), ` — ${slot.reason}`);
+  return h('li', {}, h('b', {}, slot.skill.name), ` — ${describeSource(slot.source!)}`);
+}
+
+/** The expanded build: role, contexts, confidence, reclass cost, where each slot comes from, synergies, its preset. */
+function buildCard(m: BuildMatch): HTMLElement {
+  const t = m.template;
+  const current = prefs.preset === t.preset;
+  return h(
+    'div',
+    { class: 'build-card' },
+    h('div', { class: 'muted small' }, `${t.presetName} · ${t.contexts.map((c) => CONTEXT_LABELS[c]).join(', ')} · ${t.confidence} (${t.source})`),
+    h(
+      'div',
+      { class: 'small' },
+      m.reclassCost ? `Reclass cost ${m.reclassCost}: ${m.reclassClasses.join(', ')}` : 'Reclass cost 0: every class skill is on the starting class line',
+    ),
+    h('ul', { class: 'slots' }, ...m.slots.map(slotLine)),
+    m.synergies.length ? h('ul', { class: 'notes muted small' }, ...m.synergies.map((n) => h('li', {}, n))) : null,
+    h(
+      'button',
+      { disabled: current, title: current ? 'Already the preset' : `Score pairings with ${t.presetName}`, onclick: () => setPrefs(withPreset(prefs, t.preset)) },
+      current ? `Scoring with ${t.presetName}` : 'Use this build’s preset',
+    ),
+  );
+}
+
+/** Matched builds grouped by tier, best first; a line expands into its build card (the best starts expanded). */
+function buildsSection(line: Line, id: string): HTMLElement {
+  const builds = engine.builds(line.result, skillSettings());
+  const open = openBuild?.line === id ? openBuild.id : builds[0]?.template.id;
+  const tiers = [...new Set(builds.map((b) => b.tier))];
+  return h(
+    'section',
+    { class: 'builds' },
+    h('h4', {}, 'Builds'),
+    builds.length ? null : h('p', { class: 'muted small' }, `No build template reaches 3/5 in ${CONTEXT_LABELS[prefs.context]}.`),
+    ...tiers.map((tier) =>
+      h(
+        'div',
+        { class: 'tier-group' },
+        h('div', { class: 'muted small' }, `${tier}/5`),
+        ...builds
+          .filter((b) => b.tier === tier)
+          .map((b) => {
+            const on = b.template.id === open;
+            return h(
+              'div',
+              { class: `build${on ? ' open' : ''}` },
+              h(
+                'button',
+                {
+                  class: 'build-line',
+                  'aria-expanded': String(on),
+                  title: on ? 'Collapse' : 'Show where each skill comes from',
+                  onclick: () => {
+                    openBuild = { line: id, id: on ? null : b.template.id };
+                    renderParts(['main']);
+                  },
+                },
+                h('span', { class: `tier t${b.tier}` }, `${b.tier}/5`),
+                h('span', { class: 'name' }, b.template.name),
+                h('span', { class: 'chips' }, ...b.slots.map(slotChip)),
+                h('span', { class: 'muted small cost', title: 'Reclass cost: classes beyond the starting class line' }, `⟳${b.reclassCost}`),
+              ),
+              on ? buildCard(b) : null,
+            );
+          }),
+      ),
+    ),
+  );
+}
+
 /** A skill chip coloured by rank, followed by its source markers. */
 function skillChip(skill: SkillRef, marks: (HTMLElement | string)[], title: string, cls = ''): HTMLElement {
   return h('span', { class: `skill r${skill.rank}${cls ? ` ${cls}` : ''}`, title }, skill.name, ...marks);
 }
 
-/** The drawer under a pairing row: header and legend, builds (to come), rally coverage, parents, class skills by rank. */
-function skillsRow(line: Line, ncols: number): HTMLElement {
-  const v = engine.skillView(line.result, { context: prefs.context, dlc: dlcReachable(prefs, engine) });
+/** The drawer under a pairing row: header and legend, matched builds, rally coverage, parents, class skills by rank. */
+function skillsRow(line: Line, id: string, ncols: number): HTMLElement {
+  const v = engine.skillView(line.result, skillSettings());
   const head = h(
     'div',
     { class: 'drawer-head' },
@@ -596,12 +708,7 @@ function skillsRow(line: Line, ncols: number): HTMLElement {
       : null,
   );
 
-  const builds = h(
-    'section',
-    { class: 'builds' },
-    h('h4', {}, 'Builds'),
-    h('p', { class: 'muted small' }, 'Matched build templates will appear here with the loadout suggester.'),
-  );
+  const builds = buildsSection(line, id);
   return h(
     'tr',
     { class: 'skills-row' },
@@ -619,7 +726,8 @@ function skillsRow(line: Line, ncols: number): HTMLElement {
  */
 function rowsFor(child: ChildId, line: Line, gender: Gender, sc: Scoring, ncols: number): HTMLElement[] {
   const rows = lineRows(child, line, gender, sc, ncols);
-  if (openSkills === lineId(child, line)) rows.push(skillsRow(line, ncols));
+  const id = lineId(child, line);
+  if (openSkills === id) rows.push(skillsRow(line, id, ncols));
   return rows;
 }
 
@@ -687,6 +795,7 @@ const COLUMN_GROUPS: readonly { id: ColumnGroup; label: string }[] = [
   { id: 'mods', label: 'mods' },
   { id: 'growths', label: 'growths' },
   { id: 'speed', label: 'speed' },
+  { id: 'build', label: 'build' },
 ];
 
 function columnToggles(): HTMLElement {
@@ -716,8 +825,10 @@ function childTable(child: ChildId): HTMLElement[] {
   const groups = engine.groups(child, pairingFilter);
   const allGroups = engine.groups(child).length;
   const cols = prefs.cols;
-  const ncols = 1 + 2 + (cols.speed ? 1 : 0) + (cols.caps ? STATS.length : 0) + (cols.mods ? MOD_STATS.length : 0) + (cols.growths ? STATS.length : 0) + 1;
-  const lines = sortLines(linesFor(child, groups, sc), summary.gender);
+  const ncols = 1 + 2 + (cols.speed ? 1 : 0) + (cols.build ? 1 : 0) + (cols.caps ? STATS.length : 0) + (cols.mods ? MOD_STATS.length : 0) + (cols.growths ? STATS.length : 0) + 1;
+  const byTemplate = templateFilter();
+  const all = linesFor(child, groups, sc);
+  const lines = sortLines(byTemplate ? all.filter((l) => buildOf(l)) : all, summary.gender);
   const rows = lines.flatMap((l) => rowsFor(child, l, summary.gender, sc, ncols));
   const shown = rows.slice(0, limit);
 
@@ -729,7 +840,7 @@ function childTable(child: ChildId): HTMLElement[] {
       'span',
       { class: 'muted' },
       `Fixed parent: ${summary.fixedParentName} · ${summary.pairingCount} pairings` +
-        (groups.length < allGroups ? ` · ${groups.length} of ${allGroups} parents shown` : ''),
+        (lines.length < allGroups ? ` · ${lines.length} of ${allGroups} parents shown` : ''),
     ),
     columnToggles(),
     h(
@@ -752,6 +863,7 @@ function childTable(child: ChildId): HTMLElement[] {
         h('th', { class: 'stick' }, ''),
         h('th', { colspan: '2', class: 'gstart' }, 'Result'),
         cols.speed ? h('th', { class: 'gstart' }, '') : null,
+        cols.build ? h('th', { class: 'gstart' }, '') : null,
         cols.caps
           ? h('th', { colspan: String(STATS.length), class: 'gcap gstart', title: capsTitle() }, `${capsHeader()} (${BASIS_LABELS[basis()]})`)
           : null,
@@ -768,6 +880,16 @@ function childTable(child: ChildId): HTMLElement[] {
         sortHeader('class', classHead, 'gstart'),
         sortHeader('score', 'Score', 'num gstart'),
         ...(cols.speed ? [sortHeader('speed', support() ? 'Pair-up Spd' : 'Speed', 'num gstart', speedTitle())] : []),
+        ...(cols.build
+          ? [
+              sortHeader(
+                'build',
+                byTemplate ? 'Build' : 'Best build',
+                'gstart',
+                `${byTemplate ? 'The filtered template' : 'The best-ranked build template'} in ${CONTEXT_LABELS[prefs.context]}: tier → quality → first preferences → reclass cost`,
+              ),
+            ]
+          : []),
         ...(cols.caps
           ? STATS.map((s, i) => sortHeader(`cap:${s}`, STAT_LABELS[s], `num gcap${i === 0 ? ' gstart' : ''}${weighted(s) ? ' weighted' : ''}`))
           : []),
@@ -1208,6 +1330,22 @@ function panel(): HTMLElement[] {
           },
         }),
         ' Second-gen parents (Morgan)',
+      ),
+      h(
+        'select',
+        {
+          'aria-label': 'Filter by build template',
+          title: 'Only rows that reach this template at 3/5 or better; the Build column shows its match',
+          onchange: (e) => {
+            filter = { ...filter, template: (e.target as HTMLSelectElement).value };
+            limit = FIRST_PAGE;
+            renderParts(['main']);
+          },
+        },
+        h('option', { value: '', selected: !templateFilter() }, 'Any build template'),
+        ...engine
+          .buildTemplates(prefs.context)
+          .map((t) => h('option', { value: t.id, selected: t.id === templateFilter() }, `${t.id} ${t.name}`)),
       ),
       h(
         'label',
