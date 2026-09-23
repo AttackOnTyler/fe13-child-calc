@@ -267,3 +267,36 @@ table.matrix { grid-column: 1 / -1; border-collapse: collapse; font-size: 11px; 
 .skill-card .edges { list-style: none; padding-left: 0; }
 .skill-card .edges li { margin: 0 0 5px; }
 button.skill.linkish { padding: 0 6px; font-size: 11px; }
+
+/* Roster: run facts, a state strip and spouse picker per unit; table rows and cards carry the roster's state chip. */
+.rail-item.roster-item { font-weight: 600; margin-bottom: 4px; }
+.roster { padding: 4px 12px 24px; }
+.rsec { margin: 12px 0 18px; max-width: 900px; }
+.rsec h3 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; color: var(--muted); }
+.rsec p { margin: 0 0 8px; }
+.rsec .facts { display: flex; gap: 16px; flex-wrap: wrap; }
+.rsec .blk { display: inline-flex; gap: 6px; align-items: center; }
+.rsec .lbl { color: var(--muted); }
+.rsec select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 2px 4px; }
+.unit { display: grid; grid-template-columns: 170px auto 1fr; gap: 10px; align-items: center; padding: 3px 0; border-bottom: 1px solid var(--line); }
+.unit .uname .chip { margin-left: 6px; color: var(--muted); }
+.unit .spouse { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.unit.st-dead .uname, .unit.st-missed .uname { color: var(--neg); text-decoration: line-through; }
+.unit.st-benched .uname { color: var(--warn); }
+.unit.st-not-recruited .uname { color: var(--muted); }
+.states button { min-width: 28px; }
+.states button.on.st-dead, .states button.on.st-missed { border-color: var(--neg); background: #3a2224; }
+.states button.on.st-benched { border-color: var(--warn); background: #3a3122; }
+.main-head .clear-all { margin-left: auto; border-color: var(--neg); }
+.chip.block { margin-left: 4px; cursor: help; font-weight: 700; }
+.chip.block.married { color: var(--pos); border-color: #3f7a47; }
+.chip.block.planned { color: var(--accent); border-color: #3a6394; }
+.chip.block.soft { color: var(--warn); border-color: #8a6a2c; }
+.chip.block.hard { color: var(--neg); border-color: #7a3a3a; }
+.grid tr.blocked-hard th, .grid tr.blocked-hard td { opacity: 0.4; }
+.grid tr.blocked-soft th.stick { box-shadow: inset 3px 0 0 var(--warn); }
+.card.blocked-hard { opacity: 0.45; }
+.card.blocked-soft { border-color: #8a6a2c; }
+@media (max-width: 700px) {
+  .unit { grid-template-columns: 1fr; gap: 4px; }
+}

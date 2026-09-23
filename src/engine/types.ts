@@ -7,6 +7,7 @@ import type { Citation } from '../game-data/citations';
 import type { AssumptionId } from './assumptions';
 import type { PresetData, PresetId, ScoringRole, Weights } from '../curated/presets';
 import type { BuildContext, Confidence } from '../curated/builds';
+import type { Blocking, Roster, RunFacts } from './roster';
 
 export type RobinRef = { readonly kind: 'robin'; readonly gender: Gender; readonly asset: Stat; readonly flaw: Stat };
 
@@ -208,6 +209,10 @@ export type LeaderboardOptions = {
   readonly sort: 'score' | 'speed';
   /** The table filter, applied to every child; never changes a score. */
   readonly filter?: PairingFilter;
+  /** Marks each entry's blocking and sorts hard-blocked entries last; never changes a score. */
+  readonly roster?: Roster;
+  /** Leave out hard-blocked entries (with a roster). */
+  readonly hideBlocked?: boolean;
 };
 
 export type LeaderboardEntry = {
@@ -222,6 +227,8 @@ export type LeaderboardEntry = {
   readonly parent: string;
   /** Robin's asset/flaw, e.g. `+Spd −Def`, when Robin is a parent. */
   readonly robin: string | undefined;
+  /** How the roster blocks it, when the options carry a roster. */
+  readonly blocking?: Blocking;
 };
 
 /** One asset/flaw of a Robin group: a variable Robin parent's, or the fixed Robin's for a Morgan partner group. */
@@ -258,6 +265,8 @@ export type PairingFilter = {
   readonly parent?: string;
   /** Include second-gen partners (Morgan's `Lucina ← Sumia` rows). Default true. */
   readonly secondGen?: boolean;
+  /** Run facts: pairings with the other Robin, or another of Robin's asset/flaws, are left out of their groups. */
+  readonly run?: RunFacts;
 };
 
 /** A skill with its curated rank in the current play context (1–5 = D–S, 0 unranked). */

@@ -41,6 +41,7 @@ import { createScorer } from './scoring';
 import { pairUpSpd } from './pair-up';
 import { contextReachesDlc, defaultTargetBreakpoint } from './speed';
 import { runSelfTest } from './self-test';
+import { evaluateBlocking, type Blocking, type Roster, type RunFacts } from './roster';
 import { PRESETS, type PresetId, type ScoringRole } from '../curated/presets';
 import type {
   AssumptionStatus,
@@ -89,6 +90,26 @@ export type { ClassId } from '../game-data/classes';
 export type { SkillId } from '../game-data/skills';
 export { RANK_LETTERS, describeSource, type SkillViewSettings } from './skills';
 export { buildSortKey } from './builds';
+export {
+  EMPTY_ROSTER,
+  UNIT_STATES,
+  parseRoster,
+  rosterUnits,
+  stateOf,
+  unitName,
+  voidPinReason,
+  withRun,
+  withSpouse,
+  withState,
+  type Blocking,
+  type Bond,
+  type Spouse,
+  type Roster,
+  type RosterEntry,
+  type RosterUnit,
+  type RunFacts,
+  type UnitState,
+} from './roster';
 export type { PresetId, ScoringRole, Weights } from '../curated/presets';
 
 export type Engine = {
@@ -164,6 +185,8 @@ export type Engine = {
    * whether it can ever be inherited, synergy and conflict partners with reachability, and the builds that use it.
    */
   skillCard(result: ChildResult, id: SkillId, settings: SkillViewSettings): SkillCard;
+  /** Whether the roster blocks a pairing (hard: it can no longer happen; soft: it contradicts a pin or a bench), and why. */
+  blocking(result: ChildResult, roster: Roster): Blocking;
 };
 
 /**
@@ -185,13 +208,29 @@ const BASES: Readonly<Record<ScoringRole, readonly ScoreBasis[]>> = {
 
 const PRESET_LIST: readonly Preset[] = (Object.keys(PRESETS) as PresetId[]).map((id) => ({ id, ...PRESETS[id] }));
 
-/** Whether a group passes the table filter. Second-gen groups are Morgan's `Child ← Parent` partners. */
-function passes(group: PairingGroup, filter: PairingFilter): boolean {
-  const q = filter.parent?.trim().toLowerCase();
-  if (q && !group.label.toLowerCase().includes(q)) return false;
-  if (filter.secondGen === false && group.results[0]?.pairing.variableParent.kind === 'child') return false;
-  return true;
+/** Whether a pairing exists under the run facts: Robin, if a parent, is of the run's gender and asset/flaw. */
+function inRun(pairing: Pairing, run: RunFacts | undefined): boolean {
+  const ref = robinRefOf(pairing);
+  if (!ref || !run) return true;
+  return (run.gender ?? ref.gender) === ref.gender && (run.asset ?? ref.asset) === ref.asset && (run.flaw ?? ref.flaw) === ref.flaw;
 }
+
+/**
+ * A group as the table filter leaves it, or undefined when it is filtered out. Second-gen groups are Morgan's
+ * `Child ← Parent` partners; run facts narrow a Robin group down to the run's asset/flaw.
+ */
+function narrow(group: PairingGroup, filter: PairingFilter): PairingGroup | undefined {
+  const q = filter.parent?.trim().toLowerCase();
+  if (q && !group.label.toLowerCase().includes(q)) return undefined;
+  if (filter.secondGen === false && group.results[0]?.pairing.variableParent.kind === 'child') return undefined;
+  if (!filter.run) return group;
+  const results = group.results.filter((r) => inRun(r.pairing, filter.run));
+  if (results.length === 0) return undefined;
+  return results.length === group.results.length ? group : { ...group, results };
+}
+
+const narrowAll = (groups: readonly PairingGroup[], filter: PairingFilter | undefined): PairingGroup[] =>
+  filter ? groups.flatMap((g) => narrow(g, filter) ?? []) : [...groups];
 
 const CHILD_IDS = Object.keys(CHILD_UNITS) as ChildId[];
 const UNIT_IDS = Object.keys(FIRST_GEN_UNITS) as UnitId[];
@@ -486,10 +525,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         };
       }),
     pairings: (child) => (child ? (byChild.get(child) ?? []) : all),
-    groups: (child, filter) => {
-      const groups = groupsByChild.get(child) ?? [];
-      return filter ? groups.filter((g) => passes(g, filter)) : groups;
-    },
+    groups: (child, filter) => narrowAll(groupsByChild.get(child) ?? [], filter),
     result,
     parentName,
     robinLabel: (pairing) => {
@@ -560,7 +596,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
           const bestKey = groupBest(group).best.key;
           return { cells, best: cells.find((c) => c.key === bestKey)!, spread };
         },
-        leaderboard: ({ robin, sort, filter }) => {
+        leaderboard: ({ robin, sort, filter, roster, hideBlocked }) => {
           const shownOf = (group: PairingGroup): readonly ChildResult[] => {
             if (group.results.length === 1 || robin === 'all') return group.results;
             if (robin === 'best') return [groupBest(group).best];
@@ -572,22 +608,28 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
           // Speed is the Spd pair-up bonus in the Support role, as in the table's Speed column.
           const speedOf = (s: PairingScore) => (settings.role === 'support' ? s.values?.spd : s.speed?.total);
           const rows = CHILD_IDS.flatMap((child) =>
-            (groupsByChild.get(child) ?? []).filter((g) => !filter || passes(g, filter)).flatMap((group) =>
-              shownOf(group).map((result) => ({ child, group, result, score: scores.get(result.key)! })),
+            narrowAll(groupsByChild.get(child) ?? [], filter).flatMap((group) =>
+              shownOf(group).flatMap((result) => {
+                const blocking = roster && evaluateBlocking(result.pairing, roster, assumptions);
+                if (hideBlocked && blocking?.status === 'hard') return [];
+                return [{ child, group, result, score: scores.get(result.key)!, blocking }];
+              }),
             ),
           );
-          // Unreachable last; then the sort key, the score, and table order (the sort is stable).
+          // Hard-blocked last, then unreachable; then the sort key, the score, and table order (the sort is stable).
           const desc = (a: number | undefined, b: number | undefined) => (b ?? -Infinity) - (a ?? -Infinity) || 0;
+          const hard = (r: (typeof rows)[number]) => Number(r.blocking?.status === 'hard');
           rows.sort(
             (a, b) =>
+              hard(a) - hard(b) ||
               Number(!a.score.class) - Number(!b.score.class) ||
               (sort === 'speed' ? desc(speedOf(a.score), speedOf(b.score)) : 0) ||
               desc(a.score.raw, b.score.raw),
           );
-          return rows.map(({ child, group, result, score }, i) => {
+          return rows.map(({ child, group, result, score, blocking }, i) => {
             const ref = robinRefOf(result.pairing);
             const { name, gender } = CHILD_UNITS[child];
-            return { rank: i + 1, result, score, child: name, gender, parent: group.label, robin: ref && assetFlawLabel(ref) };
+            return { rank: i + 1, result, score, child: name, gender, parent: group.label, robin: ref && assetFlawLabel(ref), blocking };
           });
         },
         weightedStats: weightedStats(settings),
@@ -610,5 +652,6 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       return filteredCache.get(k);
     },
     skillCard: (r, id, settings) => skillCard(id, reachFor(r, settings), settings.context, builds(r, settings)),
+    blocking: (r, roster) => evaluateBlocking(r.pairing, roster, assumptions),
   };
 }

@@ -9,7 +9,9 @@ import {
   createEngine,
   describeSource,
   resolveAssumptions,
+  EMPTY_ROSTER,
   type AssumptionId,
+  type Blocking,
   type BuildMatch,
   type BuildSlotMatch,
   type Assumptions,
@@ -28,6 +30,7 @@ import {
   type PairingScore,
   type PlayContext,
   type RobinMode,
+  type Roster,
   type Preset,
   type ScoreBasis,
   type ScoreSettings,
@@ -67,17 +70,21 @@ import {
   type ScoringPrefs,
 } from './scoring-prefs';
 import { validationPanel, withOverride } from './validation';
+import { rosterPage } from './roster-page';
+import { clearRoster, loadRoster, saveRoster } from './roster-store';
 
 let overrides: Overrides = loadOverrides();
 let assumptions: Assumptions = resolveAssumptions(overrides);
 let engine: Engine = createEngine(assumptions);
 let selfTest = engine.selfTest();
 let prefs: ScoringPrefs = loadPrefs(engine);
+/** Run state: read by the tables and the leaderboard, never by scoring. */
+let roster: Roster = loadRoster();
 
 // View state only; all domain answers come from the engine.
 /** A child's table, or the All children leaderboard. */
 let selected: ChildId | 'all' = 'lucina';
-let view: 'table' | 'validation' = selfTest.passed ? 'table' : 'validation';
+let view: 'table' | 'validation' | 'roster' = selfTest.passed ? 'table' : 'validation';
 /** A Robin group row's identity across children: `child|group key`. */
 const groupId = (child: ChildId, group: PairingGroup) => `${child}|${group.key}`;
 /** Robin group rows (by group id) with their asset × flaw heatmap open. */
@@ -92,8 +99,18 @@ let openBuild: { line: string; id: string | null } | undefined;
 let inspected: { line: string; id: SkillId } | undefined;
 /** The open drawer's pairing as last rendered, which the Skill card reads; cleared on each render of the main part. */
 let drawerPairing: { line: string; result: ChildResult; title: string } | undefined;
-/** `template`: a build template id to match every row against, or '' for each row's best build. */
-let filter: { parent: string; secondGen: boolean; template: string } = { parent: '', secondGen: true, template: '' };
+/**
+ * `template`: a build template id to match every row against, or '' for each row's best build. `hideBlocked` leaves
+ * out hard-blocked rows.
+ */
+let filter: { parent: string; secondGen: boolean; template: string; hideBlocked: boolean } = {
+  parent: '',
+  secondGen: true,
+  template: '',
+  hideBlocked: false,
+};
+/** The table filter as the engine takes it, with the run facts. */
+const pairingFilter = (): PairingFilter => ({ parent: filter.parent, secondGen: filter.secondGen, run: roster.run });
 type SortCol = 'parent' | 'class' | 'score' | 'speed' | 'build' | 'count' | `cap:${Stat}` | `mod:${Stat}` | `growth:${Stat}`;
 let sort: { col: SortCol; dir: 1 | -1 } = { col: 'score', dir: -1 };
 const FIRST_PAGE = 200;
@@ -169,6 +186,36 @@ function applyOverrides(next: Overrides): void {
 
 const setOverride = (id: AssumptionId, value: unknown) => applyOverrides(withOverride(overrides, id, value));
 
+// ---- roster ----
+
+function setRoster(next: Roster): void {
+  roster = next;
+  saveRoster(roster);
+  renderParts(['rail', 'main']);
+}
+
+function clearRosterState(): void {
+  roster = EMPTY_ROSTER;
+  clearRoster();
+  renderParts(['rail', 'main']);
+}
+
+const BLOCK_CHIPS: Readonly<Record<Blocking['status'], { mark: string; label: string } | undefined>> = {
+  open: undefined,
+  married: { mark: '✓', label: 'Married' },
+  planned: { mark: '★', label: 'Planned' },
+  soft: { mark: '!', label: 'Soft-blocked' },
+  hard: { mark: '✕', label: 'Hard-blocked' },
+};
+
+/** The roster's state chip for a pairing, with every reason on hover; null when the roster says nothing about it. */
+function blockChip(b: Blocking): HTMLElement | null {
+  const chip = BLOCK_CHIPS[b.status];
+  if (!chip && b.notes.length === 0) return null;
+  const title = [chip?.label ?? '', ...b.hard.map((r) => `✕ ${r}`), ...b.soft.map((r) => `! ${r}`), ...b.notes].filter(Boolean).join('\n');
+  return h('span', { class: `chip block ${b.status}`, title, 'aria-label': title }, chip?.mark ?? '⚠', chip && b.notes.length ? ' ⚠' : '');
+}
+
 // ---- formatting ----
 
 const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
@@ -200,7 +247,15 @@ function validationButton(report: SelfTestReport): HTMLElement {
 function rail(): HTMLElement[] {
   const sc = scoring();
   const children = engine.children();
-  const top = children.map((c) => sc.best(c.id)?.score).filter((s) => s !== undefined);
+  // Each child's best among the pairings that exist in this run (the run facts remove the other Robin and Morgan).
+  const bestInRun = new Map(
+    children.map((c) => {
+      const scores = engine.groups(c.id, { run: roster.run }).map((g) => sc.get(sc.groupBest(g).best.key).score);
+      const defined = scores.filter((s) => s !== undefined);
+      return [c.id, { exists: scores.length > 0, score: defined.length ? Math.max(...defined) : undefined }];
+    }),
+  );
+  const top = children.map((c) => bestInRun.get(c.id)!.score).filter((s) => s !== undefined);
   const item = (id: ChildId | 'all', name: string, title: string, score: number | undefined) =>
     h(
       'button',
@@ -219,10 +274,26 @@ function rail(): HTMLElement[] {
       h('span', {}, name),
       h('b', { class: 'num' }, String(score ?? '—')),
     );
+  const married = Object.values(roster.spouses).filter((s) => s?.bond === 'married').length / 2;
   return [
+    h(
+      'button',
+      {
+        class: `rail-item roster-item${view === 'roster' ? ' on' : ''}`,
+        title: 'Run facts, unit states and marriages',
+        onclick: () => {
+          view = 'roster';
+          render();
+        },
+      },
+      h('span', {}, 'Roster'),
+      h('b', { class: 'num muted', title: 'Marriages' }, married ? `✓${married}` : ''),
+    ),
     h('div', { class: 'muted small rail-head' }, `Best · ${presetLabel(currentPreset())}`),
     item('all', 'All children', 'Leaderboard of every child’s pairings', top.length ? Math.max(...top) : undefined),
-    ...children.map((c) => item(c.id, c.name, `${c.pairingCount} pairings`, sc.best(c.id)?.score)),
+    ...children
+      .filter((c) => bestInRun.get(c.id)!.exists)
+      .map((c) => item(c.id, c.name, `${c.pairingCount} pairings`, bestInRun.get(c.id)!.score)),
   ];
 }
 
@@ -251,6 +322,8 @@ type Line = {
   readonly range?: string;
   /** The row shows a pinned asset/flaw rather than the group's best. */
   readonly pinned?: boolean;
+  /** How the roster blocks the shown pairing. */
+  readonly blocking: Blocking;
 };
 
 /** What the Skills drawer and the builds are matched under: the play context and whether DLC is reachable. */
@@ -277,10 +350,17 @@ function sortValue(line: Line, col: SortCol, gender: Gender): number | string | 
   return result.growths[stat];
 }
 
-/** Sorts lines by the current column; lines that can't be scored in the pinned class always go last. */
+/** Sorts lines by the current column; hard-blocked lines, then lines that can't be scored in the pinned class, go last. */
 function sortLines(lines: Line[], gender: Gender): Line[] {
-  const keyed = lines.map((line, i) => ({ line, i, v: sortValue(line, sort.col, gender), dead: !line.score.class }));
+  const keyed = lines.map((line, i) => ({
+    line,
+    i,
+    v: sortValue(line, sort.col, gender),
+    dead: !line.score.class,
+    hard: line.blocking.status === 'hard',
+  }));
   keyed.sort((a, b) => {
+    if (a.hard !== b.hard) return a.hard ? 1 : -1;
     if (a.dead !== b.dead) return a.dead ? 1 : -1;
     if (a.v === b.v) return a.i - b.i;
     if (a.v === undefined) return 1;
@@ -384,9 +464,10 @@ function lineRow(line: Line, gender: Gender, cls: string, head: HTMLElement): HT
   cells.push(
     h('td', { class: 'num gstart muted', title: r.classSet.map((c) => engine.className(c, gender)).join(', ') }, String(r.classSet.length)),
   );
+  const blocked = line.blocking.status === 'hard' || line.blocking.status === 'soft' ? `blocked-${line.blocking.status}` : '';
   return h(
     'tr',
-    { 'data-key': r.key, class: [cls, score.class ? '' : 'unreachable'].filter(Boolean).join(' ') || undefined },
+    { 'data-key': r.key, class: [cls, score.class ? '' : 'unreachable', blocked].filter(Boolean).join(' ') || undefined },
     ...cells,
   );
 }
@@ -396,7 +477,7 @@ function linesFor(child: ChildId, groups: readonly PairingGroup[], sc: Scoring):
   return groups.map((g) => {
     if (g.results.length === 1) {
       const r = g.results[0]!;
-      return { label: g.label, result: r, score: sc.get(r.key) };
+      return { label: g.label, result: r, score: sc.get(r.key), blocking: engine.blocking(r, roster) };
     }
     const { best, range } = sc.groupBest(g);
     const pin = g.results.find((r) => r.key === pinned.get(groupId(child, g)));
@@ -408,6 +489,7 @@ function linesFor(child: ChildId, groups: readonly PairingGroup[], sc: Scoring):
       group: g,
       range: range && range.lo !== range.hi ? `${range.lo}–${range.hi}` : undefined,
       pinned: !!pin,
+      blocking: engine.blocking(shown, roster),
     };
   });
 }
@@ -781,7 +863,20 @@ function rowsFor(child: ChildId, line: Line, gender: Gender, sc: Scoring, ncols:
 function lineRows(child: ChildId, line: Line, gender: Gender, sc: Scoring, ncols: number): HTMLElement[] {
   const g = line.group;
   const skills = skillsButton(lineId(child, line));
-  if (!g) return [lineRow(line, gender, '', h('th', { class: 'stick', scope: 'row' }, line.label, warnMark([line.result]), skills))];
+  if (!g) {
+    // A Robin group the run facts narrowed to one asset/flaw still names it.
+    const af = engine.robinLabel(line.result.pairing);
+    const head = h(
+      'th',
+      { class: 'stick', scope: 'row' },
+      line.label,
+      af ? h('span', { class: 'af' }, ` ${af}`) : null,
+      warnMark([line.result]),
+      blockChip(line.blocking),
+      skills,
+    );
+    return [lineRow(line, gender, '', head)];
+  }
   const id = groupId(child, g);
   const open = expanded.has(id);
   const head = h(
@@ -809,6 +904,7 @@ function lineRows(child: ChildId, line: Line, gender: Gender, sc: Scoring, ncols
     ),
     line.pinned ? h('span', { class: 'muted small' }, ' 📌') : null,
     warnMark(g.results),
+    blockChip(line.blocking),
     skills,
   );
   const rows = [lineRow(line, gender, 'group-row', head)];
@@ -868,14 +964,17 @@ function columnToggles(): HTMLElement {
 function childTable(child: ChildId): HTMLElement[] {
   const summary = engine.children().find((c) => c.id === child)!;
   const sc = scoring();
-  const pairingFilter: PairingFilter = { parent: filter.parent, secondGen: filter.secondGen };
-  const groups = engine.groups(child, pairingFilter);
-  const allGroups = engine.groups(child).length;
+  const groups = engine.groups(child, pairingFilter());
+  const inRun = engine.groups(child, { run: roster.run });
+  const allGroups = inRun.length;
+  // The run facts leave some pairings out of this run entirely.
+  const pairingCount = inRun.reduce((n, g) => n + g.results.length, 0);
   const cols = prefs.cols;
   const ncols = 1 + 2 + (cols.speed ? 1 : 0) + (cols.build ? 1 : 0) + (cols.caps ? STATS.length : 0) + (cols.mods ? MOD_STATS.length : 0) + (cols.growths ? STATS.length : 0) + 1;
   const byTemplate = templateFilter();
-  const all = linesFor(child, groups, sc);
+  const all = linesFor(child, groups, sc).filter((l) => !(filter.hideBlocked && l.blocking.status === 'hard'));
   const lines = sortLines(byTemplate ? all.filter((l) => buildOf(l)) : all, summary.gender);
+  const hardCount = lines.filter((l) => l.blocking.status === 'hard').length;
   const rows = lines.flatMap((l) => rowsFor(child, l, summary.gender, sc, ncols));
   const shown = rows.slice(0, limit);
 
@@ -886,8 +985,9 @@ function childTable(child: ChildId): HTMLElement[] {
     h(
       'span',
       { class: 'muted' },
-      `Fixed parent: ${summary.fixedParentName} · ${summary.pairingCount} pairings` +
-        (lines.length < allGroups ? ` · ${lines.length} of ${allGroups} parents shown` : ''),
+      `Fixed parent: ${summary.fixedParentName} · ${pairingCount} pairings` +
+        (lines.length < allGroups ? ` · ${lines.length} of ${allGroups} parents shown` : '') +
+        (hardCount ? ` · ${hardCount} blocked` : ''),
     ),
     columnToggles(),
     h(
@@ -1055,6 +1155,8 @@ function matrix(e: LeaderboardEntry): HTMLElement {
   );
 }
 
+const blockedClass = (b: Blocking | undefined) => (b?.status === 'hard' || b?.status === 'soft' ? ` blocked-${b.status}` : '');
+
 function card(e: LeaderboardEntry, statMax: Readonly<Record<Stat, number>>): HTMLElement {
   const { score, result: r } = e;
   const tint = score.speed && speedTint(score.speed);
@@ -1073,7 +1175,7 @@ function card(e: LeaderboardEntry, statMax: Readonly<Record<Stat, number>>): HTM
   const el = h(
     'article',
     {
-      class: `card${open ? ' open' : ''}${score.class ? '' : ' unreachable'}`,
+      class: `card${open ? ' open' : ''}${score.class ? '' : ' unreachable'}${blockedClass(e.blocking)}`,
       'data-key': r.key,
       role: 'button',
       tabindex: '0',
@@ -1100,6 +1202,7 @@ function card(e: LeaderboardEntry, statMax: Readonly<Record<Stat, number>>): HTM
       e.parent,
       e.robin ? h('span', { class: 'chip af' }, e.robin) : null,
       warnMark([r]),
+      e.blocking ? blockChip(e.blocking) : null,
     ),
     h(
       'div',
@@ -1115,7 +1218,13 @@ function card(e: LeaderboardEntry, statMax: Readonly<Record<Stat, number>>): HTM
 
 function leaderboard(): HTMLElement[] {
   const sc = scoring();
-  const entries = sc.leaderboard({ robin: board.robin === 'pick' ? board.pick : board.robin, sort: board.sort, filter });
+  const entries = sc.leaderboard({
+    robin: board.robin === 'pick' ? board.pick : board.robin,
+    sort: board.sort,
+    filter: pairingFilter(),
+    roster,
+    hideBlocked: filter.hideBlocked,
+  });
   const statMax = Object.fromEntries(STATS.map((s) => [s, Math.max(0, ...entries.map((e) => e.score.values?.[s] ?? 0))])) as Record<Stat, number>;
   const shown = entries.slice(0, limit);
   const head = h(
@@ -1461,6 +1570,20 @@ function panel(): HTMLElement[] {
         ' Second-gen parents (Morgan)',
       ),
       h(
+        'label',
+        { title: 'Leave out pairings the roster hard-blocks (a unit dead, missed, or married to someone else)' },
+        h('input', {
+          type: 'checkbox',
+          checked: filter.hideBlocked,
+          onchange: (e) => {
+            filter = { ...filter, hideBlocked: (e.target as HTMLInputElement).checked };
+            limit = FIRST_PAGE;
+            renderParts(['main']);
+          },
+        }),
+        ' Hide blocked rows',
+      ),
+      h(
         'select',
         {
           'aria-label': 'Filter by build template',
@@ -1649,7 +1772,9 @@ function renderParts(parts: readonly Part[]): void {
     main.replaceChildren(
       ...(view === 'validation'
         ? [validationPanel({ engine, assumptions, selfTest, setOverride, resetAll: () => applyOverrides({}), render })]
-        : selected === 'all'
+        : view === 'roster'
+          ? rosterPage({ engine, roster, setRoster, clearAll: clearRosterState })
+          : selected === 'all'
           ? leaderboard()
           : childTable(selected)),
     );

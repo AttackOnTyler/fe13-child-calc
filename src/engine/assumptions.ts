@@ -4,7 +4,6 @@
  * user's overrides) is passed into the calculation so it stays pure.
  *
  * Data that holds an assumed value references an assumption id (`Assumed`) and is read through `assumed()`.
- * Later tickets add their own entries (death after marriage).
  */
 import {
   FEW_CONQUEROR,
@@ -22,6 +21,8 @@ import {
   SOLY_APOTHEOSIS,
   RESEARCH_FIXTURES_SPEED,
   RESEARCH_SKILL_INHERITANCE,
+  RESEARCH_DEATH_AFTER_MARRIAGE,
+  JP_CHILDREN,
   SF_CHILDREN,
   type Assumed,
   type Citation,
@@ -47,6 +48,8 @@ type AssumptionValues = {
   'inherit-ineligible-bottom': 'next-eligible' | 'nothing';
   /** Which equipped skill is "last": the bottom slot, or the one equipped most recently. */
   'inherit-last-skill': 'bottom-slot' | 'most-recent';
+  /** A parent dying after the S-support still leaves the child recruitable. */
+  'child-after-parent-death': boolean;
 };
 
 export type AssumptionId = keyof AssumptionValues;
@@ -237,6 +240,21 @@ export const ASSUMPTION_REGISTRY: { readonly [K in AssumptionId]: AssumptionDef<
     format: (v) => (v === 'bottom-slot' ? 'The bottom equipped slot' : 'The most recently equipped skill'),
     parse: (raw) => (raw === 'bottom-slot' || raw === 'most-recent' ? raw : undefined),
     affects: 'the inheritance notes in the Skills drawer',
+  }),
+  'child-after-parent-death': entry({
+    id: 'child-after-parent-death',
+    label: 'A child after a parent dies post-marriage',
+    why:
+      'No source lists the parent surviving as a condition for the paralogue, and the JP 2ch wiki notes that a lost parent’s stats and skills ' +
+      'from before the loss are used, which presupposes the child still joins. It is a single community observation, and nobody reports ' +
+      'the case of a parent lost after marrying but before Chapter 13. The inherited skill is frozen at death.',
+    sources: [JP_CHILDREN, RESEARCH_DEATH_AFTER_MARRIAGE],
+    default: true,
+    alternatives: [{ label: 'No: the child is lost with the parent', value: false }],
+    input: 'choice',
+    format: (v) => (v ? 'Yes: the child still comes' : 'No: the child is lost'),
+    parse: (raw) => (typeof raw === 'boolean' ? raw : undefined),
+    affects: 'blocked pairings on the Roster',
   }),
 };
 

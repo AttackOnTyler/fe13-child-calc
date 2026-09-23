@@ -65,4 +65,9 @@ export const RESEARCH_SKILL_INHERITANCE: Citation = {
   label: 'Research: skill inheritance (#4)',
   url: `${RESEARCH}/research/skill-inheritance/docs/research/skill-inheritance.md`,
 };
+export const RESEARCH_DEATH_AFTER_MARRIAGE: Citation = {
+  label: 'Research: death after marriage (#17)',
+  url: `${RESEARCH}/research/death-after-marriage/docs/research/death-after-marriage.md`,
+};
+export const JP_CHILDREN: Citation = { label: 'JP 2ch wiki child units (p.112)', url: 'https://w.atwiki.jp/fireemblem3ds/pages/112.html' };
 export const FEW_LUCINA: Citation = { label: 'FEW Lucina (inheritance note)', url: 'https://fireemblemwiki.org/wiki/Lucina' };
