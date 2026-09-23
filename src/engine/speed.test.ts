@@ -19,6 +19,8 @@ const settings = (over: Partial<ScoreSettings> = {}, speed: Partial<SpeedSetting
   basis: 'caps-lb',
   classMode: 'auto',
   dlc: false,
+  role: 'lead',
+  supportRank: 'A',
   ...over,
   speed: { ...DEFAULT_SPEED, ...speed },
 });
@@ -143,12 +145,3 @@ describe('breakpoint assumptions', () => {
   });
 });
 
-describe('Pair-up Spd helper', () => {
-  it('is raw-Spd tier + class Spd bonus + rank bonus on the class bonus', () => {
-    expect(engine.pairUpSpd('swordmaster', 'S', 30)).toBe(10);
-    expect(engine.pairUpSpd('sniper', 'A', 30)).toBe(3); // no class Spd bonus, so no rank bonus
-    expect(engine.pairUpSpd('falcon-knight', 'B', 25)).toBe(4 + 1 + 2);
-    expect(engine.pairUpSpd('hero', 'A', 9)).toBe(3 + 2);
-    expect(engine.pairUpSpd('hero', 'none', 30)).toBe(3 + 3);
-  });
-});

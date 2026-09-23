@@ -1,11 +1,13 @@
 /**
  * Scoring: a pairing's raw value is Σ weight × stat points in a class, under a score basis; the total is min-max
  * scaled over every enumerated pairing to 0–100 (#11, revised by #15). Spd scores through the Spd curve around the
- * target breakpoint. Pure: settings in, scores out.
+ * target breakpoint. In the Support role the stats are the pair-up bonus the unit gives a lead instead, each point
+ * linear. Pure: settings in, scores out.
  */
 import { CLASSES, type ClassData, type ClassId } from '../game-data/classes';
-import { STATS, type Gender, type Stat } from '../game-data/stats';
+import { STATS, type Gender, type ModStat, type Stat } from '../game-data/stats';
 import type { Weights } from '../curated/presets';
+import { classBonus, statTier } from './pair-up';
 import { readSpeed, speedBuffs, spdCurve } from './speed';
 import type { ChildResult, PairingScore, ScoreSettings, SpeedReading } from './types';
 
@@ -21,6 +23,7 @@ export type ScoringContext = {
 };
 
 const CLASS_IDS = Object.keys(CLASSES) as ClassId[];
+const HP = STATS.indexOf('hp');
 const STR = STATS.indexOf('str');
 const MAG = STATS.indexOf('mag');
 const SPD = STATS.indexOf('spd');
@@ -93,7 +96,9 @@ export function createScorer(ctx: ScoringContext): (settings: ScoreSettings) => 
   const candidateCache = new Map<string, Map<ReadonlySet<ClassId>, ClassId[]>>();
 
   return (settings) => {
-    const { weights, mixed, basis, classMode, dlc, speed } = settings;
+    const { weights, mixed, basis, classMode, dlc, speed, role, supportRank } = settings;
+    const support = role === 'support';
+    if (support && basis === 'growths') throw new Error('Growths basis is disabled in the Support role');
     const w = weights && weightVector(weights);
     const growthsBasis = basis === 'growths';
     const lb = basis === 'caps-lb' ? 10 : 0;
@@ -110,10 +115,26 @@ export function createScorer(ctx: ScoringContext): (settings: ScoreSettings) => 
       return c;
     };
 
+    // Support: each class's pair-up bonus per stat with the rank folded in (HP gets none).
+    const bonusCache = new Map<ClassId, readonly number[]>();
+    const bonusOf = (id: ClassId): readonly number[] => {
+      let b = bonusCache.get(id);
+      if (!b) bonusCache.set(id, (b = STATS.map((s) => (s === 'hp' ? 0 : classBonus(id, s as ModStat, supportRank)))));
+      return b;
+    };
+
     const values = new Array<number>(STATS.length);
-    /** Fills `values` with the row's stats in a class under the basis: effective caps, or growth in class. */
+    /**
+     * Fills `values` with the row's stats in a class under the basis and role: effective caps or growth in class,
+     * or the pair-up bonus from those caps.
+     */
     const fill = (row: PreparedRow, id: ClassId): number[] => {
-      if (growthsBasis) {
+      if (support) {
+        const max = maxOf(id, row.gender);
+        const bonus = bonusOf(id);
+        // The raw-stat tier of each effective cap, plus the class and rank bonus; HP gets none.
+        for (let i = 0; i < values.length; i++) values[i] = i === HP ? 0 : statTier(max[i]! + row.mods[i]! + lb) + bonus[i]!;
+      } else if (growthsBasis) {
         const b = growthOf(id, row.gender);
         for (let i = 0; i < values.length; i++) values[i] = b[i]! + row.growths[i]!;
       } else {
@@ -125,10 +146,12 @@ export function createScorer(ctx: ScoringContext): (settings: ScoreSettings) => 
     };
     /** Spd effective cap in the class + buffs. */
     const speedTotal = (row: PreparedRow, id: ClassId): number => maxOf(id, row.gender)[SPD]! + row.mods[SPD]! + speedLb + buffs;
-    /** Raw value of the values `fill` just wrote, with Spd through the curve. */
+    /** Raw value of the values `fill` just wrote, with Spd through the curve (Lead) or linear at wT (Support). */
     const score = (w: readonly number[], row: PreparedRow, id: ClassId, v: readonly number[]): number =>
       rawValue(w, v, mixed) +
-      spdCurve(speedTotal(row, id), w[SPD]!, weights!.spdBeyond, speed, growthsBasis ? v[SPD] : undefined);
+      (support
+        ? w[SPD]! * v[SPD]!
+        : spdCurve(speedTotal(row, id), w[SPD]!, weights!.spdBeyond, speed, growthsBasis ? v[SPD] : undefined));
 
     type Pick = {
       r: ChildResult;
@@ -145,7 +168,7 @@ export function createScorer(ctx: ScoringContext): (settings: ScoreSettings) => 
       auto,
       raw,
       v: cls && [...fill(row, cls)],
-      spd: cls && readSpeed(speedTotal(row, cls), ctx.breakpoints),
+      spd: cls && !support ? readSpeed(speedTotal(row, cls), ctx.breakpoints) : undefined,
     });
     for (const row of rows) {
       if (classMode !== 'auto') {

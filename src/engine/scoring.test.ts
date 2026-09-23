@@ -15,6 +15,8 @@ const settings = (id: PresetId, over: Partial<ScoreSettings> = {}): ScoreSetting
   classMode: 'auto',
   dlc: false,
   speed: { ...DEFAULT_SPEED, rally: 0, tonic: false, pairUp: 0, target: null },
+  role: preset(id).role ?? 'lead',
+  supportRank: 'A',
   ...over,
 });
 

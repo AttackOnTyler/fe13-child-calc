@@ -4,7 +4,7 @@ import type { Gender, Growths, Modifiers, Stat } from '../game-data/stats';
 import type { UnitId } from '../game-data/units';
 import type { Citation } from '../game-data/citations';
 import type { AssumptionId } from './assumptions';
-import type { PresetData, PresetId, Weights } from '../curated/presets';
+import type { PresetData, PresetId, ScoringRole, Weights } from '../curated/presets';
 
 export type RobinRef = { readonly kind: 'robin'; readonly gender: Gender; readonly asset: Stat; readonly flaw: Stat };
 
@@ -136,6 +136,10 @@ export type ScoreSettings = {
   /** DLC classes are Auto candidates. */
   readonly dlc: boolean;
   readonly speed: SpeedSettings;
+  /** Lead scores the unit's own stats; Support scores the pair-up bonus it gives a lead (never on Growths). */
+  readonly role: ScoringRole;
+  /** The support rank the pair-up bonus assumes (Support role). */
+  readonly supportRank: SupportRank;
 };
 
 export type PairingScore = {
@@ -144,14 +148,20 @@ export type PairingScore = {
   readonly class: ClassId | undefined;
   /** Auto chose the class. */
   readonly auto: boolean;
-  /** Per-stat values in that class under the basis: effective caps, or growth in class. */
+  /**
+   * Per-stat values in that class: effective caps or growth in class (Lead), or the pair-up bonus from those caps
+   * (Support, with HP 0).
+   */
   readonly values: Readonly<Record<Stat, number>> | undefined;
   /**
    * Spd effective cap (with Limit Breaker unless the basis is Caps) + Rally + Tonic + Pair-up, against the
-   * breakpoints; undefined when unreachable.
+   * breakpoints; undefined when unreachable, and in the Support role (the Spd pair-up bonus is `values.spd`).
    */
   readonly speed: SpeedReading | undefined;
-  /** Σ weight × stat points, Spd through the Spd curve; undefined when unreachable or without weights. */
+  /**
+   * Σ weight × stat points, Spd through the Spd curve (Lead) or linear at the to-target weight (Support); undefined
+   * when unreachable or without weights.
+   */
   readonly raw: number | undefined;
   /** Raw min-max scaled over every pairing to 0–100, unrounded. */
   readonly scaled: number | undefined;

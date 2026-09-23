@@ -6,6 +6,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.35 system-ui, sans-serif; }
 button { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 2px 8px; cursor: pointer; }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
 .muted { color: var(--muted); }
 .pos { color: var(--pos); } .neg { color: var(--neg); }
 .warn { color: var(--warn); cursor: help; }
@@ -105,6 +106,7 @@ table.grid { border-collapse: separate; border-spacing: 0; white-space: nowrap; 
 .weights .w input[type='range'] { width: 100%; accent-color: var(--accent); }
 .weights .w b { text-align: right; font-variant-numeric: tabular-nums; }
 .weights .w.mixed { display: flex; margin-top: 4px; }
+.weights .w.off { opacity: 0.45; }
 
 @media (max-width: 700px) {
   .shell { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; }

@@ -24,6 +24,7 @@ import {
   type ScoreBasis,
   type ScoreSettings,
   type Scoring,
+  type ScoringRole,
   type SelfTestReport,
   type SpeedReading,
   type Stat,
@@ -36,13 +37,19 @@ import {
   BASES,
   CONTEXTS,
   CONTEXT_LABELS,
+  RANKS,
+  RANK_CHOICES,
+  ROLES,
+  basisOf,
   dlcReachable,
   effectivePreset,
   isModified,
   loadPrefs,
+  roleOf,
   savePrefs,
   speedSettings,
   targetOf,
+  withPreset,
   type ColumnGroup,
   type ScoringPrefs,
 } from './scoring-prefs';
@@ -74,9 +81,24 @@ let helper: { cls: ClassId; rank: SupportRank; rawSpd: number } = { cls: 'swordm
 
 const currentPreset = (): Preset => engine.presets().find((p) => p.id === prefs.preset)!;
 
+/** The scoring role in force: the global override, else the preset's. */
+const role = (): ScoringRole => roleOf(prefs, currentPreset());
+const support = () => role() === 'support';
+/** The basis in force (Growths falls back to Caps+LB in the Support role). */
+const basis = (): ScoreBasis => basisOf(prefs, role(), engine);
+
 const scoreSettings = (): ScoreSettings => {
   const { weights, mixed } = effectivePreset(currentPreset(), prefs);
-  return { weights, mixed, basis: prefs.basis, classMode: prefs.classMode, dlc: dlcReachable(prefs, engine), speed: speedSettings(prefs, engine) };
+  return {
+    weights,
+    mixed,
+    basis: basis(),
+    classMode: prefs.classMode,
+    dlc: dlcReachable(prefs, engine),
+    speed: speedSettings(prefs, engine),
+    role: role(),
+    supportRank: prefs.supportRank,
+  };
 };
 
 let scoringCache: { settings: string; engine: Engine; scoring: Scoring } | undefined;
@@ -195,7 +217,7 @@ function sortValue(line: Line, col: SortCol, gender: Gender): number | string | 
   if (col === 'parent') return line.label.toLowerCase();
   if (col === 'class') return score.class && engine.className(score.class, gender);
   if (col === 'score') return score.raw;
-  if (col === 'speed') return score.speed?.total;
+  if (col === 'speed') return support() ? score.values?.spd : score.speed?.total;
   if (col === 'count') return result.classSet.length;
   const [kind, stat] = col.split(':') as ['cap' | 'mod' | 'growth', Stat];
   if (kind === 'cap') return score.values?.[stat];
@@ -220,7 +242,7 @@ const weighted = (s: Stat): boolean => scoring().weightedStats.includes(s);
 
 const BASIS_LABELS: Record<ScoreBasis, string> = { 'caps-lb': 'Caps+LB', caps: 'Caps', growths: 'Growths' };
 const capsHeader = () =>
-  prefs.basis === 'growths' ? 'Growth in class' : `Effective caps${prefs.basis === 'caps-lb' ? ' + LB' : ''}`;
+  support() ? 'Pair-up bonus' : basis() === 'growths' ? 'Growth in class' : `Effective caps${basis() === 'caps-lb' ? ' + LB' : ''}`;
 
 function scoreCell(line: Line): HTMLElement {
   const { score } = line;
@@ -256,6 +278,11 @@ function speedCell(speed: SpeedReading | undefined): HTMLElement {
   );
 }
 
+/** Support role: the Spd pair-up bonus the unit gives its lead. */
+function pairUpSpdCell(values: PairingScore['values']): HTMLElement {
+  return h('td', { class: 'num spd gstart' }, values ? h('b', {}, `+${values.spd}`) : '');
+}
+
 function lineRow(line: Line, gender: Gender, cls: string, head: HTMLElement): HTMLElement {
   const { score, result: r } = line;
   const values = score.values;
@@ -268,13 +295,11 @@ function lineRow(line: Line, gender: Gender, cls: string, head: HTMLElement): HT
     ),
     scoreCell(line),
   ];
-  if (prefs.cols.speed) cells.push(speedCell(score.speed));
+  if (prefs.cols.speed) cells.push(support() ? pairUpSpdCell(values) : speedCell(score.speed));
   if (prefs.cols.caps) {
-    cells.push(
-      ...STATS.map((s, i) =>
-        h('td', { class: `num gcap${i === 0 ? ' gstart' : ''}${weighted(s) ? ' weighted' : ''}` }, values ? String(values[s]) : ''),
-      ),
-    );
+    // In the Support role the values are pair-up bonuses, and HP gets none.
+    const cap = (s: Stat) => (!values ? '' : !support() ? String(values[s]) : s === 'hp' ? '—' : `+${values[s]}`);
+    cells.push(...STATS.map((s, i) => h('td', { class: `num gcap${i === 0 ? ' gstart' : ''}${weighted(s) ? ' weighted' : ''}` }, cap(s))));
   }
   if (prefs.cols.mods) {
     cells.push(
@@ -438,7 +463,7 @@ function childTable(child: ChildId): HTMLElement[] {
         h('th', { colspan: '2', class: 'gstart' }, 'Result'),
         cols.speed ? h('th', { class: 'gstart' }, '') : null,
         cols.caps
-          ? h('th', { colspan: String(STATS.length), class: 'gcap gstart', title: capsTitle() }, `${capsHeader()} (${BASIS_LABELS[prefs.basis]})`)
+          ? h('th', { colspan: String(STATS.length), class: 'gcap gstart', title: capsTitle() }, `${capsHeader()} (${BASIS_LABELS[basis()]})`)
           : null,
         cols.mods ? h('th', { colspan: String(MOD_STATS.length), class: 'gmod gstart', title: 'father + mother + 1' }, 'Max-stat modifiers') : null,
         cols.growths
@@ -452,7 +477,7 @@ function childTable(child: ChildId): HTMLElement[] {
         sortHeader('parent', 'Variable parent', 'stick'),
         sortHeader('class', classHead, 'gstart'),
         sortHeader('score', 'Score', 'num gstart'),
-        ...(cols.speed ? [sortHeader('speed', 'Speed', 'num gstart', speedTitle())] : []),
+        ...(cols.speed ? [sortHeader('speed', support() ? 'Pair-up Spd' : 'Speed', 'num gstart', speedTitle())] : []),
         ...(cols.caps
           ? STATS.map((s, i) => sortHeader(`cap:${s}`, STAT_LABELS[s], `num gcap${i === 0 ? ' gstart' : ''}${weighted(s) ? ' weighted' : ''}`))
           : []),
@@ -487,13 +512,18 @@ function childTable(child: ChildId): HTMLElement[] {
 }
 
 function speedTitle(): string {
-  const lb = prefs.basis === 'caps' ? '' : ' + 10 (Limit Breaker)';
+  if (support()) return `Spd pair-up bonus this unit gives its lead, at support rank ${RANK_CHOICE_NAMES[prefs.supportRank]}`;
+  const lb = basis() === 'caps' ? '' : ' + 10 (Limit Breaker)';
   return `Spd cap in the class${lb} + Rally ${prefs.rally} + Tonic ${prefs.tonic ? 2 : 0} + Pair-up ${prefs.pairUp} · highest breakpoint cleared (by how much)`;
 }
 
 function capsTitle(): string {
-  if (prefs.basis === 'growths') return 'inherited growth + class growth';
-  return `class max + modifier${prefs.basis === 'caps-lb' ? ' + 10 (not HP) with Limit Breaker' : ''}`;
+  const caps = `class max + modifier${basis() === 'caps-lb' ? ' + 10 (not HP) with Limit Breaker' : ''}`;
+  if (support()) {
+    return `What this unit gives its lead: +1/+2/+3 at 10/20/30 of (${caps}), plus the class pair-up bonus, plus the rank bonus (C/B +1, A/S +2) where the class bonus is non-zero. HP gets none.`;
+  }
+  if (basis() === 'growths') return 'inherited growth + class growth';
+  return caps;
 }
 
 // ---- scoring panel ----
@@ -525,7 +555,15 @@ function editPreset(change: (edit: { weights: Weights; mixed: boolean }) => void
   savePrefs(prefs);
 }
 
-function segmented<T extends string>(label: string, options: readonly T[], current: T, names: Record<T, string>, onpick: (v: T) => void): HTMLElement {
+/** A button group; `disabled` gives the reason an option can't be picked, if it can't. */
+function segmented<T extends string>(
+  label: string,
+  options: readonly T[],
+  current: T,
+  names: Record<T, string>,
+  onpick: (v: T) => void,
+  disabled: (v: T) => string | undefined = () => undefined,
+): HTMLElement {
   return h(
     'div',
     { class: 'blk', role: 'group', 'aria-label': label },
@@ -534,10 +572,29 @@ function segmented<T extends string>(label: string, options: readonly T[], curre
       'span',
       { class: 'seg' },
       ...options.map((o) =>
-        h('button', { class: o === current ? 'on' : '', 'aria-pressed': String(o === current), onclick: () => onpick(o) }, names[o]),
+        h(
+          'button',
+          { class: o === current ? 'on' : '', 'aria-pressed': String(o === current), disabled: !!disabled(o), title: disabled(o), onclick: () => onpick(o) },
+          names[o],
+        ),
       ),
     ),
   );
+}
+
+const ROLE_NAMES: Record<ScoringRole, string> = { lead: 'Lead', support: 'Support' };
+const RANK_CHOICE_NAMES: Record<SupportRank, string> = { none: '—', C: 'C/B', B: 'C/B', A: 'A/S', S: 'A/S' };
+/** The rank input's choice for a rank: C/B and A/S each give the same bonus. */
+const rankChoice = (r: SupportRank): SupportRank => (r === 'B' ? 'C' : r === 'S' ? 'A' : r);
+
+/** Lead/Support, set by the preset; picking the other one overrides it until ↺ or a new preset. */
+function roleControl(): HTMLElement {
+  const fromPreset = currentPreset().role ?? 'lead';
+  const el = segmented('Role', ROLES, role(), ROLE_NAMES, (r) => setPrefs({ role: r === fromPreset ? 'preset' : r }));
+  if (prefs.role !== 'preset') {
+    el.append(h('button', { class: 'ghost', title: 'Follow the preset’s role', onclick: () => setPrefs({ role: 'preset' }) }, '↺'));
+  }
+  return el;
 }
 
 const TIER_LABELS: Record<ClassSummary['tier'], string> = { base: 'Base', advanced: 'Advanced', special: 'Special' };
@@ -552,7 +609,7 @@ function panel(): HTMLElement[] {
     'select',
     {
       'aria-label': 'Preset',
-      onchange: (e) => setPrefs({ preset: (e.target as HTMLSelectElement).value as Preset['id'] }),
+      onchange: (e) => setPrefs(withPreset(prefs, (e.target as HTMLSelectElement).value as Preset['id'])),
     },
     ...engine.presets().map((q) => h('option', { value: q.id, selected: q.id === p.id }, presetLabel(q))),
   );
@@ -563,9 +620,11 @@ function panel(): HTMLElement[] {
         { class: 'weights' },
         ...WEIGHT_STATS.map(({ stat, max, label, title }) => {
           const out = h('b', { class: 'num' }, String(weights[stat]));
+          // Support scores the Spd pair-up bonus linearly at Spd→T: there's no beyond.
+          const off = stat === 'spdBeyond' && support();
           return h(
             'label',
-            { class: 'w', title },
+            { class: `w${off ? ' off' : ''}`, title: off ? 'No Spd beyond in the Support role: the Spd pair-up bonus scores at Spd→T' : title },
             h('span', {}, label),
             h('input', {
               type: 'range',
@@ -573,6 +632,7 @@ function panel(): HTMLElement[] {
               max: String(max),
               step: '1',
               value: String(weights[stat]),
+              disabled: off,
               'aria-label': `${label} weight`,
               oninput: (e) => {
                 const v = Number((e.target as HTMLInputElement).value);
@@ -625,7 +685,13 @@ function panel(): HTMLElement[] {
       h('button', { class: 'only-phone ghost', 'aria-label': 'Close scoring', onclick: () => ((sheetOpen = false), renderParts(['panel'])) }, '✕'),
     ),
     h('label', { class: 'blk' }, h('span', { class: 'lbl' }, 'Preset'), presetSelect, resetButton),
-    segmented('Basis', BASES, prefs.basis, BASIS_LABELS, (basis) => setPrefs({ basis })),
+    ...(weights ? [roleControl()] : []),
+    ...(support() && weights
+      ? [segmented('Support rank', RANK_CHOICES, rankChoice(prefs.supportRank), RANK_CHOICE_NAMES, (supportRank) => setPrefs({ supportRank }))]
+      : []),
+    segmented('Basis', BASES, basis(), BASIS_LABELS, (basis) => setPrefs({ basis }), (b) =>
+      engine.scoreBases(role()).includes(b) ? undefined : 'Not in the Support role: the pair-up bonus comes from caps',
+    ),
     h(
       'label',
       { class: 'blk' },
@@ -703,7 +769,6 @@ function panel(): HTMLElement[] {
 // ---- speed ----
 
 const RALLY_NAMES: Record<string, string> = { '0': 'None', '4': '+4', '8': '+8', '10': '+10' };
-const RANKS: readonly SupportRank[] = ['none', 'C', 'B', 'A', 'S'];
 const RANK_NAMES: Record<SupportRank, string> = { none: '—', C: 'C', B: 'B', A: 'A', S: 'S' };
 const RAW_SPD_TIERS: readonly { value: number; label: string }[] = [
   { value: 0, label: 'under 10' },

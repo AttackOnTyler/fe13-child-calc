@@ -33,9 +33,10 @@ import {
 } from './classes';
 import { inheritGrowths, inheritModifiers, type ParentProfile } from './inheritance';
 import { createScorer } from './scoring';
-import { contextReachesDlc, defaultTargetBreakpoint, pairUpSpd } from './speed';
+import { pairUpSpd } from './pair-up';
+import { contextReachesDlc, defaultTargetBreakpoint } from './speed';
 import { runSelfTest } from './self-test';
-import { PRESETS, type PresetId } from '../curated/presets';
+import { PRESETS, type PresetId, type ScoringRole } from '../curated/presets';
 import type {
   AssumptionStatus,
   ClassSummary,
@@ -45,6 +46,7 @@ import type {
   PairingFilter,
   PlayContext,
   PairingGroup,
+  ScoreBasis,
   PairingScore,
   ParentRef,
   Preset,
@@ -115,6 +117,8 @@ export type Engine = {
    * There is no filter input, so filtering a table never changes a score.
    */
   score(settings: ScoreSettings): Scoring;
+  /** The score bases a role can use: Growths is disabled in the Support role (scoring it throws). */
+  scoreBases(role: ScoringRole): readonly ScoreBasis[];
   /** The Speed breakpoints, ascending (an assumption). */
   breakpoints(): readonly number[];
   /** The play context's default target breakpoint, and the assumption it rests on, if any. */
@@ -125,12 +129,22 @@ export type Engine = {
   pairUpSpd(supportClass: ClassId, rank: SupportRank, rawSpd: number): number;
 };
 
-/** Stats with a non-zero weight; under Mixed, Str and Mag are both scored at the attack weight. */
-function weightedStats({ weights, mixed }: ScoreSettings): Stat[] {
+/**
+ * Stats with a non-zero weight; under Mixed, Str and Mag are both scored at the attack weight. In the Support role
+ * HP never counts: it gets no pair-up bonus.
+ */
+function weightedStats({ weights, mixed, role }: ScoreSettings): Stat[] {
   if (!weights) return [];
   const attack = Math.max(weights.str, weights.mag);
-  return STATS.filter((s) => (mixed && (s === 'str' || s === 'mag') ? attack : weights[s]) > 0);
+  return STATS.filter(
+    (s) => !(role === 'support' && s === 'hp') && (mixed && (s === 'str' || s === 'mag') ? attack : weights[s]) > 0,
+  );
 }
+
+const BASES: Readonly<Record<ScoringRole, readonly ScoreBasis[]>> = {
+  lead: ['caps-lb', 'caps', 'growths'],
+  support: ['caps-lb', 'caps'],
+};
 
 const PRESET_LIST: readonly Preset[] = (Object.keys(PRESETS) as PresetId[]).map((id) => ({ id, ...PRESETS[id] }));
 
@@ -451,6 +465,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         weightedStats: weightedStats(settings),
       };
     },
+    scoreBases: (role) => BASES[role],
     breakpoints: () => assumptions['spd-breakpoints'],
     defaultTargetBreakpoint: (context) => defaultTargetBreakpoint(context, assumptions),
     contextReachesDlc,

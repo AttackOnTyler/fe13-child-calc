@@ -8,7 +8,9 @@ import {
   type Preset,
   type PresetId,
   type ScoreBasis,
+  type ScoringRole,
   type SpeedSettings,
+  type SupportRank,
   type Weights,
 } from '../engine';
 
@@ -21,7 +23,12 @@ export type ColumnGroup = 'caps' | 'mods' | 'growths' | 'speed';
 export type ScoringPrefs = {
   readonly preset: PresetId;
   readonly edits: Readonly<Partial<Record<PresetId, PresetEdit>>>;
+  /** The user's basis; in the Support role Growths falls back to Caps+LB (see `basisOf`) but stays chosen. */
   readonly basis: ScoreBasis;
+  /** A global override of the preset's scoring role, or 'preset' to follow it. Choosing a preset resets it. */
+  readonly role: ScoringRole | 'preset';
+  /** The support rank the pair-up bonus assumes (Support role). */
+  readonly supportRank: SupportRank;
   readonly classMode: ClassMode;
   /** DLC classes are Auto candidates. */
   readonly dlc: boolean;
@@ -42,6 +49,8 @@ export const DEFAULT_PREFS: ScoringPrefs = {
   preset: 'physical-lead',
   edits: {},
   basis: 'caps-lb',
+  role: 'preset',
+  supportRank: 'A',
   classMode: 'auto',
   dlc: false,
   cols: { caps: true, mods: true, growths: false, speed: true },
@@ -75,6 +84,21 @@ export function speedSettings(prefs: ScoringPrefs, engine: Engine): SpeedSetting
 export const dlcReachable = (prefs: ScoringPrefs, engine: Engine): boolean => prefs.dlc || engine.contextReachesDlc(prefs.context);
 
 export const BASES: readonly ScoreBasis[] = ['caps-lb', 'caps', 'growths'];
+export const ROLES: readonly ScoringRole[] = ['lead', 'support'];
+/** C/B and A/S give the same bonus, so the rank input offers one of each pair. */
+export const RANK_CHOICES: readonly SupportRank[] = ['none', 'C', 'A'];
+export const RANKS: readonly SupportRank[] = ['none', 'C', 'B', 'A', 'S'];
+
+/** The scoring role in force: the global override, else the preset's (Lead for Rallybot / Dancer, which isn't scored). */
+export const roleOf = (prefs: ScoringPrefs, preset: Preset): ScoringRole =>
+  prefs.role === 'preset' ? (preset.role ?? 'lead') : prefs.role;
+
+/** The basis in force for a role: the user's, unless the role can't use it (Growths in Support). */
+export const basisOf = (prefs: ScoringPrefs, role: ScoringRole, engine: Engine): ScoreBasis =>
+  engine.scoreBases(role).includes(prefs.basis) ? prefs.basis : 'caps-lb';
+
+/** Chooses a preset, going back to its scoring role. */
+export const withPreset = (prefs: ScoringPrefs, preset: PresetId): ScoringPrefs => ({ ...prefs, preset, role: 'preset' });
 
 const KEY = 'fe13-child-calc:scoring:v1';
 
@@ -114,6 +138,8 @@ export function loadPrefs(engine: Engine): ScoringPrefs {
     preset: typeof raw.preset === 'string' && presets.has(raw.preset) ? (raw.preset as PresetId) : DEFAULT_PREFS.preset,
     edits,
     basis: BASES.includes(raw.basis as ScoreBasis) ? (raw.basis as ScoreBasis) : DEFAULT_PREFS.basis,
+    role: raw.role === 'preset' || ROLES.includes(raw.role as ScoringRole) ? (raw.role as ScoringPrefs['role']) : DEFAULT_PREFS.role,
+    supportRank: RANKS.includes(raw.supportRank as SupportRank) ? (raw.supportRank as SupportRank) : DEFAULT_PREFS.supportRank,
     classMode:
       raw.classMode === 'auto' || (typeof raw.classMode === 'string' && classIds.has(raw.classMode))
         ? (raw.classMode as ClassMode)

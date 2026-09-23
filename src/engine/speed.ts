@@ -1,10 +1,9 @@
 /**
  * Speed: the Speed total (Spd effective cap + Rally + Tonic + Pair-up), the highest breakpoint it clears, the
- * Lead Spd curve around the target breakpoint, and the pair-up Spd helper (#15; research/fixtures-and-speed, #7).
+ * Lead Spd curve around the target breakpoint (#15; research/fixtures-and-speed, #7).
  */
-import { CLASSES, type ClassData, type ClassId } from '../game-data/classes';
 import type { AssumptionId, Assumptions } from './assumptions';
-import type { PlayContext, SpeedReading, SpeedSettings, SupportRank } from './types';
+import type { PlayContext, SpeedReading, SpeedSettings } from './types';
 
 /** The target breakpoint for Apotheosis, Full route and All (#15). */
 export const DEFAULT_TARGET_BREAKPOINT = 66;
@@ -48,18 +47,4 @@ export function defaultTargetBreakpoint(
 /** Whether DLC classes are reachable in a play context: Apotheosis and the Full route include the DLC (#20 story 26). */
 export function contextReachesDlc(context: PlayContext): boolean {
   return context === 'apotheosis' || context === 'full-route';
-}
-
-/** Support rank bonus on the class bonus (SF pair-up): C/B +1, A/S +2. */
-const RANK_BONUS: Readonly<Record<SupportRank, number>> = { none: 0, C: 1, B: 1, A: 2, S: 2 };
-
-/**
- * The Spd part of the Pair-up bonus a support gives its lead: +1/+2/+3 at 10/20/30 raw Spd, plus the class's Spd pair-up bonus, plus the
- * rank bonus where that class bonus is non-zero (SF pair-up; max +10).
- */
-export function pairUpSpd(supportClass: ClassId, rank: SupportRank, rawSpd: number): number {
-  const tier = Math.min(3, Math.max(0, Math.floor(rawSpd / 10)));
-  const data: ClassData = CLASSES[supportClass];
-  const cls = data.pairUp.spd ?? 0;
-  return tier + cls + (cls > 0 ? RANK_BONUS[rank] : 0);
 }

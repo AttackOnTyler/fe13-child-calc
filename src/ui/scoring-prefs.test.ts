@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createEngine, resolveAssumptions } from '../engine';
-import { DEFAULT_PREFS, dlcReachable, speedSettings, targetOf, type ScoringPrefs } from './scoring-prefs';
+import { DEFAULT_PREFS, basisOf, dlcReachable, roleOf, speedSettings, targetOf, withPreset, type ScoringPrefs } from './scoring-prefs';
 
 const engine = createEngine();
 const prefs = (over: Partial<ScoringPrefs>): ScoringPrefs => ({ ...DEFAULT_PREFS, ...over });
@@ -38,5 +38,35 @@ describe('DLC reachability', () => {
     expect(dlcReachable(prefs({ context: 'apotheosis' }), engine)).toBe(true);
     expect(dlcReachable(prefs({ context: 'full-route' }), engine)).toBe(true);
     expect(dlcReachable(prefs({ context: 'all', dlc: true }), engine)).toBe(true);
+  });
+});
+
+describe('scoring role', () => {
+  const preset = (id: string) => engine.presets().find((p) => p.id === id)!;
+
+  it('follows the preset: Battery scores in Support, the rest in Lead', () => {
+    expect(roleOf(withPreset(DEFAULT_PREFS, 'battery'), preset('battery'))).toBe('support');
+    expect(roleOf(withPreset(DEFAULT_PREFS, 'physical-lead'), preset('physical-lead'))).toBe('lead');
+  });
+
+  it('can be overridden globally, and choosing a preset goes back to the preset’s role', () => {
+    const battery = withPreset(DEFAULT_PREFS, 'battery');
+    expect(roleOf({ ...battery, role: 'lead' }, preset('battery'))).toBe('lead');
+    expect(roleOf(prefs({ role: 'support' }), preset('physical-lead'))).toBe('support');
+    const back = withPreset({ ...battery, role: 'lead' }, 'battery');
+    expect(roleOf(back, preset('battery'))).toBe('support');
+  });
+
+  it('defaults the support rank to A/S', () => {
+    expect(DEFAULT_PREFS.supportRank).toBe('A');
+  });
+});
+
+describe('score basis by role', () => {
+  it('keeps Growths in Lead and falls back to Caps+LB in Support without losing the choice', () => {
+    const growths = prefs({ basis: 'growths' });
+    expect(basisOf(growths, 'lead', engine)).toBe('growths');
+    expect(basisOf(growths, 'support', engine)).toBe('caps-lb');
+    expect(basisOf(prefs({ basis: 'caps' }), 'support', engine)).toBe('caps');
   });
 });
