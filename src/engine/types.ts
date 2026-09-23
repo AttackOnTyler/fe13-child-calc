@@ -1,4 +1,5 @@
 import type { ChildId } from '../game-data/children';
+import type { ClassId, ClassTier } from '../game-data/classes';
 import type { Gender, Growths, Modifiers, Stat } from '../game-data/stats';
 import type { UnitId } from '../game-data/units';
 import type { Citation } from '../game-data/citations';
@@ -27,6 +28,10 @@ export type ChildResult = {
   /** Inherited personal growths, before any class growth. */
   readonly growths: Growths;
   readonly modifiers: Modifiers;
+  /** Base classes the child can Second Seal into; promotions and DLC reclass targets follow from them. */
+  readonly classSet: readonly ClassId[];
+  /** The class the child joins in (Morgan's depends on the other parent). */
+  readonly startClass: ClassId;
   readonly assumptionsUsed: readonly AssumptionId[];
 };
 
@@ -70,4 +75,14 @@ export type AssumptionStatus = {
   readonly isDefault: boolean;
   /** How many pairings list this assumption in `assumptionsUsed`. */
   readonly pairingsAffected: number;
+};
+
+/** A class as the class selector lists it. */
+export type ClassSummary = {
+  readonly id: ClassId;
+  /** Both names for a class named by gender, e.g. `Priest/Cleric`. */
+  readonly name: string;
+  readonly tier: ClassTier;
+  readonly dlc: boolean;
+  readonly genderLock: Gender | undefined;
 };

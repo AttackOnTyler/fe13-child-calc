@@ -1,4 +1,5 @@
 import { MOD_STATS, STATS, STAT_LABELS } from '../game-data/stats';
+import type { ClassSetFixture } from './class-set-fixtures';
 import type { InheritanceFixture } from './fixtures';
 import type { ChildResult, SelfTestCase, SelfTestReport } from './types';
 
@@ -20,10 +21,24 @@ function checkFixture(fx: InheritanceFixture, r: ChildResult | undefined): SelfT
   return { id: fx.id, label: fx.label, passed: mismatches.length === 0, mismatches };
 }
 
+/** One case per child: each row's class set must match (order doesn't matter). */
+function checkClassSets(fx: ClassSetFixture, lookup: (key: string) => ChildResult | undefined): SelfTestCase {
+  const mismatches = fx.rows.flatMap(([key, expected]): string[] => {
+    const r = lookup(key);
+    if (!r) return [`pairing ${key} not enumerated`];
+    const missing = expected.filter((c) => !r.classSet.includes(c));
+    const extra = r.classSet.filter((c) => !expected.includes(c));
+    if (missing.length === 0 && extra.length === 0) return [];
+    return [`${key}: ${[missing.length ? `missing ${missing.join(', ')}` : '', extra.length ? `extra ${extra.join(', ')}` : ''].filter(Boolean).join('; ')}`];
+  });
+  return { id: fx.id, label: fx.label, passed: mismatches.length === 0, mismatches };
+}
+
 export function runSelfTest(
   fixtures: readonly InheritanceFixture[],
+  classSets: readonly ClassSetFixture[],
   lookup: (key: string) => ChildResult | undefined,
 ): SelfTestReport {
-  const cases = fixtures.map((fx) => checkFixture(fx, lookup(fx.key)));
+  const cases = [...fixtures.map((fx) => checkFixture(fx, lookup(fx.key))), ...classSets.map((fx) => checkClassSets(fx, lookup))];
   return { passed: cases.every((c) => c.passed), cases };
 }

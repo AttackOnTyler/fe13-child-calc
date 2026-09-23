@@ -1,4 +1,6 @@
+import type { ClassId } from '../game-data/classes';
 import { MOD_STATS, STATS, type Growths, type Modifiers } from '../game-data/stats';
+import type { PassesClasses } from '../game-data/units';
 
 /** What one parent passes to a child, resolved to concrete values. */
 export type ParentProfile = {
@@ -6,6 +8,12 @@ export type ParentProfile = {
   readonly modifiers: Modifiers;
   /** A child unit acting as a parent (only ever Morgan's). Its modifiers already carry its own +1. */
   readonly secondGen: boolean;
+  /** The parent's own class set: what Morgan's rule reads. */
+  readonly classes: readonly ClassId[];
+  /** What the parent passes to a son or daughter when it is the variable parent (not Morgan's). */
+  readonly passesClasses: PassesClasses;
+  /** The default base class Morgan would start in (a second-gen parent's own starting class); null for the Maiden. */
+  readonly baseClass: ClassId | null;
 };
 
 /**

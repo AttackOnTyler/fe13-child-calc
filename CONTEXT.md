@@ -32,6 +32,17 @@ _Avoid_: Combo, couple, marriage (a marriage is between two units; a pairing is 
 **Galedad**:
 A father whose male-only classes turn into Pegasus Knight for a daughter (Donnel, Gaius, Robin (M)), giving her access to Dark Flier and Galeforce.
 
+**Class set**:
+The base classes a unit can Second Seal into. A child's is its default set plus the classes its variable parent passes to a child of its gender; Morgan's is every regular class for its gender plus the other parent's Villager, Taguel or Manakete.
+_Avoid_: Class pool, class list
+
+**Start class**:
+The class a child joins in: the first class of its default set, or for Morgan the other parent's default base class (Tactician if that is Lord, Dancer or Conqueror).
+_Avoid_: Default class (ambiguous with the default class set), base class
+
+**Reachable class**:
+Any class a child can be in: a class in its class set, a promotion of one, or the DLC reclass target for its gender (Dread Fighter, Bride).
+
 ### Data
 
 **Game data**:

@@ -1,6 +1,6 @@
 :root {
   --bg: #121417; --panel: #1b1e23; --line: #2c3139; --text: #d8dde4; --muted: #7c8591;
-  --accent: #5aa9ff; --pos: #6fcf7a; --neg: #ef6f6c; --warn: #f0b84d; --hover: #1f242b; --mods: #16191d;
+  --accent: #5aa9ff; --pos: #6fcf7a; --neg: #ef6f6c; --warn: #f0b84d; --hover: #1f242b; --mods: #16191d; --caps: #171b21;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -65,6 +65,11 @@ table.grid { border-collapse: separate; border-spacing: 0; white-space: nowrap; 
 .grid .count { font-size: 11px; }
 .grid td.range { color: var(--muted); }
 .grid tr.robin-row th.stick { padding-left: 22px; font-weight: 400; }
+.grid .gcap { background: var(--caps); }
+.grid td.cls { color: var(--muted); }
+.grid tr.unreachable th, .grid tr.unreachable td { opacity: 0.4; }
+.caps-controls { margin-left: auto; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.caps-controls select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 2px 4px; }
 
 .panel { border-left: 1px solid var(--line); padding: 10px; overflow: auto; background: var(--panel); }
 .panel h3 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; color: var(--muted); }

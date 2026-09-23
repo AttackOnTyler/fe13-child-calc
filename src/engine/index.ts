@@ -4,7 +4,8 @@
  */
 import { CHILD_UNITS, type ChildId } from '../game-data/children';
 import { ASSET_FLAW, ROBIN_GROWTHS, ROBIN_MODIFIERS } from '../game-data/robin';
-import { MOD_STATS, STATS, STAT_LABELS, type Gender } from '../game-data/stats';
+import { CLASSES, regularClasses, type ClassData, type ClassId } from '../game-data/classes';
+import { MOD_STATS, STATS, STAT_LABELS, type Gender, type Growths, type Stat } from '../game-data/stats';
 import { CHROM_FALLBACK_PARTNER, ROBIN_SUPPORTS, S_SUPPORTS } from '../game-data/supports';
 import { FIRST_GEN_UNITS, type FirstGenUnitData, type UnitId } from '../game-data/units';
 import { RESOLVED_DISAGREEMENTS, type ResolvedDisagreement } from '../game-data/disagreements';
@@ -19,11 +20,22 @@ import {
   type AssumptionId,
   type Assumptions,
 } from './assumptions';
+import { CLASS_SET_FIXTURES } from './class-set-fixtures';
 import { INHERITANCE_FIXTURES } from './fixtures';
+import {
+  childClassSet,
+  classGrowths,
+  classMaxStats,
+  className,
+  effectiveCaps,
+  reachableClasses,
+  startClass,
+} from './classes';
 import { inheritGrowths, inheritModifiers, type ParentProfile } from './inheritance';
 import { runSelfTest } from './self-test';
 import type {
   AssumptionStatus,
+  ClassSummary,
   ChildResult,
   ChildSummary,
   Pairing,
@@ -47,8 +59,9 @@ export {
 export type { Citation } from '../game-data/citations';
 export type { ResolvedDisagreement } from '../game-data/disagreements';
 // Stat vocabulary, re-exported so the UI only talks to the engine.
-export { MOD_STATS, STATS, STAT_LABELS, type Growths, type ModStat, type Modifiers, type Stat } from '../game-data/stats';
+export { MOD_STATS, STATS, STAT_LABELS, type Gender, type Growths, type ModStat, type Modifiers, type Stat } from '../game-data/stats';
 export type { ChildId } from '../game-data/children';
+export type { ClassId } from '../game-data/classes';
 
 export type Engine = {
   /** Every child unit, in game-data order. */
@@ -62,12 +75,24 @@ export type Engine = {
   parentName(ref: ParentRef): string;
   /** Robin's asset/flaw in a pairing, e.g. `+Spd −Def`, or undefined if Robin isn't a parent. */
   robinLabel(pairing: Pairing): string | undefined;
-  /** Runs the sourced fixtures against this engine. */
+  /** Runs the sourced fixtures (inheritance and class sets) against this engine. */
   selfTest(): SelfTestReport;
   /** Every registered assumption: its current value against the default, and how many pairings rest on it. */
   assumptions(): readonly AssumptionStatus[];
   /** Source disagreements resolved in the game data, for the validation panel. */
   disagreements(): readonly ResolvedDisagreement[];
+  /** Every class, in data order (the tie-break order wherever classes are compared). */
+  classes(): readonly ClassSummary[];
+  /** A class's name; Priest/Cleric and War Monk/War Cleric are named by gender, or both names without one. */
+  className(id: ClassId, gender?: Gender): string;
+  /** Every class the pairing's child can be in: its class set, their promotions and the DLC reclass target. */
+  reachableClasses(result: ChildResult): readonly ClassId[];
+  canReach(result: ChildResult, id: ClassId): boolean;
+  /** Class max + modifier (+10 except HP with Limit Breaker), or undefined if the child can't reach the class. */
+  effectiveCaps(result: ChildResult, id: ClassId, limitBreaker: boolean): Readonly<Record<Stat, number>> | undefined;
+  classMaxStats(id: ClassId, gender: Gender): Readonly<Record<Stat, number>>;
+  /** Class growths, with Conqueror's Skl/Spd read from the assumptions. */
+  classGrowths(id: ClassId, gender: Gender): Growths;
 };
 
 const CHILD_IDS = Object.keys(CHILD_UNITS) as ChildId[];
@@ -122,11 +147,12 @@ type ResolvedParent = { readonly profile: ParentProfile; readonly assumptionsUse
 
 function unitProfile(id: UnitId, assumptions: Assumptions): ResolvedParent {
   const unit: FirstGenUnitData = FIRST_GEN_UNITS[id];
+  const classes = { classes: unit.classes, passesClasses: unit.passesClasses, baseClass: unit.classes[0] ?? null };
   if (!isAssumed(unit.growths)) {
-    return { profile: { growths: unit.growths, modifiers: unit.modifiers, secondGen: false }, assumptionsUsed: [] };
+    return { profile: { growths: unit.growths, modifiers: unit.modifiers, secondGen: false, ...classes }, assumptionsUsed: [] };
   }
   return {
-    profile: { growths: assumed(unit.growths, assumptions), modifiers: unit.modifiers, secondGen: false },
+    profile: { growths: assumed(unit.growths, assumptions), modifiers: unit.modifiers, secondGen: false, ...classes },
     assumptionsUsed: [unit.growths.assumption],
   };
 }
@@ -139,7 +165,16 @@ function robinProfile(ref: RobinRef): ResolvedParent {
   for (const s of STATS) growths[s] = ROBIN_GROWTHS[s] + (asset.assetGrowth[s] ?? 0) + (flaw.flawGrowth[s] ?? 0);
   const modifiers = {} as Record<(typeof MOD_STATS)[number], number>;
   for (const s of MOD_STATS) modifiers[s] = ROBIN_MODIFIERS[s] + (asset.assetModifier[s] ?? 0) + (flaw.flawModifier[s] ?? 0);
-  return { profile: { growths, modifiers, secondGen: false }, assumptionsUsed: [] };
+  // Robin has, and passes to a child of either gender, every regular class for that gender (SF class sets).
+  const profile: ParentProfile = {
+    growths,
+    modifiers,
+    secondGen: false,
+    classes: regularClasses(ref.gender),
+    passesClasses: { son: regularClasses('M'), daughter: regularClasses('F') },
+    baseClass: 'tactician',
+  };
+  return { profile, assumptionsUsed: [] };
 }
 
 function parentName(ref: ParentRef): string {
@@ -210,7 +245,15 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         return robinProfile(ref);
       case 'child': {
         const r = computeResult({ child: ref.id, variableParent: ref.variableParent });
-        return { profile: { growths: r.growths, modifiers: r.modifiers, secondGen: true }, assumptionsUsed: r.assumptionsUsed };
+        const profile: ParentProfile = {
+          growths: r.growths,
+          modifiers: r.modifiers,
+          secondGen: true,
+          classes: r.classSet,
+          passesClasses: { son: null, daughter: null },
+          baseClass: r.startClass,
+        };
+        return { profile, assumptionsUsed: r.assumptionsUsed };
       }
     }
   };
@@ -223,13 +266,16 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     const fixed = profileOf(fixedRef);
     const variable = profileOf(pairing.variableParent);
     const { modifiers, capped } = inheritModifiers(fixed.profile, variable.profile, assumptions['modifier-cap']);
-    const used: AssumptionId[] = [...fixed.assumptionsUsed, ...variable.assumptionsUsed];
+    const start = startClass(child, variable.profile, assumptions);
+    const used: AssumptionId[] = [...fixed.assumptionsUsed, ...variable.assumptionsUsed, ...start.assumptionsUsed];
     if (capped) used.push('modifier-cap');
     return {
       pairing,
       key: pairingKey(pairing),
       growths: inheritGrowths(fixed.profile, variable.profile, child.growths),
       modifiers,
+      classSet: childClassSet(child, variable.profile),
+      startClass: start.startClass,
       assumptionsUsed: [...new Set(used)],
     };
   };
@@ -265,6 +311,20 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     };
   });
 
+  const genderOf = (r: ChildResult) => CHILD_UNITS[r.pairing.child].gender;
+  // Reachable classes depend only on the class set and gender, so rows share them.
+  const reachCache = new Map<string, ReadonlySet<ClassId>>();
+  const reachOf = (r: ChildResult): ReadonlySet<ClassId> => {
+    const k = `${genderOf(r)}:${r.classSet.join()}`;
+    let reach = reachCache.get(k);
+    if (!reach) reachCache.set(k, (reach = new Set(reachableClasses(r.classSet, genderOf(r)))));
+    return reach;
+  };
+  const classSummaries: ClassSummary[] = (Object.keys(CLASSES) as ClassId[]).map((id) => {
+    const c: ClassData = CLASSES[id];
+    return { id, name: className(id), tier: c.tier, dlc: c.dlc, genderLock: c.genderLock };
+  });
+
   return {
     children: () =>
       CHILD_IDS.map((id) => {
@@ -285,8 +345,16 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       const ref = pairing.fixedRobin ?? (pairing.variableParent.kind === 'robin' ? pairing.variableParent : undefined);
       return ref && assetFlawLabel(ref);
     },
-    selfTest: () => runSelfTest(INHERITANCE_FIXTURES, result),
+    selfTest: () => runSelfTest(INHERITANCE_FIXTURES, CLASS_SET_FIXTURES, result),
     assumptions: () => statuses,
     disagreements: () => RESOLVED_DISAGREEMENTS,
+    classes: () => classSummaries,
+    className,
+    reachableClasses: (r) => [...reachOf(r)],
+    canReach: (r, id) => reachOf(r).has(id),
+    effectiveCaps: (r, id, limitBreaker) =>
+      reachOf(r).has(id) ? effectiveCaps(id, genderOf(r), r.modifiers, limitBreaker) : undefined,
+    classMaxStats,
+    classGrowths: (id, gender) => classGrowths(id, gender, assumptions),
   };
 }

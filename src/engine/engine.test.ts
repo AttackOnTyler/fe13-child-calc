@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createEngine, DEFAULT_ASSUMPTIONS, resolveAssumptions, type AssumptionId, type ChildId, type Engine } from './index';
 import { INHERITANCE_FIXTURES } from './fixtures';
+import { CLASS_SET_FIXTURES } from './class-set-fixtures';
 
 const engine = createEngine();
 
@@ -199,12 +200,147 @@ describe('inheritance fixtures (published values)', () => {
   });
 });
 
+describe('class sets', () => {
+  it.each(CLASS_SET_FIXTURES)('$id $label', (fx) => {
+    for (const [key, expected] of fx.rows) {
+      const r = engine.result(key);
+      expect(r, key).toBeDefined();
+      expect([...r!.classSet].sort(), key).toEqual([...expected].sort());
+    }
+  });
+
+  it('covers every non-Morgan variable parent with a fixture row', () => {
+    const covered = new Set(CLASS_SET_FIXTURES.flatMap((fx) => fx.rows.map(([key]) => key.replace(/robin:.*/, 'robin'))));
+    for (const r of engine.pairings()) {
+      if (r.pairing.child.startsWith('morgan')) continue;
+      expect(covered.has(r.key.replace(/robin:.*/, 'robin')), r.key).toBe(true);
+    }
+  });
+
+  it('doesn’t depend on Robin’s asset/flaw', () => {
+    for (const g of [...engine.groups('lucina'), ...engine.groups('morgan-f')]) {
+      expect(new Set(g.results.map((r) => [...r.classSet].sort().join())).size, g.label).toBe(1);
+    }
+  });
+
+  it('never passes Dancer, Conqueror or a DLC class, and Lord only to Lucina', () => {
+    for (const r of engine.pairings()) {
+      for (const c of ['dancer', 'conqueror', 'lodestar', 'dread-fighter', 'bride'] as const) expect(r.classSet, r.key).not.toContain(c);
+      if (r.pairing.child !== 'lucina') expect(r.classSet, r.key).not.toContain('lord');
+    }
+  });
+});
+
+describe('start class', () => {
+  const start = (e: Engine, key: string) => e.result(key)!.startClass;
+
+  it('is the first class of a child’s default set', () => {
+    expect(start(engine, 'lucina|sumia')).toBe('lord');
+    expect(start(engine, 'yarne|robin:str/mag')).toBe('taguel');
+    expect(start(engine, 'kjelle|gaius')).toBe('knight');
+  });
+
+  it('is Morgan’s other parent’s default base class, or Tactician for Lord, Dancer or Conqueror', () => {
+    expect(start(engine, 'morgan-f|robin:str/mag|lissa')).toBe('priest');
+    expect(start(engine, 'morgan-f|robin:str/mag|panne')).toBe('taguel');
+    expect(start(engine, 'morgan-m|robin:str/mag|donnel')).toBe('villager');
+    expect(start(engine, 'morgan-m|robin:str/mag|frederick')).toBe('cavalier');
+    for (const key of ['morgan-m|robin:str/mag|chrom', 'morgan-m|robin:str/mag|walhart', 'morgan-f|robin:str/mag|olivia']) {
+      expect(start(engine, key), key).toBe('tactician');
+    }
+  });
+
+  it('takes a second-gen partner’s own start class, flagged as an assumption only where Tactician would differ', () => {
+    const kjelle = engine.result('morgan-f|robin:str/mag|kjelle<frederick')!;
+    expect(kjelle.startClass).toBe('knight');
+    expect(kjelle.assumptionsUsed).toContain('morgan-second-gen-start-class');
+    // Lucina's start class is Lord, so Morgan starts as a Tactician under either reading.
+    const lucina = engine.result('morgan-f|robin:str/mag|lucina<sully')!;
+    expect(lucina.startClass).toBe('tactician');
+    expect(lucina.assumptionsUsed).not.toContain('morgan-second-gen-start-class');
+    expect(engine.result('morgan-m|robin:str/mag|frederick')!.assumptionsUsed).not.toContain('morgan-second-gen-start-class');
+
+    const other = createEngine(resolveAssumptions({ 'morgan-second-gen-start-class': 'tactician' }));
+    expect(start(other, 'morgan-f|robin:str/mag|kjelle<frederick')).toBe('tactician');
+    expect(start(other, 'morgan-m|robin:str/mag|frederick')).toBe('cavalier');
+  });
+
+  it('flags every Morgan pairing with a second-gen partner other than Lucina', () => {
+    // Morgan (F): Kjelle 13 + Cynthia 4 + Severa, Noire, Nah 12 each. Morgan (M): the six sons, 74 in all.
+    const status = engine.assumptions().find((a) => a.id === 'morgan-second-gen-start-class')!;
+    expect(status.pairingsAffected).toBe((53 + 74) * ASSET_FLAWS);
+  });
+
+  it('is always in the child’s class set', () => {
+    for (const r of engine.pairings()) expect(r.classSet, r.key).toContain(r.startClass);
+  });
+});
+
+describe('reachable classes and effective caps', () => {
+  it('reaches promotions of the class set, gender permitting, plus the DLC reclass target', () => {
+    const lucina = engine.result('lucina|sumia')!;
+    expect(engine.reachableClasses(lucina)).toEqual([
+      'lord', 'cavalier', 'knight', 'archer', 'pegasus-knight', 'priest',
+      'great-lord', 'paladin', 'great-knight', 'general', 'sniper', 'bow-knight', 'falcon-knight', 'dark-flier', 'sage', 'war-monk',
+      'bride',
+    ]);
+    // Galedad: Gaius's daughter gets Pegasus Knight, so Dark Flier; his son doesn't.
+    expect(engine.canReach(engine.result('kjelle|gaius')!, 'dark-flier')).toBe(true);
+    expect(engine.canReach(engine.result('kjelle|frederick')!, 'dark-flier')).toBe(false);
+    expect(engine.canReach(engine.result('owain|gaius')!, 'dark-flier')).toBe(false);
+    expect(engine.canReach(engine.result('owain|gaius')!, 'warrior')).toBe(true);
+    expect(engine.canReach(engine.result('owain|gaius')!, 'dread-fighter')).toBe(true);
+    expect(engine.canReach(engine.result('owain|gaius')!, 'bride')).toBe(false);
+    expect(engine.canReach(engine.result('morgan-f|robin:str/mag|nowi')!, 'manakete')).toBe(true);
+    expect(engine.canReach(engine.result('morgan-f|robin:str/mag|sully')!, 'manakete')).toBe(false);
+  });
+
+  it('adds the child modifier to the class max, and 10 more with Limit Breaker except on HP', () => {
+    // F1 Lucina (Sumia × Chrom) modifiers 0/+1/+4/+5/+2/−2/+1. Sniper caps 80/41/30/48/40/45/40/31.
+    const lucina = engine.result('lucina|sumia')!;
+    expect(engine.effectiveCaps(lucina, 'sniper', false)).toEqual({ hp: 80, str: 41, mag: 31, skl: 52, spd: 45, lck: 47, def: 38, res: 32 });
+    expect(engine.effectiveCaps(lucina, 'sniper', true)).toEqual({ hp: 80, str: 51, mag: 41, skl: 62, spd: 55, lck: 57, def: 48, res: 42 });
+  });
+
+  it('uses Lord and Great Lord stats by the child’s gender', () => {
+    // Great Lord (F) 80/40/30/42/44/45/40/40; Great Lord (M) 80/43/30/40/41/45/42/40 (#13 D5).
+    expect(engine.effectiveCaps(engine.result('lucina|sumia')!, 'great-lord', false)).toEqual({
+      hp: 80, str: 40, mag: 31, skl: 46, spd: 49, lck: 47, def: 38, res: 41,
+    });
+    expect(engine.classMaxStats('great-lord', 'M')).toEqual({ hp: 80, str: 43, mag: 30, skl: 40, spd: 41, lck: 45, def: 42, res: 40 });
+    expect(engine.classMaxStats('lord', 'M')).toEqual({ hp: 60, str: 27, mag: 20, skl: 25, spd: 26, lck: 30, def: 26, res: 25 });
+    expect(engine.classMaxStats('lord', 'F')).toEqual({ hp: 60, str: 25, mag: 20, skl: 26, spd: 28, lck: 30, def: 25, res: 25 });
+  });
+
+  it('has no caps for a class the child can’t reach', () => {
+    expect(engine.effectiveCaps(engine.result('owain|gaius')!, 'pegasus-knight', true)).toBeUndefined();
+  });
+
+  it('applies the resolved Thief Skl cap of 30 (#13 D6)', () => {
+    expect(engine.classMaxStats('thief', 'M').skl).toBe(30);
+  });
+
+  it('reads Conqueror’s Skl/Spd growth through the assumption', () => {
+    expect(engine.classGrowths('conqueror', 'M')).toEqual({ hp: 50, str: 20, mag: 5, skl: 15, spd: 15, lck: 0, def: 10, res: 10 });
+    const other = createEngine(resolveAssumptions({ 'conqueror-skl-spd-growth': 20 }));
+    expect(other.classGrowths('conqueror', 'M')).toMatchObject({ skl: 20, spd: 20 });
+  });
+
+  it('splits Taguel growths by gender and names Priest/Cleric by gender', () => {
+    expect(engine.classGrowths('taguel', 'M')).toEqual({ hp: 45, str: 20, mag: 0, skl: 15, spd: 15, lck: 0, def: 15, res: 5 });
+    expect(engine.classGrowths('taguel', 'F')).toEqual({ hp: 40, str: 15, mag: 0, skl: 20, spd: 20, lck: 0, def: 10, res: 5 });
+    expect(engine.className('priest', 'F')).toBe('Cleric');
+    expect(engine.className('priest', 'M')).toBe('Priest');
+  });
+});
+
 describe('assumptions', () => {
   it('flags the Maiden pairing, and Morgan through Lucina ← Maiden, as resting on unknown growths', () => {
-    const flagged = engine.pairings().filter((r) => r.assumptionsUsed.length > 0);
+    const flagged = engine.pairings().filter((r) => r.assumptionsUsed.includes('maiden-growths'));
     expect(flagged.filter((r) => r.pairing.child !== 'morgan-f').map((r) => r.key)).toEqual(['lucina|maiden']);
     expect(flagged.filter((r) => r.pairing.child === 'morgan-f')).toHaveLength(ASSET_FLAWS);
     expect(flagged.every((r) => r.key === 'lucina|maiden' || r.key.endsWith('|lucina<maiden'))).toBe(true);
+    // Lucina ← Maiden's Morgan starts as a Tactician either way (Lucina's Lord), so nothing else is flagged there.
     expect(flagged.every((r) => r.assumptionsUsed.join() === 'maiden-growths')).toBe(true);
   });
 
@@ -295,7 +431,7 @@ describe('assumption overrides', () => {
 describe('self-test', () => {
   it('runs every fixture and passes', () => {
     const report = engine.selfTest();
-    expect(report.cases.map((c) => c.id)).toEqual(INHERITANCE_FIXTURES.map((f) => f.id));
+    expect(report.cases.map((c) => c.id)).toEqual([...INHERITANCE_FIXTURES, ...CLASS_SET_FIXTURES].map((f) => f.id));
     expect(report.passed).toBe(true);
     expect(report.cases.every((c) => c.passed && c.mismatches.length === 0)).toBe(true);
   });

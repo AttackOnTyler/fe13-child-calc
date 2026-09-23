@@ -39,7 +39,7 @@ function selfTestSection(report: SelfTestReport): HTMLElement {
     'section',
     { class: 'vsec', 'aria-label': 'Self-test' },
     h('h3', {}, `Self-test ${report.passed ? '✓' : '✕'}`),
-    h('p', { class: 'muted' }, 'Sourced inheritance fixtures, run against the engine on load and after every override.'),
+    h('p', { class: 'muted' }, 'Sourced inheritance and class-set fixtures, run against the engine on load and after every override.'),
     h(
       'ul',
       { class: 'selftest-list' },

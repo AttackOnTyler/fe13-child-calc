@@ -9,6 +9,9 @@ import {
   type Assumptions,
   type ChildId,
   type ChildResult,
+  type ClassId,
+  type ClassSummary,
+  type Gender,
   type Engine,
   type Overrides,
   type PairingGroup,
@@ -28,6 +31,9 @@ let selected: ChildId = 'lucina';
 let view: 'table' | 'validation' = selfTest.passed ? 'table' : 'validation';
 /** Group rows (by group key) currently listing one row per Robin asset/flaw. */
 const expanded = new Set<string>();
+/** The class the caps are shown in: each row's start class, or one pinned class. */
+let capsClass: ClassId | 'start' = 'start';
+let limitBreaker = true;
 
 /** Replaces the overrides, saves them and recomputes every pairing. */
 function applyOverrides(next: Overrides): void {
@@ -100,11 +106,30 @@ function warnMark(results: readonly ChildResult[]): HTMLElement | null {
   return h('span', { class: 'warn', title, 'aria-label': title }, ' ⚠');
 }
 
-function row(r: ChildResult, label: string, cls = ''): HTMLElement {
+/** The class a row's caps are shown in. */
+const rowClass = (r: ChildResult): ClassId => (capsClass === 'start' ? r.startClass : capsClass);
+
+/** Class count, class name and effective caps cells; `caps` is undefined when the child can't reach the class. */
+function classCells(r: ChildResult, gender: Gender, caps: ((s: (typeof STATS)[number]) => string) | undefined): HTMLElement[] {
+  const cls = rowClass(r);
+  return [
+    h(
+      'td',
+      { class: 'num gstart', title: r.classSet.map((c) => engine.className(c, gender)).join(', ') },
+      String(r.classSet.length),
+    ),
+    h('td', { class: 'cls' }, caps ? engine.className(cls, gender) : ''),
+    ...STATS.map((s, i) => h('td', { class: `num gcap${i === 0 ? ' gstart' : ''}` }, caps ? caps(s) : '')),
+  ];
+}
+
+function row(r: ChildResult, label: string, gender: Gender, cls = ''): HTMLElement {
+  const caps = engine.effectiveCaps(r, rowClass(r), limitBreaker);
   return h(
     'tr',
-    { 'data-key': r.key, class: cls || undefined },
+    { 'data-key': r.key, class: [cls, caps ? '' : 'unreachable'].filter(Boolean).join(' ') || undefined },
     h('th', { class: 'stick', scope: 'row' }, label, warnMark([r])),
+    ...classCells(r, gender, caps && ((s) => String(caps[s]))),
     ...STATS.map((s, i) => h('td', { class: `num${i === 0 ? ' gstart' : ''}` }, String(r.growths[s]))),
     ...MOD_STATS.map((s, i) =>
       h('td', { class: `num gmod ${tone(r.modifiers[s])}${i === 0 ? ' gstart' : ''}` }, signed(r.modifiers[s])),
@@ -120,11 +145,14 @@ function range(values: number[], fmt: (n: number) => string): string {
 }
 
 /** A group row over Robin's asset/flaw pairings, showing each stat's range; expands into one row per asset/flaw. */
-function groupRows(g: PairingGroup): HTMLElement[] {
+function groupRows(g: PairingGroup, gender: Gender): HTMLElement[] {
   const open = expanded.has(g.key);
+  // Robin's asset/flaw changes stats only: every row in a group shares its class set and start class.
+  const first = g.results[0]!;
+  const caps = g.results.map((r) => engine.effectiveCaps(r, rowClass(r), limitBreaker));
   const head = h(
     'tr',
-    { class: 'group-row', 'data-group': g.key },
+    { class: `group-row${caps[0] ? '' : ' unreachable'}`, 'data-group': g.key },
     h(
       'th',
       { class: 'stick', scope: 'row' },
@@ -146,6 +174,7 @@ function groupRows(g: PairingGroup): HTMLElement[] {
       h('span', { class: 'muted count' }, ` ×${g.results.length}`),
       warnMark(g.results),
     ),
+    ...classCells(first, gender, caps[0] && ((s) => range(caps.map((c) => c![s]), String))),
     ...STATS.map((s, i) =>
       h('td', { class: `num range${i === 0 ? ' gstart' : ''}` }, range(g.results.map((r) => r.growths[s]), String)),
     ),
@@ -154,12 +183,62 @@ function groupRows(g: PairingGroup): HTMLElement[] {
     ),
   );
   if (!open) return [head];
-  return [head, ...g.results.map((r) => row(r, engine.robinLabel(r.pairing) ?? r.key, 'robin-row'))];
+  return [head, ...g.results.map((r) => row(r, engine.robinLabel(r.pairing) ?? r.key, gender, 'robin-row'))];
+}
+
+const TIER_LABELS: Record<ClassSummary['tier'], string> = { base: 'Base', advanced: 'Advanced', special: 'Special' };
+
+/** Picks the class the caps are shown in, and whether Limit Breaker is assumed. */
+function capsControls(): HTMLElement {
+  const tiers = ['base', 'advanced', 'special'] as const;
+  const option = (c: ClassSummary) =>
+    h('option', { value: c.id, selected: c.id === capsClass }, `${c.name}${c.dlc ? ' (DLC)' : ''}`);
+  return h(
+    'div',
+    { class: 'caps-controls' },
+    h(
+      'label',
+      {},
+      'Class ',
+      h(
+        'select',
+        {
+          'aria-label': 'Class for effective caps',
+          onchange: (e) => {
+            capsClass = (e.target as HTMLSelectElement).value as ClassId | 'start';
+            render();
+          },
+        },
+        h('option', { value: 'start', selected: capsClass === 'start' }, 'Start class (per row)'),
+        ...tiers.map((t) =>
+          h('optgroup', { label: TIER_LABELS[t] }, ...engine.classes().filter((c) => c.tier === t).map(option)),
+        ),
+      ),
+    ),
+    h(
+      'label',
+      { title: 'Limit Breaker raises every cap but HP by 10' },
+      h('input', {
+        type: 'checkbox',
+        checked: limitBreaker,
+        onchange: (e) => {
+          limitBreaker = (e.target as HTMLInputElement).checked;
+          render();
+        },
+      }),
+      ' Limit Breaker',
+    ),
+  );
 }
 
 function childTable(child: ChildId): HTMLElement {
   const summary = engine.children().find((c) => c.id === child)!;
-  const groups = engine.groups(child);
+  // Rows whose child can't reach the pinned class sort last (stable).
+  const all = engine.groups(child);
+  const reaches = (g: PairingGroup) => engine.canReach(g.results[0]!, rowClass(g.results[0]!));
+  const groups = [...all.filter(reaches), ...all.filter((g) => !reaches(g))];
+  const capsLabel =
+    capsClass === 'start' ? 'Effective caps (start class)' : `Effective caps (${engine.className(capsClass, summary.gender)})`;
   const head = h(
     'div',
     { class: 'main-head' },
@@ -170,6 +249,7 @@ function childTable(child: ChildId): HTMLElement {
       `Fixed parent: ${summary.fixedParentName} · ${summary.pairingCount} pairings` +
         (groups.length < summary.pairingCount ? ` in ${groups.length} rows` : ''),
     ),
+    capsControls(),
   );
   const table = h(
     'table',
@@ -181,6 +261,12 @@ function childTable(child: ChildId): HTMLElement {
         'tr',
         { class: 'grp' },
         h('th', { class: 'stick' }, ''),
+        h('th', { colspan: '2', class: 'gstart' }, 'Classes'),
+        h(
+          'th',
+          { colspan: String(STATS.length), class: 'gcap gstart', title: `class max + modifier${limitBreaker ? ' + 10 (not HP) with Limit Breaker' : ''}` },
+          `${capsLabel}${limitBreaker ? ' + LB' : ''}`,
+        ),
         h('th', { colspan: String(STATS.length), class: 'gstart', title: 'floor((father + mother + child) / 3), before class growths' }, 'Growths (personal)'),
         h('th', { colspan: String(MOD_STATS.length), class: 'gmod gstart', title: 'father + mother + 1' }, 'Max-stat modifiers'),
       ),
@@ -188,6 +274,9 @@ function childTable(child: ChildId): HTMLElement {
         'tr',
         {},
         h('th', { class: 'stick', scope: 'col' }, 'Variable parent'),
+        h('th', { class: 'num gstart', scope: 'col', title: 'Base classes in the class set (hover a count to list them)' }, '#'),
+        h('th', { scope: 'col' }, 'Class'),
+        ...STATS.map((s, i) => h('th', { class: `num gcap${i === 0 ? ' gstart' : ''}`, scope: 'col' }, STAT_LABELS[s])),
         ...STATS.map((s, i) => h('th', { class: `num${i === 0 ? ' gstart' : ''}`, scope: 'col' }, STAT_LABELS[s])),
         ...MOD_STATS.map((s, i) => h('th', { class: `num gmod${i === 0 ? ' gstart' : ''}`, scope: 'col' }, STAT_LABELS[s])),
       ),
@@ -196,7 +285,7 @@ function childTable(child: ChildId): HTMLElement {
       'tbody',
       {},
       ...groups.flatMap((g) =>
-        g.results.length === 1 ? [row(g.results[0]!, g.label)] : groupRows(g),
+        g.results.length === 1 ? [row(g.results[0]!, g.label, summary.gender)] : groupRows(g, summary.gender),
       ),
     ),
   );
