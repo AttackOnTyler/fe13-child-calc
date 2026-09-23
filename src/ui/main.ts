@@ -64,8 +64,12 @@ let prefs: ScoringPrefs = loadPrefs(engine);
 // View state only; all domain answers come from the engine.
 let selected: ChildId = 'lucina';
 let view: 'table' | 'validation' = selfTest.passed ? 'table' : 'validation';
-/** Group rows (by group key) currently listing one row per Robin asset/flaw. */
+/** A Robin group row's identity across children: `child|group key`. */
+const groupId = (child: ChildId, group: PairingGroup) => `${child}|${group.key}`;
+/** Robin group rows (by group id) with their asset × flaw heatmap open. */
 const expanded = new Set<string>();
+/** The asset/flaw pairing pinned into a Robin group row, by group id; otherwise the row shows its best. */
+const pinned = new Map<string, string>();
 let filter: { parent: string; secondGen: boolean } = { parent: '', secondGen: true };
 type SortCol = 'parent' | 'class' | 'score' | 'speed' | 'count' | `cap:${Stat}` | `mod:${Stat}` | `growth:${Stat}`;
 let sort: { col: SortCol; dir: 1 | -1 } = { col: 'score', dir: -1 };
@@ -201,7 +205,7 @@ function warnMark(results: readonly ChildResult[]): HTMLElement | null {
   return h('span', { class: 'warn', title, 'aria-label': title }, ' ⚠');
 }
 
-/** A table line: one pairing, or a Robin group shown through its best asset/flaw. */
+/** A table line: one pairing, or a Robin group shown through its best (or pinned) asset/flaw. */
 type Line = {
   readonly label: string;
   readonly result: ChildResult;
@@ -210,6 +214,8 @@ type Line = {
   readonly group?: PairingGroup;
   /** Score range over the group, when it varies. */
   readonly range?: string;
+  /** The row shows a pinned asset/flaw rather than the group's best. */
+  readonly pinned?: boolean;
 };
 
 function sortValue(line: Line, col: SortCol, gender: Gender): number | string | undefined {
@@ -321,23 +327,121 @@ function lineRow(line: Line, gender: Gender, cls: string, head: HTMLElement): HT
   );
 }
 
-/** Lines for a child's groups: single pairings as they are, Robin groups as their best asset/flaw. */
-function linesFor(groups: readonly PairingGroup[], sc: Scoring): Line[] {
+/** Lines for a child's groups: single pairings as they are, Robin groups as their pinned or best asset/flaw. */
+function linesFor(child: ChildId, groups: readonly PairingGroup[], sc: Scoring): Line[] {
   return groups.map((g) => {
     if (g.results.length === 1) {
       const r = g.results[0]!;
       return { label: g.label, result: r, score: sc.get(r.key) };
     }
     const { best, range } = sc.groupBest(g);
-    return { label: g.label, result: best, score: sc.get(best.key), group: g, range: range && range.lo !== range.hi ? `${range.lo}–${range.hi}` : undefined };
+    const pin = g.results.find((r) => r.key === pinned.get(groupId(child, g)));
+    const shown = pin ?? best;
+    return {
+      label: g.label,
+      result: shown,
+      score: sc.get(shown.key),
+      group: g,
+      range: range && range.lo !== range.hi ? `${range.lo}–${range.hi}` : undefined,
+      pinned: !!pin,
+    };
   });
 }
 
-/** The rows a line renders to: itself, plus one row per asset/flaw when its Robin group is expanded. */
-function rowsFor(line: Line, gender: Gender, sc: Scoring): HTMLElement[] {
+/** Red (this parent's worst combo) through green (its best). */
+const heatColour = (position: number | undefined) =>
+  position === undefined ? 'transparent' : `hsl(${Math.round(position * 120)} 55% 30%)`;
+
+/** The asset × flaw heatmap under an open Robin group row; clicking a cell pins it into the row, again unpins. */
+function heatmapRow(child: ChildId, line: Line, gender: Gender, sc: Scoring, ncols: number): HTMLElement {
+  const g = line.group!;
+  const map = sc.heatmap(g)!;
+  const byAF = new Map(map.cells.map((c) => [`${c.asset}/${c.flaw}`, c]));
+  const shownKey = line.result.key;
+  const fmt = (v: number | undefined) => (v === undefined ? '—' : v.toFixed(1));
+  const morgan = !!line.result.pairing.fixedRobin;
+
+  const grid = h(
+    'table',
+    { class: 'heat', 'aria-label': `${g.label}: score by Robin’s asset and flaw` },
+    h(
+      'thead',
+      {},
+      h('tr', {}, h('th', { scope: 'col', class: 'corner' }, 'asset ↓ flaw →'), ...STATS.map((f) => h('th', { scope: 'col' }, `−${STAT_LABELS[f]}`))),
+    ),
+    h(
+      'tbody',
+      {},
+      ...STATS.map((a) =>
+        h(
+          'tr',
+          {},
+          h('th', { scope: 'row' }, `+${STAT_LABELS[a]}`),
+          ...STATS.map((f) => {
+            const c = byAF.get(`${a}/${f}`);
+            if (!c) return h('td', { class: 'diag', 'aria-hidden': 'true' });
+            const s = sc.get(c.key);
+            const isPinned = pinned.get(groupId(child, g)) === c.key;
+            const detail = [
+              c.label,
+              s.class ? engine.className(s.class, gender) : 'unreachable',
+              support() ? (s.values ? `Spd pair-up +${s.values.spd}` : '') : s.speed ? `Spd ${s.speed.total}` : '',
+              c === map.best ? 'best' : '',
+              isPinned ? 'pinned: click to unpin' : 'click to pin',
+            ].filter(Boolean);
+            return h(
+              'td',
+              {
+                class: ['cell', c === map.best ? 'best' : '', c.key === shownKey ? 'shown' : ''].filter(Boolean).join(' '),
+                style: `background:${heatColour(c.position)}`,
+                title: detail.join(' · '),
+                role: 'button',
+                tabindex: '0',
+                'aria-pressed': String(isPinned),
+                onclick: () => togglePin(child, g, c.key),
+                onkeydown: (e) => {
+                  const k = (e as KeyboardEvent).key;
+                  if (k === 'Enter' || k === ' ') (e.preventDefault(), togglePin(child, g, c.key));
+                },
+              },
+              fmt(c.scaled),
+            );
+          }),
+        ),
+      ),
+    ),
+  );
+  const note = h(
+    'div',
+    { class: 'heatnote muted small' },
+    h('div', {}, 'Best for ', h('b', {}, presetLabel(currentPreset())), ': ', h('span', { class: 'af' }, map.best.label), ` → ${fmt(map.best.scaled)}`),
+    h(
+      'div',
+      {},
+      'Row shows: ',
+      h('span', { class: 'af' }, engine.robinLabel(line.result.pairing) ?? ''),
+      line.pinned ? h('span', {}, ' (pinned; click it again to go back to best) ', h('button', { class: 'ghost', onclick: () => togglePin(child, g, shownKey) }, 'Unpin')) : ' (best)',
+    ),
+    map.spread ? h('div', {}, `Colour: red = worst, green = best combo for this parent (${fmt(map.spread.lo)}–${fmt(map.spread.hi)}).`) : null,
+    h('div', {}, 'Click a cell to pin that combo into the row. Outline = best, ring = shown.'),
+    morgan ? h('div', {}, 'This is the fixed Robin’s asset/flaw.') : null,
+  );
+  return h('tr', { class: 'heat-row' }, h('td', { colspan: String(ncols) }, h('div', { class: 'heatwrap' }, grid, note)));
+}
+
+function togglePin(child: ChildId, g: PairingGroup, key: string): void {
+  const id = groupId(child, g);
+  if (pinned.get(id) === key) pinned.delete(id);
+  else pinned.set(id, key);
+  renderParts(['main']);
+}
+
+/** The rows a line renders to: itself, plus the asset × flaw heatmap when its Robin group is open. */
+function rowsFor(child: ChildId, line: Line, gender: Gender, sc: Scoring, ncols: number): HTMLElement[] {
   const g = line.group;
   if (!g) return [lineRow(line, gender, '', h('th', { class: 'stick', scope: 'row' }, line.label, warnMark([line.result])))];
-  const open = expanded.has(g.key);
+  const id = groupId(child, g);
+  const open = expanded.has(id);
   const head = h(
     'th',
     { class: 'stick', scope: 'row' },
@@ -346,28 +450,26 @@ function rowsFor(line: Line, gender: Gender, sc: Scoring): HTMLElement[] {
       {
         class: 'expander',
         'aria-expanded': String(open),
-        title: `${open ? 'Hide' : 'List'} Robin’s ${g.results.length} asset/flaw pairings`,
+        title: `${open ? 'Hide' : 'Show'} the asset × flaw heatmap of Robin’s ${g.results.length} combos`,
         onclick: () => {
-          if (open) expanded.delete(g.key);
-          else expanded.add(g.key);
+          if (open) expanded.delete(id);
+          else expanded.add(id);
           renderParts(['main']);
         },
       },
       open ? '▾ ' : '▸ ',
       line.label,
     ),
-    h('span', { class: 'af', title: `Best of ${g.results.length} asset/flaw pairings` }, ` ${engine.robinLabel(line.result.pairing) ?? ''}`),
+    h(
+      'span',
+      { class: `af${line.pinned ? ' pinned' : ''}`, title: line.pinned ? 'Pinned asset/flaw' : `Best of ${g.results.length} asset/flaw pairings` },
+      ` ${engine.robinLabel(line.result.pairing) ?? ''}`,
+    ),
+    line.pinned ? h('span', { class: 'muted small' }, ' 📌') : null,
     warnMark(g.results),
   );
   const rows = [lineRow(line, gender, 'group-row', head)];
-  if (!open) return rows;
-  const subLines = sortLines(
-    g.results.map((r) => ({ label: engine.robinLabel(r.pairing) ?? r.key, result: r, score: sc.get(r.key) })),
-    gender,
-  );
-  for (const sub of subLines) {
-    rows.push(lineRow(sub, gender, 'robin-row', h('th', { class: 'stick', scope: 'row' }, sub.label, warnMark([sub.result]))));
-  }
+  if (open) rows.push(heatmapRow(child, line, gender, sc, ncols));
   return rows;
 }
 
@@ -425,11 +527,11 @@ function childTable(child: ChildId): HTMLElement[] {
   const pairingFilter: PairingFilter = { parent: filter.parent, secondGen: filter.secondGen };
   const groups = engine.groups(child, pairingFilter);
   const allGroups = engine.groups(child).length;
-  const lines = sortLines(linesFor(groups, sc), summary.gender);
-  const rows = lines.flatMap((l) => rowsFor(l, summary.gender, sc));
-  const shown = rows.slice(0, limit);
   const cols = prefs.cols;
   const ncols = 1 + 2 + (cols.speed ? 1 : 0) + (cols.caps ? STATS.length : 0) + (cols.mods ? MOD_STATS.length : 0) + (cols.growths ? STATS.length : 0) + 1;
+  const lines = sortLines(linesFor(child, groups, sc), summary.gender);
+  const rows = lines.flatMap((l) => rowsFor(child, l, summary.gender, sc, ncols));
+  const shown = rows.slice(0, limit);
 
   const head = h(
     'div',

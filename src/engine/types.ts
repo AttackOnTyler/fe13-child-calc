@@ -178,8 +178,32 @@ export type Scoring = {
   best(child: ChildId): PairingScore | undefined;
   /** A group's highest-scoring pairing (the first on ties or without scores) and its score range. */
   groupBest(group: PairingGroup): GroupBest;
+  /** A Robin group's asset × flaw heatmap; undefined for a group of one pairing. */
+  heatmap(group: PairingGroup): Heatmap | undefined;
   /** Stats that carry weight under these settings (under Mixed, Str and Mag share the attack weight). */
   readonly weightedStats: readonly Stat[];
+};
+
+/** One asset/flaw of a Robin group: a variable Robin parent's, or the fixed Robin's for a Morgan partner group. */
+export type HeatCell = {
+  readonly asset: Stat;
+  readonly flaw: Stat;
+  /** e.g. `+Spd −Def`. */
+  readonly label: string;
+  readonly key: string;
+  /** The pairing's score, unrounded. */
+  readonly scaled: number | undefined;
+  /** Where `scaled` sits in the group's own spread, 0 (worst) to 1 (best); 1 when every combo scores the same. */
+  readonly position: number | undefined;
+};
+
+export type Heatmap = {
+  /** 8 assets × 7 flaws, asset-major in stat order. */
+  readonly cells: readonly HeatCell[];
+  /** The group's best pairing's cell (as `groupBest`). */
+  readonly best: HeatCell;
+  /** Lowest and highest unrounded score in the group; undefined when nothing in it has a score. */
+  readonly spread: { readonly lo: number; readonly hi: number } | undefined;
 };
 
 export type GroupBest = {

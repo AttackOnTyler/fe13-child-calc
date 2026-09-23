@@ -42,6 +42,8 @@ import type {
   ClassSummary,
   ChildResult,
   ChildSummary,
+  GroupBest,
+  HeatCell,
   Pairing,
   PairingFilter,
   PlayContext,
@@ -251,6 +253,10 @@ function parentName(ref: ParentRef): string {
 
 const assetFlawLabel = (ref: RobinRef) => `+${STAT_LABELS[ref.asset]} −${STAT_LABELS[ref.flaw]}`;
 
+/** The Robin whose asset/flaw is part of a pairing: Morgan's fixed Robin, or a variable Robin parent. */
+const robinRefOf = (pairing: Pairing): RobinRef | undefined =>
+  pairing.fixedRobin ?? (pairing.variableParent.kind === 'robin' ? pairing.variableParent : undefined);
+
 /** A group of pairings before their results are computed. */
 type GroupPlan = { readonly key: string; readonly label: string; readonly pairings: readonly Pairing[] };
 
@@ -410,7 +416,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     result,
     parentName,
     robinLabel: (pairing) => {
-      const ref = pairing.fixedRobin ?? (pairing.variableParent.kind === 'robin' ? pairing.variableParent : undefined);
+      const ref = robinRefOf(pairing);
       return ref && assetFlawLabel(ref);
     },
     selfTest: () => runSelfTest(INHERITANCE_FIXTURES, CLASS_SET_FIXTURES, result),
@@ -435,6 +441,20 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         breakpoints: assumptions['spd-breakpoints'],
       });
       const scores = scorer(settings);
+      const groupBest = (group: PairingGroup): GroupBest => {
+        let top = group.results[0]!;
+        let topRaw = scores.get(top.key)?.raw ?? -Infinity;
+        let range: { lo: number; hi: number } | undefined;
+        for (const r of group.results) {
+          const s = scores.get(r.key)!;
+          if ((s.raw ?? -Infinity) > topRaw) {
+            top = r;
+            topRaw = s.raw!;
+          }
+          if (s.score !== undefined) range = { lo: Math.min(range?.lo ?? s.score, s.score), hi: Math.max(range?.hi ?? s.score, s.score) };
+        }
+        return { best: top, range };
+      };
       const best = new Map<ChildId, PairingScore>();
       for (const r of all) {
         const s = scores.get(r.key)!;
@@ -448,19 +468,20 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
           return s;
         },
         best: (child) => best.get(child),
-        groupBest: (group) => {
-          let top = group.results[0]!;
-          let topRaw = scores.get(top.key)?.raw ?? -Infinity;
-          let range: { lo: number; hi: number } | undefined;
-          for (const r of group.results) {
-            const s = scores.get(r.key)!;
-            if ((s.raw ?? -Infinity) > topRaw) {
-              top = r;
-              topRaw = s.raw!;
-            }
-            if (s.score !== undefined) range = { lo: Math.min(range?.lo ?? s.score, s.score), hi: Math.max(range?.hi ?? s.score, s.score) };
-          }
-          return { best: top, range };
+        groupBest,
+        heatmap: (group) => {
+          if (group.results.length === 1) return undefined;
+          const scaled = group.results.map((r) => scores.get(r.key)!.scaled).filter((v) => v !== undefined);
+          const spread = scaled.length ? { lo: Math.min(...scaled), hi: Math.max(...scaled) } : undefined;
+          const cells = group.results.map((r): HeatCell => {
+            // Every group of more than one pairing is a Robin group: one pairing per asset/flaw.
+            const ref = robinRefOf(r.pairing)!;
+            const v = scores.get(r.key)!.scaled;
+            const position = v === undefined || !spread ? undefined : spread.hi === spread.lo ? 1 : (v - spread.lo) / (spread.hi - spread.lo);
+            return { asset: ref.asset, flaw: ref.flaw, label: assetFlawLabel(ref), key: r.key, scaled: v, position };
+          });
+          const bestKey = groupBest(group).best.key;
+          return { cells, best: cells.find((c) => c.key === bestKey)!, spread };
         },
         weightedStats: weightedStats(settings),
       };
