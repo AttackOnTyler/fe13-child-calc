@@ -8,7 +8,7 @@ import type { SkState } from './main';
 
 export const name = 'Inline drawer under the row';
 
-const chip = (b: BuildMatch, i: number, s: SkState) => {
+export const chip = (b: BuildMatch, i: number, s: SkState) => {
   const sl = b.slots[i];
   if (!sl.skill) return `<span class="slot empty" title="${sl.options.join(' / ')} — ${sl.reason}">${sl.options[0]}</span>`;
   const k = sl.src!.kind === 'parent' ? '↑' : sl.src!.kind === 'book' ? '◇' : sl.src!.kind === 'class' && sl.src!.start ? '' : '⟳';

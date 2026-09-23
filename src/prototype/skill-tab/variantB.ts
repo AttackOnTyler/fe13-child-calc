@@ -8,7 +8,7 @@ import type { SkState } from './main';
 
 export const name = 'Pairing page (build cards + skill table)';
 
-const card = (b: BuildMatch, s: SkState) => `<article class="vbk-card t${b.tier}">
+export const card = (b: BuildMatch, s: SkState) => `<article class="vbk-card t${b.tier}">
   <header><b class="tier t${b.tier}">${b.tier}/5</b> <b>${b.t.name}</b>
     <span class="muted small">${b.t.role} · ${b.t.ctx.join('/')} · ${b.t.conf}</span>
     <span class="cost">${b.cost ? `reclass ${b.cost}: ${b.classes.join(', ')}` : 'no reclass'}</span></header>

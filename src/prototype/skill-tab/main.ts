@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 // PROTOTYPE — throwaway. "Three variants of the skill tab + loadout suggester for one selected
-// pairing, switchable via ?variant=A|B|C, mounted in the chosen pairing-table layout (variant D)."
+// pairing, switchable via ?variant=D|A|B|C (D merges the three), mounted in the chosen pairing-table layout (variant D)."
 // State is in memory only.
 import { PRESETS, enumerate, filtered, initialState, score, type Row, type State } from '../pairing-table/data';
 import * as Host from './host';
@@ -8,6 +8,7 @@ import { analyse, presetIndexFor, type Analysis, type Ctx } from './skills';
 import * as A from './variantA';
 import * as B from './variantB';
 import * as C from './variantC';
+import * as D from './variantD';
 
 export type SkState = State & {
   ctx: Ctx;
@@ -19,7 +20,7 @@ export type SkState = State & {
 };
 
 type Variant = { name: string; hooks: (s: SkState, a: Analysis | null, row: Row | null) => Host.Hooks };
-const VARIANTS: Record<string, Variant> = { A, B, C };
+const VARIANTS: Record<string, Variant> = { D, A, B, C };
 const KEYS = Object.keys(VARIANTS);
 
 const app = document.getElementById('app')!;
@@ -27,8 +28,8 @@ const bar = document.getElementById('switcher')!;
 const s: SkState = { ...initialState(), ctx: 'All', sel: null, openBuild: null, poolSort: 'rank', showUnranked: false, panelTab: 'scoring' };
 const all = enumerate();
 const byKey = new Map(all.map((r) => [r.key, r]));
-let variant = new URLSearchParams(location.search).get('variant') ?? 'A';
-if (!VARIANTS[variant]) variant = 'A';
+let variant = new URLSearchParams(location.search).get('variant') ?? 'D';
+if (!VARIANTS[variant]) variant = 'D';
 if (variant === 'C') s.panelTab = 'skills';
 
 // open on a representative pairing so every variant has something to show

@@ -8,7 +8,8 @@ import type { SkState } from './main';
 
 export const name = 'Side sheet (Scoring | Skills tabs)';
 
-function body(a: Analysis, s: SkState) {
+export function body(a: Analysis, s: SkState, opts: { builds?: boolean; title?: boolean } = {}) {
+  const { builds: withBuilds = true, title = true } = opts;
   const parent = (label: string, p: Analysis['fixedPool']) => {
     const ks = [...p.skills].sort((x, y) => rank(y, s.ctx) - rank(x, s.ctx));
     const only = new Set(a.pool.filter((e) => e.onlyVia === label).map((e) => e.skill));
@@ -31,10 +32,10 @@ function body(a: Analysis, s: SkState) {
     })
     .join('');
   return `<div class="vc-sk">
-    <div class="vc-title"><b>${a.child} × ${a.variable}</b><div class="muted small">starts ${a.start} · context ${s.ctx}</div></div>
+    ${title ? `<div class="vc-title"><b>${a.child} × ${a.variable}</b><div class="muted small">starts ${a.start} · context ${s.ctx}</div></div>` : ''}
     <h4>Rallies ${a.rallies.filter((r) => r.src).length}/10</h4>
     <div class="vc-dots">${a.rallies.map((r) => `<span class="${r.src ? 'ok' : 'no'}" title="${r.skill}: ${r.src ? srcText(r.src) : r.reason}">${r.skill.replace('Rally ', '').slice(0, 3)}</span>`).join('')}</div>
-    <h4>Builds</h4>${builds || '<div class="muted">none ≥ 3/5</div>'}
+    ${withBuilds ? `<h4>Builds</h4>${builds || '<div class="muted">none ≥ 3/5</div>'}` : ''}
     <h4>From parents (one each)</h4>${parent(a.fixed, a.fixedPool)}${parent(a.variable, a.variablePool)}
     <h4>Class skills by rank</h4>${buckets}
   </div>`;

@@ -79,3 +79,15 @@ tr.selrow td { background: #1d2a3b !important; }
   .vbk-pool th:nth-child(5), .vbk-pool td:nth-child(5) { display: none; }
   .vbk-pool td { white-space: normal; }
 }
+
+/* ---- D: A drawer + B cards + C skills ---- */
+.vd-drawer { max-width: none; width: min(1100px, calc(100vw - 520px)); }
+.vd-cols { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(240px, 1fr); gap: 16px; }
+.vd-cols h4 { margin: 6px 0 4px; font-size: 11px; text-transform: uppercase; color: var(--muted); }
+.vd-open { margin: 2px 0 6px; } .vd-close { cursor: pointer; }
+.vd-skills { border-left: 1px solid var(--line); padding-left: 12px; }
+@media (max-width: 700px) {
+  .vd-drawer { width: calc(100vw - 16px); }
+  .vd-cols { grid-template-columns: 1fr; }
+  .vd-skills { border-left: 0; padding-left: 0; }
+}
