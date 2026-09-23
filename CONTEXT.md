@@ -59,6 +59,35 @@ _Avoid_: Build (alone, when the template is meant), preset (a preset weights sta
 **Reclass cost**:
 The number of distinct classes a unit must pass through, beyond its starting class line, to learn every class skill in a build.
 
+### Scoring
+
+**Effective cap**:
+A child's maximum for a stat in a given class: the class's max stat plus the child's max-stat modifier, plus 10 (not HP) if Limit Breaker is assumed.
+_Avoid_: Max stat (ambiguous between class max and the child's cap), cap (alone)
+
+**Preset**:
+A named set of per-stat weights used to score pairings, optionally flagged Mixed. Each build template role maps to one.
+_Avoid_: Profile, build (a build is skills)
+
+**Mixed**:
+A preset flag meaning the unit attacks with whichever of Str or Mag is stronger; that one is scored, and the other is ignored as the off-stat.
+
+**Score basis**:
+What a score measures per stat: effective caps with Limit Breaker, effective caps without it, or total growth rates (the no-grind proxy).
+_Avoid_: Mode
+
+**Scoring role**:
+Whether a unit is scored as the Lead (its own stats) or the Support (the pair-up bonus it gives a lead).
+_Avoid_: Position, front/back
+
+**Pair-up bonus**:
+The stats a support unit adds to its lead: a tier from the support's raw stat, plus its class's pair-up bonus, plus a support-rank bonus where the class bonus is non-zero.
+_Avoid_: Dual bonus (Dual Support gives hit/avoid, not stats)
+
+**Auto class**:
+The class chosen per row as the one that scores highest under the current preset, role and basis, from the child's final-tier reachable classes.
+_Avoid_: Best class (alone), default class (the child's starting class)
+
 ### Verification
 
 **Assumption**:
