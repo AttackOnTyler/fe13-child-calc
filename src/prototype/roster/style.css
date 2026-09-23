@@ -1,0 +1,66 @@
+/* PROTOTYPE — throwaway. Roster additions on top of ../pairing-table/style.css. */
+a[data-ctl] { color: var(--accent); cursor: pointer; }
+button.danger { color: var(--neg); }
+button.mini, .seg.mini button { padding: 0 5px; font-size: 11px; }
+.small { font-size: 11px; } .nowrap { white-space: nowrap; }
+
+/* row kinds */
+.vd-table tr.k-hard td { opacity: .38; }
+.vd-table tr.k-soft td { background: #2a2416; }
+.vd-table tr.k-planned td { background: #1b2c1f; }
+.vd-table tr.k-married td { background: #173222; }
+.vd-table tr.inplan td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.vd-table tr.k-hard td.skcell { opacity: 1; }
+.kind { font-size: 11px; padding: 0 5px; border-radius: 3px; white-space: nowrap; cursor: help; }
+.kind.k-married { background: var(--pos); color: #111; } .kind.k-planned { background: #3d6b44; }
+.kind.k-hard { color: var(--neg); } .kind.k-soft { color: var(--warn); } .kind.k-info { color: var(--muted); }
+.kind.k-plan { background: var(--accent); color: #0b1320; }
+.card.k-hard { opacity: .35; } .card.k-soft { background: #221e14; } .card.k-planned, .card.k-married { background: #16261a; }
+.kind-tag { font-size: 11px; } .kind-tag.k-hard { color: var(--neg); } .kind-tag.k-soft { color: var(--warn); } .kind-tag.k-married, .kind-tag.k-planned { color: var(--pos); }
+.rowacts { display: inline-flex; } .rowacts button { padding: 0 5px; border-radius: 0; margin-left: -1px; }
+.rowacts button.on { background: var(--pos); border-color: var(--pos); color: #111; }
+
+/* rail marks */
+.rmark { font-style: normal; display: inline-block; width: 1.1em; color: var(--warn); }
+.rail-item b small { font-size: 10px; margin-left: 2px; }
+.rail-item.top { border-bottom: 1px solid var(--line); margin-bottom: 2px; font-weight: 700; }
+
+/* banners / boxes */
+.banner { padding: 6px 12px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; white-space: normal; }
+.banner.warn { background: #2a2416; } .banner.hard { background: #2a1d1f; } .banner.ok { background: #16261a; }
+.pv .banner { flex-direction: column; border: 1px solid var(--line); border-radius: 6px; margin: 6px 0; }
+.rosterbox { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 5px; background: #16191d; }
+.rb-head { display: flex; gap: 6px; align-items: center; } .rb-head strong { margin-right: auto; }
+.sums { display: flex; flex-wrap: wrap; gap: 3px; }
+.sumchip { font-size: 11px; background: #232830; border-radius: 3px; padding: 0 5px; }
+.sumchip.s-dead { color: var(--neg); } .sumchip.s-missed { color: #d88; } .sumchip.s-benched { color: var(--warn); } .sumchip.s-later { color: var(--muted); }
+.runfacts { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.useg button { padding: 0 4px; font-size: 11px; min-width: 1.7em; }
+.useg button.on.s-dead { background: var(--neg); border-color: var(--neg); } .useg button.on.s-missed { background: #a55; border-color: #a55; }
+.useg button.on.s-benched { background: var(--warn); border-color: var(--warn); } .useg button.on.s-later { background: #555c66; border-color: #555c66; color: var(--text); }
+.rowmenu { padding: 6px 8px 8px 28px; background: #15191e; border-left: 3px solid var(--accent); display: flex; flex-direction: column; gap: 3px; }
+.urow { display: flex; gap: 8px; align-items: center; } .uname { min-width: 90px; font-weight: 600; }
+
+/* B: roster view */
+.rv, .pv { padding: 8px 14px 60px; display: flex; flex-direction: column; gap: 6px; max-width: 1150px; }
+.rv h3, .pv h3 { margin: 10px 0 2px; font-size: 13px; }
+.rv-top { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+.rv-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.rv-units td, .rv-ledger td, .pv-pairs td { vertical-align: middle; }
+.rv-units tr.u-gone td { opacity: .45; } .rv-units tr.u-bench td { background: #2a2416; }
+.rv-units select { max-width: 150px; }
+
+/* C: plan view */
+.pv-pairs tr.how-married td { background: #173222; } .pv-pairs tr.how-planned td { background: #1b2c1f; }
+.kid { display: inline-block; margin-right: 10px; white-space: nowrap; }
+.ustrip { display: flex; flex-wrap: wrap; gap: 3px; }
+.uchip { font-size: 11px; padding: 0 6px; border-radius: 99px; }
+.uchip.s-dead { color: var(--neg); border-color: var(--neg); text-decoration: line-through; } .uchip.s-missed { color: #d88; }
+.uchip.s-benched { color: var(--warn); border-color: var(--warn); } .uchip.s-later { color: var(--muted); border-style: dashed; }
+.prios { display: grid; grid-template-columns: 1fr; gap: 0; } .prios .w span { width: 86px; font-size: 12px; }
+
+@media (max-width: 700px) {
+  .rv-cols { grid-template-columns: 1fr; }
+  .rv, .pv { padding: 6px 8px 60px; }
+  .rv-ledger, .pv-pairs, .rv-units { display: block; overflow-x: auto; }
+}
