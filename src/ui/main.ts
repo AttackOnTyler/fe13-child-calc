@@ -9,31 +9,84 @@ import {
   type Assumptions,
   type ChildId,
   type ChildResult,
-  type ClassId,
+  type ClassMode,
   type ClassSummary,
-  type Gender,
   type Engine,
+  type Gender,
   type Overrides,
+  type PairingFilter,
   type PairingGroup,
+  type PairingScore,
+  type Preset,
+  type ScoreBasis,
+  type ScoreSettings,
+  type Scoring,
   type SelfTestReport,
+  type Stat,
+  type Weights,
 } from '../engine';
 import { h } from './dom';
 import { loadOverrides, saveOverrides } from './overrides';
+import {
+  BASES,
+  effectivePreset,
+  isModified,
+  loadPrefs,
+  savePrefs,
+  type ColumnGroup,
+  type ScoringPrefs,
+} from './scoring-prefs';
 import { validationPanel, withOverride } from './validation';
 
 let overrides: Overrides = loadOverrides();
 let assumptions: Assumptions = resolveAssumptions(overrides);
 let engine: Engine = createEngine(assumptions);
 let selfTest = engine.selfTest();
+let prefs: ScoringPrefs = loadPrefs(engine);
 
 // View state only; all domain answers come from the engine.
 let selected: ChildId = 'lucina';
 let view: 'table' | 'validation' = selfTest.passed ? 'table' : 'validation';
 /** Group rows (by group key) currently listing one row per Robin asset/flaw. */
 const expanded = new Set<string>();
-/** The class the caps are shown in: each row's start class, or one pinned class. */
-let capsClass: ClassId | 'start' = 'start';
-let limitBreaker = true;
+let filter: { parent: string; secondGen: boolean } = { parent: '', secondGen: true };
+type SortCol = 'parent' | 'class' | 'score' | 'count' | `cap:${Stat}` | `mod:${Stat}` | `growth:${Stat}`;
+let sort: { col: SortCol; dir: 1 | -1 } = { col: 'score', dir: -1 };
+const FIRST_PAGE = 200;
+const MORE = 500;
+let limit = FIRST_PAGE;
+/** The scoring panel as a bottom sheet (phone width only). */
+let sheetOpen = false;
+
+// ---- scoring ----
+
+const currentPreset = (): Preset => engine.presets().find((p) => p.id === prefs.preset)!;
+
+const scoreSettings = (): ScoreSettings => {
+  const { weights, mixed } = effectivePreset(currentPreset(), prefs);
+  return { weights, mixed, basis: prefs.basis, classMode: prefs.classMode, dlc: prefs.dlc };
+};
+
+let scoringCache: { settings: string; engine: Engine; scoring: Scoring } | undefined;
+/** Every pairing's score under the current settings, recomputed only when they change. */
+function scoring(): Scoring {
+  const settings = scoreSettings();
+  const k = JSON.stringify(settings);
+  if (scoringCache?.settings !== k || scoringCache.engine !== engine) {
+    scoringCache = { settings: k, engine, scoring: engine.score(settings) };
+  }
+  return scoringCache.scoring;
+}
+
+function setPrefs(next: Partial<ScoringPrefs>, parts: Part[] = ['rail', 'main', 'panel']): void {
+  prefs = { ...prefs, ...next };
+  savePrefs(prefs);
+  renderParts(parts);
+}
+
+const presetLabel = (p: Preset) => `${p.name}${isModified(p, prefs.edits[p.id]) ? '*' : ''}`;
+
+// ---- assumptions ----
 
 /** Replaces the overrides, saves them and recomputes every pairing. */
 function applyOverrides(next: Overrides): void {
@@ -46,6 +99,8 @@ function applyOverrides(next: Overrides): void {
 }
 
 const setOverride = (id: AssumptionId, value: unknown) => applyOverrides(withOverride(overrides, id, value));
+
+// ---- formatting ----
 
 const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
 const tone = (n: number) => (n > 0 ? 'pos' : n < 0 ? 'neg' : 'muted');
@@ -71,28 +126,34 @@ function validationButton(report: SelfTestReport): HTMLElement {
   );
 }
 
-function rail(): HTMLElement {
-  return h(
-    'nav',
-    { class: 'rail', 'aria-label': 'Children' },
+// ---- rail ----
+
+function rail(): HTMLElement[] {
+  const sc = scoring();
+  return [
+    h('div', { class: 'muted small rail-head' }, `Best · ${presetLabel(currentPreset())}`),
     ...engine.children().map((c) =>
       h(
         'button',
         {
           class: `rail-item${c.id === selected && view === 'table' ? ' on' : ''}`,
+          title: `${c.pairingCount} pairings`,
           onclick: () => {
             selected = c.id;
             view = 'table';
             expanded.clear();
+            limit = FIRST_PAGE;
             render();
           },
         },
         h('span', {}, c.name),
-        h('span', { class: 'muted' }, String(c.pairingCount)),
+        h('b', { class: 'num' }, String(sc.best(c.id)?.score ?? '—')),
       ),
     ),
-  );
+  ];
 }
+
+// ---- table ----
 
 /** ⚠ on a row that rests on an assumption, naming each one (and its current value) on hover. */
 function warnMark(results: readonly ChildResult[]): HTMLElement | null {
@@ -106,139 +167,211 @@ function warnMark(results: readonly ChildResult[]): HTMLElement | null {
   return h('span', { class: 'warn', title, 'aria-label': title }, ' ⚠');
 }
 
-/** The class a row's caps are shown in. */
-const rowClass = (r: ChildResult): ClassId => (capsClass === 'start' ? r.startClass : capsClass);
+/** A table line: one pairing, or a Robin group shown through its best asset/flaw. */
+type Line = {
+  readonly label: string;
+  readonly result: ChildResult;
+  readonly score: PairingScore;
+  /** Set on a Robin group row. */
+  readonly group?: PairingGroup;
+  /** Score range over the group, when it varies. */
+  readonly range?: string;
+};
 
-/** Class count, class name and effective caps cells; `caps` is undefined when the child can't reach the class. */
-function classCells(r: ChildResult, gender: Gender, caps: ((s: (typeof STATS)[number]) => string) | undefined): HTMLElement[] {
-  const cls = rowClass(r);
-  return [
+function sortValue(line: Line, col: SortCol, gender: Gender): number | string | undefined {
+  const { score, result } = line;
+  if (col === 'parent') return line.label.toLowerCase();
+  if (col === 'class') return score.class && engine.className(score.class, gender);
+  if (col === 'score') return score.raw;
+  if (col === 'count') return result.classSet.length;
+  const [kind, stat] = col.split(':') as ['cap' | 'mod' | 'growth', Stat];
+  if (kind === 'cap') return score.values?.[stat];
+  if (kind === 'mod') return stat === 'hp' ? undefined : result.modifiers[stat];
+  return result.growths[stat];
+}
+
+/** Sorts lines by the current column; lines that can't be scored in the pinned class always go last. */
+function sortLines(lines: Line[], gender: Gender): Line[] {
+  const keyed = lines.map((line, i) => ({ line, i, v: sortValue(line, sort.col, gender), dead: !line.score.class }));
+  keyed.sort((a, b) => {
+    if (a.dead !== b.dead) return a.dead ? 1 : -1;
+    if (a.v === b.v) return a.i - b.i;
+    if (a.v === undefined) return 1;
+    if (b.v === undefined) return -1;
+    return (a.v < b.v ? -1 : 1) * sort.dir;
+  });
+  return keyed.map((k) => k.line);
+}
+
+const weighted = (s: Stat): boolean => scoring().weightedStats.includes(s);
+
+const BASIS_LABELS: Record<ScoreBasis, string> = { 'caps-lb': 'Caps+LB', caps: 'Caps', growths: 'Growths' };
+const capsHeader = () =>
+  prefs.basis === 'growths' ? 'Growth in class' : `Effective caps${prefs.basis === 'caps-lb' ? ' + LB' : ''}`;
+
+function scoreCell(line: Line): HTMLElement {
+  const { score } = line;
+  const tag = score.attack
+    ? h('sup', { class: 'tag', title: score.attack === 'S' ? 'Scored on Str' : 'Scored on Mag' }, score.attack)
+    : null;
+  const text = !score.class ? '' : score.score === undefined ? '—' : String(score.score);
+  return h(
+    'td',
+    { class: 'num score gstart', title: score.raw === undefined ? '' : `raw ${score.raw}` },
+    text,
+    tag,
+    line.range ? h('div', { class: 'range' }, line.range) : null,
+  );
+}
+
+function lineRow(line: Line, gender: Gender, cls: string, head: HTMLElement): HTMLElement {
+  const { score, result: r } = line;
+  const values = score.values;
+  const cells: HTMLElement[] = [
+    head,
     h(
       'td',
-      { class: 'num gstart', title: r.classSet.map((c) => engine.className(c, gender)).join(', ') },
-      String(r.classSet.length),
+      { class: 'cls gstart' },
+      score.class ? `${engine.className(score.class, gender)}${score.auto ? ' (Auto)' : ''}` : h('span', { class: 'muted' }, 'unreachable'),
     ),
-    h('td', { class: 'cls' }, caps ? engine.className(cls, gender) : ''),
-    ...STATS.map((s, i) => h('td', { class: `num gcap${i === 0 ? ' gstart' : ''}` }, caps ? caps(s) : '')),
+    scoreCell(line),
   ];
-}
-
-function row(r: ChildResult, label: string, gender: Gender, cls = ''): HTMLElement {
-  const caps = engine.effectiveCaps(r, rowClass(r), limitBreaker);
+  if (prefs.cols.caps) {
+    cells.push(
+      ...STATS.map((s, i) =>
+        h('td', { class: `num gcap${i === 0 ? ' gstart' : ''}${weighted(s) ? ' weighted' : ''}` }, values ? String(values[s]) : ''),
+      ),
+    );
+  }
+  if (prefs.cols.mods) {
+    cells.push(
+      ...MOD_STATS.map((s, i) =>
+        h('td', { class: `num gmod ${tone(r.modifiers[s])}${i === 0 ? ' gstart' : ''}` }, signed(r.modifiers[s])),
+      ),
+    );
+  }
+  if (prefs.cols.growths) {
+    cells.push(...STATS.map((s, i) => h('td', { class: `num ggro${i === 0 ? ' gstart' : ''}` }, String(r.growths[s]))));
+  }
+  cells.push(
+    h('td', { class: 'num gstart muted', title: r.classSet.map((c) => engine.className(c, gender)).join(', ') }, String(r.classSet.length)),
+  );
   return h(
     'tr',
-    { 'data-key': r.key, class: [cls, caps ? '' : 'unreachable'].filter(Boolean).join(' ') || undefined },
-    h('th', { class: 'stick', scope: 'row' }, label, warnMark([r])),
-    ...classCells(r, gender, caps && ((s) => String(caps[s]))),
-    ...STATS.map((s, i) => h('td', { class: `num${i === 0 ? ' gstart' : ''}` }, String(r.growths[s]))),
-    ...MOD_STATS.map((s, i) =>
-      h('td', { class: `num gmod ${tone(r.modifiers[s])}${i === 0 ? ' gstart' : ''}` }, signed(r.modifiers[s])),
-    ),
+    { 'data-key': r.key, class: [cls, score.class ? '' : 'unreachable'].filter(Boolean).join(' ') || undefined },
+    ...cells,
   );
 }
 
-/** `lo–hi` over a group's rows, or one value when they agree. */
-function range(values: number[], fmt: (n: number) => string): string {
-  const lo = Math.min(...values);
-  const hi = Math.max(...values);
-  return lo === hi ? fmt(lo) : `${fmt(lo)}–${fmt(hi)}`;
+/** Lines for a child's groups: single pairings as they are, Robin groups as their best asset/flaw. */
+function linesFor(groups: readonly PairingGroup[], sc: Scoring): Line[] {
+  return groups.map((g) => {
+    if (g.results.length === 1) {
+      const r = g.results[0]!;
+      return { label: g.label, result: r, score: sc.get(r.key) };
+    }
+    const { best, range } = sc.groupBest(g);
+    return { label: g.label, result: best, score: sc.get(best.key), group: g, range: range && range.lo !== range.hi ? `${range.lo}–${range.hi}` : undefined };
+  });
 }
 
-/** A group row over Robin's asset/flaw pairings, showing each stat's range; expands into one row per asset/flaw. */
-function groupRows(g: PairingGroup, gender: Gender): HTMLElement[] {
+/** The rows a line renders to: itself, plus one row per asset/flaw when its Robin group is expanded. */
+function rowsFor(line: Line, gender: Gender, sc: Scoring): HTMLElement[] {
+  const g = line.group;
+  if (!g) return [lineRow(line, gender, '', h('th', { class: 'stick', scope: 'row' }, line.label, warnMark([line.result])))];
   const open = expanded.has(g.key);
-  // Robin's asset/flaw changes stats only: every row in a group shares its class set and start class.
-  const first = g.results[0]!;
-  const caps = g.results.map((r) => engine.effectiveCaps(r, rowClass(r), limitBreaker));
   const head = h(
-    'tr',
-    { class: `group-row${caps[0] ? '' : ' unreachable'}`, 'data-group': g.key },
+    'th',
+    { class: 'stick', scope: 'row' },
     h(
-      'th',
-      { class: 'stick', scope: 'row' },
-      h(
-        'button',
-        {
-          class: 'expander',
-          'aria-expanded': String(open),
-          title: `${open ? 'Hide' : 'List'} Robin’s ${g.results.length} asset/flaw pairings`,
-          onclick: () => {
-            if (open) expanded.delete(g.key);
-            else expanded.add(g.key);
-            render();
-          },
+      'button',
+      {
+        class: 'expander',
+        'aria-expanded': String(open),
+        title: `${open ? 'Hide' : 'List'} Robin’s ${g.results.length} asset/flaw pairings`,
+        onclick: () => {
+          if (open) expanded.delete(g.key);
+          else expanded.add(g.key);
+          renderParts(['main']);
         },
-        open ? '▾ ' : '▸ ',
-        g.label,
-      ),
-      h('span', { class: 'muted count' }, ` ×${g.results.length}`),
-      warnMark(g.results),
+      },
+      open ? '▾ ' : '▸ ',
+      line.label,
     ),
-    ...classCells(first, gender, caps[0] && ((s) => range(caps.map((c) => c![s]), String))),
-    ...STATS.map((s, i) =>
-      h('td', { class: `num range${i === 0 ? ' gstart' : ''}` }, range(g.results.map((r) => r.growths[s]), String)),
-    ),
-    ...MOD_STATS.map((s, i) =>
-      h('td', { class: `num gmod range${i === 0 ? ' gstart' : ''}` }, range(g.results.map((r) => r.modifiers[s]), signed)),
-    ),
+    h('span', { class: 'af', title: `Best of ${g.results.length} asset/flaw pairings` }, ` ${engine.robinLabel(line.result.pairing) ?? ''}`),
+    warnMark(g.results),
   );
-  if (!open) return [head];
-  return [head, ...g.results.map((r) => row(r, engine.robinLabel(r.pairing) ?? r.key, gender, 'robin-row'))];
+  const rows = [lineRow(line, gender, 'group-row', head)];
+  if (!open) return rows;
+  const subLines = sortLines(
+    g.results.map((r) => ({ label: engine.robinLabel(r.pairing) ?? r.key, result: r, score: sc.get(r.key) })),
+    gender,
+  );
+  for (const sub of subLines) {
+    rows.push(lineRow(sub, gender, 'robin-row', h('th', { class: 'stick', scope: 'row' }, sub.label, warnMark([sub.result]))));
+  }
+  return rows;
 }
 
-const TIER_LABELS: Record<ClassSummary['tier'], string> = { base: 'Base', advanced: 'Advanced', special: 'Special' };
-
-/** Picks the class the caps are shown in, and whether Limit Breaker is assumed. */
-function capsControls(): HTMLElement {
-  const tiers = ['base', 'advanced', 'special'] as const;
-  const option = (c: ClassSummary) =>
-    h('option', { value: c.id, selected: c.id === capsClass }, `${c.name}${c.dlc ? ' (DLC)' : ''}`);
+function sortHeader(col: SortCol, label: string, cls = '', title?: string): HTMLElement {
+  const on = sort.col === col;
   return h(
-    'div',
-    { class: 'caps-controls' },
-    h(
-      'label',
-      {},
-      'Class ',
+    'th',
+    {
+      class: `sortable ${cls}${on ? ' sorted' : ''}`,
+      scope: 'col',
+      title,
+      'aria-sort': on ? (sort.dir > 0 ? 'ascending' : 'descending') : undefined,
+      onclick: () => {
+        // Text columns start ascending, numbers descending.
+        const firstDir = col === 'parent' || col === 'class' ? 1 : -1;
+        sort = on ? { col, dir: sort.dir === 1 ? -1 : 1 } : { col, dir: firstDir };
+        renderParts(['main']);
+      },
+    },
+    label,
+    on ? (sort.dir > 0 ? ' ▴' : ' ▾') : '',
+  );
+}
+
+const COLUMN_GROUPS: readonly { id: ColumnGroup; label: string }[] = [
+  { id: 'caps', label: 'caps' },
+  { id: 'mods', label: 'mods' },
+  { id: 'growths', label: 'growths' },
+];
+
+function columnToggles(): HTMLElement {
+  return h(
+    'span',
+    { class: 'coltog' },
+    'Columns:',
+    ...COLUMN_GROUPS.map((c) =>
       h(
-        'select',
-        {
-          'aria-label': 'Class for effective caps',
-          onchange: (e) => {
-            capsClass = (e.target as HTMLSelectElement).value as ClassId | 'start';
-            render();
-          },
-        },
-        h('option', { value: 'start', selected: capsClass === 'start' }, 'Start class (per row)'),
-        ...tiers.map((t) =>
-          h('optgroup', { label: TIER_LABELS[t] }, ...engine.classes().filter((c) => c.tier === t).map(option)),
-        ),
+        'label',
+        {},
+        h('input', {
+          type: 'checkbox',
+          checked: prefs.cols[c.id],
+          onchange: (e) => setPrefs({ cols: { ...prefs.cols, [c.id]: (e.target as HTMLInputElement).checked } }, ['main']),
+        }),
+        c.label,
       ),
-    ),
-    h(
-      'label',
-      { title: 'Limit Breaker raises every cap but HP by 10' },
-      h('input', {
-        type: 'checkbox',
-        checked: limitBreaker,
-        onchange: (e) => {
-          limitBreaker = (e.target as HTMLInputElement).checked;
-          render();
-        },
-      }),
-      ' Limit Breaker',
     ),
   );
 }
 
-function childTable(child: ChildId): HTMLElement {
+function childTable(child: ChildId): HTMLElement[] {
   const summary = engine.children().find((c) => c.id === child)!;
-  // Rows whose child can't reach the pinned class sort last (stable).
-  const all = engine.groups(child);
-  const reaches = (g: PairingGroup) => engine.canReach(g.results[0]!, rowClass(g.results[0]!));
-  const groups = [...all.filter(reaches), ...all.filter((g) => !reaches(g))];
-  const capsLabel =
-    capsClass === 'start' ? 'Effective caps (start class)' : `Effective caps (${engine.className(capsClass, summary.gender)})`;
+  const sc = scoring();
+  const pairingFilter: PairingFilter = { parent: filter.parent, secondGen: filter.secondGen };
+  const groups = engine.groups(child, pairingFilter);
+  const allGroups = engine.groups(child).length;
+  const lines = sortLines(linesFor(groups, sc), summary.gender);
+  const rows = lines.flatMap((l) => rowsFor(l, summary.gender, sc));
+  const shown = rows.slice(0, limit);
+  const cols = prefs.cols;
+  const ncols = 1 + 2 + (cols.caps ? STATS.length : 0) + (cols.mods ? MOD_STATS.length : 0) + (cols.growths ? STATS.length : 0) + 1;
+
   const head = h(
     'div',
     { class: 'main-head' },
@@ -247,10 +380,17 @@ function childTable(child: ChildId): HTMLElement {
       'span',
       { class: 'muted' },
       `Fixed parent: ${summary.fixedParentName} · ${summary.pairingCount} pairings` +
-        (groups.length < summary.pairingCount ? ` in ${groups.length} rows` : ''),
+        (groups.length < allGroups ? ` · ${groups.length} of ${allGroups} parents shown` : ''),
     ),
-    capsControls(),
+    columnToggles(),
+    h(
+      'button',
+      { class: 'only-phone', 'aria-expanded': String(sheetOpen), onclick: () => ((sheetOpen = true), renderParts(['panel'])) },
+      'Scoring ⚙',
+    ),
   );
+  // Without weights (Rallybot / Dancer) Auto has nothing to maximise and rows show their start class.
+  const classHead = prefs.classMode === 'auto' && scoreSettings().weights ? 'Class (Auto)' : 'Class';
   const table = h(
     'table',
     { class: 'grid' },
@@ -261,51 +401,287 @@ function childTable(child: ChildId): HTMLElement {
         'tr',
         { class: 'grp' },
         h('th', { class: 'stick' }, ''),
-        h('th', { colspan: '2', class: 'gstart' }, 'Classes'),
-        h(
-          'th',
-          { colspan: String(STATS.length), class: 'gcap gstart', title: `class max + modifier${limitBreaker ? ' + 10 (not HP) with Limit Breaker' : ''}` },
-          `${capsLabel}${limitBreaker ? ' + LB' : ''}`,
-        ),
-        h('th', { colspan: String(STATS.length), class: 'gstart', title: 'floor((father + mother + child) / 3), before class growths' }, 'Growths (personal)'),
-        h('th', { colspan: String(MOD_STATS.length), class: 'gmod gstart', title: 'father + mother + 1' }, 'Max-stat modifiers'),
+        h('th', { colspan: '2', class: 'gstart' }, 'Result'),
+        cols.caps
+          ? h('th', { colspan: String(STATS.length), class: 'gcap gstart', title: capsTitle() }, `${capsHeader()} (${BASIS_LABELS[prefs.basis]})`)
+          : null,
+        cols.mods ? h('th', { colspan: String(MOD_STATS.length), class: 'gmod gstart', title: 'father + mother + 1' }, 'Max-stat modifiers') : null,
+        cols.growths
+          ? h('th', { colspan: String(STATS.length), class: 'gstart', title: 'floor((father + mother + child) / 3), before class growths' }, 'Inherited growths')
+          : null,
+        h('th', { class: 'gstart' }, ''),
       ),
       h(
         'tr',
         {},
-        h('th', { class: 'stick', scope: 'col' }, 'Variable parent'),
-        h('th', { class: 'num gstart', scope: 'col', title: 'Base classes in the class set (hover a count to list them)' }, '#'),
-        h('th', { scope: 'col' }, 'Class'),
-        ...STATS.map((s, i) => h('th', { class: `num gcap${i === 0 ? ' gstart' : ''}`, scope: 'col' }, STAT_LABELS[s])),
-        ...STATS.map((s, i) => h('th', { class: `num${i === 0 ? ' gstart' : ''}`, scope: 'col' }, STAT_LABELS[s])),
-        ...MOD_STATS.map((s, i) => h('th', { class: `num gmod${i === 0 ? ' gstart' : ''}`, scope: 'col' }, STAT_LABELS[s])),
+        sortHeader('parent', 'Variable parent', 'stick'),
+        sortHeader('class', classHead, 'gstart'),
+        sortHeader('score', 'Score', 'num gstart'),
+        ...(cols.caps
+          ? STATS.map((s, i) => sortHeader(`cap:${s}`, STAT_LABELS[s], `num gcap${i === 0 ? ' gstart' : ''}${weighted(s) ? ' weighted' : ''}`))
+          : []),
+        ...(cols.mods ? MOD_STATS.map((s, i) => sortHeader(`mod:${s}`, STAT_LABELS[s], `num gmod${i === 0 ? ' gstart' : ''}`)) : []),
+        ...(cols.growths ? STATS.map((s, i) => sortHeader(`growth:${s}`, STAT_LABELS[s], `num${i === 0 ? ' gstart' : ''}`)) : []),
+        sortHeader('count', '#Cls', 'num gstart', 'Base classes in the class set (hover a count to list them)'),
       ),
     ),
     h(
       'tbody',
       {},
-      ...groups.flatMap((g) =>
-        g.results.length === 1 ? [row(g.results[0]!, g.label, summary.gender)] : groupRows(g, summary.gender),
+      ...shown,
+      rows.length > limit
+        ? h(
+            'tr',
+            { class: 'more' },
+            h(
+              'td',
+              { colspan: String(ncols) },
+              h(
+                'button',
+                { onclick: () => ((limit += MORE), renderParts(['main'])) },
+                `Show ${Math.min(MORE, rows.length - limit)} more`,
+              ),
+              h('span', { class: 'muted' }, ` · ${limit} of ${rows.length} rows shown`),
+            ),
+          )
+        : null,
+    ),
+  );
+  return [head, h('div', { class: 'scroll' }, table)];
+}
+
+function capsTitle(): string {
+  if (prefs.basis === 'growths') return 'inherited growth + class growth';
+  return `class max + modifier${prefs.basis === 'caps-lb' ? ' + 10 (not HP) with Limit Breaker' : ''}`;
+}
+
+// ---- scoring panel ----
+
+const WEIGHT_STATS: readonly { stat: Stat; max: number; label: string }[] = STATS.map((s) => ({
+  stat: s,
+  max: s === 'spd' ? 20 : 10,
+  label: s === 'spd' ? 'Spd→T' : STAT_LABELS[s],
+}));
+
+const withoutEdit = (id: Preset['id']): ScoringPrefs['edits'] => {
+  const { [id]: _, ...rest } = prefs.edits;
+  return rest;
+};
+
+function editPreset(change: (edit: { weights: Weights; mixed: boolean }) => void): void {
+  const p = currentPreset();
+  const base = effectivePreset(p, prefs);
+  if (!base.weights) return;
+  const edit = { weights: { ...base.weights }, mixed: base.mixed };
+  change(edit);
+  prefs = { ...prefs, edits: { ...prefs.edits, [p.id]: edit } };
+  if (!isModified(p, edit)) prefs = { ...prefs, edits: withoutEdit(p.id) };
+  savePrefs(prefs);
+}
+
+function segmented<T extends string>(label: string, options: readonly T[], current: T, names: Record<T, string>, onpick: (v: T) => void): HTMLElement {
+  return h(
+    'div',
+    { class: 'blk', role: 'group', 'aria-label': label },
+    h('span', { class: 'lbl' }, label),
+    h(
+      'span',
+      { class: 'seg' },
+      ...options.map((o) =>
+        h('button', { class: o === current ? 'on' : '', 'aria-pressed': String(o === current), onclick: () => onpick(o) }, names[o]),
       ),
     ),
   );
-  return h('section', { class: 'main' }, head, h('div', { class: 'scroll' }, table));
+}
+
+const TIER_LABELS: Record<ClassSummary['tier'], string> = { base: 'Base', advanced: 'Advanced', special: 'Special' };
+
+function panel(): HTMLElement[] {
+  const p = currentPreset();
+  const { weights, mixed } = effectivePreset(p, prefs);
+  const modified = isModified(p, prefs.edits[p.id]);
+  const tiers = ['base', 'advanced', 'special'] as const;
+
+  const presetSelect = h(
+    'select',
+    {
+      'aria-label': 'Preset',
+      onchange: (e) => setPrefs({ preset: (e.target as HTMLSelectElement).value as Preset['id'] }),
+    },
+    ...engine.presets().map((q) => h('option', { value: q.id, selected: q.id === p.id }, presetLabel(q))),
+  );
+
+  const sliders = weights
+    ? h(
+        'div',
+        { class: 'weights' },
+        ...WEIGHT_STATS.map(({ stat, max, label }) => {
+          const out = h('b', { class: 'num' }, String(weights[stat]));
+          return h(
+            'label',
+            { class: 'w' },
+            h('span', {}, label),
+            h('input', {
+              type: 'range',
+              min: '0',
+              max: String(max),
+              step: '1',
+              value: String(weights[stat]),
+              'aria-label': `${label} weight`,
+              oninput: (e) => {
+                const v = Number((e.target as HTMLInputElement).value);
+                out.textContent = String(v);
+                editPreset((edit) => (edit.weights = { ...edit.weights, [stat]: v }));
+                // Keep the slider being dragged: refresh the preset name in place, re-render only the results.
+                const opt = presetSelect.querySelector<HTMLOptionElement>(`option[value="${p.id}"]`);
+                if (opt) opt.textContent = presetLabel(p);
+                resetButton.hidden = !isModified(p, prefs.edits[p.id]);
+                renderParts(['rail', 'main']);
+              },
+            }),
+            out,
+          );
+        }),
+        h(
+          'label',
+          { class: 'w mixed', title: 'Score whichever of Str or Mag is higher, at the higher of their weights' },
+          h('input', {
+            type: 'checkbox',
+            checked: mixed,
+            onchange: (e) => {
+              editPreset((edit) => (edit.mixed = (e.target as HTMLInputElement).checked));
+              renderParts(['rail', 'main', 'panel']);
+            },
+          }),
+          ' Mixed (max Str/Mag)',
+        ),
+      )
+    : h('p', { class: 'muted' }, 'Rallybot / Dancer isn’t ranked on stats: scores show “—”.');
+
+  const resetButton = h(
+    'button',
+    {
+      class: 'ghost',
+      hidden: !modified,
+      title: 'Back to the curated weights',
+      onclick: () => {
+        setPrefs({ edits: withoutEdit(p.id) });
+      },
+    },
+    '↺ Reset',
+  );
+
+  return [
+    h(
+      'div',
+      { class: 'panel-head' },
+      h('h3', {}, 'Scoring'),
+      h('button', { class: 'only-phone ghost', 'aria-label': 'Close scoring', onclick: () => ((sheetOpen = false), renderParts(['panel'])) }, '✕'),
+    ),
+    h('label', { class: 'blk' }, h('span', { class: 'lbl' }, 'Preset'), presetSelect, resetButton),
+    segmented('Basis', BASES, prefs.basis, BASIS_LABELS, (basis) => setPrefs({ basis })),
+    h(
+      'label',
+      { class: 'blk' },
+      h('span', { class: 'lbl' }, 'Class'),
+      h(
+        'select',
+        {
+          'aria-label': 'Class for caps and score',
+          onchange: (e) => setPrefs({ classMode: (e.target as HTMLSelectElement).value as ClassMode }),
+        },
+        h('option', { value: 'auto', selected: prefs.classMode === 'auto' }, 'Auto (best final-tier class per row)'),
+        ...tiers.map((t) =>
+          h(
+            'optgroup',
+            { label: TIER_LABELS[t] },
+            ...engine
+              .classes()
+              .filter((c) => c.tier === t)
+              .map((c) => h('option', { value: c.id, selected: c.id === prefs.classMode }, `${c.name}${c.dlc ? ' (DLC)' : ''}`)),
+          ),
+        ),
+      ),
+    ),
+    h('h4', {}, 'Weights ', h('span', { class: 'muted small' }, 'per stat point')),
+    sliders,
+    h('h4', {}, 'Filters'),
+    h(
+      'div',
+      { class: 'blk col' },
+      h('input', {
+        type: 'search',
+        placeholder: 'Variable parent…',
+        'aria-label': 'Filter by variable parent',
+        value: filter.parent,
+        oninput: (e) => {
+          filter = { ...filter, parent: (e.target as HTMLInputElement).value };
+          limit = FIRST_PAGE;
+          renderParts(['main']);
+        },
+      }),
+      h(
+        'label',
+        {},
+        h('input', {
+          type: 'checkbox',
+          checked: filter.secondGen,
+          onchange: (e) => {
+            filter = { ...filter, secondGen: (e.target as HTMLInputElement).checked };
+            limit = FIRST_PAGE;
+            renderParts(['main']);
+          },
+        }),
+        ' Second-gen parents (Morgan)',
+      ),
+      h(
+        'label',
+        { title: 'Let Auto pick DLC classes (Dread Fighter, Bride)' },
+        h('input', { type: 'checkbox', checked: prefs.dlc, onchange: (e) => setPrefs({ dlc: (e.target as HTMLInputElement).checked }) }),
+        ' DLC classes',
+      ),
+    ),
+  ];
+}
+
+// ---- shell ----
+
+type Part = 'rail' | 'main' | 'panel';
+const regions: Partial<Record<Part, HTMLElement>> = {};
+
+function renderParts(parts: readonly Part[]): void {
+  const { rail: railEl, main, panel: panelEl } = regions;
+  if (!railEl || !main || !panelEl) return render();
+  if (parts.includes('rail')) railEl.replaceChildren(...rail());
+  if (parts.includes('main')) {
+    main.replaceChildren(
+      ...(view === 'validation'
+        ? [validationPanel({ engine, assumptions, selfTest, setOverride, resetAll: () => applyOverrides({}), render })]
+        : childTable(selected)),
+    );
+  }
+  if (parts.includes('panel')) {
+    panelEl.replaceChildren(...panel());
+    panelEl.classList.toggle('open', sheetOpen);
+  }
 }
 
 function render(): void {
   const app = document.getElementById('app')!;
+  regions.rail = h('nav', { class: 'rail', 'aria-label': 'Children' });
+  regions.main = h('section', { class: 'main' });
+  regions.panel = h('aside', { class: 'panel', 'aria-label': 'Scoring' });
   app.replaceChildren(
     h(
       'div',
       { class: 'shell' },
       h('header', { class: 'topbar' }, h('span', { class: 'brand' }, 'FE13 Child Calc'), validationButton(selfTest)),
-      rail(),
-      view === 'validation'
-        ? validationPanel({ engine, assumptions, selfTest, setOverride, resetAll: () => applyOverrides({}), render })
-        : childTable(selected),
-      h('aside', { class: 'panel', 'aria-label': 'Scoring' }, h('h3', {}, 'Scoring'), h('p', { class: 'muted' }, 'No scoring controls yet.')),
+      regions.rail,
+      regions.main,
+      regions.panel,
     ),
   );
+  renderParts(['rail', 'main', 'panel']);
 }
 
 render();

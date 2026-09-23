@@ -32,16 +32,23 @@ import {
   startClass,
 } from './classes';
 import { inheritGrowths, inheritModifiers, type ParentProfile } from './inheritance';
+import { createScorer } from './scoring';
 import { runSelfTest } from './self-test';
+import { PRESETS, type PresetId } from '../curated/presets';
 import type {
   AssumptionStatus,
   ClassSummary,
   ChildResult,
   ChildSummary,
   Pairing,
+  PairingFilter,
   PairingGroup,
+  PairingScore,
   ParentRef,
+  Preset,
   RobinRef,
+  Scoring,
+  ScoreSettings,
   SelfTestReport,
 } from './types';
 
@@ -62,14 +69,18 @@ export type { ResolvedDisagreement } from '../game-data/disagreements';
 export { MOD_STATS, STATS, STAT_LABELS, type Gender, type Growths, type ModStat, type Modifiers, type Stat } from '../game-data/stats';
 export type { ChildId } from '../game-data/children';
 export type { ClassId } from '../game-data/classes';
+export type { PresetId, ScoringRole, Weights } from '../curated/presets';
 
 export type Engine = {
   /** Every child unit, in game-data order. */
   children(): readonly ChildSummary[];
   /** Every enumerated pairing's result, optionally for one child. */
   pairings(child?: ChildId): readonly ChildResult[];
-  /** A child's pairings grouped by variable parent (Robin's 56 asset/flaw pairings form one group), in table order. */
-  groups(child: ChildId): readonly PairingGroup[];
+  /**
+   * A child's pairings grouped by variable parent (Robin's 56 asset/flaw pairings form one group), in table order,
+   * optionally narrowed by a filter.
+   */
+  groups(child: ChildId, filter?: PairingFilter): readonly PairingGroup[];
   result(key: string): ChildResult | undefined;
   /** e.g. `Sumia`, `Robin (F) +Spd −Def`, `Lucina ← Sumia`. */
   parentName(ref: ParentRef): string;
@@ -93,7 +104,31 @@ export type Engine = {
   classMaxStats(id: ClassId, gender: Gender): Readonly<Record<Stat, number>>;
   /** Class growths, with Conqueror's Skl/Spd read from the assumptions. */
   classGrowths(id: ClassId, gender: Gender): Growths;
+  /** The curated presets, in menu order. */
+  presets(): readonly Preset[];
+  /**
+   * Scores every pairing: Auto or pinned class, raw value, and the raw min-max scaled over all pairings to 0–100.
+   * There is no filter input, so filtering a table never changes a score.
+   */
+  score(settings: ScoreSettings): Scoring;
 };
+
+/** Stats with a non-zero weight; under Mixed, Str and Mag are both scored at the attack weight. */
+function weightedStats({ weights, mixed }: ScoreSettings): Stat[] {
+  if (!weights) return [];
+  const attack = Math.max(weights.str, weights.mag);
+  return STATS.filter((s) => (mixed && (s === 'str' || s === 'mag') ? attack : weights[s]) > 0);
+}
+
+const PRESET_LIST: readonly Preset[] = (Object.keys(PRESETS) as PresetId[]).map((id) => ({ id, ...PRESETS[id] }));
+
+/** Whether a group passes the table filter. Second-gen groups are Morgan's `Child ← Parent` partners. */
+function passes(group: PairingGroup, filter: PairingFilter): boolean {
+  const q = filter.parent?.trim().toLowerCase();
+  if (q && !group.label.toLowerCase().includes(q)) return false;
+  if (filter.secondGen === false && group.results[0]?.pairing.variableParent.kind === 'child') return false;
+  return true;
+}
 
 const CHILD_IDS = Object.keys(CHILD_UNITS) as ChildId[];
 const UNIT_IDS = Object.keys(FIRST_GEN_UNITS) as UnitId[];
@@ -325,6 +360,9 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     return { id, name: className(id), tier: c.tier, dlc: c.dlc, genderLock: c.genderLock };
   });
 
+  /** Built on first use: rows prepared once, rescored per settings. */
+  let scorer: ReturnType<typeof createScorer> | undefined;
+
   return {
     children: () =>
       CHILD_IDS.map((id) => {
@@ -338,7 +376,10 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         };
       }),
     pairings: (child) => (child ? (byChild.get(child) ?? []) : all),
-    groups: (child) => groupsByChild.get(child) ?? [],
+    groups: (child, filter) => {
+      const groups = groupsByChild.get(child) ?? [];
+      return filter ? groups.filter((g) => passes(g, filter)) : groups;
+    },
     result,
     parentName,
     robinLabel: (pairing) => {
@@ -356,5 +397,45 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       reachOf(r).has(id) ? effectiveCaps(id, genderOf(r), r.modifiers, limitBreaker) : undefined,
     classMaxStats,
     classGrowths: (id, gender) => classGrowths(id, gender, assumptions),
+    presets: () => PRESET_LIST,
+    score: (settings) => {
+      scorer ??= createScorer({
+        results: all,
+        genderOf,
+        reachOf,
+        classMaxStats,
+        classGrowths: (id, g) => classGrowths(id, g, assumptions),
+      });
+      const scores = scorer(settings);
+      const best = new Map<ChildId, PairingScore>();
+      for (const r of all) {
+        const s = scores.get(r.key)!;
+        const cur = best.get(r.pairing.child);
+        if (s.raw !== undefined && (!cur || s.raw > cur.raw!)) best.set(r.pairing.child, s);
+      }
+      return {
+        get: (key) => {
+          const s = scores.get(key);
+          if (!s) throw new Error(`No pairing ${key}`);
+          return s;
+        },
+        best: (child) => best.get(child),
+        groupBest: (group) => {
+          let top = group.results[0]!;
+          let topRaw = scores.get(top.key)?.raw ?? -Infinity;
+          let range: { lo: number; hi: number } | undefined;
+          for (const r of group.results) {
+            const s = scores.get(r.key)!;
+            if ((s.raw ?? -Infinity) > topRaw) {
+              top = r;
+              topRaw = s.raw!;
+            }
+            if (s.score !== undefined) range = { lo: Math.min(range?.lo ?? s.score, s.score), hi: Math.max(range?.hi ?? s.score, s.score) };
+          }
+          return { best: top, range };
+        },
+        weightedStats: weightedStats(settings),
+      };
+    },
   };
 }
