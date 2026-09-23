@@ -1,0 +1,81 @@
+/* PROTOTYPE — throwaway. Skill tab additions on top of ../pairing-table/style.css. */
+:root { --r5: #e0b04a; --r4: #7fc27b; --r3: #5aa9ff; --r2: #8a93a0; --r1: #5d646e; --r0: #444a53; }
+.rk { display: inline-block; min-width: 1.4em; text-align: center; border-radius: 3px; font-weight: 700; font-size: 11px; color: #111; }
+.rk.rk5, .sk.rk5, .slot.rk5 { --rc: var(--r5); } .rk4, .sk.rk4, .slot.rk4 { --rc: var(--r4); } .rk3, .sk.rk3, .slot.rk3 { --rc: var(--r3); }
+.rk2, .sk.rk2, .slot.rk2 { --rc: var(--r2); } .rk1, .sk.rk1, .slot.rk1 { --rc: var(--r1); } .rk0, .sk.rk0, .slot.rk0 { --rc: var(--r0); }
+.rk { background: var(--rc); }
+.sk, .slot { display: inline-block; border-left: 3px solid var(--rc); background: #20252c; padding: 0 6px; margin: 1px 3px 1px 0; border-radius: 3px; white-space: nowrap; font-size: 12px; }
+.sk i { font-style: normal; color: var(--rc); font-size: 10px; font-weight: 700; }
+.sk.only { outline: 1px dashed var(--warn); }
+.slot.empty { border: 1px dashed var(--neg); border-left-width: 1px; color: var(--neg); background: transparent; text-decoration: line-through; cursor: help; }
+.slot sup { font-size: 9px; margin-left: 1px; color: var(--warn); }
+.tier { display: inline-block; border-radius: 3px; padding: 0 4px; font-size: 11px; }
+.tier.t5 { background: var(--pos); color: #111; } .tier.t4 { background: #3d6b44; } .tier.t3 { background: #3a3f47; }
+tr.selrow td { background: #1d2a3b !important; }
+.skcell { padding: 0 2px; } .skcell button { padding: 0 6px; } .radio { font-size: 14px; }
+.small { font-size: 11px; }
+
+/* rallies */
+.rallies { display: flex; flex-wrap: wrap; gap: 3px; margin: 6px 0; }
+.rally { display: flex; flex-direction: column; min-width: 74px; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+.rally small { font-size: 10px; color: var(--muted); }
+.rally.ok { background: #1f3325; } .rally.no { background: #2a1d1f; color: var(--muted); }
+
+/* ---- A: inline drawer ---- */
+.va-drawer-sk { padding: 8px 8px 12px 24px; background: #15191e; border-left: 3px solid var(--accent); max-width: calc(100vw - 520px); min-width: 640px; }
+.va-dhead { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.va-dhead button { margin-left: auto; }
+.va-cols { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 16px; }
+.va-cols h4 { margin: 6px 0 4px; font-size: 11px; text-transform: uppercase; color: var(--muted); }
+.va-build { border-bottom: 1px solid var(--line); }
+.va-bline { display: flex; gap: 6px; align-items: center; padding: 3px 0; cursor: pointer; flex-wrap: wrap; }
+.va-bline .bname { min-width: 170px; font-weight: 600; }
+.va-bline:hover { background: #1c2128; }
+.va-bdetail { padding: 4px 0 8px 36px; display: flex; flex-direction: column; gap: 2px; }
+.va-bdetail button { align-self: flex-start; margin-top: 4px; }
+.va-grid { border-collapse: collapse; } .va-grid th { text-align: left; font-weight: 600; padding: 2px 6px 2px 0; vertical-align: top; white-space: nowrap; }
+.va-grid td { padding: 2px 4px; vertical-align: top; white-space: normal; } .va-grid tr { border-bottom: 1px solid var(--line); }
+.startcls { color: var(--accent); }
+
+/* ---- B: pairing page ---- */
+.vbk { padding: 8px 14px 60px; display: flex; flex-direction: column; gap: 14px; max-width: 1100px; }
+.vbk h3 { margin: 0 0 6px; font-size: 14px; }
+.tierhead { margin: 8px 0 4px; font-size: 11px; text-transform: uppercase; color: var(--muted); }
+.vbk-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 8px; }
+.vbk-card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.vbk-card.t5 { border-color: #3d6b44; }
+.vbk-card header { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.vbk-card .cost { margin-left: auto; font-size: 11px; color: var(--warn); }
+.vbk-card ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
+.miss-slot { color: var(--neg); } .miss-slot span { color: #d8a0a0; font-size: 12px; }
+.vbk-card .notes { font-size: 11px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 4px; }
+.vbk-card footer button { font-size: 12px; }
+.vbk-rally { border-collapse: collapse; font-size: 11px; } .vbk-rally th, .vbk-rally td { padding: 2px 6px; border: 1px solid var(--line); text-align: center; }
+.vbk-rally td.ok { background: #1f3325; } .vbk-rally td.no { background: #2a1d1f; color: var(--neg); cursor: help; }
+.vbk-pool { width: 100%; } .vbk-pool td { white-space: nowrap; }
+.only-tag { font-size: 10px; border: 1px dashed var(--warn); color: var(--warn); padding: 0 4px; border-radius: 3px; }
+
+/* ---- C: side sheet ---- */
+.vc-sk { display: flex; flex-direction: column; gap: 2px; }
+.vc-title { padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+.vc-dots { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; }
+.vc-dots span { text-align: center; font-size: 11px; padding: 2px 0; border-radius: 3px; cursor: help; }
+.vc-dots .ok { background: #2d5a36; } .vc-dots .no { background: #2a1d1f; color: var(--muted); text-decoration: line-through; }
+.vc-par { padding: 4px 0; border-bottom: 1px solid var(--line); }
+.vc-bucket { display: grid; grid-template-columns: 22px 1fr; gap: 6px; padding: 3px 0; border-bottom: 1px solid var(--line); }
+.vc-bucket .rk { height: 16px; }
+.vc-acc { border-bottom: 1px solid var(--line); }
+.vc-acchead { padding: 4px 0; cursor: pointer; display: flex; gap: 6px; align-items: baseline; }
+.vc-accbody { padding: 2px 0 8px 10px; display: flex; flex-direction: column; gap: 3px; }
+.vc-accbody button { align-self: flex-start; }
+
+@media (max-width: 700px) {
+  .va-drawer-sk { max-width: calc(100vw - 16px); min-width: 0; padding-left: 8px; }
+  .va-cols { grid-template-columns: 1fr; }
+  .va-bline .bname { min-width: 0; width: 100%; }
+  .vbk { padding: 8px; }
+  .vbk-cards { grid-template-columns: 1fr; }
+  .vbk-rally { display: block; overflow-x: auto; }
+  .vbk-pool th:nth-child(5), .vbk-pool td:nth-child(5) { display: none; }
+  .vbk-pool td { white-space: normal; }
+}

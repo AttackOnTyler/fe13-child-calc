@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "proto:table": "vite --open /src/prototype/pairing-table/index.html"
+    "proto:table": "vite --open /src/prototype/pairing-table/index.html",
+    "proto:skills": "vite --open /src/prototype/skill-tab/index.html"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

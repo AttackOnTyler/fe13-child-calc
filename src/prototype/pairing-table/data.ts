@@ -67,7 +67,7 @@ export const CLASSES: Record<string, ClassDef> = {
 };
 export const CLASS_NAMES = Object.keys(CLASSES);
 
-const PROMO: Record<string, string[]> = {
+export const PROMO: Record<string, string[]> = {
   Lord: ['Great Lord'], Tactician: ['Grandmaster'], Cavalier: ['Paladin', 'Great Knight'],
   Knight: ['General', 'Great Knight'], Myrmidon: ['Swordmaster', 'Assassin'], Mercenary: ['Hero', 'Bow Knight'],
   Fighter: ['Warrior', 'Hero'], Barbarian: ['Berserker', 'Warrior'], Archer: ['Sniper', 'Bow Knight'],
@@ -76,11 +76,11 @@ const PROMO: Record<string, string[]> = {
   Priest: ['War Monk', 'Sage'], Troubadour: ['Valkyrie', 'War Monk'], Taguel: ['Taguel'], Manakete: ['Manakete'],
   Villager: [], Dancer: [], Conqueror: [],
 };
-const REGULAR = ['Tactician', 'Cavalier', 'Knight', 'Myrmidon', 'Mercenary', 'Fighter', 'Barbarian', 'Archer', 'Thief', 'Pegasus Knight', 'Wyvern Rider', 'Mage', 'Dark Mage', 'Priest', 'Troubadour'];
+export const REGULAR = ['Tactician', 'Cavalier', 'Knight', 'Myrmidon', 'Mercenary', 'Fighter', 'Barbarian', 'Archer', 'Thief', 'Pegasus Knight', 'Wyvern Rider', 'Mage', 'Dark Mage', 'Priest', 'Troubadour'];
 const MALE_ONLY = new Set(['Fighter', 'Barbarian']);
 const FEMALE_ONLY = new Set(['Pegasus Knight', 'Troubadour']);
 const NEVER_PASS = new Set(['Lord', 'Dancer', 'Conqueror', 'Taguel', 'Manakete']);
-function adapt(set: string[], g: 'M' | 'F') {
+export function adapt(set: string[], g: 'M' | 'F') {
   return set.flatMap((c) => {
     if (NEVER_PASS.has(c)) return [];
     if (g === 'F' && MALE_ONLY.has(c)) return ['Pegasus Knight'];
@@ -155,7 +155,7 @@ const ASSET_MOD: Stats[] = [[0, 1, 1, 0, 0, 2, 2, 2], [0, 4, 0, 2, 0, 0, 2, 0], 
   [0, 0, 0, 2, 4, 2, 0, 0], [0, 2, 2, 0, 0, 4, 0, 0], [0, 0, 0, 0, 0, 2, 4, 2], [0, 0, 2, 0, 2, 0, 0, 4]];
 const FLAW_MOD: Stats[] = [[0, 1, 1, 0, 0, 1, 1, 1], [0, 3, 0, 1, 0, 0, 1, 0], [0, 0, 3, 0, 1, 0, 0, 1], [0, 1, 0, 3, 0, 0, 1, 0],
   [0, 0, 0, 1, 3, 1, 0, 0], [0, 1, 1, 0, 0, 3, 0, 0], [0, 0, 0, 0, 0, 1, 3, 1], [0, 0, 1, 0, 1, 0, 0, 3]];
-const robinProfile = (g: 'M' | 'F', asset: string, flaw: string): Unit => {
+export const robinProfile = (g: 'M' | 'F', asset: string, flaw: string): Unit => {
   const a = AF_STATS.indexOf(asset), f = AF_STATS.indexOf(flaw);
   const growths = STATS.map((_, i) => ROBIN_BASE_GROWTH[i] + ASSET_GROWTH[a][i] - FLAW_GROWTH[f][i]);
   const mods = STATS.map((_, i) => ASSET_MOD[a][i] - FLAW_MOD[f][i]);
