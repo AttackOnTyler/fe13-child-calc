@@ -61,13 +61,15 @@ export function startClass(child: ChildUnitData, variable: ParentProfile, assump
   return { startClass: choice, assumptionsUsed: ['morgan-second-gen-start-class'] };
 }
 
+/** What a class promotes to with a Master Seal; nothing for advanced and special classes. */
+export const promotionsOf = (c: ClassId): readonly ClassId[] => (PROMOTES_TO as Partial<Record<ClassId, readonly ClassId[]>>)[c] ?? [];
+
 /**
  * Every class a child with this class set can be in: each base class, its promotions, and the DLC reclass targets
  * (Dread Fighter, Bride), less anything locked to the other gender. In class data order.
  */
 export function reachableClasses(classSet: readonly ClassId[], gender: Gender): readonly ClassId[] {
-  const promotions = (c: ClassId): readonly ClassId[] => (PROMOTES_TO as Partial<Record<ClassId, readonly ClassId[]>>)[c] ?? [];
-  const reach = new Set<ClassId>([...classSet.flatMap((c) => [c, ...promotions(c)]), ...DLC_RECLASS_TARGETS]);
+  const reach = new Set<ClassId>([...classSet.flatMap((c) => [c, ...promotionsOf(c)]), ...DLC_RECLASS_TARGETS]);
   return (Object.keys(CLASSES) as ClassId[]).filter((c) => reach.has(c) && allowsGender(c, gender));
 }
 

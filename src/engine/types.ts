@@ -2,6 +2,7 @@ import type { ChildId } from '../game-data/children';
 import type { ClassId, ClassTier } from '../game-data/classes';
 import type { Gender, Growths, Modifiers, Stat } from '../game-data/stats';
 import type { UnitId } from '../game-data/units';
+import type { SkillId } from '../game-data/skills';
 import type { Citation } from '../game-data/citations';
 import type { AssumptionId } from './assumptions';
 import type { PresetData, PresetId, ScoringRole, Weights } from '../curated/presets';
@@ -33,8 +34,19 @@ export type ChildResult = {
   readonly classSet: readonly ClassId[];
   /** The class the child joins in (Morgan's depends on the other parent). */
   readonly startClass: ClassId;
+  /** What each parent can pass: one skill per parent (research/skill-inheritance, #4). */
+  readonly skillCandidates: ChildSkillCandidates;
   readonly assumptionsUsed: readonly AssumptionId[];
 };
+
+/**
+ * The skills one parent can pass. A pool means any of them, as the parent's lowest equipped inheritable skill;
+ * `fixed` means the one skill always passes (Chrom and his children, Aversa, Walhart).
+ */
+export type SkillCandidates = { readonly skills: readonly SkillId[]; readonly fixed: boolean };
+
+/** What the fixed and the variable parent can each pass. */
+export type ChildSkillCandidates = { readonly fromFixed: SkillCandidates; readonly fromVariable: SkillCandidates };
 
 /** A child's pairings that share a variable parent, differing only in Robin's asset/flaw. One table group row. */
 export type PairingGroup = {
@@ -245,4 +257,61 @@ export type PairingFilter = {
   readonly parent?: string;
   /** Include second-gen partners (Morgan's `Lucina ← Sumia` rows). Default true. */
   readonly secondGen?: boolean;
+};
+
+/** A skill with its curated rank in the current play context (1–5 = D–S, 0 unranked). */
+export type SkillRef = { readonly id: SkillId; readonly name: string; readonly rank: number };
+
+/** One way a pairing gets a skill. */
+export type SkillSource =
+  | {
+      readonly kind: 'class';
+      readonly class: ClassId;
+      readonly className: string;
+      readonly level: number;
+      /** Outside the starting class line (⟳). */
+      readonly reclass: boolean;
+      readonly dlc: boolean;
+    }
+  | { readonly kind: 'parent'; readonly side: 'fixed' | 'variable'; readonly parent: string; readonly fixed: boolean };
+
+export type RallyCoverage = {
+  readonly skill: SkillRef;
+  /** Best first; empty when the pairing can't get it. */
+  readonly sources: readonly SkillSource[];
+  /** Why not, when there is no source. */
+  readonly reason: string | undefined;
+};
+
+export type ParentSkills = {
+  readonly side: 'fixed' | 'variable';
+  readonly parent: string;
+  readonly fixed: boolean;
+  /** `unique`: no class the child can reach teaches it, and the other parent can't pass it. */
+  readonly skills: readonly (SkillRef & { readonly unique: boolean })[];
+  /** How the skill passes, worded by the inheritance assumptions. */
+  readonly note: string;
+};
+
+export type RankedSkill = SkillRef & { readonly sources: readonly SkillSource[] };
+
+/** The Skills drawer's facts for one pairing under a play context and DLC state. */
+export type SkillView = {
+  readonly child: string;
+  readonly fixedParent: string;
+  readonly variableParent: string;
+  readonly startClass: string;
+  readonly classCount: number;
+  readonly context: PlayContext;
+  readonly dlc: boolean;
+  /** The ten rallies, in dot order. */
+  readonly rallies: readonly RallyCoverage[];
+  /** Fixed parent, then variable parent. */
+  readonly parents: readonly [ParentSkills, ParentSkills];
+  /** Edge cases that apply to this pairing, worded by the inheritance assumptions. */
+  readonly caveats: readonly string[];
+  /** Class-learned skills by rank, S → D, then unranked; only non-empty buckets. */
+  readonly ranks: readonly { readonly rank: number; readonly letter: string; readonly skills: readonly RankedSkill[] }[];
+  /** DLC skill books (◇), when DLC is reachable. */
+  readonly books: readonly SkillRef[];
 };

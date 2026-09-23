@@ -4,11 +4,12 @@
  * user's overrides) is passed into the calculation so it stays pure.
  *
  * Data that holds an assumed value references an assumption id (`Assumed`) and is read through `assumed()`.
- * Later tickets add their own entries (skill-inheritance edge cases, death after marriage).
+ * Later tickets add their own entries (death after marriage).
  */
 import {
   FEW_CONQUEROR,
   FEW_INHERITANCE,
+  FEW_LUCINA,
   FEW_LUCINA_STATS,
   RESEARCH_CLASSES,
   RESEARCH_DISAGREEMENTS,
@@ -20,6 +21,8 @@ import {
   SF_CALCULATIONS,
   SOLY_APOTHEOSIS,
   RESEARCH_FIXTURES_SPEED,
+  RESEARCH_SKILL_INHERITANCE,
+  SF_CHILDREN,
   type Assumed,
   type Citation,
 } from '../game-data/citations';
@@ -36,6 +39,14 @@ type AssumptionValues = {
   /** Ascending Speed breakpoints. */
   'spd-breakpoints': readonly number[];
   'main-story-target-breakpoint': number;
+  /** A parent's pick is a skill the child already has: the slot is wasted, or the next skill up passes. */
+  'inherit-duplicate-skill': 'wasted' | 'next-skill';
+  /** Both parents' picks are the same skill: the child gets one copy, or the second parent's next skill passes. */
+  'inherit-same-skill': 'one-copy' | 'next-skill';
+  /** An ineligible skill (DLC, Special Dance) at the bottom: the next eligible one up passes, or nothing does. */
+  'inherit-ineligible-bottom': 'next-eligible' | 'nothing';
+  /** Which equipped skill is "last": the bottom slot, or the one equipped most recently. */
+  'inherit-last-skill': 'bottom-slot' | 'most-recent';
 };
 
 export type AssumptionId = keyof AssumptionValues;
@@ -172,6 +183,60 @@ export const ASSUMPTION_REGISTRY: { readonly [K in AssumptionId]: AssumptionDef<
     format: String,
     parse: (raw) => (isInt(raw) && raw > 0 && raw < 100 ? raw : undefined),
     affects: 'the default target breakpoint in the Main story context',
+  }),
+  'inherit-duplicate-skill': entry({
+    id: 'inherit-duplicate-skill',
+    label: 'Inheriting a skill the child already has',
+    why:
+      'When a parent’s lowest equipped skill is one the child starts with (Nowi passing Odd Rhythm to Nah), no source says ' +
+      'whether that inheritance is wasted or the game moves up to the parent’s next equipped skill. FEW’s “lowest eligible skill” fits either.',
+    sources: [SF_CHILDREN, FEW_INHERITANCE, FEW_LUCINA, RESEARCH_SKILL_INHERITANCE],
+    default: 'wasted',
+    alternatives: [{ label: 'The next skill up passes instead', value: 'next-skill' }],
+    input: 'choice',
+    format: (v) => (v === 'wasted' ? 'Wasted (nothing new passes)' : 'The next skill up passes'),
+    parse: (raw) => (raw === 'wasted' || raw === 'next-skill' ? raw : undefined),
+    affects: 'the inheritance notes in the Skills drawer',
+  }),
+  'inherit-same-skill': entry({
+    id: 'inherit-same-skill',
+    label: 'Both parents passing the same skill',
+    why: 'No source says whether the child gets one copy and loses the second inheritance, or the second parent’s next skill passes.',
+    sources: [SF_CHILDREN, FEW_INHERITANCE, RESEARCH_SKILL_INHERITANCE],
+    default: 'one-copy',
+    alternatives: [{ label: 'The second parent’s next skill passes', value: 'next-skill' }],
+    input: 'choice',
+    format: (v) => (v === 'one-copy' ? 'One copy (the second is lost)' : 'The second parent’s next skill passes'),
+    parse: (raw) => (raw === 'one-copy' || raw === 'next-skill' ? raw : undefined),
+    affects: 'the inheritance notes in the Skills drawer',
+  }),
+  'inherit-ineligible-bottom': entry({
+    id: 'inherit-ineligible-bottom',
+    label: 'An ineligible skill at the bottom of the equipped list',
+    why:
+      'FEW’s character notes say the lowest eligible equipped skill passes, so a DLC skill or Special Dance at the bottom is skipped; ' +
+      'no test is cited, and SF says only “last active skill”, which could mean nothing passes.',
+    sources: [FEW_LUCINA, SF_CHILDREN, RESEARCH_SKILL_INHERITANCE],
+    default: 'next-eligible',
+    alternatives: [{ label: 'Nothing passes from that parent', value: 'nothing' }],
+    input: 'choice',
+    format: (v) => (v === 'next-eligible' ? 'Skipped (the next eligible skill up passes)' : 'Nothing passes'),
+    parse: (raw) => (raw === 'next-eligible' || raw === 'nothing' ? raw : undefined),
+    affects: 'the inheritance notes in the Skills drawer',
+  }),
+  'inherit-last-skill': entry({
+    id: 'inherit-last-skill',
+    label: 'Which equipped skill is “last”',
+    why:
+      'FEW’s Inheritance page says the most recently activated skill passes; its character notes say the lowest skill in the equipped list. ' +
+      'They are taken to be the same (a newly equipped skill goes to the bottom), but no source confirms it.',
+    sources: [FEW_INHERITANCE, FEW_LUCINA, SF_CHILDREN, RESEARCH_SKILL_INHERITANCE],
+    default: 'bottom-slot',
+    alternatives: [{ label: 'The most recently equipped skill', value: 'most-recent' }],
+    input: 'choice',
+    format: (v) => (v === 'bottom-slot' ? 'The bottom equipped slot' : 'The most recently equipped skill'),
+    parse: (raw) => (raw === 'bottom-slot' || raw === 'most-recent' ? raw : undefined),
+    affects: 'the inheritance notes in the Skills drawer',
   }),
 };
 

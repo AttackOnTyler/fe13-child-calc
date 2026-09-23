@@ -1,6 +1,7 @@
 import type { ClassId } from '../game-data/classes';
 import { MOD_STATS, STATS, type Growths, type Modifiers } from '../game-data/stats';
 import type { PassesClasses } from '../game-data/units';
+import type { InheritableSkills } from './skills';
 
 /** What one parent passes to a child, resolved to concrete values. */
 export type ParentProfile = {
@@ -14,6 +15,8 @@ export type ParentProfile = {
   readonly passesClasses: PassesClasses;
   /** The default base class Morgan would start in (a second-gen parent's own starting class); null for the Maiden. */
   readonly baseClass: ClassId | null;
+  /** The skills the parent can pass on. */
+  readonly skills: InheritableSkills;
 };
 
 /**

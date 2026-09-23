@@ -61,3 +61,8 @@ export const RESEARCH_FIXTURES_SPEED: Citation = {
   label: 'Research: fixtures and Speed (#7)',
   url: `${RESEARCH}/research/fixtures-and-speed/docs/research/fixtures-and-speed.md`,
 };
+export const RESEARCH_SKILL_INHERITANCE: Citation = {
+  label: 'Research: skill inheritance (#4)',
+  url: `${RESEARCH}/research/skill-inheritance/docs/research/skill-inheritance.md`,
+};
+export const FEW_LUCINA: Citation = { label: 'FEW Lucina (inheritance note)', url: 'https://fireemblemwiki.org/wiki/Lucina' };

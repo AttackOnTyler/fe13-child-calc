@@ -32,6 +32,8 @@ import {
   startClass,
 } from './classes';
 import { inheritGrowths, inheritModifiers, type ParentProfile } from './inheritance';
+import { buildSkillView, candidatesFor, firstGenSkills, secondGenSkills, skillRank, type SkillViewSettings } from './skills';
+import type { SkillId } from '../game-data/skills';
 import { createScorer } from './scoring';
 import { pairUpSpd } from './pair-up';
 import { contextReachesDlc, defaultTargetBreakpoint } from './speed';
@@ -56,6 +58,7 @@ import type {
   Scoring,
   ScoreSettings,
   SelfTestReport,
+  SkillView,
   SupportRank,
 } from './types';
 
@@ -77,6 +80,8 @@ export type { ResolvedDisagreement } from '../game-data/disagreements';
 export { MOD_STATS, STATS, STAT_LABELS, type Gender, type Growths, type ModStat, type Modifiers, type Stat } from '../game-data/stats';
 export type { ChildId } from '../game-data/children';
 export type { ClassId } from '../game-data/classes';
+export type { SkillId } from '../game-data/skills';
+export { RANK_LETTERS, describeSource, type SkillViewSettings } from './skills';
 export type { PresetId, ScoringRole, Weights } from '../curated/presets';
 
 export type Engine = {
@@ -129,6 +134,10 @@ export type Engine = {
   contextReachesDlc(context: PlayContext): boolean;
   /** The Spd part of the Pair-up bonus from a support in this class, at this rank, with this raw Spd. */
   pairUpSpd(supportClass: ClassId, rank: SupportRank, rawSpd: number): number;
+  /** A skill's curated rank in a play context: 1–5 (D–S), 0 unranked. */
+  skillRank(id: SkillId, context: PlayContext): number;
+  /** The Skills drawer's facts for a pairing: rally coverage, what each parent can pass, class skills by rank. */
+  skillView(result: ChildResult, settings: SkillViewSettings): SkillView;
 };
 
 /**
@@ -210,7 +219,8 @@ type ResolvedParent = { readonly profile: ParentProfile; readonly assumptionsUse
 
 function unitProfile(id: UnitId, assumptions: Assumptions): ResolvedParent {
   const unit: FirstGenUnitData = FIRST_GEN_UNITS[id];
-  const classes = { classes: unit.classes, passesClasses: unit.passesClasses, baseClass: unit.classes[0] ?? null };
+  const skills = firstGenSkills(id, unit.classes, unit.gender);
+  const classes = { classes: unit.classes, passesClasses: unit.passesClasses, baseClass: unit.classes[0] ?? null, skills };
   if (!isAssumed(unit.growths)) {
     return { profile: { growths: unit.growths, modifiers: unit.modifiers, secondGen: false, ...classes }, assumptionsUsed: [] };
   }
@@ -236,6 +246,7 @@ function robinProfile(ref: RobinRef): ResolvedParent {
     classes: regularClasses(ref.gender),
     passesClasses: { son: regularClasses('M'), daughter: regularClasses('F') },
     baseClass: 'tactician',
+    skills: firstGenSkills('robin', regularClasses(ref.gender), ref.gender),
   };
   return { profile, assumptionsUsed: [] };
 }
@@ -312,7 +323,11 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         return robinProfile(ref);
       case 'child': {
         const r = computeResult({ child: ref.id, variableParent: ref.variableParent });
+        const data = CHILD_UNITS[ref.id];
+        const chromsChild = data.fixedParent === 'chrom' || (ref.variableParent.kind === 'unit' && ref.variableParent.id === 'chrom');
+        const skills = secondGenSkills(data.gender, chromsChild, r.classSet, r.skillCandidates);
         const profile: ParentProfile = {
+          skills,
           growths: r.growths,
           modifiers: r.modifiers,
           secondGen: true,
@@ -343,6 +358,10 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       modifiers,
       classSet: childClassSet(child, variable.profile),
       startClass: start.startClass,
+      skillCandidates: {
+        fromFixed: candidatesFor(fixed.profile.skills, child.gender),
+        fromVariable: candidatesFor(variable.profile.skills, child.gender),
+      },
       assumptionsUsed: [...new Set(used)],
     };
   };
@@ -521,5 +540,25 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     defaultTargetBreakpoint: (context) => defaultTargetBreakpoint(context, assumptions),
     contextReachesDlc,
     pairUpSpd,
+    skillRank,
+    skillView: (r, settings) => {
+      const child = CHILD_UNITS[r.pairing.child];
+      const fixedRef: ParentRef = child.fixedParent === 'robin' ? r.pairing.fixedRobin! : { kind: 'unit', id: child.fixedParent };
+      const gender = child.gender;
+      return buildSkillView(
+        {
+          childName: child.name,
+          gender,
+          fixedParent: parentName(fixedRef),
+          variableParent: parentName(r.pairing.variableParent),
+          candidates: r.skillCandidates,
+          startClass: r.startClass,
+          reachable: [...reachOf(r)],
+          classCount: r.classSet.length,
+        },
+        settings,
+        assumptions,
+      );
+    },
   };
 }

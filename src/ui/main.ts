@@ -4,7 +4,9 @@ import {
   RALLY_OPTIONS,
   STATS,
   STAT_LABELS,
+  RANK_LETTERS,
   createEngine,
+  describeSource,
   resolveAssumptions,
   type AssumptionId,
   type Assumptions,
@@ -29,6 +31,8 @@ import {
   type Scoring,
   type ScoringRole,
   type SelfTestReport,
+  type SkillRef,
+  type SkillSource,
   type SpeedReading,
   type Stat,
   type SupportRank,
@@ -74,6 +78,8 @@ const groupId = (child: ChildId, group: PairingGroup) => `${child}|${group.key}`
 const expanded = new Set<string>();
 /** The asset/flaw pairing pinned into a Robin group row, by group id; otherwise the row shows its best. */
 const pinned = new Map<string, string>();
+/** The one table line (by line id) with its Skills drawer open. */
+let openSkills: string | undefined;
 let filter: { parent: string; secondGen: boolean } = { parent: '', secondGen: true };
 type SortCol = 'parent' | 'class' | 'score' | 'speed' | 'count' | `cap:${Stat}` | `mod:${Stat}` | `growth:${Stat}`;
 let sort: { col: SortCol; dir: 1 | -1 } = { col: 'score', dir: -1 };
@@ -463,10 +469,164 @@ function togglePin(child: ChildId, g: PairingGroup, key: string): void {
   renderParts(['main']);
 }
 
-/** The rows a line renders to: itself, plus the asset × flaw heatmap when its Robin group is open. */
+// ---- Skills drawer ----
+
+/** A line's identity across renders: its Robin group, else its pairing. */
+const lineId = (child: ChildId, line: Line) => (line.group ? groupId(child, line.group) : line.result.key);
+
+function skillsButton(id: string): HTMLElement {
+  const open = openSkills === id;
+  return h(
+    'button',
+    {
+      class: `skills-btn${open ? ' on' : ''}`,
+      'aria-expanded': String(open),
+      title: `${open ? 'Hide' : 'Show'} this pairing’s skills`,
+      onclick: () => {
+        openSkills = open ? undefined : id;
+        renderParts(['main']);
+      },
+    },
+    'Skills',
+  );
+}
+
+const sourcesTitle = (sources: readonly SkillSource[]) => sources.map(describeSource).join('\n');
+
+/** A skill chip coloured by rank, followed by its source markers. */
+function skillChip(skill: SkillRef, marks: (HTMLElement | string)[], title: string, cls = ''): HTMLElement {
+  return h('span', { class: `skill r${skill.rank}${cls ? ` ${cls}` : ''}`, title }, skill.name, ...marks);
+}
+
+/** The drawer under a pairing row: header and legend, builds (to come), rally coverage, parents, class skills by rank. */
+function skillsRow(line: Line, ncols: number): HTMLElement {
+  const v = engine.skillView(line.result, { context: prefs.context, dlc: dlcReachable(prefs, engine) });
+  const head = h(
+    'div',
+    { class: 'drawer-head' },
+    h('b', {}, `${v.child} × ${line.label}`),
+    line.group ? h('span', { class: 'af' }, engine.robinLabel(line.result.pairing) ?? '') : null,
+    h('span', { class: 'muted' }, `Starts as ${v.startClass} · ${v.classCount} classes · ${CONTEXT_LABELS[v.context]} · DLC ${v.dlc ? 'on' : 'off'}`),
+    h(
+      'span',
+      { class: 'legend muted small' },
+      '⟳ reclass · ↑ inherited · ◇ DLC skill book · colour = rank ',
+      ...[5, 4, 3, 2, 1].map((r) => h('span', { class: `skill r${r}` }, RANK_LETTERS[r]!)),
+    ),
+    h('button', { class: 'ghost close', title: 'Close the Skills drawer', onclick: () => ((openSkills = undefined), renderParts(['main'])) }, '✕'),
+  );
+
+  const covered = v.rallies.filter((r) => r.sources.length).length;
+  const rallies = h(
+    'section',
+    {},
+    h('h4', {}, `Rally coverage ${covered}/10`),
+    h(
+      'div',
+      { class: 'dots' },
+      ...v.rallies.map((r) =>
+        h(
+          'span',
+          { class: `dot${r.sources.length ? ' on' : ''}`, title: `${r.skill.name}: ${r.sources.length ? sourcesTitle(r.sources) : r.reason}` },
+          h('i', {}),
+          r.skill.name.replace(/^Rally /, ''),
+        ),
+      ),
+    ),
+  );
+
+  const parents = h(
+    'section',
+    {},
+    h('h4', {}, 'From parents (one each)'),
+    ...v.parents.map((p) =>
+      h(
+        'div',
+        { class: 'parent' },
+        h(
+          'div',
+          {},
+          h('b', {}, p.parent),
+          h('span', { class: 'muted small' }, p.side === 'fixed' ? ' · fixed parent' : ' · variable parent'),
+          p.fixed ? h('span', { class: 'chip' }, 'always') : null,
+        ),
+        h(
+          'div',
+          { class: 'chips' },
+          ...(p.skills.length
+            ? p.skills.map((k) => skillChip(k, [' ↑'], k.unique ? `${k.name}: only ${p.parent} can give it` : k.name, k.unique ? 'unique' : ''))
+            : [h('span', { class: 'muted' }, 'nothing')]),
+        ),
+        h('div', { class: 'muted small' }, p.note),
+      ),
+    ),
+    ...v.caveats.map((c) => h('div', { class: 'muted small' }, c)),
+    h('div', { class: 'muted small' }, 'Outlined: no class of this child teaches it, and the other parent can’t pass it.'),
+  );
+
+  const ranks = h(
+    'section',
+    {},
+    h('h4', {}, 'Class skills by rank'),
+    ...v.ranks.map((b) =>
+      h(
+        'div',
+        { class: 'bucket' },
+        h('span', { class: `rank-badge r${b.rank}`, title: b.rank ? `Rank ${b.letter}` : 'Unranked' }, b.letter),
+        h(
+          'div',
+          { class: 'chips' },
+          ...b.skills.map((k) => {
+            const cls = k.sources.find((s) => s.kind === 'class');
+            const marks: (HTMLElement | string)[] =
+              cls?.kind === 'class' ? [h('span', { class: 'src' }, ` ${cls.className} ${cls.level}${cls.reclass ? ' ⟳' : ''}`)] : [];
+            if (k.sources.some((s) => s.kind === 'parent')) marks.push(' ↑');
+            return skillChip(k, marks, sourcesTitle(k.sources));
+          }),
+        ),
+      ),
+    ),
+    v.books.length
+      ? h(
+          'div',
+          { class: 'bucket' },
+          h('span', { class: 'rank-badge', title: 'DLC skill books' }, '◇'),
+          h('div', { class: 'chips' }, ...v.books.map((k) => skillChip(k, [' ◇'], `${k.name}: DLC skill book`))),
+        )
+      : null,
+  );
+
+  const builds = h(
+    'section',
+    { class: 'builds' },
+    h('h4', {}, 'Builds'),
+    h('p', { class: 'muted small' }, 'Matched build templates will appear here with the loadout suggester.'),
+  );
+  return h(
+    'tr',
+    { class: 'skills-row' },
+    h(
+      'td',
+      { colspan: String(ncols) },
+      h('div', { class: 'drawer' }, head, h('div', { class: 'drawer-cols' }, builds, h('div', { class: 'skills-col' }, rallies, parents, ranks))),
+    ),
+  );
+}
+
+/**
+ * The rows a line renders to: itself, the asset × flaw heatmap when its Robin group is open, and the Skills drawer
+ * when it is the open one.
+ */
 function rowsFor(child: ChildId, line: Line, gender: Gender, sc: Scoring, ncols: number): HTMLElement[] {
+  const rows = lineRows(child, line, gender, sc, ncols);
+  if (openSkills === lineId(child, line)) rows.push(skillsRow(line, ncols));
+  return rows;
+}
+
+function lineRows(child: ChildId, line: Line, gender: Gender, sc: Scoring, ncols: number): HTMLElement[] {
   const g = line.group;
-  if (!g) return [lineRow(line, gender, '', h('th', { class: 'stick', scope: 'row' }, line.label, warnMark([line.result])))];
+  const skills = skillsButton(lineId(child, line));
+  if (!g) return [lineRow(line, gender, '', h('th', { class: 'stick', scope: 'row' }, line.label, warnMark([line.result]), skills))];
   const id = groupId(child, g);
   const open = expanded.has(id);
   const head = h(
@@ -494,6 +654,7 @@ function rowsFor(child: ChildId, line: Line, gender: Gender, sc: Scoring, ncols:
     ),
     line.pinned ? h('span', { class: 'muted small' }, ' 📌') : null,
     warnMark(g.results),
+    skills,
   );
   const rows = [lineRow(line, gender, 'group-row', head)];
   if (open) rows.push(heatmapRow(child, line, gender, sc, ncols));
