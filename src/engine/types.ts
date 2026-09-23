@@ -180,8 +180,35 @@ export type Scoring = {
   groupBest(group: PairingGroup): GroupBest;
   /** A Robin group's asset × flaw heatmap; undefined for a group of one pairing. */
   heatmap(group: PairingGroup): Heatmap | undefined;
+  /** Every child's pairings ranked together, Robin groups shown as the Robin mode says. */
+  leaderboard(options: LeaderboardOptions): readonly LeaderboardEntry[];
   /** Stats that carry weight under these settings (under Mixed, Str and Mag share the attack weight). */
   readonly weightedStats: readonly Stat[];
+};
+
+/** How a Robin group shows on the leaderboard: every asset/flaw, its best one, or one picked combo. */
+export type RobinMode = 'all' | 'best' | { readonly asset: Stat; readonly flaw: Stat };
+
+export type LeaderboardOptions = {
+  readonly robin: RobinMode;
+  /** Score, or Speed (the Spd pair-up bonus in the Support role); ties go to the higher score. */
+  readonly sort: 'score' | 'speed';
+  /** The table filter, applied to every child; never changes a score. */
+  readonly filter?: PairingFilter;
+};
+
+export type LeaderboardEntry = {
+  /** 1-based position. */
+  readonly rank: number;
+  readonly result: ChildResult;
+  readonly score: PairingScore;
+  /** The child's name, e.g. `Morgan (F)`. */
+  readonly child: string;
+  readonly gender: Gender;
+  /** The variable parent's group label, e.g. `Sumia`, `Robin (F)`, `Lucina ← Sumia`. */
+  readonly parent: string;
+  /** Robin's asset/flaw, e.g. `+Spd −Def`, when Robin is a parent. */
+  readonly robin: string | undefined;
 };
 
 /** One asset/flaw of a Robin group: a variable Robin parent's, or the fixed Robin's for a Morgan partner group. */

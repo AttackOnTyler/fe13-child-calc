@@ -483,6 +483,36 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
           const bestKey = groupBest(group).best.key;
           return { cells, best: cells.find((c) => c.key === bestKey)!, spread };
         },
+        leaderboard: ({ robin, sort, filter }) => {
+          const shownOf = (group: PairingGroup): readonly ChildResult[] => {
+            if (group.results.length === 1 || robin === 'all') return group.results;
+            if (robin === 'best') return [groupBest(group).best];
+            return group.results.filter((r) => {
+              const ref = robinRefOf(r.pairing)!;
+              return ref.asset === robin.asset && ref.flaw === robin.flaw;
+            });
+          };
+          // Speed is the Spd pair-up bonus in the Support role, as in the table's Speed column.
+          const speedOf = (s: PairingScore) => (settings.role === 'support' ? s.values?.spd : s.speed?.total);
+          const rows = CHILD_IDS.flatMap((child) =>
+            (groupsByChild.get(child) ?? []).filter((g) => !filter || passes(g, filter)).flatMap((group) =>
+              shownOf(group).map((result) => ({ child, group, result, score: scores.get(result.key)! })),
+            ),
+          );
+          // Unreachable last; then the sort key, the score, and table order (the sort is stable).
+          const desc = (a: number | undefined, b: number | undefined) => (b ?? -Infinity) - (a ?? -Infinity) || 0;
+          rows.sort(
+            (a, b) =>
+              Number(!a.score.class) - Number(!b.score.class) ||
+              (sort === 'speed' ? desc(speedOf(a.score), speedOf(b.score)) : 0) ||
+              desc(a.score.raw, b.score.raw),
+          );
+          return rows.map(({ child, group, result, score }, i) => {
+            const ref = robinRefOf(result.pairing);
+            const { name, gender } = CHILD_UNITS[child];
+            return { rank: i + 1, result, score, child: name, gender, parent: group.label, robin: ref && assetFlawLabel(ref) };
+          });
+        },
         weightedStats: weightedStats(settings),
       };
     },

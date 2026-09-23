@@ -15,11 +15,14 @@ import {
   type ClassSummary,
   type Engine,
   type Gender,
+  type LeaderboardEntry,
+  type LeaderboardOptions,
   type Overrides,
   type PairingFilter,
   type PairingGroup,
   type PairingScore,
   type PlayContext,
+  type RobinMode,
   type Preset,
   type ScoreBasis,
   type ScoreSettings,
@@ -62,7 +65,8 @@ let selfTest = engine.selfTest();
 let prefs: ScoringPrefs = loadPrefs(engine);
 
 // View state only; all domain answers come from the engine.
-let selected: ChildId = 'lucina';
+/** A child's table, or the All children leaderboard. */
+let selected: ChildId | 'all' = 'lucina';
 let view: 'table' | 'validation' = selfTest.passed ? 'table' : 'validation';
 /** A Robin group row's identity across children: `child|group key`. */
 const groupId = (child: ChildId, group: PairingGroup) => `${child}|${group.key}`;
@@ -76,6 +80,14 @@ let sort: { col: SortCol; dir: 1 | -1 } = { col: 'score', dir: -1 };
 const FIRST_PAGE = 200;
 const MORE = 500;
 let limit = FIRST_PAGE;
+/** The leaderboard's Robin mode (with the combo Pick shows) and sort. */
+let board: { robin: 'all' | 'best' | 'pick'; pick: Exclude<RobinMode, string>; sort: LeaderboardOptions['sort'] } = {
+  robin: 'best',
+  pick: { asset: 'spd', flaw: 'def' },
+  sort: 'score',
+};
+/** Leaderboard cards (by pairing key) showing their growth / modifier / cap matrix. */
+const openCards = new Set<string>();
 /** The scoring panel as a bottom sheet (phone width only). */
 let sheetOpen = false;
 /** The Pair-up Spd helper's inputs: a support class, rank and raw Spd. */
@@ -168,26 +180,30 @@ function validationButton(report: SelfTestReport): HTMLElement {
 
 function rail(): HTMLElement[] {
   const sc = scoring();
+  const children = engine.children();
+  const top = children.map((c) => sc.best(c.id)?.score).filter((s) => s !== undefined);
+  const item = (id: ChildId | 'all', name: string, title: string, score: number | undefined) =>
+    h(
+      'button',
+      {
+        class: `rail-item${id === 'all' ? ' all' : ''}${id === selected && view === 'table' ? ' on' : ''}`,
+        title,
+        onclick: () => {
+          selected = id;
+          view = 'table';
+          expanded.clear();
+          openCards.clear();
+          limit = FIRST_PAGE;
+          render();
+        },
+      },
+      h('span', {}, name),
+      h('b', { class: 'num' }, String(score ?? '—')),
+    );
   return [
     h('div', { class: 'muted small rail-head' }, `Best · ${presetLabel(currentPreset())}`),
-    ...engine.children().map((c) =>
-      h(
-        'button',
-        {
-          class: `rail-item${c.id === selected && view === 'table' ? ' on' : ''}`,
-          title: `${c.pairingCount} pairings`,
-          onclick: () => {
-            selected = c.id;
-            view = 'table';
-            expanded.clear();
-            limit = FIRST_PAGE;
-            render();
-          },
-        },
-        h('span', {}, c.name),
-        h('b', { class: 'num' }, String(sc.best(c.id)?.score ?? '—')),
-      ),
-    ),
+    item('all', 'All children', 'Leaderboard of every child’s pairings', top.length ? Math.max(...top) : undefined),
+    ...children.map((c) => item(c.id, c.name, `${c.pairingCount} pairings`, sc.best(c.id)?.score)),
   ];
 }
 
@@ -265,9 +281,8 @@ function scoreCell(line: Line): HTMLElement {
   );
 }
 
-/** `63 · 60 (+3)`, tinted by the breakpoint cleared (none: below every breakpoint). */
-function speedCell(speed: SpeedReading | undefined): HTMLElement {
-  if (!speed) return h('td', { class: 'num spd gstart' }, '');
+/** The Speed tint class (bp0 = below every breakpoint) and hover text for a Speed total. */
+function speedTint(speed: SpeedReading): { cls: string; title: string } {
   const bps = engine.breakpoints();
   // One tint per breakpoint cleared (bp1 = the lowest); a list longer than five shares the top tint.
   const step = speed.cleared === undefined ? 0 : Math.min(5, bps.indexOf(speed.cleared) + 1);
@@ -276,18 +291,30 @@ function speedCell(speed: SpeedReading | undefined): HTMLElement {
     speed.cleared === undefined
       ? `Below every breakpoint (${bps[0]})`
       : `Clears ${speed.cleared} by ${speed.over}` + (target === null ? '' : speed.total >= target ? ` · meets target ${target}` : ` · ${target - speed.total} short of target ${target}`);
-  return h(
-    'td',
-    { class: `num spd gstart bp${step}`, title },
-    h('b', {}, String(speed.total)),
-    speed.cleared === undefined ? h('span', { class: 'muted' }, ' · —') : ` · ${speed.cleared} (+${speed.over})`,
-  );
+  return { cls: `bp${step}`, title };
+}
+
+/** `63 · 60 (+3)`: the total, then the breakpoint cleared and by how much. */
+const speedText = (speed: SpeedReading): (HTMLElement | string)[] => [
+  h('b', {}, String(speed.total)),
+  speed.cleared === undefined ? h('span', { class: 'muted' }, ' · —') : ` · ${speed.cleared} (+${speed.over})`,
+];
+
+/** `63 · 60 (+3)`, tinted by the breakpoint cleared (none: below every breakpoint). */
+function speedCell(speed: SpeedReading | undefined): HTMLElement {
+  if (!speed) return h('td', { class: 'num spd gstart' }, '');
+  const { cls, title } = speedTint(speed);
+  return h('td', { class: `num spd gstart ${cls}`, title }, ...speedText(speed));
 }
 
 /** Support role: the Spd pair-up bonus the unit gives its lead. */
 function pairUpSpdCell(values: PairingScore['values']): HTMLElement {
   return h('td', { class: 'num spd gstart' }, values ? h('b', {}, `+${values.spd}`) : '');
 }
+
+/** The class scored in, `(Auto)` when Auto chose it; undefined when unreachable. */
+const classLabel = (score: PairingScore, gender: Gender) =>
+  score.class && `${engine.className(score.class, gender)}${score.auto ? ' (Auto)' : ''}`;
 
 function lineRow(line: Line, gender: Gender, cls: string, head: HTMLElement): HTMLElement {
   const { score, result: r } = line;
@@ -297,7 +324,7 @@ function lineRow(line: Line, gender: Gender, cls: string, head: HTMLElement): HT
     h(
       'td',
       { class: 'cls gstart' },
-      score.class ? `${engine.className(score.class, gender)}${score.auto ? ' (Auto)' : ''}` : h('span', { class: 'muted' }, 'unreachable'),
+      classLabel(score, gender) ?? h('span', { class: 'muted' }, 'unreachable'),
     ),
     scoreCell(line),
   ];
@@ -611,6 +638,178 @@ function childTable(child: ChildId): HTMLElement[] {
     ),
   );
   return [head, h('div', { class: 'scroll' }, table)];
+}
+
+// ---- leaderboard ----
+
+const ROBIN_MODE_NAMES = { all: 'All', best: 'Best per pairing', pick: 'Pick one' } as const;
+const BOARD_SORT_NAMES = { score: 'Score', speed: 'Spd' } as const;
+
+function setBoard(next: Partial<typeof board>): void {
+  board = { ...board, ...next };
+  limit = FIRST_PAGE;
+  renderParts(['main']);
+}
+
+/** Robin mode, the combo Pick shows, and the sort. */
+function boardControls(): HTMLElement {
+  const statSelect = (label: string, value: Stat, options: readonly Stat[], sign: string, onpick: (s: Stat) => void) =>
+    h(
+      'select',
+      { 'aria-label': label, onchange: (e) => onpick((e.target as HTMLSelectElement).value as Stat) },
+      ...options.map((s) => h('option', { value: s, selected: s === value }, `${sign}${STAT_LABELS[s]}`)),
+    );
+  const { asset, flaw } = board.pick;
+  return h(
+    'div',
+    { class: 'board-controls' },
+    segmented('Robin', ['all', 'best', 'pick'] as const, board.robin, ROBIN_MODE_NAMES, (robin) => setBoard({ robin })),
+    board.robin === 'pick'
+      ? h(
+          'span',
+          { class: 'blk pick' },
+          statSelect('Robin’s asset', asset, STATS, '+', (a) => setBoard({ pick: { asset: a, flaw: a === flaw ? STATS.find((s) => s !== a)! : flaw } })),
+          statSelect('Robin’s flaw', flaw, STATS.filter((s) => s !== asset), '−', (f) => setBoard({ pick: { asset, flaw: f } })),
+        )
+      : null,
+    segmented('Sort', ['score', 'speed'] as const, board.sort, BOARD_SORT_NAMES, (sort) => setBoard({ sort })),
+  );
+}
+
+/** A card's per-stat values: what the score counts, as bars scaled to the highest value of that stat on the board. */
+function barStrip(e: LeaderboardEntry, statMax: Readonly<Record<Stat, number>>): HTMLElement {
+  const values = e.score.values;
+  const stats = support() ? STATS.filter((s) => s !== 'hp') : STATS;
+  return h(
+    'div',
+    { class: 'bars', 'aria-label': capsHeader() },
+    ...stats.map((s) => {
+      const v = values?.[s];
+      const pct = v === undefined || statMax[s] <= 0 ? 0 : Math.max(0, Math.min(100, (v / statMax[s]) * 100));
+      return h(
+        'div',
+        { class: `bar${weighted(s) ? ' weighted' : ''}`, title: `${STAT_LABELS[s]} ${v === undefined ? '—' : support() ? `+${v}` : v}` },
+        h('span', { class: 'lbl' }, STAT_LABELS[s]),
+        h('span', { class: 'track' }, h('span', { class: 'fill', style: `width:${pct.toFixed(1)}%` })),
+        h('span', { class: 'num' }, v === undefined ? '—' : support() ? `+${v}` : String(v)),
+      );
+    }),
+  );
+}
+
+/** Inherited growth, max-stat modifier and effective cap in the scored class, plus what's scored when that differs. */
+function matrix(e: LeaderboardEntry): HTMLElement {
+  const { result: r, score } = e;
+  const lb = basis() !== 'caps';
+  const caps = score.class && engine.effectiveCaps(r, score.class, lb);
+  const row = (label: string, title: string, cell: (s: Stat) => HTMLElement | string) =>
+    h('tr', {}, h('th', { scope: 'row', title }, label), ...STATS.map((s) => h('td', { class: 'num' }, cell(s))));
+  const mod = (s: Stat) => (s === 'hp' ? '—' : h('span', { class: tone(r.modifiers[s]) }, signed(r.modifiers[s])));
+  const rows = [
+    row('Growth', 'Inherited growth: floor((father + mother + child) / 3), before class growths', (s) => String(r.growths[s])),
+    row('Mod', 'Max-stat modifier: father + mother + 1', mod),
+    row('Cap', `Effective cap in the scored class: class max + modifier${lb ? ' + 10 (not HP) with Limit Breaker' : ''}`, (s) =>
+      caps ? String(caps[s]) : '—',
+    ),
+  ];
+  if (score.values && (support() || basis() === 'growths')) {
+    rows.push(
+      row(support() ? 'Pair-up' : 'In class', capsTitle(), (s) => (support() ? (s === 'hp' ? '—' : `+${score.values![s]}`) : String(score.values![s]))),
+    );
+  }
+  return h(
+    'table',
+    { class: 'matrix' },
+    h('thead', {}, h('tr', {}, h('th', {}, ''), ...STATS.map((s) => h('th', { scope: 'col', class: weighted(s) ? 'weighted' : undefined }, STAT_LABELS[s])))),
+    h('tbody', {}, ...rows),
+  );
+}
+
+function card(e: LeaderboardEntry, statMax: Readonly<Record<Stat, number>>): HTMLElement {
+  const { score, result: r } = e;
+  const tint = score.speed && speedTint(score.speed);
+  const open = openCards.has(r.key);
+  const speed = support()
+    ? score.values && h('span', { class: 'chip spd', title: 'Spd pair-up bonus to its lead' }, `Spd +${score.values.spd}`)
+    : score.speed && tint && h('span', { class: `chip spd ${tint.cls}`, title: tint.title }, 'Spd ', ...speedText(score.speed));
+  const toggle = () => {
+    if (open) openCards.delete(r.key);
+    else openCards.add(r.key);
+    const next = card(e, statMax);
+    const focused = document.activeElement === el;
+    el.replaceWith(next);
+    if (focused) next.focus();
+  };
+  const el = h(
+    'article',
+    {
+      class: `card${open ? ' open' : ''}${score.class ? '' : ' unreachable'}`,
+      'data-key': r.key,
+      role: 'button',
+      tabindex: '0',
+      'aria-expanded': String(open),
+      title: open ? 'Hide the growth / modifier / cap matrix' : 'Show the growth / modifier / cap matrix',
+      onclick: toggle,
+      onkeydown: (ev) => {
+        const k = (ev as KeyboardEvent).key;
+        if ((k === 'Enter' || k === ' ') && ev.target === el) (ev.preventDefault(), toggle());
+      },
+    },
+    h('div', { class: 'rank num' }, `#${e.rank}`),
+    h(
+      'div',
+      { class: 'big num', title: score.raw === undefined ? '' : `raw ${score.raw}` },
+      !score.class ? '' : score.score === undefined ? '—' : String(score.score),
+      score.attack ? h('sup', { class: 'tag', title: score.attack === 'S' ? 'Scored on Str' : 'Scored on Mag' }, score.attack) : null,
+    ),
+    h(
+      'div',
+      { class: 'who' },
+      h('b', {}, e.child),
+      ' × ',
+      e.parent,
+      e.robin ? h('span', { class: 'chip af' }, e.robin) : null,
+      warnMark([r]),
+    ),
+    h(
+      'div',
+      { class: 'meta' },
+      h('span', { class: 'cls' }, classLabel(score, e.gender) ?? 'unreachable'),
+      speed ?? null,
+    ),
+    barStrip(e, statMax),
+    open ? matrix(e) : null,
+  );
+  return el;
+}
+
+function leaderboard(): HTMLElement[] {
+  const sc = scoring();
+  const entries = sc.leaderboard({ robin: board.robin === 'pick' ? board.pick : board.robin, sort: board.sort, filter });
+  const statMax = Object.fromEntries(STATS.map((s) => [s, Math.max(0, ...entries.map((e) => e.score.values?.[s] ?? 0))])) as Record<Stat, number>;
+  const shown = entries.slice(0, limit);
+  const head = h(
+    'div',
+    { class: 'main-head' },
+    h('h2', {}, 'All children'),
+    h('span', { class: 'muted' }, `${entries.length} pairings · ${presetLabel(currentPreset())} · bars: ${capsHeader()} (${BASIS_LABELS[basis()]})`),
+    boardControls(),
+    h(
+      'button',
+      { class: 'only-phone', 'aria-expanded': String(sheetOpen), onclick: () => ((sheetOpen = true), renderParts(['panel'])) },
+      'Scoring ⚙',
+    ),
+  );
+  const more =
+    entries.length > limit
+      ? h(
+          'div',
+          { class: 'more' },
+          h('button', { onclick: () => ((limit += MORE), renderParts(['main'])) }, `Show ${Math.min(MORE, entries.length - limit)} more`),
+          h('span', { class: 'muted' }, ` · ${limit} of ${entries.length} shown`),
+        )
+      : null;
+  return [head, h('div', { class: 'scroll' }, h('div', { class: 'cards' }, ...shown.map((e) => card(e, statMax))), more)];
 }
 
 function speedTitle(): string {
@@ -1020,7 +1219,9 @@ function renderParts(parts: readonly Part[]): void {
     main.replaceChildren(
       ...(view === 'validation'
         ? [validationPanel({ engine, assumptions, selfTest, setOverride, resetAll: () => applyOverrides({}), render })]
-        : childTable(selected)),
+        : selected === 'all'
+          ? leaderboard()
+          : childTable(selected)),
     );
   }
   if (parts.includes('panel')) {

@@ -157,3 +157,47 @@ table.heat { border-collapse: collapse; font-size: 11px; font-variant-numeric: t
   .heatwrap { max-width: calc(100vw - 8px); padding-left: 8px; }
   .heat th, .heat td { min-width: 0; padding: 3px 2px; }
 }
+
+/* All children leaderboard: ranked cards; tapping one shows its growth / modifier / cap matrix. */
+.rail-item.all { font-weight: 600; border-bottom: 1px solid var(--line); border-radius: 4px 4px 0 0; margin-bottom: 4px; }
+.board-controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.board-controls .blk { display: inline-flex; gap: 6px; align-items: center; }
+.board-controls .lbl { color: var(--muted); }
+.board-controls select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 2px 4px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 8px; padding: 10px 12px; align-items: start; }
+.card { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; row-gap: 4px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); cursor: pointer; min-width: 0; }
+.card:hover { border-color: #3d4652; }
+.card:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.card.open { border-color: var(--accent); }
+.card.unreachable { opacity: 0.45; }
+.card .rank { grid-column: 1; grid-row: 1; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.card .big { grid-column: 1; grid-row: 2 / span 2; font-size: 28px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.card .big .tag { font-size: 10px; color: var(--accent); margin-left: 1px; }
+.card .who { grid-column: 2; grid-row: 1 / span 2; align-self: end; overflow-wrap: anywhere; }
+.card .meta { grid-column: 2; grid-row: 3; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; color: var(--muted); }
+.chip { display: inline-block; padding: 0 6px; border: 1px solid var(--line); border-radius: 10px; font-size: 11px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.chip.af { color: var(--warn); margin-left: 4px; }
+.chip.spd { color: var(--text); }
+.chip.spd.bp0 { color: var(--muted); }
+.chip.spd.bp1 { background: rgba(90, 169, 255, 0.06); }
+.chip.spd.bp2 { background: rgba(90, 169, 255, 0.14); }
+.chip.spd.bp3 { background: rgba(111, 207, 122, 0.12); }
+.chip.spd.bp4 { background: rgba(111, 207, 122, 0.24); }
+.chip.spd.bp5 { background: rgba(240, 184, 77, 0.22); }
+.card .bars { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px 10px; font-size: 11px; }
+.bar { display: grid; grid-template-columns: 24px 1fr 22px; gap: 4px; align-items: center; color: var(--muted); }
+.bar .track { height: 5px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+.bar .fill { display: block; height: 100%; background: #4a5462; }
+.bar.weighted { color: var(--text); }
+.bar.weighted .fill { background: var(--accent); }
+.bar .num { text-align: right; font-variant-numeric: tabular-nums; }
+table.matrix { grid-column: 1 / -1; border-collapse: collapse; font-size: 11px; font-variant-numeric: tabular-nums; width: 100%; margin-top: 4px; cursor: default; }
+.matrix th, .matrix td { padding: 2px 3px; border-top: 1px solid var(--line); text-align: right; }
+.matrix thead th { color: var(--muted); font-weight: 600; border-top: 0; }
+.matrix thead th.weighted { color: var(--accent); }
+.matrix tbody th { text-align: left; color: var(--muted); font-weight: 400; }
+.scroll > .more { padding: 4px 12px 16px; }
+@media (max-width: 700px) {
+  .cards { grid-template-columns: 1fr; padding: 8px; }
+  .board-controls { gap: 8px; }
+}
