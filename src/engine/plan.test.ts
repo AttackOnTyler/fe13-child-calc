@@ -278,3 +278,93 @@ describe('the saved plan', () => {
     expect(parseRoster({ savedPlan: 'nope' }).savedPlan).toBeNull();
   });
 });
+
+describe('plan preset overrides', () => {
+  it('holds an override in every play context, while defaulted children follow the context', () => {
+    const roster = { ...EMPTY_ROSTER, run: RUN };
+    const s = { ...settings, overrides: { kjelle: 'lancekiller' } } as const;
+    const presets = (context: PlanSettings['context']) =>
+      new Map(engine.plan(roster, { ...s, context }).marriages.flatMap((m) => m.children.map((c) => [c.child, c.preset] as const)));
+    const all = presets('all');
+    const main = presets('main-story');
+    expect(all.get('kjelle')).toBe('lancekiller');
+    expect(main.get('kjelle')).toBe('lancekiller');
+    expect(all.get('nah')).toBe('battery');
+    expect(main.get('nah')).toBe('nostank');
+  });
+
+  it('tells the curated default apart from the preset in force', () => {
+    const s = { context: 'main-story', preset: 'battery', overrides: { kjelle: 'lancekiller' } } as const;
+    expect(engine.defaultPlanPreset('kjelle', s)).toBe('tank');
+    expect(engine.planPreset('kjelle', s)).toBe('lancekiller');
+    expect(engine.defaultPlanPreset('morgan-f', s)).toBe('battery');
+  });
+});
+
+describe('children ledger', () => {
+  // Mid-run: Chrom × Sumia married, Stahl × Olivia pinned, the saved plan's Vaike × Lissa broken by Vaike's death,
+  // Nowi dead before marrying, Severa dead, Sully untouched.
+  const saved: SavedPlan = {
+    robin: null,
+    marriages: [
+      ['chrom', 'sumia'],
+      ['stahl', 'olivia'],
+      ['vaike', 'lissa'],
+    ],
+  };
+  let roster: Roster = withSavedPlan({ ...EMPTY_ROSTER, run: RUN }, saved);
+  roster = withSpouse(roster, 'chrom', 'sumia', 'married');
+  roster = withSpouse(roster, 'stahl', 'olivia', 'pinned');
+  roster = withSpouse(roster, 'vaike', 'lissa', 'pinned');
+  roster = withState(withState(withState(roster, 'vaike', 'dead'), 'nowi', 'dead'), 'severa', 'dead');
+  const ledger = engine.ledger(roster, settings);
+  const row = (c: string) => ledger.find((e) => e.child === c)!;
+
+  it('lists the run’s children with their fixed parent', () => {
+    expect(ledger.map((e) => e.child)).toEqual(rosterUnits(RUN).filter((u) => u.kind === 'child').map((u) => u.id));
+    expect(row('lucina').fixedParent).toBe('chrom');
+    expect(row('morgan-f').fixedParent).toBe('robin');
+  });
+
+  it('gives each child a status', () => {
+    expect(row('lucina').status).toBe('married');
+    expect(row('cynthia').status).toBe('married');
+    expect(row('inigo').status).toBe('planned');
+    expect(row('owain').status).toBe('broken');
+    expect(row('nah').status).toBe('unborn');
+    expect(row('severa').status).toBe('dead');
+    expect(row('kjelle').status).toBe('open');
+  });
+
+  it('keeps a child re-pinned away from the saved plan as planned, not broken', () => {
+    const repinned = withSpouse(roster, 'stahl', 'tharja', 'pinned');
+    const ledger = engine.ledger(repinned, settings);
+    // Stahl leaves Olivia for Tharja: Noire is planned; Inigo is open again, not broken.
+    expect(ledger.find((e) => e.child === 'noire')!.status).toBe('planned');
+    expect(ledger.find((e) => e.child === 'inigo')!.status).toBe('open');
+  });
+
+  it('shows the plan’s pairing or the marriage', () => {
+    expect(row('lucina').planned).toMatchObject({ key: 'lucina|sumia', parent: 'Sumia' });
+    expect(row('inigo').planned).toMatchObject({ key: 'inigo|stahl' });
+    expect(row('nah').planned).toBeUndefined();
+    expect(row('severa').planned).toBeUndefined();
+  });
+
+  it('shows the best remaining pairing in the plan preset, with Δ vs the plan', () => {
+    expect(row('nah').best).toBeUndefined();
+    expect(row('severa').best).toBeUndefined();
+    // Owain can no longer have Vaike.
+    expect(row('owain').best?.key).not.toBe('owain|vaike');
+    for (const e of ledger) {
+      if (e.planned?.score !== undefined && e.best?.score !== undefined) {
+        expect(e.delta).toBe(e.best.score - e.planned.score);
+        expect(e.delta).toBeGreaterThanOrEqual(0);
+      } else expect(e.delta).toBeUndefined();
+    }
+    // A tie goes to the plan's pairing.
+    for (const e of ledger) if (e.planned && e.best && e.best.scaled === e.planned.scaled) expect(e.best.key).toBe(e.planned.key);
+    // Lucina's best is her best-scoring pairing that isn't hard-blocked: Sumia is married to Chrom, so nothing better is open.
+    expect(row('lucina').best?.key).toBe('lucina|sumia');
+  });
+});

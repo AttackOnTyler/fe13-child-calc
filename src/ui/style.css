@@ -320,6 +320,21 @@ table.plan tr.married td.bond { color: var(--pos); }
 .ruleouts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .plan-side { margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .plan-side p { margin: 0 0 6px; }
-.prio { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: center; padding: 2px 0; }
-.prio .ppreset { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px; }
+.prio { display: grid; grid-template-columns: 1fr auto; gap: 2px 6px; align-items: center; padding: 3px 0; border-bottom: 1px solid var(--line); }
+.prio .ppreset { grid-column: 1 / -1; }
+.ppreset { display: inline-flex; gap: 4px; align-items: center; }
+.ppreset select { font: inherit; font-size: 11px; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 2px; max-width: 170px; }
+.chip.set { color: var(--accent); border-color: #3a6394; }
+button.chip.plan-preset { cursor: pointer; background: transparent; color: var(--accent); border-color: #3a6394; }
+button.chip.plan-preset:disabled { cursor: default; color: var(--muted); border-color: var(--line); }
+
+/* Roster: the children ledger. */
+.rsec.ledger { max-width: none; }
+.ledger-scroll { overflow-x: auto; }
+.grid.ledger td { vertical-align: middle; }
+.lstatus.married { color: var(--pos); }
+.lstatus.planned { color: var(--accent); }
+.lstatus.broken { color: var(--warn); }
+.lstatus.unborn, .lstatus.dead { color: var(--neg); }
+.grid.ledger tr.ledger-dead td.uname, .grid.ledger tr.ledger-unborn td.uname { text-decoration: line-through; color: var(--muted); }
 .prio .seg button { padding: 0 6px; }

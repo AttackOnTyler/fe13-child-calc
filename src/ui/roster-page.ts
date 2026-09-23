@@ -12,6 +12,8 @@ import {
   type Bond,
   type Engine,
   type Gender,
+  type LedgerEntry,
+  type LedgerStatus,
   type Roster,
   type RosterEntry,
   type RosterUnit,
@@ -19,6 +21,7 @@ import {
   type UnitState,
 } from '../engine';
 import { h } from './dom';
+import { presetControl, priorityControl, type ChildPlanControls } from './plan-page';
 
 /** What the Roster page reads, and how it changes the roster. */
 export type RosterContext = {
@@ -27,6 +30,8 @@ export type RosterContext = {
   readonly setRoster: (next: Roster) => void;
   /** Wipes the roster (after the user confirms); scoring settings are left alone. */
   readonly clearAll: () => void;
+  /** The children ledger edits the same priorities and plan presets as the Plan sidebar. */
+  readonly plan: ChildPlanControls;
 };
 
 const STATE_UI: Readonly<Record<UnitState, { icon: string; label: string; hint: string }>> = {
@@ -129,6 +134,76 @@ function unitRow(ctx: RosterContext, u: RosterEntry): HTMLElement {
   );
 }
 
+const LEDGER_UI: Readonly<Record<LedgerStatus, { mark: string; label: string; hint: string }>> = {
+  open: { mark: '○', label: 'open', hint: 'Nothing is pinned or married for it yet' },
+  planned: { mark: '★', label: 'planned', hint: 'Its parents are pinned' },
+  married: { mark: '✓', label: 'parents married', hint: 'Its parents are married: it will be born' },
+  broken: { mark: '⚠', label: 'plan broken', hint: 'The saved plan’s pairing for it can no longer happen as planned' },
+  unborn: { mark: '✕', label: 'can’t be born', hint: 'No pairing that can still happen produces it' },
+  dead: { mark: '☠', label: 'dead', hint: 'Dead' },
+};
+
+const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
+
+function ledgerRow(ctx: RosterContext, e: LedgerEntry): HTMLElement {
+  const gender = ctx.roster.run.gender;
+  const st = LEDGER_UI[e.status];
+  const pairing = (c: LedgerEntry['planned']) =>
+    c ? [h('span', {}, c.parent), ' ', h('b', { class: 'num' }, c.score === undefined ? '—' : String(c.score))] : [h('span', { class: 'muted' }, '—')];
+  const same = e.best && e.best.key === e.planned?.key;
+  return h(
+    'tr',
+    { class: `ledger-${e.status}` },
+    h('td', { class: 'uname' }, e.name),
+    h('td', { class: 'muted' }, unitName(e.fixedParent, gender)),
+    h('td', { title: e.status === 'married' ? 'Its parents’ marriage' : 'The marriage plan’s pairing' }, ...pairing(e.planned)),
+    h(
+      'td',
+      { title: 'Its best pairing in its plan preset that can still happen, whatever the rest of the plan' },
+      ...(same ? [h('span', { class: 'muted' }, '= plan')] : pairing(e.best)),
+      e.delta ? h('span', { class: `small ${e.delta > 0 ? 'pos' : 'neg'}` }, ` ${signed(e.delta)}`) : null,
+    ),
+    h('td', { class: `lstatus ${e.status}`, title: st.hint }, `${st.mark} ${st.label}`),
+    h('td', {}, priorityControl(ctx.plan, e.child, e.name)),
+    h('td', {}, presetControl(ctx.plan, e.child, e.name)),
+  );
+}
+
+/** Each child: fixed parent, plan or marriage, best remaining pairing with Δ vs the plan, status, and its plan controls. */
+function childrenLedger(ctx: RosterContext): HTMLElement {
+  const ledger = ctx.engine.ledger(ctx.roster, ctx.plan.settings);
+  return h(
+    'section',
+    { class: 'rsec ledger', 'aria-label': 'Children ledger' },
+    h('h3', {}, 'Children ledger'),
+    h('p', { class: 'muted' }, 'Each child scored in its plan preset. Priority and preset are the same controls as the Plan sidebar.'),
+    h(
+      'div',
+      { class: 'ledger-scroll' },
+      h(
+        'table',
+        { class: 'grid ledger' },
+        h(
+          'thead',
+          {},
+          h(
+            'tr',
+            {},
+            h('th', {}, 'Child'),
+            h('th', {}, 'Fixed parent'),
+            h('th', {}, 'Plan / marriage'),
+            h('th', {}, 'Best remaining (Δ)'),
+            h('th', {}, 'Status'),
+            h('th', {}, 'Priority'),
+            h('th', {}, 'Plan preset'),
+          ),
+        ),
+        h('tbody', {}, ...ledger.map((e) => ledgerRow(ctx, e))),
+      ),
+    ),
+  );
+}
+
 function runFacts(ctx: RosterContext): HTMLElement {
   const { run } = ctx.roster;
   const setRun = (next: Partial<Roster['run']>) => ctx.setRoster(withRun(ctx.roster, next));
@@ -206,6 +281,7 @@ export function rosterPage(ctx: RosterContext): HTMLElement[] {
       section('Men', byGender('M')),
       section('Women', byGender('F')),
       section('Children', units.filter((u) => u.kind === 'child')),
+      childrenLedger(ctx),
     ),
   ];
 }

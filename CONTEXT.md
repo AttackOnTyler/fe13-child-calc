@@ -129,6 +129,10 @@ _Avoid_: Backup (alone), optimal pairing
 The preset a child is scored with in the marriage plan: a curated default per child (may differ by play context) unless the user sets one, which then holds in every context. Only the preset name is per child; its role comes with it, everything else is global. The pairing tables ignore it and use the global preset.
 _Avoid_: Child preset, default preset (ambiguous with the global one)
 
+**Children ledger**:
+The Roster page's one row per child: fixed parent, the marriage plan's pairing (or its parents' marriage), its best pairing that can still happen with Δ vs the plan, and where it stands — open, planned, parents married, plan broken (the saved plan's pairing can no longer happen), can't be born, or dead. It edits the same priority and plan preset as the Plan sidebar.
+_Avoid_: Child list, tracker
+
 **Deployment role**:
 The job a deployed unit does in the army: Lead, Battery, Staff/Rally or Dancer. A child's comes from its plan preset (a preset's scoring role, or Rallybot/Dancer for no preset); a first-gen unit's is a tag the user sets, defaulted from a curated table. No child can be a Dancer.
 _Avoid_: Role (alone — ambiguous with scoring role and build template role), job, position

@@ -22,19 +22,25 @@ import {
 } from '../engine';
 import { h } from './dom';
 
-/** What the Plan view reads, and how it changes the roster and the plan preferences. */
-export type PlanPageContext = {
+/** A child's plan controls (priority, plan preset), shared by the Plan sidebar and the Roster page's ledger. */
+export type ChildPlanControls = {
   readonly engine: Engine;
+  readonly settings: PlanSettings;
+  readonly setPriority: (child: ChildId, priority: number) => void;
+  /** Sets a child's plan preset; null resets it to the default. */
+  readonly setPlanPreset: (child: ChildId, preset: PresetId | null) => void;
+  /** A preset's name, with `*` when the user edited it. */
+  readonly presetLabel: (id: PresetId) => string;
+};
+
+/** What the Plan view reads, and how it changes the roster and the plan preferences. */
+export type PlanPageContext = ChildPlanControls & {
   readonly roster: Roster;
   readonly setRoster: (next: Roster) => void;
-  readonly settings: PlanSettings;
   /** Free re-plan: ignore the pins (view state). */
   readonly free: boolean;
   readonly setFree: (free: boolean) => void;
-  readonly setPriority: (child: ChildId, priority: number) => void;
   readonly resetPlanPrefs: () => void;
-  /** A preset's name, with `*` when the user edited it. */
-  readonly presetLabel: (id: PresetId) => string;
 };
 
 const fmt = (n: number) => String(Math.round(n));
@@ -227,32 +233,57 @@ export function planPage(ctx: PlanPageContext): HTMLElement[] {
   return [head, h('div', { class: 'scroll plan-view' }, ...notes, table, unborn, ruleOuts)];
 }
 
-/** The Plan sidebar: each child's plan preset and priority. */
+/** A child's priority, 0–3. */
+export function priorityControl(ctl: ChildPlanControls, id: ChildId, name: string): HTMLElement {
+  const priority = ctl.settings.priorities[id] ?? DEFAULT_PRIORITY;
+  return h(
+    'span',
+    { class: 'seg', role: 'group', 'aria-label': `${name}: priority` },
+    ...PLAN_PRIORITIES.map((p) =>
+      h('button', { class: p === priority ? 'on' : '', 'aria-pressed': String(p === priority), onclick: () => ctl.setPriority(id, p) }, String(p)),
+    ),
+  );
+}
+
+/** A child's plan preset: "default (X)" or the user's, which holds in every play context; ↺ resets it. */
+export function presetControl(ctl: ChildPlanControls, id: ChildId, name: string): HTMLElement {
+  const { engine, settings } = ctl;
+  const own = settings.overrides[id];
+  const fallback = engine.defaultPlanPreset(id, settings);
+  return h(
+    'span',
+    { class: 'ppreset' },
+    h(
+      'select',
+      {
+        'aria-label': `${name}: plan preset`,
+        title: own ? `Set: ${ctl.presetLabel(own)} in every play context (default ${ctl.presetLabel(fallback)})` : 'Follows the play context',
+        onchange: (e) => ctl.setPlanPreset(id, ((e.target as HTMLSelectElement).value || null) as PresetId | null),
+      },
+      h('option', { value: '', selected: !own }, `default (${ctl.presetLabel(fallback)})`),
+      ...engine.presets().map((p) => h('option', { value: p.id, selected: p.id === own }, ctl.presetLabel(p.id))),
+    ),
+    own ? h('span', { class: 'chip set', title: 'Set by you: holds in every play context' }, 'set') : null,
+    h('button', { class: 'mini', disabled: !own, title: own ? 'Reset to the default' : 'On the default', onclick: () => ctl.setPlanPreset(id, null) }, '↺'),
+  );
+}
+
+/** The Plan sidebar: each child's priority and plan preset. */
 export function planSidebar(ctx: PlanPageContext): HTMLElement {
-  const { engine, settings } = ctx;
   const children = rosterUnits(ctx.roster.run).filter((u) => u.kind === 'child');
   return h(
     'section',
-    { class: 'plan-side', 'aria-label': 'Child priorities' },
-    h('div', { class: 'panel-head' }, h('h3', {}, 'Plan'), h('button', { class: 'ghost small', title: 'Reset every child’s priority', onclick: ctx.resetPlanPrefs }, 'Reset plan preferences')),
+    { class: 'plan-side', 'aria-label': 'Child priorities and plan presets' },
+    h(
+      'div',
+      { class: 'panel-head' },
+      h('h3', {}, 'Plan'),
+      h('button', { class: 'ghost small', title: 'Reset every child’s priority and plan preset', onclick: ctx.resetPlanPrefs }, 'Reset plan preferences'),
+    ),
     h('p', { class: 'muted small' }, 'Priority 0 = don’t care · 3 = must be great. Each child scores in its plan preset, in Auto class.'),
     ...children.map((u) => {
       const id = u.id as ChildId;
-      const priority = settings.priorities[id] ?? DEFAULT_PRIORITY;
-      const preset = engine.planPreset(id, settings);
-      return h(
-        'div',
-        { class: 'prio' },
-        h('span', { class: 'pname' }, u.name),
-        h('span', { class: 'muted small ppreset', title: `Plan preset: ${ctx.presetLabel(preset)}` }, ctx.presetLabel(preset)),
-        h(
-          'span',
-          { class: 'seg', role: 'group', 'aria-label': `${u.name}: priority` },
-          ...PLAN_PRIORITIES.map((p) =>
-            h('button', { class: p === priority ? 'on' : '', 'aria-pressed': String(p === priority), onclick: () => ctx.setPriority(id, p) }, String(p)),
-          ),
-        ),
-      );
+      return h('div', { class: 'prio' }, h('span', { class: 'pname' }, u.name), priorityControl(ctx, id, u.name), presetControl(ctx, id, u.name));
     }),
   );
 }

@@ -74,8 +74,8 @@ import {
 import { validationPanel, withOverride } from './validation';
 import { rosterPage } from './roster-page';
 import { clearRoster, loadRoster, saveRoster } from './roster-store';
-import { planPage, planSidebar, type PlanPageContext } from './plan-page';
-import { DEFAULT_PLAN_PREFS, loadPlanPrefs, savePlanPrefs, type PlanPrefs } from './plan-prefs';
+import { planPage, planSidebar, type ChildPlanControls, type PlanPageContext } from './plan-page';
+import { DEFAULT_PLAN_PREFS, loadPlanPrefs, savePlanPrefs, withPlanPreset, withPriority, type PlanPrefs } from './plan-prefs';
 
 let overrides: Overrides = loadOverrides();
 let assumptions: Assumptions = resolveAssumptions(overrides);
@@ -84,7 +84,7 @@ let selfTest = engine.selfTest();
 let prefs: ScoringPrefs = loadPrefs(engine);
 /** Run state: read by the tables and the leaderboard, never by scoring. */
 let roster: Roster = loadRoster();
-/** Plan preferences (priorities): survive Clear all. */
+/** Plan preferences (priorities, plan presets): survive Clear all. */
 let planPrefs: PlanPrefs = loadPlanPrefs(engine);
 /** The Plan view's Free re-plan toggle. */
 let freeReplan = false;
@@ -229,23 +229,47 @@ const planSettings = (): PlanSettings => ({
   speed: speedSettings(prefs, engine),
   supportRank: prefs.supportRank,
   priorities: planPrefs.priorities,
-  overrides: {},
+  overrides: planPrefs.overrides,
+});
+
+/** The priority and plan-preset controls: the Plan sidebar and the Roster page's ledger edit the same values. */
+const planControls = (): ChildPlanControls => ({
+  engine,
+  settings: planSettings(),
+  setPriority: (child, priority) => setPlanPrefs(withPriority(planPrefs, child, priority)),
+  setPlanPreset: (child, preset) => setPlanPrefs(withPlanPreset(planPrefs, child, preset)),
+  presetLabel: (id: PresetId) => presetLabel(engine.presets().find((p) => p.id === id)!),
 });
 
 const planContext = (): PlanPageContext => ({
-  engine,
+  ...planControls(),
   roster,
   setRoster,
-  settings: planSettings(),
   free: freeReplan,
   setFree: (free) => {
     freeReplan = free;
     renderParts(['main']);
   },
-  setPriority: (child, priority) => setPlanPrefs({ priorities: { ...planPrefs.priorities, [child]: priority } }),
   resetPlanPrefs: () => setPlanPrefs(DEFAULT_PLAN_PREFS),
-  presetLabel: (id: PresetId) => presetLabel(engine.presets().find((p) => p.id === id)!),
 });
+
+/** The child's plan preset as a chip on its table: the tables keep the global preset, and this sets it. */
+function planPresetChip(child: ChildId): HTMLElement {
+  const id = engine.planPreset(child, planSettings());
+  const name = presetLabel(engine.presets().find((p) => p.id === id)!);
+  const current = id === prefs.preset;
+  return h(
+    'button',
+    {
+      class: 'chip plan-preset',
+      disabled: current,
+      title: current ? 'The table already scores with the plan preset' : `The table scores with ${presetLabel(currentPreset())}: switch the global preset to ${name}`,
+      onclick: () => setPrefs(withPreset(prefs, id)),
+    },
+    `Plan: ${name}`,
+    current ? ' ✓' : ' → score with this',
+  );
+}
 
 let planKeysCache: { roster: Roster; engine: Engine; keys: ReadonlySet<string> } | undefined;
 /** The saved plan's pairings, which the tables mark ◆. */
@@ -1067,6 +1091,7 @@ function childTable(child: ChildId): HTMLElement[] {
         (lines.length < allGroups ? ` · ${lines.length} of ${allGroups} parents shown` : '') +
         (hardCount ? ` · ${hardCount} blocked` : ''),
     ),
+    planPresetChip(child),
     columnToggles(),
     h(
       'button',
@@ -1853,7 +1878,7 @@ function renderParts(parts: readonly Part[]): void {
       ...(view === 'validation'
         ? [validationPanel({ engine, assumptions, selfTest, setOverride, resetAll: () => applyOverrides({}), render })]
         : view === 'roster'
-          ? rosterPage({ engine, roster, setRoster, clearAll: clearRosterState })
+          ? rosterPage({ engine, roster, setRoster, clearAll: clearRosterState, plan: planControls() })
           : view === 'plan'
           ? planPage(planContext())
           : selected === 'all'

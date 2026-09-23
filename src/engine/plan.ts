@@ -9,7 +9,20 @@ import { CHILD_UNITS, type ChildId } from '../game-data/children';
 import { FIRST_GEN_UNITS } from '../game-data/units';
 import { STATS, type Gender } from '../game-data/stats';
 import { CHROM_FALLBACK_PARTNER } from '../game-data/supports';
-import { isRuledOut, rosterUnits, stateOf, voidPinReason, withSavedPlan, withSpouse, type Bond, type Couple, type Roster, type RosterUnit, type SavedPlan } from './roster';
+import {
+  isRuledOut,
+  rosterUnits,
+  stateOf,
+  voidPinReason,
+  withSavedPlan,
+  withSpouse,
+  type Blocking,
+  type Bond,
+  type Couple,
+  type Roster,
+  type RosterUnit,
+  type SavedPlan,
+} from './roster';
 import type { PresetId } from '../curated/presets';
 import type { Pairing, ParentRef, RobinRef } from './types';
 
@@ -67,6 +80,26 @@ export type PlanDiff = {
   /** Children in both whose pairing or score changed. */
   readonly changes: readonly { readonly child: ChildId; readonly before: PlannedChild; readonly after: PlannedChild }[];
   readonly same: boolean;
+};
+
+/**
+ * A child's standing in the run: ☠ dead, ✕ can't be born (no pairing left that can happen), parents married, ⚠ plan
+ * broken (the saved plan's pairing for it can no longer happen), planned (its parents are pinned), or open.
+ */
+export type LedgerStatus = 'dead' | 'unborn' | 'married' | 'broken' | 'planned' | 'open';
+
+/** One child in the Roster page's children ledger. */
+export type LedgerEntry = {
+  readonly child: ChildId;
+  readonly name: string;
+  readonly fixedParent: RosterUnit;
+  /** The pairing the plan gives it: the marriage's, once its parents are married. */
+  readonly planned: PlannedChild | undefined;
+  /** Its best pairing in its plan preset that can still happen, whatever the rest of the plan. */
+  readonly best: PlannedChild | undefined;
+  /** best − planned score; undefined unless both have a score. */
+  readonly delta: number | undefined;
+  readonly status: LedgerStatus;
 };
 
 /** What the plan needs from the engine. */
@@ -390,4 +423,63 @@ function hungarian(cost: readonly (readonly number[])[]): number[] {
   const out = new Array<number>(n).fill(-1);
   for (let j = 1; j <= m; j++) if (p[j]) out[p[j]! - 1] = j - 1;
   return out;
+}
+
+/**
+ * The children ledger: each child of the run with its plan (or marriage), its best remaining pairing and its status.
+ * `candidates` are a child's pairings under the run facts; `blocking` reads a pairing against the roster.
+ */
+export function childLedger(
+  ctx: PlanContext,
+  plan: MarriagePlan,
+  candidates: (child: ChildId) => readonly Pairing[],
+  blocking: (pairing: Pairing) => Blocking,
+): LedgerEntry[] {
+  const { roster } = ctx;
+  const planned = new Map(plan.marriages.flatMap((m) => m.children.map((c) => [c.child, c] as const)));
+  const saved = new Map(roster.savedPlan ? savedPairings(roster, roster.savedPlan).map((p) => [p.child, p] as const) : []);
+  return rosterUnits(roster.run).flatMap((u): LedgerEntry[] => {
+    if (u.kind !== 'child') return [];
+    const child = u.id as ChildId;
+    const mine = planned.get(child);
+    let best: PlannedChild | undefined;
+    let plannedPairing: Pairing | undefined;
+    for (const p of candidates(child)) {
+      const c = ctx.child(p);
+      if (!c) continue;
+      if (c.key === mine?.key) plannedPairing = p;
+      // Ties go to the plan's pairing.
+      const [a, b] = [c.scaled ?? -Infinity, best?.scaled ?? -Infinity];
+      if (!best || a > b || (a === b && c.key === mine?.key)) best = c;
+    }
+    const bond = plannedPairing && blocking(plannedPairing).status;
+    const was = saved.get(child);
+    // Only a pairing that can no longer happen breaks the plan: re-pinning away from it is the user's call.
+    const broken = was && blocking(was).status === 'hard';
+    const status: LedgerStatus =
+      stateOf(roster, child) === 'dead'
+        ? 'dead'
+        : !best
+          ? 'unborn'
+          : bond === 'married'
+            ? 'married'
+            : broken
+              ? 'broken'
+              : bond === 'planned'
+                ? 'planned'
+                : 'open';
+    const alive = status !== 'dead' && status !== 'unborn';
+    const delta = alive && mine?.score !== undefined && best?.score !== undefined ? best.score - mine.score : undefined;
+    return [
+      {
+        child,
+        name: u.name,
+        fixedParent: CHILD_UNITS[child].fixedParent,
+        planned: alive ? mine : undefined,
+        best: alive ? best : undefined,
+        delta,
+        status,
+      },
+    ];
+  });
 }

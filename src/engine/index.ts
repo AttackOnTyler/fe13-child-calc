@@ -44,7 +44,7 @@ import { runSelfTest } from './self-test';
 import { EMPTY_ROSTER, evaluateBlocking, type Blocking, type Roster, type RunFacts } from './roster';
 import { PRESETS, type PresetId, type ScoringRole } from '../curated/presets';
 import { PLAN_PRESETS } from '../curated/plan-presets';
-import { DEFAULT_PRIORITY, evaluatePlan, savedPairings, solvePlan, type MarriagePlan, type PlanContext, type PlannedChild } from './plan';
+import { DEFAULT_PRIORITY, childLedger, evaluatePlan, savedPairings, solvePlan, type LedgerEntry, type MarriagePlan, type PlanContext, type PlannedChild } from './plan';
 import type { SavedPlan } from './roster';
 import type {
   AssumptionStatus,
@@ -120,7 +120,19 @@ export {
   type UnitState,
 } from './roster';
 export type { PresetId, ScoringRole, Weights } from '../curated/presets';
-export { DEFAULT_PRIORITY, PLAN_PRIORITIES, adoptPlan, canPin, diffPlans, type MarriagePlan, type PlanDiff, type PlanMarriage, type PlannedChild } from './plan';
+export {
+  DEFAULT_PRIORITY,
+  PLAN_PRIORITIES,
+  adoptPlan,
+  canPin,
+  diffPlans,
+  type LedgerEntry,
+  type LedgerStatus,
+  type MarriagePlan,
+  type PlanDiff,
+  type PlanMarriage,
+  type PlannedChild,
+} from './plan';
 
 export type Engine = {
   /** Every child unit, in game-data order. */
@@ -199,6 +211,8 @@ export type Engine = {
   blocking(result: ChildResult, roster: Roster): Blocking;
   /** A child's plan preset: the user's, else the curated default for the play context, else the global preset. */
   planPreset(child: ChildId, settings: Pick<PlanSettings, 'context' | 'preset' | 'overrides'>): PresetId;
+  /** The plan preset a child has without a user override: the curated default for the play context, else the global preset. */
+  defaultPlanPreset(child: ChildId, settings: Pick<PlanSettings, 'context' | 'preset'>): PresetId;
   /**
    * The marriage plan: max Σ priority × score, each child in its plan preset (Auto class), with marriages and pins
    * fixed, void pins dropped and rule-outs never planned. `free` ignores the pins.
@@ -211,6 +225,11 @@ export type Engine = {
   evaluatePlan(saved: SavedPlan, run: RunFacts, settings: PlanSettings): MarriagePlan;
   /** The keys of the saved plan's pairings (the tables' ◆ in plan); empty without a saved plan. */
   planKeys(roster: Roster): ReadonlySet<string>;
+  /**
+   * The children ledger: each child of the run with its fixed parent, the plan's pairing (or its parents' marriage),
+   * its best pairing that can still happen with Δ vs the plan, and its status.
+   */
+  ledger(roster: Roster, settings: PlanSettings): readonly LedgerEntry[];
 };
 
 /**
@@ -556,9 +575,9 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     }
     return found;
   };
-  const planPreset = (child: ChildId, { context, preset, overrides }: Pick<PlanSettings, 'context' | 'preset' | 'overrides'>): PresetId => {
-    const own = overrides[child];
-    if (own) return own;
+  const planPreset = (child: ChildId, { context, preset, overrides }: Pick<PlanSettings, 'context' | 'preset' | 'overrides'>): PresetId =>
+    overrides[child] ?? defaultPlanPreset(child, { context, preset });
+  const defaultPlanPreset = (child: ChildId, { context, preset }: Pick<PlanSettings, 'context' | 'preset'>): PresetId => {
     const entry = PLAN_PRESETS[child];
     if (!entry) return preset;
     const k = context === 'all' ? undefined : ({ apotheosis: 'apotheosis', 'main-story': 'mainStory', 'full-route': 'fullRoute' } as const)[context];
@@ -769,9 +788,15 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     skillCard: (r, id, settings) => skillCard(id, reachFor(r, settings), settings.context, builds(r, settings)),
     blocking: (r, roster) => evaluateBlocking(r.pairing, roster, assumptions),
     planPreset,
+    defaultPlanPreset,
     plan: (roster, settings, options) => solvePlan(planContext(roster, settings), options?.free),
     evaluatePlan: (saved, run, settings) => evaluatePlan(planContext(savedRoster(run), settings), saved),
     planKeys: (roster) =>
       new Set(roster.savedPlan ? savedPairings(roster, roster.savedPlan).map(pairingKey).filter((k) => byKey.has(k)) : []),
+    ledger: (roster, settings) => {
+      const ctx = planContext(roster, settings);
+      const candidates = (child: ChildId) => narrowAll(groupsByChild.get(child) ?? [], { run: roster.run }).flatMap((g) => g.results.map((r) => r.pairing));
+      return childLedger(ctx, solvePlan(ctx), candidates, (p) => evaluateBlocking(p, roster, assumptions));
+    },
   };
 }
