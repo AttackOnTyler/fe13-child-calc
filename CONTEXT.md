@@ -114,6 +114,10 @@ _Avoid_: Lock (alone), reservation
 One spouse per unit for the whole roster, chosen by the solver to maximise the sum of each child's priority × score (each child scored with its own preset), with marriages and pins fixed. Re-solved around losses and compared with the saved plan.
 _Avoid_: Backup (alone), optimal pairing
 
+**Plan preset**:
+The preset a child is scored with in the marriage plan: a curated default per child (may differ by play context) unless the user sets one, which then holds in every context. Only the preset name is per child; its role comes with it, everything else is global. The pairing tables ignore it and use the global preset.
+_Avoid_: Child preset, default preset (ambiguous with the global one)
+
 **Blocked pairing**:
 A pairing that contradicts the roster: hard when it can no longer happen (a unit is dead or missed, or married to someone else), soft when it only contradicts a pin or a bench.
 _Avoid_: Invalid, disabled
