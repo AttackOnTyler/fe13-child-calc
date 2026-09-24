@@ -1,4 +1,4 @@
-import { stateOf, type PlayContext, type Roster, type RosterUnit, type UnitState } from '../engine';
+import { stateOf, type Couple, type PlayContext, type Roster, type RosterUnit, type UnitState } from '../engine';
 import type { PlanPrefs } from './plan-prefs';
 import { DEFAULT_PREFS } from './scoring-prefs';
 
@@ -22,7 +22,7 @@ export type GuideFacts = {
    * The adopted plan still holds: none of its couples has lost a partner (dead or missed) short of a marriage, and every
    * real marriage is one of its couples. A loss unsets it until the re-plan is adopted; a bench, a what-if, doesn't.
    */
-  readonly planCurrent: boolean;
+  readonly adoptedPlanHolds: boolean;
   /** A unit is dead or missed. */
   readonly unitLost: boolean;
   /** A marriage really happened (✓ Married), not only a pin. */
@@ -32,16 +32,29 @@ export type GuideFacts = {
 /** Hard losses: gone for good. */
 const LOST: readonly UnitState[] = ['dead', 'missed'];
 
-function planCurrent(roster: Roster): boolean {
+/**
+ * The real marriages (✓ Married) the adopted plan doesn't hold, each couple once; none without an adopted plan. The
+ * Adopt tick and the loss prompt both read it: a marriage the plan made is progress, not a loss.
+ */
+export function offPlanMarriages({ savedPlan, spouses }: Roster): Couple[] {
+  if (!savedPlan) return [];
+  const planned = new Set(savedPlan.marriages.flatMap(([a, b]) => [`${a}+${b}`, `${b}+${a}`]));
+  const seen = new Set<RosterUnit>();
+  return (Object.keys(spouses) as RosterUnit[]).flatMap((u): Couple[] => {
+    const s = spouses[u];
+    if (s?.bond !== 'married' || seen.has(u)) return [];
+    seen.add(u).add(s.partner);
+    return planned.has(`${u}+${s.partner}`) ? [] : [[u, s.partner]];
+  });
+}
+
+/** The adopted plan still holds: no couple of it has lost a partner short of a marriage, and no real marriage is off it. */
+function adoptedPlanHolds(roster: Roster): boolean {
   const { savedPlan, spouses } = roster;
   if (!savedPlan) return false;
   const lost = (u: RosterUnit) => LOST.includes(stateOf(roster, u));
   const married = (a: RosterUnit, b: RosterUnit) => spouses[a]?.partner === b && spouses[a]?.bond === 'married';
-  const saved = new Set(savedPlan.marriages.flatMap(([a, b]) => [`${a}+${b}`, `${b}+${a}`]));
-  return (
-    savedPlan.marriages.every(([a, b]) => married(a, b) || !(lost(a) || lost(b))) &&
-    (Object.keys(spouses) as RosterUnit[]).every((u) => spouses[u]?.bond !== 'married' || saved.has(`${u}+${spouses[u]!.partner}`))
-  );
+  return savedPlan.marriages.every(([a, b]) => married(a, b) || !(lost(a) || lost(b))) && offPlanMarriages(roster).length === 0;
 }
 
 export function guideFacts(roster: Roster, { acts }: PlanPrefs, context: PlayContext): GuideFacts {
@@ -55,7 +68,7 @@ export function guideFacts(roster: Roster, { acts }: PlanPrefs, context: PlayCon
     robinLocked: !!gender && !!asset && !!flaw,
     unitBenched: states.includes('benched'),
     planAdopted: roster.savedPlan !== null,
-    planCurrent: planCurrent(roster),
+    adoptedPlanHolds: adoptedPlanHolds(roster),
     unitLost: states.some((s) => LOST.includes(s)),
     marriageRecorded: Object.values(roster.spouses).some((s) => s?.bond === 'married'),
   };

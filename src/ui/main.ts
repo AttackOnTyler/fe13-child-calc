@@ -347,7 +347,7 @@ function blockChip(b: Blocking): HTMLElement | null {
   const chip = BLOCK_CHIPS[b.status];
   if (!chip && b.notes.length === 0) return null;
   const title = [chip?.label ?? '', ...b.hard.map((r) => `✕ ${r}`), ...b.soft.map((r) => `! ${r}`), ...b.notes].filter(Boolean).join('\n');
-  return h('span', { class: `chip block ${b.status}`, title, 'aria-label': title }, chip?.mark ?? '⚠', chip && b.notes.length ? ' ⚠' : '');
+  return h('span', { class: `chip block ${b.status}`, title, 'aria-label': title }, chip?.mark ?? LABELS.assumption, chip && b.notes.length ? ` ${LABELS.assumption}` : '');
 }
 
 // ---- formatting ----
@@ -371,7 +371,7 @@ function validationButton(report: SelfTestReport): HTMLElement {
         render();
       },
     },
-    'Validation ',
+    `${LABELS.validation} `,
     h('span', { class: report.passed ? 'pos' : 'neg' }, `Self-test ${report.passed ? '✓' : '✕'} ${passed}/${report.cases.length}`),
     overridden > 0 ? h('span', { class: 'warn' }, ` · ${overridden} overridden`) : null,
   );
@@ -447,7 +447,7 @@ function rail(): HTMLElement[] {
 
 // ---- table ----
 
-/** ⚠ on a row that rests on an assumption, naming each one (and its current value) on hover. */
+/** ⚠ (`LABELS.assumption`) on a row that rests on an assumption, naming each one (and its current value) on hover. */
 function warnMark(results: readonly ChildResult[]): HTMLElement | null {
   const used = new Set(results.flatMap((r) => r.assumptionsUsed));
   if (used.size === 0) return null;
@@ -456,7 +456,7 @@ function warnMark(results: readonly ChildResult[]): HTMLElement | null {
     .filter((a) => used.has(a.id))
     .map((a) => `Assumption: ${a.label} = ${a.current}${a.isDefault ? '' : ' (overridden)'}`)
     .join('\n');
-  return h('span', { class: 'warn', title, 'aria-label': title }, ' ⚠');
+  return h('span', { class: 'warn', title, 'aria-label': title }, ` ${LABELS.assumption}`);
 }
 
 /** A table line: one pairing, or a Robin group shown through its best (or pinned) asset/flaw. */

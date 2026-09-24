@@ -13,6 +13,7 @@ import {
   type SelfTestReport,
 } from '../engine';
 import { h } from './dom';
+import { LABELS } from './labels';
 
 /** What the validation panel reads, and how it changes the assumption overrides. */
 export type ValidationContext = {
@@ -213,7 +214,7 @@ export function validationPanel(ctx: ValidationContext): HTMLElement {
   return h(
     'section',
     { class: 'main' },
-    h('div', { class: 'main-head' }, h('h2', {}, 'Validation')),
+    h('div', { class: 'main-head' }, h('h2', {}, LABELS.validation)),
     h('div', { class: 'scroll vpanel' }, selfTestSection(ctx.selfTest), assumptionsSection(ctx), disagreementsSection(ctx.engine)),
   );
 }

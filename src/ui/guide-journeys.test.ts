@@ -11,7 +11,7 @@ const none: GuideFacts = {
   robinLocked: false,
   unitBenched: false,
   planAdopted: false,
-  planCurrent: false,
+  adoptedPlanHolds: false,
   unitLost: false,
   marriageRecorded: false,
 };
@@ -79,7 +79,7 @@ describe('the After a loss journey', () => {
     const ticks = (facts: Partial<GuideFacts>) => steps.filter((s) => stepDone(s, { ...none, ...facts })).map((s) => s.target);
     expect(ticks({ unitLost: true })).toEqual(['state-strip']);
     expect(ticks({ marriageRecorded: true })).toEqual(['married']);
-    expect(ticks({ planCurrent: true })).toEqual(['adopt']);
+    expect(ticks({ adoptedPlanHolds: true })).toEqual(['adopt']);
     expect(ticks({ planAdopted: true })).toEqual([]);
   });
 

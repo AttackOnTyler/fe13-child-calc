@@ -23,6 +23,14 @@ export const LABELS = {
   /** The Plan's diff against the saved plan, and the children ledger's column of what each child could still get. */
   changedVsSaved: 'Changed vs saved plan',
   bestRemaining: 'Best remaining (Δ)',
+  /** The children ledger's status column. */
+  ledgerStatus: 'Status',
+  /** Σ priority × score, the plan's total; ⇄ a spouse swap in the diff. */
+  total: 'Σ',
+  swap: '⇄',
+  /** A game rule the app couldn't verify, and the panel that shows and overrides it. */
+  assumption: '⚠',
+  validation: 'Validation',
   /** The two views the journeys live on, as the left rail names them. */
   roster: 'Roster',
   plan: 'Plan',

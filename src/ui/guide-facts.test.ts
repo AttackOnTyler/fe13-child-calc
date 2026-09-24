@@ -12,7 +12,7 @@ import {
   type PlanSettings,
   type Roster,
 } from '../engine';
-import { guideFacts } from './guide-facts';
+import { guideFacts, offPlanMarriages } from './guide-facts';
 import { DEFAULT_PLAN_PREFS, withDeployEdited, withPriority, withSuggestedPresets, type PlanPrefs } from './plan-prefs';
 import { DEFAULT_PREFS } from './scoring-prefs';
 
@@ -76,32 +76,40 @@ describe('guide facts', () => {
     const [husband, wife] = adopted.savedPlan!.marriages[0]!;
 
     it('once Adopt saves a plan, and not before', () => {
-      expect(fresh().planCurrent).toBe(false);
-      expect(factsFor(adopted).planCurrent).toBe(true);
+      expect(fresh().adoptedPlanHolds).toBe(false);
+      expect(factsFor(adopted).adoptedPlanHolds).toBe(true);
     });
 
     it('not once a partner in it dies or is missed, until the re-plan is adopted', () => {
       const lost = withState(adopted, husband, 'dead');
-      expect(factsFor(lost).planCurrent).toBe(false);
-      expect(factsFor(withState(adopted, wife, 'missed')).planCurrent).toBe(false);
-      expect(factsFor(adopt(lost)).planCurrent).toBe(true);
+      expect(factsFor(lost).adoptedPlanHolds).toBe(false);
+      expect(factsFor(withState(adopted, wife, 'missed')).adoptedPlanHolds).toBe(false);
+      expect(factsFor(adopt(lost)).adoptedPlanHolds).toBe(true);
     });
 
     it('through a bench, which is only a what-if', () => {
-      expect(factsFor(withState(adopted, husband, 'benched')).planCurrent).toBe(true);
+      expect(factsFor(withState(adopted, husband, 'benched')).adoptedPlanHolds).toBe(true);
     });
 
     it('through a marriage the plan made, even if a partner dies after it', () => {
       const married = withSpouse(adopted, husband, wife, 'married');
-      expect(factsFor(married).planCurrent).toBe(true);
-      expect(factsFor(withState(married, wife, 'dead')).planCurrent).toBe(true);
+      expect(factsFor(married).adoptedPlanHolds).toBe(true);
+      expect(factsFor(withState(married, wife, 'dead')).adoptedPlanHolds).toBe(true);
     });
 
     it('not once an off-plan marriage is recorded, until the re-plan is adopted', () => {
       const other = adopted.savedPlan!.marriages.find(([h]) => h !== husband)![1];
       const offPlan = withSpouse(adopted, husband, other, 'married');
-      expect(factsFor(offPlan).planCurrent).toBe(false);
-      expect(factsFor(adopt(offPlan)).planCurrent).toBe(true);
+      expect(factsFor(offPlan).adoptedPlanHolds).toBe(false);
+      expect(factsFor(adopt(offPlan)).adoptedPlanHolds).toBe(true);
+    });
+
+    it('lists the real marriages the adopted plan doesn’t hold, which the loss prompt shares', () => {
+      const other = adopted.savedPlan!.marriages.find(([h]) => h !== husband)![1];
+      expect(offPlanMarriages(withSpouse(EMPTY_ROSTER, husband, other, 'married'))).toEqual([]);
+      expect(offPlanMarriages(withSpouse(adopted, husband, wife, 'married'))).toEqual([]);
+      expect(offPlanMarriages(withSpouse(adopted, husband, other, 'pinned'))).toEqual([]);
+      expect(offPlanMarriages(withSpouse(adopted, husband, other, 'married'))).toEqual([[husband, other]]);
     });
   });
 

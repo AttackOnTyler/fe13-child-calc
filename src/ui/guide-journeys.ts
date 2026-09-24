@@ -36,6 +36,7 @@ export const VIEW_NAMES: Readonly<Record<GuideView, string>> = { roster: LABELS.
 
 const { pinned, married, ruleOut, adoptPlan, lock, suggestRoles, freeReplan, pin, roster, plan, runFacts, playContext, changedVsSaved, bestRemaining } =
   LABELS;
+const { total, swap, assumption, validation, ledgerStatus } = LABELS;
 const stateLabel = (s: keyof typeof STATE_UI) => `${STATE_UI[s].icon} ${STATE_UI[s].label}`;
 const roles = Object.values(ROLE_UI);
 const ledgerLabel = (s: keyof typeof LEDGER_UI) => `${LEDGER_UI[s].mark} ${LEDGER_UI[s].label}`;
@@ -97,7 +98,7 @@ const FRESH: JourneyContent = {
       where: `${plan} › marriage table`,
       title: 'Read the marriage plan',
       takeaway:
-        'The app’s pick of one spouse per unit, maximising Σ priority × score over the children. A child’s score (0–100) is ' +
+        `The app’s pick of one spouse per unit, maximising ${total} priority × score over the children. A child’s score (0–100) is ` +
         `how good its best pairing is under its plan preset, in its best class. Its letter is its deployment role: ` +
         `${roles.map((r) => `${r.short} ${r.label}`).join(', ')}.`,
     },
@@ -178,14 +179,15 @@ const LOSS: JourneyContent = {
       title: `Mark ${stateLabel('dead')}, ${stateLabel('missed')} or ${stateLabel('benched')}`,
       takeaway:
         `Hard (red, struck through) can’t be undone in your game: ${stateLabel('dead')} and ${stateLabel('missed')} are gone for good, ` +
-        `a pin through the unit is ${broken.label}, and pairings that need it are blocked. Soft (amber) is your choice and reversible: ` +
-        `${stateLabel('benched')} puts a pin through the unit ${onHold.label}, and un-benching brings it back. Mark ${stateLabel('missed')} ` +
+        `a pin through the unit is ${broken.label} and frees the partner, and pairings that need it are hard-blocked. ` +
+        `Soft (amber) is your choice and reversible: ${stateLabel('benched')} puts a pin through the unit ${onHold.label}, freeing ` +
+        `the partner until un-benching brings the pin back. Mark ${stateLabel('missed')} ` +
         `only once recruiting is truly impossible; ${stateLabel('not-recruited')} prunes nothing. Bench is also a what-if: bench a unit ` +
         `to ask “what if I drop them?”, read the ${plan}, and un-bench if you don’t like it.`,
       tick: 'unitLost',
       note:
         `Died after their ${married} S-support? Mark ${stateLabel('dead')} anyway. The app assumes their child can still be recruited; ` +
-        'that rule is unverified (⚠), and you can override it in Validation if your run says otherwise.',
+        `that rule is unverified (${assumption}), and you can override it in ${validation} if your run says otherwise.`,
     },
     {
       view: 'roster',
@@ -203,7 +205,7 @@ const LOSS: JourneyContent = {
       where: `${roster} › children ledger`,
       title: 'Scan the children ledger',
       takeaway:
-        `One row per child, with its fixed parent (the one it always has). Status tells you which children are hurt: ` +
+        `One row per child, with its fixed parent (the one it always has). ${ledgerStatus} tells you which children are hurt: ` +
         `${ledgerLabel('broken')} (the saved pairing can’t happen), ${ledgerLabel('on-hold')} (a parent is benched), ` +
         `${ledgerLabel('left-out')} (it can still be born, but this plan doesn’t produce it: ${leftOutReasons}), ` +
         `${ledgerLabel('unborn')}, ${ledgerLabel('dead')}. The plan’s pairing column already shows the re-plan; ${bestRemaining} is ` +
@@ -216,8 +218,8 @@ const LOSS: JourneyContent = {
       title: 'Read what broke and what replaces it',
       takeaway:
         `The banners list the pins that are ${broken.label} or ${onHold.label}. ${changedVsSaved} tells you why and what replaces it: ` +
-        `Σ before → after; ${NOT_BORN_UI.unborn} (red, gone for good); ${NOT_BORN_UI.leftOut} (amber, with the reason, so you know ` +
-        'whether raising its priority or pinning its parent would help); and ⇄, every spouse swap.',
+        `${total} before → after; ${NOT_BORN_UI.unborn} (red, gone for good); ${NOT_BORN_UI.leftOut} (amber, with the reason, so you know ` +
+        `whether raising its priority or pinning its parent would help); and ${swap}, every spouse swap.`,
     },
     {
       view: 'plan',
@@ -226,7 +228,7 @@ const LOSS: JourneyContent = {
       title: 'Keep your pins; go free only to see their cost',
       takeaway:
         `Keep pins by default: a pin usually means supports already being built. ${freeReplan} shows the best plan without them. ` +
-        'Go free only when the gain beats restarting the pairings its ⇄ line lists.',
+        `Go free only when the gain beats restarting the pairings its ${swap} line lists.`,
     },
     {
       view: 'plan',
@@ -236,7 +238,7 @@ const LOSS: JourneyContent = {
       takeaway:
         'Always adopt after recording a loss. Otherwise the next diff compares against a dead plan, and the ' +
         `${broken.banner} banner keeps growing. Ticks once the adopted plan has no dead or missed partner and holds every real marriage.`,
-      tick: 'planCurrent',
+      tick: 'adoptedPlanHolds',
     },
   ],
 };

@@ -228,13 +228,13 @@ function diffBanner(ctx: PlanPageContext, plan: MarriagePlan, diff: PlanDiff | u
   return h(
     'div',
     { ...guide('plan-diff'), class: 'banner warn-b' },
-    h('div', {}, h('b', {}, LABELS.changedVsSaved), ` Σ ${fmt(diff.before)} → ${fmt(diff.after)} `, h('span', { class: tone(change) }, `(${signed(change)})`)),
+    h('div', {}, h('b', {}, LABELS.changedVsSaved), ` ${LABELS.total} ${fmt(diff.before)} → ${fmt(diff.after)} `, h('span', { class: tone(change) }, `(${signed(change)})`)),
     diff.unborn.length
       ? h('div', { class: 'neg' }, `${NOT_BORN_UI.unborn}: `, diff.unborn.map((c) => `${c.name} (${c.score ?? '—'})`).join(', '))
       : null,
     leftOutLine(diff.leftOut, true),
     diff.gained.length ? h('div', { class: 'pos' }, '+ New children: ', diff.gained.map((c) => `${c.name} (${c.score ?? '—'})`).join(', ')) : null,
-    diff.moves.length ? h('div', {}, '⇄ ', diff.moves.map((m) => `${name(m.unit)}: ${name(m.from)} → ${name(m.to)}`).join(' · ')) : null,
+    diff.moves.length ? h('div', {}, `${LABELS.swap} `, diff.moves.map((m) => `${name(m.unit)}: ${name(m.from)} → ${name(m.to)}`).join(' · ')) : null,
     diff.roleMoves.length
       ? h('div', {}, 'Roles: ', diff.roleMoves.map((m) => `${m.name}: ${ROLE_UI[m.from].label} → ${ROLE_UI[m.to].label}`).join(' · '))
       : null,
@@ -297,7 +297,7 @@ export function planPage(ctx: PlanPageContext): HTMLElement[] {
     'div',
     { class: 'main-head' },
     h('h2', {}, 'Marriage plan'),
-    h('b', { class: 'num' }, `Σ ${fmt(plan.total)}`),
+    h('b', { class: 'num' }, `${LABELS.total} ${fmt(plan.total)}`),
     h('span', { class: 'muted small' }, `priority × score · ${plan.marriages.length} marriages · solved in ${ms} ms`),
     h(
       'label',
@@ -334,8 +334,8 @@ export function planPage(ctx: PlanPageContext): HTMLElement[] {
           'div',
           { class: 'muted' },
           ctx.free
-            ? `Ignoring the pins gains Σ ${signed(pinCost)} over keeping them (${fmt(pinnedPlan.total)}).`
-            : `Keeping the pins costs Σ ${fmt(pinCost)}: a free re-plan reaches ${fmt(freePlan.total)}.`,
+            ? `Ignoring the pins gains ${LABELS.total} ${signed(pinCost)} over keeping them (${fmt(pinnedPlan.total)}).`
+            : `Keeping the pins costs ${LABELS.total} ${fmt(pinCost)}: a free re-plan reaches ${fmt(freePlan.total)}.`,
         )
       : null,
     diffBanner(ctx, plan, diff),
