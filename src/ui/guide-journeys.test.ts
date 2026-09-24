@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GuideFacts } from './guide-facts';
+import { LEDGER_UI, NOT_BORN_UI, PIN_LOSS_UI } from './labels';
 import { JOURNEYS, journeyProgress, stepDone, type JourneyStep } from './guide-journeys';
 
 const none: GuideFacts = {
@@ -10,6 +11,7 @@ const none: GuideFacts = {
   robinLocked: false,
   unitBenched: false,
   planAdopted: false,
+  planCurrent: false,
   unitLost: false,
   marriageRecorded: false,
 };
@@ -51,5 +53,39 @@ describe('the Fresh run journey', () => {
     expect(ticks({ rolesSuggested: true })).toEqual(['suggest-roles']);
     expect(ticks({ planAdopted: true })).toEqual(['adopt']);
     expect(ticks({ robinLocked: true })).toEqual(['robin-lock']);
+  });
+});
+
+describe('the After a loss journey', () => {
+  const { steps } = JOURNEYS.loss;
+
+  it('follows Fresh run on the switch', () => {
+    expect(Object.keys(JOURNEYS)).toEqual(['fresh', 'loss']);
+  });
+
+  it('records on Roster, reads the ledger, then re-plans and adopts on Plan', () => {
+    expect(steps.map((s) => [s.view, s.target])).toEqual([
+      ['roster', 'state-strip'],
+      ['roster', 'married'],
+      ['roster', 'children-ledger'],
+      ['plan', 'plan-diff'],
+      ['plan', 'free-replan'],
+      ['plan', 'adopt'],
+    ]);
+  });
+
+  it('ticks a loss, a real marriage and adopting the re-plan', () => {
+    expect(journeyProgress(steps, none)).toEqual({ done: 0, tracked: 3 });
+    const ticks = (facts: Partial<GuideFacts>) => steps.filter((s) => stepDone(s, { ...none, ...facts })).map((s) => s.target);
+    expect(ticks({ unitLost: true })).toEqual(['state-strip']);
+    expect(ticks({ marriageRecorded: true })).toEqual(['married']);
+    expect(ticks({ planCurrent: true })).toEqual(['adopt']);
+    expect(ticks({ planAdopted: true })).toEqual([]);
+  });
+
+  it('names left out, can’t be born, broken and on hold as the app shows them', () => {
+    const copy = steps.map((s) => `${s.title} ${s.takeaway} ${s.note ?? ''}`).join(' ');
+    for (const label of [LEDGER_UI['left-out'].label, NOT_BORN_UI.unborn, NOT_BORN_UI.leftOut, PIN_LOSS_UI.broken.label, PIN_LOSS_UI['on-hold'].label])
+      expect(copy).toContain(label);
   });
 });

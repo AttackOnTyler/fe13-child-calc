@@ -63,7 +63,7 @@ export function guideButton(ctx: () => GuideContext): HTMLElement {
   );
 }
 
-/** The welcome box's journeys; until After a loss and Explore have content, the dock shows Fresh run for them. */
+/** The welcome box's journeys; until Explore has content, Just look around shows Fresh run. */
 const WELCOME_CHOICES: readonly { readonly journey: Journey; readonly title: string; readonly ask: string }[] = [
   { journey: 'fresh', title: 'Plan a fresh run', ask: 'I’m starting a run: who should everyone marry?' },
   { journey: 'loss', title: 'Re-plan after a loss', ask: 'A unit died, a recruit was missed, or a marriage went off-plan.' },

@@ -228,7 +228,7 @@ function diffBanner(ctx: PlanPageContext, plan: MarriagePlan, diff: PlanDiff | u
   return h(
     'div',
     { ...guide('plan-diff'), class: 'banner warn-b' },
-    h('div', {}, h('b', {}, 'Changed vs saved plan'), ` Σ ${fmt(diff.before)} → ${fmt(diff.after)} `, h('span', { class: tone(change) }, `(${signed(change)})`)),
+    h('div', {}, h('b', {}, LABELS.changedVsSaved), ` Σ ${fmt(diff.before)} → ${fmt(diff.after)} `, h('span', { class: tone(change) }, `(${signed(change)})`)),
     diff.unborn.length
       ? h('div', { class: 'neg' }, `${NOT_BORN_UI.unborn}: `, diff.unborn.map((c) => `${c.name} (${c.score ?? '—'})`).join(', '))
       : null,

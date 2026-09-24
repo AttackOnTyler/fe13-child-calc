@@ -20,6 +20,9 @@ export const LABELS = {
   lock: 'Lock',
   suggestRoles: 'Suggest roles',
   freeReplan: 'Free re-plan',
+  /** The Plan's diff against the saved plan, and the children ledger's column of what each child could still get. */
+  changedVsSaved: 'Changed vs saved plan',
+  bestRemaining: 'Best remaining (Δ)',
   /** The two views the journeys live on, as the left rail names them. */
   roster: 'Roster',
   plan: 'Plan',

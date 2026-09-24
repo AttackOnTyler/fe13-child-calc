@@ -230,7 +230,7 @@ function childrenLedger(ctx: RosterContext): HTMLElement {
             h('th', {}, 'Child'),
             h('th', {}, 'Fixed parent'),
             h('th', {}, 'Plan / marriage'),
-            h('th', {}, 'Best remaining (Δ)'),
+            h('th', {}, LABELS.bestRemaining),
             h('th', {}, 'Status'),
             h('th', {}, 'Priority'),
             h('th', {}, 'Plan preset'),

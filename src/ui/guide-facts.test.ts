@@ -70,6 +70,41 @@ describe('guide facts', () => {
     expect(factsFor(withSpouse(EMPTY_ROSTER, 'chrom', 'sumia', 'married')).marriageRecorded).toBe(true);
   });
 
+  describe('say the adopted plan is current', () => {
+    const adopt = (roster: Roster) => adoptPlan(roster, engine.plan(roster, settings));
+    const adopted = adopt(EMPTY_ROSTER);
+    const [husband, wife] = adopted.savedPlan!.marriages[0]!;
+
+    it('once Adopt saves a plan, and not before', () => {
+      expect(fresh().planCurrent).toBe(false);
+      expect(factsFor(adopted).planCurrent).toBe(true);
+    });
+
+    it('not once a partner in it dies or is missed, until the re-plan is adopted', () => {
+      const lost = withState(adopted, husband, 'dead');
+      expect(factsFor(lost).planCurrent).toBe(false);
+      expect(factsFor(withState(adopted, wife, 'missed')).planCurrent).toBe(false);
+      expect(factsFor(adopt(lost)).planCurrent).toBe(true);
+    });
+
+    it('through a bench, which is only a what-if', () => {
+      expect(factsFor(withState(adopted, husband, 'benched')).planCurrent).toBe(true);
+    });
+
+    it('through a marriage the plan made, even if a partner dies after it', () => {
+      const married = withSpouse(adopted, husband, wife, 'married');
+      expect(factsFor(married).planCurrent).toBe(true);
+      expect(factsFor(withState(married, wife, 'dead')).planCurrent).toBe(true);
+    });
+
+    it('not once an off-plan marriage is recorded, until the re-plan is adopted', () => {
+      const other = adopted.savedPlan!.marriages.find(([h]) => h !== husband)![1];
+      const offPlan = withSpouse(adopted, husband, other, 'married');
+      expect(factsFor(offPlan).planCurrent).toBe(false);
+      expect(factsFor(adopt(offPlan)).planCurrent).toBe(true);
+    });
+  });
+
   it('say Suggest roles ran once its picks are written, even when it picked nothing', () => {
     expect(fresh().rolesSuggested).toBe(false);
     const picks = engine.suggestRoles(EMPTY_ROSTER, settings, quotasFor('all')).overrides;
