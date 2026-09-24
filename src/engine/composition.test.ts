@@ -104,6 +104,17 @@ describe('composition counts', () => {
     expect(counts(withState(ROSTER, 'olivia', 'not-recruited')).dancer).toBe(1);
   });
 
+  it('say how many of the deployed are planned children, which benching leaves out', () => {
+    const plan = engine.plan(ROSTER, settings);
+    const kids = plan.marriages.flatMap((m) => m.children).length;
+    expect(composition(ROSTER, plan, quotasFor('all')).deployed.children).toBe(kids);
+    // Benched Lucina stays planned (soft) but isn't counted.
+    const benched = withState(ROSTER, 'lucina', 'benched');
+    const benchedPlan = engine.plan(benched, settings);
+    expect(benchedPlan.marriages.some((m) => m.children.some((c) => c.child === 'lucina'))).toBe(true);
+    expect(composition(benched, benchedPlan, quotasFor('all')).deployed).toMatchObject({ count: 3 + kids - 1, children: kids - 1 });
+  });
+
   it('count a child in the role of its plan preset', () => {
     const base = counts(ROSTER);
     const c = counts(ROSTER, { ...settings, overrides: { lucina: 'rallybot' } });

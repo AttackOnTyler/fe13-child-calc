@@ -17,8 +17,8 @@ export type RoleCount = QuotaRange & { readonly role: DeploymentRole; readonly c
 export type Composition = {
   /** Lead, Battery, Staff/Rally, Dancer. */
   readonly roles: readonly RoleCount[];
-  /** Red over the cap. */
-  readonly deployed: { readonly count: number; readonly cap: number; readonly status: 'ok' | 'over' };
+  /** Red over the cap. `children` of the count are planned children: every one deploys unless benched, missed or dead. */
+  readonly deployed: { readonly count: number; readonly children: number; readonly cap: number; readonly status: 'ok' | 'over' };
 };
 
 /**
@@ -56,11 +56,17 @@ export function composition(roster: Roster, plan: MarriagePlan, quotas: Quotas):
     const tag = deploymentOf(roster, u);
     if (tag.deploy && inPlay(roster, u)) add(tag.role);
   }
-  for (const m of plan.marriages) for (const c of m.children) if (inPlay(roster, c.child)) add(c.deploymentRole);
+  let children = 0;
+  for (const m of plan.marriages)
+    for (const c of m.children)
+      if (inPlay(roster, c.child)) {
+        add(c.deploymentRole);
+        children++;
+      }
   const roles = DEPLOYMENT_ROLES.map((role): RoleCount => {
     const count = counts.get(role)!;
     return { role, count, ...quotas.roles[role], status: statusOf(count, quotas.roles[role]) };
   });
   const total = roles.reduce((sum, r) => sum + r.count, 0);
-  return { roles, deployed: { count: total, cap: quotas.cap, status: total > quotas.cap ? 'over' : 'ok' } };
+  return { roles, deployed: { count: total, children, cap: quotas.cap, status: total > quotas.cap ? 'over' : 'ok' } };
 }

@@ -347,6 +347,7 @@ button.chip.plan-preset:disabled { cursor: default; color: var(--muted); border-
 .comp { display: flex; gap: 6px; align-items: flex-start; margin: 0 0 6px; }
 .comp-strip { font-size: 12px; line-height: 1.6; font-variant-numeric: tabular-nums; }
 .ledger .comp-strip { margin-top: 6px; }
+.comp-note { margin: 2px 0 0; line-height: 1.4; }
 .q { white-space: nowrap; }
 .q-ok { color: var(--pos); }
 .q-under { color: var(--warn); }

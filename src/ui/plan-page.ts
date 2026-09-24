@@ -72,7 +72,12 @@ export const ROLE_UI: Readonly<Record<DeploymentRole, { readonly label: string; 
 
 const QUOTA_HINT = { ok: 'In range', under: 'Below the minimum', over: 'Over the maximum' } as const;
 
-/** `Lead n / min–max · … · Deployed n / cap`: green in range, amber below min, red over max or over the cap. Never blocks. */
+const BENCH_HINT = 'Every planned child counts as deployed, whatever its priority. Set the children you won’t field to ⏸ Benched (Roster › Children): they stay planned but aren’t counted.';
+
+/**
+ * `Lead n / min–max · … · Deployed n / cap`: green in range, amber below min, red over max or over the cap. Never blocks.
+ * When red and planned children are counted, says that benching is how to leave one out.
+ */
 export function compositionStrip(c: Composition): HTMLElement {
   const parts = c.roles.map((r) =>
     h(
@@ -82,12 +87,21 @@ export function compositionStrip(c: Composition): HTMLElement {
     ),
   );
   const d = c.deployed;
+  const showBenchHint = d.children > 0 && (d.status === 'over' || c.roles.some((r) => r.status === 'over'));
   const deployed = h(
     'span',
-    { class: `q q-${d.status}`, title: d.status === 'over' ? 'Over the deploy cap' : 'Within the deploy cap' },
+    {
+      class: `q q-${d.status}`,
+      title: `${d.status === 'over' ? 'Over the deploy cap' : 'Within the deploy cap'}: ${d.count - d.children} first-gen + ${d.children} planned children.${showBenchHint ? ` ${BENCH_HINT}` : ''}`,
+    },
     `Deployed ${d.count} / ${d.cap}`,
   );
-  return h('div', { class: 'comp-strip', 'aria-label': 'Deployment composition' }, ...[...parts, deployed].flatMap((p, i) => (i ? [h('span', { class: 'muted' }, ' · '), p] : [p])));
+  return h(
+    'div',
+    { class: 'comp-strip', 'aria-label': 'Deployment composition' },
+    ...[...parts, deployed].flatMap((p, i) => (i ? [h('span', { class: 'muted' }, ' · '), p] : [p])),
+    showBenchHint ? h('p', { class: 'comp-note muted small' }, BENCH_HINT) : null,
+  );
 }
 
 /** A child's deployment role, from its plan preset: read-only. */
