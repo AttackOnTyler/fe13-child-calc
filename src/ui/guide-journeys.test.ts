@@ -56,11 +56,18 @@ describe('the Fresh run journey', () => {
   });
 });
 
+describe('Explore', () => {
+  it('has no steps, so nothing to tick', () => {
+    expect(JOURNEYS.explore.steps).toEqual([]);
+    expect(journeyProgress(JOURNEYS.explore.steps, all)).toEqual({ done: 0, tracked: 0 });
+  });
+});
+
 describe('the After a loss journey', () => {
   const { steps } = JOURNEYS.loss;
 
-  it('follows Fresh run on the switch', () => {
-    expect(Object.keys(JOURNEYS)).toEqual(['fresh', 'loss']);
+  it('follows Fresh run on the switch, before Explore', () => {
+    expect(Object.keys(JOURNEYS)).toEqual(['fresh', 'loss', 'explore']);
   });
 
   it('records on Roster, reads the ledger, then re-plans and adopts on Plan', () => {

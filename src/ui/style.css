@@ -397,6 +397,22 @@ button.chip.plan-preset:disabled { cursor: default; color: var(--muted); border-
 .gd-take { margin: 0 2px 6px 24px; }
 .gd-path { margin-bottom: 2px; }
 .gd-note { margin: 2px 2px 6px 24px; padding-left: 6px; border-left: 2px solid var(--line); }
+.gd-links { display: grid; justify-items: start; margin: 0 2px 6px 24px; }
+.gd-link { border: 0; background: transparent; padding: 1px 0; color: var(--accent); text-align: left; }
+.gd-link:hover { text-decoration: underline; }
+.gd-deeper { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+.gd-deeper-head { display: block; width: 100%; margin: 0 0 4px; padding: 2px; border: 0; background: transparent; text-align: left; font-size: 13px; font-weight: 600; color: var(--text); }
+button.gd-deeper-head:hover { background: var(--hover); }
+.gd-deeper-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.gd-q { padding: 2px; border-radius: 4px; }
+.gd-q-head { display: flex; gap: 6px; align-items: baseline; justify-content: space-between; }
+.gd-jump { flex: none; }
+.gd-steps { margin: 2px 0; padding-left: 20px; }
+.gd-terms { margin-top: 2px; }
+.gd-terms summary { cursor: pointer; }
+.gd-terms dl { margin: 4px 0 0; }
+.gd-terms dt { font-weight: 600; }
+.gd-terms dd { margin: 0 0 4px 10px; }
 .guide-spot { outline: 2px solid var(--accent) !important; outline-offset: 3px; border-radius: 4px; animation: guide-spot 1.8s ease-out; }
 @keyframes guide-spot { 0%, 60% { box-shadow: 0 0 0 6px #5aa9ff55; } 100% { box-shadow: 0 0 0 0 transparent; } }
 @media (max-width: 700px) { .gd { left: 8px; right: 8px; width: auto; } }

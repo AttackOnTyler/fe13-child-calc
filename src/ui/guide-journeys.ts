@@ -3,6 +3,7 @@
  * where there is a state to detect. Copy interpolates the labels module, so a rename there reaches the guide.
  */
 import type { GuideTarget } from './guide';
+import type { DeeperId } from './guide-deeper';
 import type { GuideFacts } from './guide-facts';
 import { LABELS, LEDGER_UI, LEFT_OUT_UI, NOT_BORN_UI, PIN_LOSS_UI, ROLE_UI, STATE_UI } from './labels';
 import { CONTEXT_LABELS } from './scoring-prefs';
@@ -22,6 +23,8 @@ export type JourneyStep = {
   readonly tick?: keyof GuideFacts | readonly (keyof GuideFacts)[];
   /** A note shown after the step. */
   readonly note?: string;
+  /** Going deeper entries the step links to with “↳ <question>”. */
+  readonly deeper?: readonly DeeperId[];
 };
 
 export type JourneyContent = {
@@ -101,6 +104,7 @@ const FRESH: JourneyContent = {
         `The app’s pick of one spouse per unit, maximising ${total} priority × score over the children. A child’s score (0–100) is ` +
         `how good its best pairing is under its plan preset, in its best class. Its letter is its deployment role: ` +
         `${roles.map((r) => `${r.short} ${r.label}`).join(', ')}.`,
+      deeper: ['why-spouse', 'pairing-build'],
     },
     {
       view: 'plan',
@@ -135,6 +139,7 @@ const FRESH: JourneyContent = {
       takeaway:
         'A plan preset is how a child is judged (lead, support, tank, staff…), and it sets the child’s deployment letter. ' +
         'default is the curated pick for this play context; ↺ goes back to it.',
+      deeper: ['preset'],
     },
     {
       view: 'plan',
@@ -162,6 +167,7 @@ const FRESH: JourneyContent = {
         `${lock} writes the plan’s Robin into ${runFacts} and pins Robin’s marriage. From here on, re-plans respect the Robin you actually ` +
         'have. If you set Robin at step 2, there’s no pick line and nothing to lock: this step is already done.',
       tick: 'robinLocked',
+      deeper: ['robin'],
     },
   ],
 };
@@ -210,6 +216,7 @@ const LOSS: JourneyContent = {
         `${ledgerLabel('left-out')} (it can still be born, but this plan doesn’t produce it: ${leftOutReasons}), ` +
         `${ledgerLabel('unborn')}, ${ledgerLabel('dead')}. The plan’s pairing column already shows the re-plan; ${bestRemaining} is ` +
         'the best the child could still get if you prioritised it: raise its priority if that’s worth chasing.',
+      deeper: ['why-spouse'],
     },
     {
       view: 'plan',
@@ -243,8 +250,15 @@ const LOSS: JourneyContent = {
   ],
 };
 
+/** Just look around: no steps, only Going deeper. */
+const EXPLORE: JourneyContent = {
+  title: 'Explore',
+  ask: 'Look around at your own pace. Each question jumps to the view that answers it.',
+  steps: [],
+};
+
 /** The journeys the dock can show, in switch order. */
-export const JOURNEYS = { fresh: FRESH, loss: LOSS } as const;
+export const JOURNEYS = { fresh: FRESH, loss: LOSS, explore: EXPLORE } as const;
 
 export type GuideJourney = keyof typeof JOURNEYS;
 

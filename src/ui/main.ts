@@ -53,10 +53,11 @@ import {
 } from '../engine';
 import { h } from './dom';
 import { guide } from './guide';
+import { guideChild } from './guide-deeper';
 import { guideFacts } from './guide-facts';
 import { hasSavedRun, loadGuidePrefs, saveGuidePrefs, welcomeShows, type GuidePrefs } from './guide-prefs';
 import { guideButton, guideLayer, type GuideContext } from './guide-ui';
-import { LABELS, SCORING_ROLE_UI } from './labels';
+import { BASIS_LABELS, LABELS, SCORING_ROLE_UI } from './labels';
 import { loadOverrides, saveOverrides } from './overrides';
 import {
   BASES,
@@ -117,6 +118,8 @@ let editingQuotas = false;
 // View state only; all domain answers come from the engine.
 /** A child's table, or the All children leaderboard. */
 let selected: ChildId | 'all' = 'lucina';
+/** The last child the visitor opened from the left rail, which the guide's table jumps show again. */
+let childOpened: ChildId | undefined;
 /** A new visitor starts on Roster, under the welcome box: setup comes first. */
 let view: 'table' | 'validation' | 'roster' | 'plan' = !selfTest.passed ? 'validation' : welcomeOpen ? 'roster' : 'table';
 /** A Robin group row's identity across children: `child|group key`. */
@@ -314,7 +317,7 @@ function planPresetChip(child: ChildId): HTMLElement {
       onclick: () => setPrefs(withPreset(prefs, id)),
     },
     `Plan: ${name}`,
-    current ? ' ✓' : ' → score with this',
+    current ? ' ✓' : ` ${LABELS.scoreWithThis}`,
   );
 }
 
@@ -331,7 +334,7 @@ function planChip(results: readonly ChildResult[]): HTMLElement | null {
   if (!inPlan) return null;
   const af = results.length > 1 ? engine.robinLabel(inPlan.pairing) : undefined;
   const title = `In the saved marriage plan${af ? ` (${af})` : ''}`;
-  return h('span', { class: 'chip block in-plan', title, 'aria-label': title }, '◆');
+  return h('span', { class: 'chip block in-plan', title, 'aria-label': title }, LABELS.inPlan);
 }
 
 const BLOCK_CHIPS: Readonly<Record<Blocking['status'], { mark: string; label: string } | undefined>> = {
@@ -379,6 +382,18 @@ function validationButton(report: SelfTestReport): HTMLElement {
 
 // ---- rail ----
 
+/** The children with a pairing in this run (the run facts remove the other Morgan), in rail order. */
+const childrenInRun = () => engine.children().filter((c) => engine.groups(c.id, { run: roster.run }).length > 0);
+
+/** Switches to a child's table or the leaderboard, with rows collapsed. */
+function showTable(id: ChildId | 'all'): void {
+  selected = id;
+  view = 'table';
+  expanded.clear();
+  openCards.clear();
+  limit = FIRST_PAGE;
+}
+
 function rail(): HTMLElement[] {
   const sc = scoring();
   const children = engine.children();
@@ -398,11 +413,8 @@ function rail(): HTMLElement[] {
         class: `rail-item${id === 'all' ? ' all' : ''}${id === selected && view === 'table' ? ' on' : ''}`,
         title,
         onclick: () => {
-          selected = id;
-          view = 'table';
-          expanded.clear();
-          openCards.clear();
-          limit = FIRST_PAGE;
+          showTable(id);
+          if (id !== 'all') childOpened = id;
           render();
         },
       },
@@ -435,10 +447,10 @@ function rail(): HTMLElement[] {
         },
       },
       h('span', {}, LABELS.plan),
-      h('b', { class: 'num muted', title: 'A saved plan' }, roster.savedPlan ? '◆' : ''),
+      h('b', { class: 'num muted', title: 'A saved plan' }, roster.savedPlan ? LABELS.inPlan : ''),
     ),
     h('div', { class: 'muted small rail-head' }, `Best · ${presetLabel(currentPreset())}`),
-    item('all', 'All children', 'Leaderboard of every child’s pairings', top.length ? Math.max(...top) : undefined),
+    item('all', LABELS.allChildren, 'Leaderboard of every child’s pairings', top.length ? Math.max(...top) : undefined),
     ...children
       .filter((c) => bestInRun.get(c.id)!.exists)
       .map((c) => item(c.id, c.name, `${c.pairingCount} pairings`, bestInRun.get(c.id)!.score)),
@@ -520,7 +532,6 @@ function sortLines(lines: Line[], gender: Gender): Line[] {
 
 const weighted = (s: Stat): boolean => scoring().weightedStats.includes(s);
 
-const BASIS_LABELS: Record<ScoreBasis, string> = { 'caps-lb': 'Caps+LB', caps: 'Caps', growths: 'Growths' };
 const capsHeader = () =>
   support() ? 'Pair-up bonus' : basis() === 'growths' ? 'Growth in class' : `Effective caps${basis() === 'caps-lb' ? ' + LB' : ''}`;
 
@@ -751,7 +762,7 @@ function skillsButton(id: string): HTMLElement {
         renderParts(['main']);
       },
     },
-    'Skills',
+    LABELS.skills,
   );
 }
 
@@ -1384,7 +1395,7 @@ function leaderboard(): HTMLElement[] {
   const head = h(
     'div',
     { class: 'main-head' },
-    h('h2', {}, 'All children'),
+    h('h2', {}, LABELS.allChildren),
     h('span', { class: 'muted' }, `${entries.length} pairings · ${presetLabel(currentPreset())} · bars: ${capsHeader()} (${BASIS_LABELS[basis()]})`),
     boardControls(),
     h(
@@ -1507,8 +1518,8 @@ type WeightSlider = { stat: keyof Weights; max: number; label: string; title?: s
 const WEIGHT_STATS: readonly WeightSlider[] = STATS.flatMap((s): WeightSlider[] =>
   s === 'spd'
     ? [
-        { stat: 'spd', max: 20, label: 'Spd→T', title: 'Per Spd point up to the target breakpoint + margin' },
-        { stat: 'spdBeyond', max: 10, label: 'Spd+', title: 'Per Spd point beyond the target breakpoint + margin' },
+        { stat: 'spd', max: 20, label: LABELS.spdToTarget, title: 'Per Spd point up to the target breakpoint + margin' },
+        { stat: 'spdBeyond', max: 10, label: LABELS.spdBeyond, title: 'Per Spd point beyond the target breakpoint + margin' },
       ]
     : [{ stat: s, max: 10, label: STAT_LABELS[s] }],
 );
@@ -1947,6 +1958,23 @@ const guideContext = (): GuideContext => ({
     view = next;
     renderParts(['rail', 'main', 'panel']);
   },
+  goDeeper: (jump) => {
+    let shown: string | undefined;
+    if (jump.to === 'leaderboard') showTable('all');
+    else if (jump.to === 'validation') view = 'validation';
+    else if (jump.to === 'child') {
+      const inRun = childrenInRun();
+      const child = guideChild(childOpened, planPrefs.priorities, inRun.map((c) => c.id));
+      showTable(child);
+      const robin = jump.robinRow ? engine.groups(child, pairingFilter()).find((g) => g.results.length > 1) : undefined;
+      if (robin) expanded.add(groupId(child, robin));
+      shown = inRun.find((c) => c.id === child)!.name;
+    }
+    // The Scoring sidebar is on every view: its jump stays put.
+    renderParts(['rail', 'main', 'panel']);
+    return shown;
+  },
+  refresh: renderGuide,
 });
 
 /** The guide follows every change: its ticks read the roster, plan preferences and play context. */

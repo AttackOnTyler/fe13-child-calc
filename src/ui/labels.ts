@@ -2,7 +2,7 @@
  * Labels a view and the guide both show. Views render these constants rather than string literals, so the guide can
  * name a control and be sure it matches what the visitor sees.
  */
-import type { DeploymentRole, LedgerStatus, LeftOutReason, PinLoss, ScoringRole, UnitState } from '../engine';
+import type { DeploymentRole, LedgerStatus, LeftOutReason, PinLoss, ScoreBasis, ScoringRole, UnitState } from '../engine';
 
 const PIN = '📌';
 
@@ -38,7 +38,21 @@ export const LABELS = {
   playContext: 'Play context',
   /** The header button that brings the guide back. */
   guide: '? Guide',
+  /** The left rail's leaderboard entry. */
+  allChildren: 'All children',
+  /** A child table's chip that switches the Scoring sidebar to the child's plan preset. */
+  scoreWithThis: '→ score with this',
+  /** A table row whose pairing is in the saved marriage plan. */
+  inPlan: '◆',
+  /** A table row's button that opens its Skills drawer. */
+  skills: 'Skills',
+  /** The Scoring sidebar's Spd weights: up to the target breakpoint + margin, and beyond it. */
+  spdToTarget: 'Spd→T',
+  spdBeyond: 'Spd+',
 } as const;
+
+/** The Scoring sidebar's score bases. */
+export const BASIS_LABELS: Readonly<Record<ScoreBasis, string>> = { 'caps-lb': 'Caps+LB', caps: 'Caps', growths: 'Growths' };
 
 /** A unit's state on Roster: its icon, word and hint. */
 export const STATE_UI: Readonly<Record<UnitState, { icon: string; label: string; hint: string }>> = {
