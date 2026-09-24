@@ -134,7 +134,7 @@ One spouse per unit for the whole roster, chosen by the solver to maximise the s
 _Avoid_: Backup (alone), optimal pairing
 
 **Plan preset**:
-The preset a child is scored with in the marriage plan: a curated default per child (may differ by play context) unless the user sets one, which then holds in every context. Only the preset name is per child; its role comes with it, everything else is global. The pairing tables ignore it and use the global preset.
+The preset a child is scored with in the marriage plan: a curated default per child (may differ by play context) unless the user sets one, which then holds in every context. Only the preset name is per child; its role comes with it, everything else is global. The pairing tables ignore it and use the global preset, except on a **visit**: a child opened from the marriage plan scores with its plan preset (its scoring role, Auto class) until the visitor leaves its table or sets the preset, scoring role or class.
 _Avoid_: Child preset, default preset (ambiguous with the global one)
 
 **Children ledger**:

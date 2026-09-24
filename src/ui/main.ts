@@ -31,6 +31,7 @@ import {
   type PairingGroup,
   type PairingScore,
   type PlanSettings,
+  type PlannedChild,
   type PlayContext,
   type PresetId,
   type RobinMode,
@@ -67,14 +68,17 @@ import {
   RANK_CHOICES,
   ROLES,
   basisOf,
+  changePrefs,
   dlcReachable,
   effectivePreset,
   isModified,
   loadPrefs,
   roleOf,
   savePrefs,
+  scoreSettingsOf,
   speedSettings,
   targetOf,
+  visitPrefs,
   withPreset,
   type ColumnGroup,
   type ScoringPrefs,
@@ -185,42 +189,59 @@ let helper: { cls: ClassId; rank: SupportRank; rawSpd: number } = { cls: 'swordm
 
 // ---- scoring ----
 
-const currentPreset = (): Preset => engine.presets().find((p) => p.id === prefs.preset)!;
+/**
+ * A visit from the Plan's marriage table to a child's table: the table scores with the child's plan preset, and the
+ * plan's pairing (`key`) is highlighted. View state: it ends when the visitor leaves the table or the sidebar sets the
+ * preset, role or class.
+ */
+let visit: { child: ChildId; preset: PresetId; key: string } | undefined;
+/** The planned row still to scroll into view once the table renders. */
+let scrollToPlanned = false;
 
-/** The scoring role in force: the global override, else the preset's. */
-const role = (): ScoringRole => roleOf(prefs, currentPreset());
-const support = () => role() === 'support';
-/** The basis in force (Growths falls back to Caps+LB in the Support role). */
-const basis = (): ScoreBasis => basisOf(prefs, role(), engine);
-
-const scoreSettings = (): ScoreSettings => {
-  const { weights, mixed } = effectivePreset(currentPreset(), prefs);
-  return {
-    weights,
-    mixed,
-    basis: basis(),
-    classMode: prefs.classMode,
-    dlc: dlcReachable(prefs, engine),
-    speed: speedSettings(prefs, engine),
-    role: role(),
-    supportRank: prefs.supportRank,
-  };
+/** The visit, while its child's table is in view. */
+const activeVisit = () => (visit && view === 'table' && selected === visit.child ? visit : undefined);
+/** The prefs the view scores with: the global ones, or on a visit its plan preset (the sidebar shows and edits these). */
+const viewPrefs = (): ScoringPrefs => {
+  const v = activeVisit();
+  return v ? visitPrefs(prefs, v.preset) : prefs;
 };
 
-let scoringCache: { settings: string; engine: Engine; scoring: Scoring } | undefined;
-/** Every pairing's score under the current settings, recomputed only when they change. */
-function scoring(): Scoring {
-  const settings = scoreSettings();
+const presetOf = (p: ScoringPrefs): Preset => engine.presets().find((q) => q.id === p.preset)!;
+const currentPreset = (): Preset => presetOf(viewPrefs());
+
+/** The scoring role in force: the global override, else the preset's. */
+const role = (): ScoringRole => roleOf(viewPrefs(), currentPreset());
+const support = () => role() === 'support';
+/** The basis in force (Growths falls back to Caps+LB in the Support role). */
+const basis = (): ScoreBasis => basisOf(viewPrefs(), role(), engine);
+
+const scoreSettings = (p: ScoringPrefs = viewPrefs()): ScoreSettings => scoreSettingsOf(p, engine);
+
+/** The last few scorings by settings: a visit's table and the rail score under different ones. */
+const scoringCache = new Map<string, Scoring>();
+let scoringEngine: Engine | undefined;
+/** Every pairing's score under the view's settings (or `p`'s), recomputed only when they change. */
+function scoring(p: ScoringPrefs = viewPrefs()): Scoring {
+  const settings = scoreSettings(p);
   const k = JSON.stringify(settings);
-  if (scoringCache?.settings !== k || scoringCache.engine !== engine) {
-    scoringCache = { settings: k, engine, scoring: engine.score(settings) };
+  if (scoringEngine !== engine) {
+    scoringCache.clear();
+    scoringEngine = engine;
   }
-  return scoringCache.scoring;
+  let found = scoringCache.get(k);
+  if (!found) {
+    // A few settings are live at once (the view's, the rail's); past that the oldest are stale.
+    if (scoringCache.size >= 4) scoringCache.clear();
+    scoringCache.set(k, (found = engine.score(settings)));
+  }
+  return found;
 }
 
 function setPrefs(next: Partial<ScoringPrefs>, parts: Part[] = ['rail', 'main', 'panel']): void {
-  prefs = { ...prefs, ...next };
+  const change = changePrefs(prefs, activeVisit()?.preset, next);
+  prefs = change.prefs;
   savePrefs(prefs);
+  if (change.endsVisit) visit = undefined;
   renderParts(parts);
 }
 
@@ -317,25 +338,45 @@ const planContext = (): PlanPageContext => ({
     editingQuotas = open;
     renderParts(['panel']);
   },
+  openChild,
 });
 
-/** The child's plan preset as a chip on its table: the tables keep the global preset, and this sets it. */
+/**
+ * The child's plan preset as a chip on its table: the tables keep the global preset, and this sets it. On a visit from
+ * the marriage table the table already scores with it, for this visit; the chip still makes it the global preset.
+ */
 function planPresetChip(child: ChildId): HTMLElement {
   const id = engine.planPreset(child, planSettings());
   const name = presetLabel(engine.presets().find((p) => p.id === id)!);
-  const current = id === prefs.preset;
+  const global = id === prefs.preset && (!activeVisit() || prefs.role === 'preset');
+  // On a visit the table scores differently from the global prefs unless they already match it.
+  const visiting = !!activeVisit() && !(global && prefs.classMode === 'auto');
+  const title = visiting
+    ? `Scored with the plan preset (its scoring role, Auto class) for this visit${global ? '' : `: make ${name} the global preset`}`
+    : global
+      ? 'The table already scores with the plan preset'
+      : `The table scores with ${presetLabel(currentPreset())}: switch the global preset to ${name}`;
   return h(
     'button',
     {
       ...guide('score-with-plan-preset'),
-      class: 'chip plan-preset',
-      disabled: current,
-      title: current ? 'The table already scores with the plan preset' : `The table scores with ${presetLabel(currentPreset())}: switch the global preset to ${name}`,
-      onclick: () => setPrefs(withPreset(prefs, id)),
+      class: `chip plan-preset${visiting ? ' visit' : ''}`,
+      disabled: global,
+      title,
+      // Only the preset and its role: a visit goes on (it still scores in Auto class).
+      onclick: () => setPrefs({ preset: id, role: 'preset' }),
     },
     `Plan: ${name}`,
-    current ? ' ✓' : ` ${LABELS.scoreWithThis}`,
+    visiting ? ` ✓ ${LABELS.thisVisit}` : global ? ' ✓' : ` ${LABELS.scoreWithThis}`,
   );
+}
+
+/** Opens a child's table from the marriage table: scored with its plan preset for this visit, its planned pairing in view. */
+function openChild(c: PlannedChild): void {
+  showTable(c.child);
+  visit = { child: c.child, preset: c.preset, key: c.key };
+  scrollToPlanned = true;
+  renderParts(['rail', 'main', 'panel']);
 }
 
 let planKeysCache: { roster: Roster; engine: Engine; keys: ReadonlySet<string> } | undefined;
@@ -402,17 +443,19 @@ function validationButton(report: SelfTestReport): HTMLElement {
 /** The children with a pairing in this run (the run facts remove the other Morgan), in rail order. */
 const childrenInRun = () => engine.children().filter((c) => engine.groups(c.id, { run: roster.run }).length > 0);
 
-/** Switches to a child's table or the leaderboard, with rows collapsed. */
+/** Switches to a child's table or the leaderboard, with rows collapsed and no visit. */
 function showTable(id: ChildId | 'all'): void {
   selected = id;
   view = 'table';
+  visit = undefined;
   expanded.clear();
   openCards.clear();
   limit = FIRST_PAGE;
 }
 
 function rail(): HTMLElement[] {
-  const sc = scoring();
+  // The rail stays on the global preset, whatever the table in view scores with.
+  const sc = scoring(prefs);
   const children = engine.children();
   // Each child's best among the pairings that exist in this run (the run facts remove the other Robin and Morgan).
   const bestInRun = new Map(
@@ -466,7 +509,7 @@ function rail(): HTMLElement[] {
       h('span', {}, LABELS.plan),
       h('b', { class: 'num muted', title: 'A saved plan' }, roster.savedPlan ? LABELS.inPlan : ''),
     ),
-    h('div', { class: 'muted small rail-head' }, `Best · ${presetLabel(currentPreset())}`),
+    h('div', { class: 'muted small rail-head' }, `Best · ${presetLabel(presetOf(prefs))}`),
     item('all', LABELS.allChildren, 'Leaderboard of every child’s pairings', top.length ? Math.max(...top) : undefined),
     ...children
       .filter((c) => bestInRun.get(c.id)!.exists)
@@ -499,6 +542,8 @@ type Line = {
   readonly range?: string;
   /** The row shows a pinned asset/flaw rather than the group's best. */
   readonly pinned?: boolean;
+  /** On a visit from the marriage table: the line holds the plan's pairing (a Robin group row shows it, unless pinned). */
+  readonly planned?: boolean;
   /** How the roster blocks the shown pairing. */
   readonly blocking: Blocking;
 };
@@ -608,6 +653,8 @@ function buildCell(m: BuildMatch | undefined): HTMLElement {
 const classLabel = (score: PairingScore, gender: Gender) =>
   score.class && `${engine.className(score.class, gender)}${score.auto ? ' (Auto)' : ''}`;
 
+const PLANNED_TITLE = 'The marriage plan’s pairing for this child';
+
 function lineRow(line: Line, gender: Gender, cls: string, head: HTMLElement): HTMLElement {
   const { score, result: r } = line;
   const values = score.values;
@@ -643,21 +690,30 @@ function lineRow(line: Line, gender: Gender, cls: string, head: HTMLElement): HT
   const blocked = line.blocking.status === 'hard' || line.blocking.status === 'soft' ? `blocked-${line.blocking.status}` : '';
   return h(
     'tr',
-    { 'data-key': r.key, class: [cls, score.class ? '' : 'unreachable', blocked].filter(Boolean).join(' ') || undefined },
+    {
+      'data-key': r.key,
+      class: [cls, score.class ? '' : 'unreachable', blocked, line.planned ? 'planned' : ''].filter(Boolean).join(' ') || undefined,
+      title: line.planned ? PLANNED_TITLE : undefined,
+    },
     ...cells,
   );
 }
 
-/** Lines for a child's groups: single pairings as they are, Robin groups as their pinned or best asset/flaw. */
+/**
+ * Lines for a child's groups: single pairings as they are, Robin groups as their pinned asset/flaw, else on a visit
+ * the plan's, else their best.
+ */
 function linesFor(child: ChildId, groups: readonly PairingGroup[], sc: Scoring): Line[] {
+  const plannedKey = activeVisit()?.key;
   return groups.map((g) => {
+    const plan = plannedKey === undefined ? undefined : g.results.find((r) => r.key === plannedKey);
     if (g.results.length === 1) {
       const r = g.results[0]!;
-      return { label: g.label, result: r, score: sc.get(r.key), blocking: engine.blocking(r, roster) };
+      return { label: g.label, result: r, score: sc.get(r.key), planned: !!plan, blocking: engine.blocking(r, roster) };
     }
     const { best, range } = sc.groupBest(g);
     const pin = g.results.find((r) => r.key === pinned.get(groupId(child, g)));
-    const shown = pin ?? best;
+    const shown = pin ?? plan ?? best;
     return {
       label: g.label,
       result: shown,
@@ -665,6 +721,7 @@ function linesFor(child: ChildId, groups: readonly PairingGroup[], sc: Scoring):
       group: g,
       range: range && range.lo !== range.hi ? `${range.lo}–${range.hi}` : undefined,
       pinned: !!pin,
+      planned: shown === plan,
       blocking: engine.blocking(shown, roster),
     };
   });
@@ -742,7 +799,7 @@ function heatmapRow(child: ChildId, line: Line, gender: Gender, sc: Scoring, nco
       {},
       'Row shows: ',
       h('span', { class: 'af' }, engine.robinLabel(line.result.pairing) ?? ''),
-      line.pinned ? h('span', {}, ' (pinned; click it again to go back to best) ', h('button', { class: 'ghost', onclick: () => togglePin(child, g, shownKey) }, 'Unpin')) : ' (best)',
+      line.pinned ? h('span', {}, ' (pinned; click it again to go back to best) ', h('button', { class: 'ghost', onclick: () => togglePin(child, g, shownKey) }, 'Unpin')) : line.planned ? ' (the marriage plan’s)' : ' (best)',
     ),
     map.spread ? h('div', {}, `Colour: red = worst, green = best combo for this parent (${fmt(map.spread.lo)}–${fmt(map.spread.hi)}).`) : null,
     h('div', {}, 'Click a cell to pin that combo into the row. Outline = best, ring = shown.'),
@@ -809,7 +866,7 @@ function slotLine(slot: BuildSlotMatch): HTMLElement {
 /** The expanded build: role, contexts, confidence, reclass cost, where each slot comes from, synergies, its preset. */
 function buildCard(m: BuildMatch): HTMLElement {
   const t = m.template;
-  const current = prefs.preset === t.preset;
+  const current = viewPrefs().preset === t.preset;
   return h(
     'div',
     { class: 'build-card' },
@@ -1078,7 +1135,10 @@ function lineRows(child: ChildId, line: Line, gender: Gender, sc: Scoring, ncols
     ),
     h(
       'span',
-      { class: `af${line.pinned ? ' pinned' : ''}`, title: line.pinned ? 'Pinned asset/flaw' : `Best of ${g.results.length} asset/flaw pairings` },
+      {
+        class: `af${line.pinned ? ' pinned' : ''}`,
+        title: line.pinned ? 'Pinned asset/flaw' : line.planned ? 'The marriage plan’s asset/flaw' : `Best of ${g.results.length} asset/flaw pairings`,
+      },
       ` ${engine.robinLabel(line.result.pairing) ?? ''}`,
     ),
     line.pinned ? h('span', { class: 'muted small' }, ' 📌') : null,
@@ -1155,7 +1215,12 @@ function childTable(child: ChildId): HTMLElement[] {
   const all = linesFor(child, groups, sc).filter((l) => !(filter.hideBlocked && l.blocking.status === 'hard'));
   const lines = sortLines(byTemplate ? all.filter((l) => buildOf(l)) : all, summary.gender);
   const hardCount = lines.filter((l) => l.blocking.status === 'hard').length;
-  const rows = lines.flatMap((l) => rowsFor(child, l, summary.gender, sc, ncols));
+  const lineRowsOf = lines.map((l) => rowsFor(child, l, summary.gender, sc, ncols));
+  const rows = lineRowsOf.flat();
+  // On a visit the table shows rows far enough to include the planned one (filters may hide it).
+  const planned = lines.findIndex((l) => l.planned);
+  const plannedAt = planned < 0 ? -1 : lineRowsOf.slice(0, planned).flat().length;
+  if (plannedAt >= limit) limit = plannedAt + 1;
   const shown = rows.slice(0, limit);
 
   const head = h(
@@ -1173,7 +1238,7 @@ function childTable(child: ChildId): HTMLElement[] {
     columnToggles(),
   );
   // Without weights (Rallybot / Dancer) Auto has nothing to maximise and rows show their start class.
-  const classHead = prefs.classMode === 'auto' && scoreSettings().weights ? 'Class (Auto)' : 'Class';
+  const classHead = viewPrefs().classMode === 'auto' && scoreSettings().weights ? 'Class (Auto)' : 'Class';
   const table = h(
     'table',
     { ...guide('child-table'), class: 'grid' },
@@ -1582,11 +1647,12 @@ const rankChoice = (r: SupportRank): SupportRank => (r === 'B' ? 'C' : r === 'S'
 
 /** Lead/Battery (the Lead/Support scoring role), set by the preset; picking the other one overrides it until ↺ or a new preset. */
 function roleControl(): HTMLElement {
-  const fromPreset = currentPreset().role ?? 'lead';
+  // The role applies globally: following the global preset's role is 'preset'.
+  const fromPreset = presetOf(prefs).role ?? 'lead';
   const names = { lead: SCORING_ROLE_UI.lead.label, support: SCORING_ROLE_UI.support.label };
   const hints = { lead: SCORING_ROLE_UI.lead.hint, support: SCORING_ROLE_UI.support.hint };
   const el = segmented('Role', ROLES, role(), names, (r) => setPrefs({ role: r === fromPreset ? 'preset' : r }), undefined, hints);
-  if (prefs.role !== 'preset') {
+  if (viewPrefs().role !== 'preset') {
     el.append(h('button', { class: 'ghost', title: 'Follow the preset’s role', onclick: () => setPrefs({ role: 'preset' }) }, '↺'));
   }
   return el;
@@ -1708,7 +1774,7 @@ function panel(): HTMLElement[] {
           'aria-label': 'Class for caps and score',
           onchange: (e) => setPrefs({ classMode: (e.target as HTMLSelectElement).value as ClassMode }),
         },
-        h('option', { value: 'auto', selected: prefs.classMode === 'auto' }, 'Auto (best final-tier class per row)'),
+        h('option', { value: 'auto', selected: viewPrefs().classMode === 'auto' }, 'Auto (best final-tier class per row)'),
         ...tiers.map((t) =>
           h(
             'optgroup',
@@ -1716,7 +1782,7 @@ function panel(): HTMLElement[] {
             ...engine
               .classes()
               .filter((c) => c.tier === t)
-              .map((c) => h('option', { value: c.id, selected: c.id === prefs.classMode }, `${c.name}${c.dlc ? ' (DLC)' : ''}`)),
+              .map((c) => h('option', { value: c.id, selected: c.id === viewPrefs().classMode }, `${c.name}${c.dlc ? ' (DLC)' : ''}`)),
           ),
         ),
       ),
@@ -2019,6 +2085,8 @@ const regions: Partial<Record<Part | 'guide', HTMLElement>> = {};
 function renderParts(parts: readonly Part[]): void {
   const { rail: railEl, main, panel: panelEl } = regions;
   if (!railEl || !main || !panelEl) return render();
+  // A visit ends when the visitor leaves its table.
+  if (visit && !activeVisit()) visit = undefined;
   if (parts.includes('rail')) railEl.replaceChildren(...rail());
   const card = cardKey();
   if (parts.includes('main')) {
@@ -2034,6 +2102,10 @@ function renderParts(parts: readonly Part[]): void {
           ? leaderboard()
           : childTable(selected)),
     );
+    if (scrollToPlanned) {
+      scrollToPlanned = false;
+      main.querySelector('tr.planned')?.scrollIntoView({ block: 'center', inline: 'nearest' });
+    }
   }
   // The Skill card lives in the panel but follows the drawer: refresh the panel when the card would change.
   if (parts.includes('panel') || cardKey() !== card) {

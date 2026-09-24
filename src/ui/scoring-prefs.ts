@@ -8,6 +8,7 @@ import {
   type Preset,
   type PresetId,
   type ScoreBasis,
+  type ScoreSettings,
   type ScoringRole,
   type SpeedSettings,
   type SupportRank,
@@ -99,6 +100,42 @@ export const basisOf = (prefs: ScoringPrefs, role: ScoringRole, engine: Engine):
 
 /** Chooses a preset, going back to its scoring role. */
 export const withPreset = (prefs: ScoringPrefs, preset: PresetId): ScoringPrefs => ({ ...prefs, preset, role: 'preset' });
+
+/** A visit's scoring: a plan preset in its own role and Auto class, as the marriage plan scores it; the rest stays global. */
+export const visitPrefs = (prefs: ScoringPrefs, preset: PresetId): ScoringPrefs => ({ ...withPreset(prefs, preset), classMode: 'auto' });
+
+/**
+ * A sidebar change, on a visit to the plan preset `visiting` or not: it applies to the global prefs, and ends the
+ * visit when it sets something the visit overrides (the preset, scoring role or class) to other than the visit shows.
+ */
+export function changePrefs(
+  prefs: ScoringPrefs,
+  visiting: PresetId | undefined,
+  next: Partial<ScoringPrefs>,
+): { prefs: ScoringPrefs; endsVisit: boolean } {
+  if (!visiting) return { prefs: { ...prefs, ...next }, endsVisit: false };
+  const shown = visitPrefs(prefs, visiting);
+  const after = { ...shown, ...next };
+  const endsVisit = after.preset !== shown.preset || after.role !== shown.role || after.classMode !== shown.classMode;
+  return { prefs: { ...prefs, ...next }, endsVisit };
+}
+
+/** The settings the engine scores with under these prefs. */
+export function scoreSettingsOf(prefs: ScoringPrefs, engine: Engine): ScoreSettings {
+  const preset = engine.presets().find((p) => p.id === prefs.preset)!;
+  const role = roleOf(prefs, preset);
+  const { weights, mixed } = effectivePreset(preset, prefs);
+  return {
+    weights,
+    mixed,
+    basis: basisOf(prefs, role, engine),
+    classMode: prefs.classMode,
+    dlc: dlcReachable(prefs, engine),
+    speed: speedSettings(prefs, engine),
+    role,
+    supportRank: prefs.supportRank,
+  };
+}
 
 const KEY = 'fe13-child-calc:scoring:v1';
 

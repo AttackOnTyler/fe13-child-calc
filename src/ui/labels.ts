@@ -42,6 +42,8 @@ export const LABELS = {
   allChildren: 'All children',
   /** A child table's chip that switches the Scoring sidebar to the child's plan preset. */
   scoreWithThis: '→ score with this',
+  /** The same chip when the table scores with the plan preset for a visit from the marriage table. */
+  thisVisit: '(this visit)',
   /** A table row whose pairing is in the saved marriage plan. */
   inPlan: '◆',
   /** A table row's button that opens its Skills drawer. */

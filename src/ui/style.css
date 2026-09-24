@@ -321,7 +321,13 @@ table.plan td { padding: 4px 6px; vertical-align: middle; }
 table.plan td.uname { font-weight: 600; }
 table.plan td.children { white-space: normal; }
 table.plan tr.married td.bond { color: var(--pos); }
-.pchild { display: inline-block; margin: 1px 8px 1px 0; }
+/* A child chip opens its table, scored with its plan preset for the visit. */
+button.pchild { display: inline-block; margin: 1px 4px 1px 0; padding: 1px 6px; background: transparent; border-color: transparent; text-align: left; }
+button.pchild:hover, button.pchild:focus-visible { border-color: var(--accent); background: var(--hover); }
+/* The plan's pairing on a visit from the marriage table: its own tint, not only the saved plan's ◆. */
+.grid tr.planned th, .grid tr.planned td { background: #2a2140; }
+.grid tr.planned th.stick { box-shadow: inset 3px 0 0 #c59bff; }
+button.chip.plan-preset.visit { color: #c59bff; border-color: #6a4f94; }
 .mini { padding: 0 5px; font-size: 11px; margin-left: 2px; }
 .mini.on { background: #243349; border-color: var(--accent); }
 .ruleouts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }

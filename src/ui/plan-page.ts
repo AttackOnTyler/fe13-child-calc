@@ -66,6 +66,8 @@ export type PlanPageContext = ChildPlanControls & {
   /** The quota editor is open (view state). */
   readonly editingQuotas: boolean;
   readonly setEditingQuotas: (open: boolean) => void;
+  /** Opens the child's pairing table, scored with its plan preset for that visit, with this pairing highlighted. */
+  readonly openChild: (child: PlannedChild) => void;
 };
 
 const QUOTA_HINT = { ok: 'In range', under: 'Below the minimum', over: 'Over the maximum' } as const;
@@ -155,10 +157,11 @@ function childChip(ctx: PlanPageContext, c: PlannedChild, saved: ReadonlyMap<Chi
     `${c.name} × ${c.parent}`,
     `Plan preset: ${ctx.presetLabel(c.preset)} · priority ${c.priority}`,
     was ? `Saved plan: ${was.name} × ${was.parent}, ${was.score ?? '—'}` : 'Not in the saved plan',
+    `Open ${c.name}’s pairings scored with ${ctx.presetLabel(c.preset)}`,
   ].join('\n');
   return h(
-    'span',
-    { class: `pchild${c.priority === 0 ? ' muted' : ''}`, title },
+    'button',
+    { class: `pchild${c.priority === 0 ? ' muted' : ''}`, title, onclick: () => ctx.openChild(c) },
     h('span', {}, c.name),
     ' ',
     h('b', { class: 'num' }, c.score === undefined ? '—' : String(c.score)),

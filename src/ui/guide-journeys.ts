@@ -103,7 +103,8 @@ const FRESH: JourneyContent = {
       takeaway:
         `The app’s pick of one spouse per unit, maximising ${total} priority × score over the children. A child’s score (0–100) is ` +
         `how good its best pairing is under its plan preset, in its best class. Its letter is its deployment role: ` +
-        `${roles.map((r) => `${r.short} ${r.label}`).join(', ')}.`,
+        `${roles.map((r) => `${r.short} ${r.label}`).join(', ')}. Click a child to see its pairings scored the plan’s way, ` +
+        'with the plan’s pairing highlighted.',
       deeper: ['why-spouse', 'pairing-build'],
     },
     {
