@@ -88,7 +88,7 @@ What a score measures per stat: effective caps with Limit Breaker, effective cap
 _Avoid_: Mode
 
 **Scoring role**:
-Whether a unit is scored as the Lead (its own stats) or the Support (the pair-up bonus it gives a lead).
+Whether a unit is scored as the Lead (its own stats) or the Support (the pair-up bonus it gives a lead). Visitors see it as Lead / Battery, the deployment role a Support preset gives.
 _Avoid_: Position, front/back
 
 **Pair-up bonus**:
@@ -118,8 +118,12 @@ Where a unit stands in the current run: Available, Not yet recruited (prunes not
 _Avoid_: Status (alone), availability
 
 **Pin**:
-A planned marriage the player has locked. Soft: it can be broken, and it breaks by itself when either unit is benched, missed or dead, freeing the partner.
-_Avoid_: Lock (alone), reservation
+A planned marriage the player has locked. Soft: the player can unpin it. It is **broken** for good when either unit is missed or dead, and **on hold** while either unit is benched (it returns when un-benched); either way it frees the partner.
+_Avoid_: Lock (alone), reservation, planned (every marriage in the marriage plan is planned; only a pinned one is locked)
+
+**Rule-out**:
+A marriage the player has forbidden. Soft: the marriage plan works around it until it is ruled back in.
+_Avoid_: Ban, block (a blocked pairing is the roster's doing, not the player's)
 
 **Marriage plan**:
 One spouse per unit for the whole roster, chosen by the solver to maximise the sum of each child's priority × score (each child scored with its own preset), with marriages and pins fixed. Re-solved around losses and compared with the saved plan.
