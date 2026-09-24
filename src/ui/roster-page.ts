@@ -37,6 +37,8 @@ export type RosterContext = {
   readonly engine: Engine;
   readonly roster: Roster;
   readonly setRoster: (next: Roster) => void;
+  /** Sets the roster after a Deploy or deployment-role edit, noting the edit for the guide. */
+  readonly setDeployment: (next: Roster) => void;
   /** Wipes the roster (after the user confirms); scoring settings are left alone. */
   readonly clearAll: () => void;
   /** The children ledger edits the same priorities and plan presets as the Plan sidebar. */
@@ -149,7 +151,7 @@ function deployControl(ctx: RosterContext, u: RosterEntry & { id: DeployableUnit
         type: 'checkbox',
         checked: tag.deploy,
         'aria-label': `${u.name}: deploy`,
-        onchange: (e) => ctx.setRoster(withDeploy(ctx.roster, u.id, (e.target as HTMLInputElement).checked)),
+        onchange: (e) => ctx.setDeployment(withDeploy(ctx.roster, u.id, (e.target as HTMLInputElement).checked)),
       }),
       ' Deploy',
     ),
@@ -158,7 +160,7 @@ function deployControl(ctx: RosterContext, u: RosterEntry & { id: DeployableUnit
       {
         ...guide('deploy-role'),
         'aria-label': `${u.name}: deployment role`,
-        onchange: (e) => ctx.setRoster(withDeployRole(ctx.roster, u.id, (e.target as HTMLSelectElement).value as DeploymentRole)),
+        onchange: (e) => ctx.setDeployment(withDeployRole(ctx.roster, u.id, (e.target as HTMLSelectElement).value as DeploymentRole)),
       },
       ...DEPLOYMENT_ROLES.map((r) => h('option', { value: r, selected: r === tag.role }, ROLE_UI[r].label)),
     ),

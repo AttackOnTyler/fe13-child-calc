@@ -5,6 +5,7 @@ import {
   editQuota,
   loadPlanPrefs,
   parsePlanPrefs,
+  resetPlanPrefs,
   savePlanPrefs,
   userOverrides,
   withPlanPreset,
@@ -21,7 +22,13 @@ describe('plan preferences', () => {
     const set = withPlanPreset(DEFAULT_PLAN_PREFS, 'kjelle', 'lancekiller');
     expect(set.overrides).toEqual({ kjelle: 'lancekiller' });
     expect(withPlanPreset(set, 'kjelle', null).overrides).toEqual({});
-    expect(withPriority(set, 'kjelle', 3)).toEqual({ priorities: { kjelle: 3 }, overrides: { kjelle: 'lancekiller' }, suggested: [], quotas: {} });
+    expect(withPriority(set, 'kjelle', 3)).toEqual({
+      priorities: { kjelle: 3 },
+      overrides: { kjelle: 'lancekiller' },
+      suggested: [],
+      quotas: {},
+      acts: { prioritiesSetAt: expect.any(Number) },
+    });
   });
 
   it('writes Suggest roles picks as suggested overrides, replacing earlier ones and leaving the user’s alone', () => {
@@ -58,9 +65,11 @@ describe('plan preferences', () => {
   it('drops unknown children, presets and priorities when read back', () => {
     expect(
       parsePlanPrefs({ priorities: { lucina: 2, nobody: 1, owain: 7 }, overrides: { kjelle: 'rallybot', lucina: 'nope', nobody: 'tank' } }, engine),
-    ).toEqual({ priorities: { lucina: 2 }, overrides: { kjelle: 'rallybot' }, suggested: [], quotas: {} });
-    // Saved before overrides and quotas existed.
-    expect(parsePlanPrefs({ priorities: { lucina: 2 } }, engine)).toEqual({ priorities: { lucina: 2 }, overrides: {}, suggested: [], quotas: {} });
+    ).toEqual({ priorities: { lucina: 2 }, overrides: { kjelle: 'rallybot' }, suggested: [], quotas: {}, acts: {} });
+    // Saved before overrides, quotas and act flags existed.
+    expect(parsePlanPrefs({ priorities: { lucina: 2 } }, engine)).toEqual({ priorities: { lucina: 2 }, overrides: {}, suggested: [], quotas: {}, acts: {} });
+    expect(parsePlanPrefs({ acts: { suggestedAt: 5, prioritiesSetAt: -1, deployEditedAt: 'x', nope: 3 } }, engine).acts).toEqual({ suggestedAt: 5 });
+    expect(parsePlanPrefs({ acts: [1] }, engine).acts).toEqual({});
     const good = { ...quotasFor('apotheosis'), cap: 18 };
     const bad = { ...quotasFor('apotheosis'), roles: { ...quotasFor('apotheosis').roles, lead: { min: 7, max: 2 } } };
     expect(parsePlanPrefs({ quotas: { apotheosis: good, 'main-story': bad, nowhere: good, all: 'x' } }, engine).quotas).toEqual({ apotheosis: good });
@@ -86,13 +95,15 @@ describe('plan preferences', () => {
         withQuotas(withPriority(withPlanPreset(DEFAULT_PLAN_PREFS, 'kjelle', 'lancekiller'), 'lucina', 3), 'main-story', quotas),
         { owain: 'battery' },
       );
+      expect(prefs.acts).toEqual({ prioritiesSetAt: expect.any(Number), suggestedAt: expect.any(Number) });
       savePlanPrefs(prefs);
       saveRoster({ ...EMPTY_ROSTER, run: { gender: 'M', asset: null, flaw: null } });
       clearRoster();
       expect(loadRoster()).toEqual(EMPTY_ROSTER);
       expect(loadPlanPrefs(engine)).toEqual(prefs);
-      savePlanPrefs(DEFAULT_PLAN_PREFS);
-      expect(loadPlanPrefs(engine)).toEqual(DEFAULT_PLAN_PREFS);
+      savePlanPrefs(resetPlanPrefs(prefs));
+      // Reset keeps the act flags: they record what the user did, for the guide.
+      expect(loadPlanPrefs(engine)).toEqual({ ...DEFAULT_PLAN_PREFS, acts: prefs.acts });
     });
   });
 });

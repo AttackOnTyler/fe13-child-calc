@@ -22,9 +22,25 @@ export type PlanPrefs = {
   /** The overrides Suggest roles wrote: the next run may rewrite them. */
   readonly suggested: readonly ChildId[];
   readonly quotas: Readonly<Partial<Record<PlayContext, Quotas>>>;
+  readonly acts: PlanActs;
 };
 
-export const DEFAULT_PLAN_PREFS: PlanPrefs = { priorities: {}, overrides: {}, suggested: [], quotas: {} };
+/**
+ * When the user last did something whose effect state alone can't show (epoch ms), for the guide's ticks. The handler
+ * that performs the action writes its flag; the guide only reads them.
+ */
+export type PlanActs = {
+  /** Suggest roles ran, even if it picked nothing. */
+  readonly suggestedAt?: number;
+  /** A child's priority was set, even back to its default. */
+  readonly prioritiesSetAt?: number;
+  /** A first-gen unit's Deploy flag or deployment role was edited on Roster. */
+  readonly deployEditedAt?: number;
+};
+
+const ACTS: readonly (keyof PlanActs)[] = ['suggestedAt', 'prioritiesSetAt', 'deployEditedAt'];
+
+export const DEFAULT_PLAN_PREFS: PlanPrefs = { priorities: {}, overrides: {}, suggested: [], quotas: {}, acts: {} };
 
 /** The most a quota or the cap can be. */
 const QUOTA_LIMIT = 99;
@@ -33,10 +49,16 @@ const KEY = 'fe13-child-calc:plan:v1';
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-export const withPriority = (prefs: PlanPrefs, child: ChildId, priority: number): PlanPrefs => ({
-  ...prefs,
-  priorities: { ...prefs.priorities, [child]: priority },
-});
+const withAct = (prefs: PlanPrefs, act: keyof PlanActs): PlanPrefs => ({ ...prefs, acts: { ...prefs.acts, [act]: Date.now() } });
+
+export const withPriority = (prefs: PlanPrefs, child: ChildId, priority: number): PlanPrefs =>
+  withAct({ ...prefs, priorities: { ...prefs.priorities, [child]: priority } }, 'prioritiesSetAt');
+
+/** Reset plan preferences: the defaults, keeping the act flags, which record what the user did rather than a preference. */
+export const resetPlanPrefs = (prefs: PlanPrefs): PlanPrefs => ({ ...DEFAULT_PLAN_PREFS, acts: prefs.acts });
+
+/** Notes that the user edited a Deploy flag or deployment role: the roster holds the edit, this only the act. */
+export const withDeployEdited = (prefs: PlanPrefs): PlanPrefs => withAct(prefs, 'deployEditedAt');
 
 /** Sets a child's plan preset as the user's, or with null resets it to the default. */
 export function withPlanPreset(prefs: PlanPrefs, child: ChildId, preset: PresetId | null): PlanPrefs {
@@ -55,7 +77,7 @@ export function userOverrides(prefs: PlanPrefs): Partial<Record<ChildId, PresetI
 export function withSuggestedPresets(prefs: PlanPrefs, picks: Readonly<Partial<Record<ChildId, PresetId>>>): PlanPrefs {
   const mine = userOverrides(prefs);
   const suggested = (Object.keys(picks) as ChildId[]).filter((c) => !(c in mine));
-  return { ...prefs, overrides: { ...mine, ...Object.fromEntries(suggested.map((c) => [c, picks[c]])) }, suggested };
+  return withAct({ ...prefs, overrides: { ...mine, ...Object.fromEntries(suggested.map((c) => [c, picks[c]])) }, suggested }, 'suggestedAt');
 }
 
 /** Sets a play context's quotas, or with null resets them to the curated seed. */
@@ -88,7 +110,7 @@ function parseQuotas(raw: unknown): Quotas | undefined {
   return { cap: raw.cap, roles };
 }
 
-/** Plan preferences as saved, dropping unknown children and presets, out-of-range priorities and broken quotas. */
+/** Plan preferences as saved, dropping unknown children and presets, out-of-range priorities, broken quotas and act flags. */
 export function parsePlanPrefs(raw: unknown, engine: Engine): PlanPrefs {
   if (!isObject(raw)) return DEFAULT_PLAN_PREFS;
   const children = new Set<string>(engine.children().map((c) => c.id));
@@ -110,7 +132,13 @@ export function parsePlanPrefs(raw: unknown, engine: Engine): PlanPrefs {
     const q = parseQuotas(savedQuotas[context]);
     if (q) quotas[context] = q;
   }
-  return { priorities, overrides, suggested, quotas };
+  const acts: { -readonly [A in keyof PlanActs]: number } = {};
+  const savedActs = isObject(raw.acts) ? raw.acts : {};
+  for (const act of ACTS) {
+    const at = savedActs[act];
+    if (typeof at === 'number' && Number.isFinite(at) && at >= 0) acts[act] = at;
+  }
+  return { priorities, overrides, suggested, quotas, acts };
 }
 
 export function loadPlanPrefs(engine: Engine): PlanPrefs {
@@ -118,6 +146,15 @@ export function loadPlanPrefs(engine: Engine): PlanPrefs {
     return parsePlanPrefs(JSON.parse(localStorage.getItem(KEY) ?? 'null'), engine);
   } catch {
     return DEFAULT_PLAN_PREFS;
+  }
+}
+
+/** Whether plan preferences are saved at all; false when storage is blocked. */
+export function hasSavedPlanPrefs(): boolean {
+  try {
+    return localStorage.getItem(KEY) !== null;
+  } catch {
+    return false;
   }
 }
 

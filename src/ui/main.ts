@@ -80,10 +80,11 @@ import { rosterPage } from './roster-page';
 import { clearRoster, loadRoster, saveRoster } from './roster-store';
 import { planPage, planSidebar, type ChildPlanControls, type PlanPageContext } from './plan-page';
 import {
-  DEFAULT_PLAN_PREFS,
   loadPlanPrefs,
+  resetPlanPrefs,
   savePlanPrefs,
   userOverrides,
+  withDeployEdited,
   withPlanPreset,
   withPriority,
   withQuotas,
@@ -221,6 +222,13 @@ function setRoster(next: Roster): void {
   renderParts(rosterParts());
 }
 
+/** A Deploy or deployment-role edit: the roster holds it, and the plan preferences note the act for the guide. */
+function setDeployment(next: Roster): void {
+  planPrefs = withDeployEdited(planPrefs);
+  savePlanPrefs(planPrefs);
+  setRoster(next);
+}
+
 function clearRosterState(): void {
   roster = EMPTY_ROSTER;
   clearRoster();
@@ -268,7 +276,7 @@ const planContext = (): PlanPageContext => ({
     freeReplan = free;
     renderParts(['main']);
   },
-  resetPlanPrefs: () => setPlanPrefs(DEFAULT_PLAN_PREFS),
+  resetPlanPrefs: () => setPlanPrefs(resetPlanPrefs(planPrefs)),
   suggestRoles: () => {
     const s = engine.suggestRoles(roster, { ...planSettings(), overrides: userOverrides(planPrefs) }, quotasFor(prefs.context, planPrefs.quotas));
     setPlanPrefs(withSuggestedPresets(planPrefs, s.overrides));
@@ -1923,7 +1931,7 @@ function renderParts(parts: readonly Part[]): void {
       ...(view === 'validation'
         ? [validationPanel({ engine, assumptions, selfTest, setOverride, resetAll: () => applyOverrides({}), render })]
         : view === 'roster'
-          ? rosterPage({ engine, roster, setRoster, clearAll: clearRosterState, plan: planControls() })
+          ? rosterPage({ engine, roster, setRoster, setDeployment, clearAll: clearRosterState, plan: planControls() })
           : view === 'plan'
           ? planPage(planContext())
           : selected === 'all'

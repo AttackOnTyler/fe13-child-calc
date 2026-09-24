@@ -11,6 +11,15 @@ export function loadRoster(): Roster {
   }
 }
 
+/** Whether a roster is saved at all; false when storage is blocked. */
+export function hasSavedRoster(): boolean {
+  try {
+    return localStorage.getItem(KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export function saveRoster(roster: Roster): void {
   try {
     localStorage.setItem(KEY, JSON.stringify(roster));
