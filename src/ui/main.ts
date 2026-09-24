@@ -88,6 +88,7 @@ import {
   withSuggestedPresets,
   type PlanPrefs,
 } from './plan-prefs';
+import { guideOverlays, guidePage, guideRailItem, inlineCallout, journeyToggle, landingView, tourButton, guideVariant, type GuideCtx } from './guide-prototype';
 
 let overrides: Overrides = loadOverrides();
 let assumptions: Assumptions = resolveAssumptions(overrides);
@@ -106,7 +107,7 @@ let editingQuotas = false;
 // View state only; all domain answers come from the engine.
 /** A child's table, or the All children leaderboard. */
 let selected: ChildId | 'all' = 'lucina';
-let view: 'table' | 'validation' | 'roster' | 'plan' = selfTest.passed ? 'table' : 'validation';
+let view: 'table' | 'validation' | 'roster' | 'plan' | 'guide' = selfTest.passed ? landingView() : 'validation';
 /** A Robin group row's identity across children: `child|group key`. */
 const groupId = (child: ChildId, group: PairingGroup) => `${child}|${group.key}`;
 /** Robin group rows (by group id) with their asset × flaw heatmap open. */
@@ -389,7 +390,9 @@ function rail(): HTMLElement[] {
       h('b', { class: 'num' }, String(score ?? '—')),
     );
   const married = Object.values(roster.spouses).filter((s) => s?.bond === 'married').length / 2;
+  const guideItem = guideRailItem(guideCtx());
   return [
+    ...(guideItem ? [guideItem] : []),
     h(
       'button',
       {
@@ -1889,6 +1892,30 @@ function contextSelect(): HTMLElement {
   );
 }
 
+// ---- PROTOTYPE: guide form (#41) ----
+
+function guideCtx(): GuideCtx {
+  const states = Object.values(roster.states);
+  return {
+    view,
+    go: (v) => {
+      view = v;
+      render();
+    },
+    rerender: render,
+    facts: {
+      robinLocked: !!(roster.run.gender && roster.run.asset && roster.run.flaw),
+      deployEdited: Object.keys(roster.deploy).length > 0 || Object.keys(roster.deployRoles).length > 0,
+      benched: states.includes('benched'),
+      prioritiesSet: Object.keys(planPrefs.priorities).length > 0,
+      suggested: planPrefs.suggested.length > 0,
+      adopted: !!roster.savedPlan,
+      lost: states.includes('dead') || states.includes('missed'),
+      married: Object.values(roster.spouses).some((s) => s?.bond === 'married'),
+    },
+  };
+}
+
 // ---- shell ----
 
 type Part = 'rail' | 'main' | 'panel';
@@ -1901,8 +1928,12 @@ function renderParts(parts: readonly Part[]): void {
   const card = cardKey();
   if (parts.includes('main')) {
     drawerPairing = undefined;
+    const callout = inlineCallout(guideCtx());
     main.replaceChildren(
-      ...(view === 'validation'
+      ...(callout ? [callout] : []),
+      ...(view === 'guide'
+        ? guidePage(guideCtx())
+        : view === 'validation'
         ? [validationPanel({ engine, assumptions, selfTest, setOverride, resetAll: () => applyOverrides({}), render })]
         : view === 'roster'
           ? rosterPage({ engine, roster, setRoster, clearAll: clearRosterState, plan: planControls() })
@@ -1929,11 +1960,12 @@ function render(): void {
     h(
       'div',
       { class: 'shell' },
-      h('header', { class: 'topbar' }, h('span', { class: 'brand' }, 'FE13 Child Calc'), contextSelect(), validationButton(selfTest)),
+      h('header', { class: 'topbar' }, h('span', { class: 'brand' }, 'FE13 Child Calc'), contextSelect(), guideVariant() === 'C' ? journeyToggle(guideCtx()) : null, tourButton(guideCtx()), validationButton(selfTest)),
       regions.rail,
       regions.main,
       regions.panel,
     ),
+    ...guideOverlays(guideCtx()),
   );
   renderParts(['rail', 'main', 'panel']);
 }
