@@ -52,6 +52,7 @@ import {
   type Weights,
 } from '../engine';
 import { h } from './dom';
+import { guide } from './guide';
 import { LABELS, SCORING_ROLE_UI } from './labels';
 import { loadOverrides, saveOverrides } from './overrides';
 import {
@@ -289,6 +290,7 @@ function planPresetChip(child: ChildId): HTMLElement {
   return h(
     'button',
     {
+      ...guide('score-with-plan-preset'),
       class: 'chip plan-preset',
       disabled: current,
       title: current ? 'The table already scores with the plan preset' : `The table scores with ${presetLabel(currentPreset())}: switch the global preset to ${name}`,
@@ -343,6 +345,7 @@ function validationButton(report: SelfTestReport): HTMLElement {
   return h(
     'button',
     {
+      ...guide('validation'),
       class: `validation-toggle${report.passed ? '' : ' fail'}${view === 'validation' ? ' on' : ''}`,
       title: 'Assumptions, resolved source disagreements and the self-test',
       'aria-pressed': String(view === 'validation'),
@@ -720,6 +723,7 @@ function skillsButton(id: string): HTMLElement {
   return h(
     'button',
     {
+      ...guide('skills-drawer'),
       class: `skills-btn${open ? ' on' : ''}`,
       'aria-expanded': String(open),
       title: `${open ? 'Hide' : 'Show'} this pairing’s skills`,
@@ -1014,6 +1018,7 @@ function lineRows(child: ChildId, line: Line, gender: Gender, sc: Scoring, ncols
     h(
       'button',
       {
+        ...guide('robin-heatmap'),
         class: 'expander',
         'aria-expanded': String(open),
         title: `${open ? 'Hide' : 'Show'} the asset × flaw heatmap of Robin’s ${g.results.length} combos`,
@@ -1131,7 +1136,7 @@ function childTable(child: ChildId): HTMLElement[] {
   const classHead = prefs.classMode === 'auto' && scoreSettings().weights ? 'Class (Auto)' : 'Class';
   const table = h(
     'table',
-    { class: 'grid' },
+    { ...guide('child-table'), class: 'grid' },
     h(
       'thead',
       {},
@@ -1380,7 +1385,7 @@ function leaderboard(): HTMLElement[] {
           h('span', { class: 'muted' }, ` · ${limit} of ${entries.length} shown`),
         )
       : null;
-  return [head, h('div', { class: 'scroll' }, h('div', { class: 'cards' }, ...shown.map((e) => card(e, statMax))), more)];
+  return [head, h('div', { class: 'scroll' }, h('div', { ...guide('leaderboard'), class: 'cards' }, ...shown.map((e) => card(e, statMax))), more)];
 }
 
 function speedTitle(): string {
@@ -1516,10 +1521,11 @@ function segmented<T extends string>(
   onpick: (v: T) => void,
   disabled: (v: T) => string | undefined = () => undefined,
   hints: Partial<Record<T, string>> = {},
+  anchor: Partial<ReturnType<typeof guide>> = {},
 ): HTMLElement {
   return h(
     'div',
-    { class: 'blk', role: 'group', 'aria-label': label },
+    { ...anchor, class: 'blk', role: 'group', 'aria-label': label },
     h('span', { class: 'lbl' }, label),
     h(
       'span',
@@ -1562,6 +1568,7 @@ function panel(): HTMLElement[] {
   const presetSelect = h(
     'select',
     {
+      ...guide('scoring-preset'),
       'aria-label': 'Preset',
       onchange: (e) => setPrefs(withPreset(prefs, (e.target as HTMLSelectElement).value as Preset['id'])),
     },
@@ -1646,8 +1653,15 @@ function panel(): HTMLElement[] {
     ...(support() && weights
       ? [segmented('Support rank', RANK_CHOICES, rankChoice(prefs.supportRank), RANK_CHOICE_NAMES, (supportRank) => setPrefs({ supportRank }))]
       : []),
-    segmented('Basis', BASES, basis(), BASIS_LABELS, (basis) => setPrefs({ basis }), (b) =>
-      engine.scoreBases(role()).includes(b) ? undefined : 'Not in the Support role: the pair-up bonus comes from caps',
+    segmented(
+      'Basis',
+      BASES,
+      basis(),
+      BASIS_LABELS,
+      (basis) => setPrefs({ basis }),
+      (b) => (engine.scoreBases(role()).includes(b) ? undefined : 'Not in the Support role: the pair-up bonus comes from caps'),
+      {},
+      guide('scoring-basis'),
     ),
     h(
       'label',
@@ -1854,6 +1868,7 @@ function speedControls(): HTMLElement[] {
       h(
         'select',
         {
+          ...guide('spd-target'),
           'aria-label': 'Target breakpoint',
           onchange: (e) => {
             const v = (e.target as HTMLSelectElement).value;
@@ -1882,7 +1897,7 @@ function speedControls(): HTMLElement[] {
 function contextSelect(): HTMLElement {
   return h(
     'label',
-    { class: 'context', title: 'What you’re building for: sets the default target breakpoint and whether DLC is reachable' },
+    { ...guide('play-context'), class: 'context', title: 'What you’re building for: sets the default target breakpoint and whether DLC is reachable' },
     h('span', { class: 'muted' }, 'Play context '),
     h(
       'select',

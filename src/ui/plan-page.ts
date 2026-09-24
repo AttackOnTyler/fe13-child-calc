@@ -30,6 +30,7 @@ import {
   type RosterUnit,
 } from '../engine';
 import { h } from './dom';
+import { guide } from './guide';
 import { LABELS, LEFT_OUT_UI, NOT_BORN_UI, PIN_LOSS_UI, ROLE_UI } from './labels';
 import { editQuota } from './plan-prefs';
 
@@ -177,6 +178,7 @@ function marriageRow(ctx: PlanPageContext, plan: MarriagePlan, m: PlanMarriage, 
           h(
             'button',
             {
+              ...guide('pin'),
               class: `mini${pinned ? ' on' : ''}`,
               'aria-pressed': String(pinned),
               disabled: locked,
@@ -188,6 +190,7 @@ function marriageRow(ctx: PlanPageContext, plan: MarriagePlan, m: PlanMarriage, 
           h(
             'button',
             {
+              ...guide('rule-out'),
               class: 'mini',
               disabled: locked,
               'aria-label': LABELS.ruleOutHint,
@@ -217,14 +220,14 @@ function diffBanner(ctx: PlanPageContext, plan: MarriagePlan, diff: PlanDiff | u
   const title = ctx.free
     ? 'Save this free re-plan and pin every marriage it proposes: pins it moves are replaced'
     : 'Save this plan and pin every marriage it proposes';
-  const adoptButton = h('button', { class: 'adopt', title, onclick: () => ctx.setRoster(adoptPlan(ctx.roster, plan)) }, LABELS.adoptPlan);
+  const adoptButton = h('button', { ...guide('adopt'), class: 'adopt', title, onclick: () => ctx.setRoster(adoptPlan(ctx.roster, plan)) }, LABELS.adoptPlan);
   if (!diff) return h('div', { class: 'banner' }, h('span', {}, 'No saved plan yet. '), adoptButton);
-  if (diff.same) return h('div', { class: 'banner ok' }, '✓ Matches the saved plan.');
+  if (diff.same) return h('div', { ...guide('plan-diff'), class: 'banner ok' }, '✓ Matches the saved plan.');
   const name = (u: RosterUnit | undefined) => (u ? unitName(u, plan.robin.gender) : '—');
   const change = diff.after - diff.before;
   return h(
     'div',
-    { class: 'banner warn-b' },
+    { ...guide('plan-diff'), class: 'banner warn-b' },
     h('div', {}, h('b', {}, 'Changed vs saved plan'), ` Σ ${fmt(diff.before)} → ${fmt(diff.after)} `, h('span', { class: tone(change) }, `(${signed(change)})`)),
     diff.unborn.length
       ? h('div', { class: 'neg' }, `${NOT_BORN_UI.unborn}: `, diff.unborn.map((c) => `${c.name} (${c.score ?? '—'})`).join(', '))
@@ -269,7 +272,7 @@ function lostPinsBanner(plan: MarriagePlan, status: PinLoss['status']): HTMLElem
   const ui = PIN_LOSS_UI[status];
   return h(
     'div',
-    { class: `banner pin-${status}`, title: ui.hint },
+    { ...(status === 'broken' ? guide('broken-pins') : {}), class: `banner pin-${status}`, title: ui.hint },
     `${ui.banner}: `,
     pins.map((p) => `${unitName(p.couple[0], plan.robin.gender)} × ${unitName(p.couple[1], plan.robin.gender)} (${p.reason})`).join(' · '),
     status === 'broken' ? ' — re-planned around them.' : ' — re-planned around them until un-benched.',
@@ -298,7 +301,7 @@ export function planPage(ctx: PlanPageContext): HTMLElement[] {
     h('span', { class: 'muted small' }, `priority × score · ${plan.marriages.length} marriages · solved in ${ms} ms`),
     h(
       'label',
-      { class: 'small', title: 'Ignore the pins (not marriages) to see what keeping them costs' },
+      { ...guide('free-replan'), class: 'small', title: 'Ignore the pins (not marriages) to see what keeping them costs' },
       h('input', { type: 'checkbox', checked: ctx.free, onchange: (e) => ctx.setFree((e.target as HTMLInputElement).checked) }),
       ` ${LABELS.freeReplan}`,
     ),
@@ -313,6 +316,7 @@ export function planPage(ctx: PlanPageContext): HTMLElement[] {
           h(
             'button',
             {
+              ...guide('robin-lock'),
               class: 'lock',
               title: robinMarried
                 ? 'Set the open Run facts to this Robin, and pin Robin’s marriage'
@@ -339,7 +343,7 @@ export function planPage(ctx: PlanPageContext): HTMLElement[] {
 
   const table = h(
     'table',
-    { class: 'grid plan' },
+    { ...guide('marriage-table'), class: 'grid plan' },
     h(
       'thead',
       {},
@@ -382,7 +386,7 @@ export function priorityControl(ctl: ChildPlanControls, id: ChildId, name: strin
   const priority = ctl.settings.priorities[id] ?? DEFAULT_PRIORITY;
   return h(
     'span',
-    { class: 'seg', role: 'group', 'aria-label': `${name}: priority` },
+    { ...guide('priority'), class: 'seg', role: 'group', 'aria-label': `${name}: priority` },
     ...PLAN_PRIORITIES.map((p) =>
       h('button', { class: p === priority ? 'on' : '', 'aria-pressed': String(p === priority), onclick: () => ctl.setPriority(id, p) }, String(p)),
     ),
@@ -400,6 +404,7 @@ export function presetControl(ctl: ChildPlanControls, id: ChildId, name: string)
     h(
       'select',
       {
+        ...guide('plan-preset'),
         'aria-label': `${name}: plan preset`,
         title: own ? `Set: ${ctl.presetLabel(own)} in every play context (default ${ctl.presetLabel(fallback)})` : 'Follows the play context',
         onchange: (e) => ctl.setPlanPreset(id, ((e.target as HTMLSelectElement).value || null) as PresetId | null),
@@ -412,7 +417,7 @@ export function presetControl(ctl: ChildPlanControls, id: ChildId, name: string)
         ? h('span', { class: 'chip suggested', title: 'Picked by Suggest roles: the next run may change it; ↺ resets it' }, 'suggested')
         : h('span', { class: 'chip set', title: 'Set by you: holds in every play context' }, 'set')
       : null,
-    h('button', { class: 'mini', disabled: !own, title: own ? 'Reset to the default' : 'On the default', onclick: () => ctl.setPlanPreset(id, null) }, '↺'),
+    h('button', { ...guide('plan-preset-reset'), class: 'mini', disabled: !own, title: own ? 'Reset to the default' : 'On the default', onclick: () => ctl.setPlanPreset(id, null) }, '↺'),
   );
 }
 
@@ -435,11 +440,12 @@ export function planSidebar(ctx: PlanPageContext): HTMLElement {
     ),
     h(
       'div',
-      { class: 'comp' },
+      { ...guide('quota-bar'), class: 'comp' },
       compositionStrip(comp),
       h(
         'button',
         {
+          ...guide('quota-edit'),
           class: `mini${ctx.editingQuotas ? ' on' : ''}`,
           'aria-pressed': String(ctx.editingQuotas),
           title: ctx.quotasEdited ? 'Edit the quotas (edited for this play context)' : 'Edit the quotas for this play context',
@@ -450,6 +456,7 @@ export function planSidebar(ctx: PlanPageContext): HTMLElement {
       h(
         'button',
         {
+          ...guide('suggest-roles'),
           class: 'ghost small',
           title: 'Pick a plan preset for every child on its default so the army meets the quotas, then re-plan. Your own presets stay.',
           onclick: ctx.suggestRoles,

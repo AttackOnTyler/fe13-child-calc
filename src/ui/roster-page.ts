@@ -28,6 +28,7 @@ import {
   type UnitState,
 } from '../engine';
 import { h } from './dom';
+import { guide } from './guide';
 import { LABELS, LEDGER_UI, LEFT_OUT_UI, PIN_LOSS_UI, ROLE_UI } from './labels';
 import { compositionStrip, presetControl, priorityControl, roleChip, type ChildPlanControls } from './plan-page';
 
@@ -56,13 +57,14 @@ function stateStrip(ctx: RosterContext, u: RosterEntry): HTMLElement {
   const current = stateOf(ctx.roster, u.id);
   return h(
     'span',
-    { class: 'seg states', role: 'group', 'aria-label': `${u.name}: state` },
+    { ...guide('state-strip'), class: 'seg states', role: 'group', 'aria-label': `${u.name}: state` },
     ...UNIT_STATES.map((st) => {
       const locked = !u.canBeLost && (st === 'dead' || st === 'missed');
       const { icon, label, hint } = STATE_UI[st];
       return h(
         'button',
         {
+          ...(st === 'benched' ? guide('bench') : {}),
           class: `st-${st}${st === current ? ' on' : ''}`,
           'aria-pressed': String(st === current),
           'aria-label': label,
@@ -96,6 +98,7 @@ function spousePicker(ctx: RosterContext, u: RosterEntry): HTMLElement {
     h(
       'select',
       {
+        ...guide('spouse-picker'),
         'aria-label': `${u.name}: spouse`,
         onchange: (e) => {
           const v = (e.target as HTMLSelectElement).value;
@@ -112,6 +115,7 @@ function spousePicker(ctx: RosterContext, u: RosterEntry): HTMLElement {
         h(
           'button',
           {
+            ...(b === 'married' ? guide('married') : {}),
             class: spouse?.bond === b ? 'on' : '',
             'aria-pressed': String(spouse?.bond === b),
             disabled: !spouse,
@@ -140,7 +144,7 @@ function deployControl(ctx: RosterContext, u: RosterEntry & { id: DeployableUnit
     { class: 'deploy' },
     h(
       'label',
-      { title: 'Deploy: counts toward the composition quotas in its role' },
+      { ...guide('deploy'), title: 'Deploy: counts toward the composition quotas in its role' },
       h('input', {
         type: 'checkbox',
         checked: tag.deploy,
@@ -152,6 +156,7 @@ function deployControl(ctx: RosterContext, u: RosterEntry & { id: DeployableUnit
     h(
       'select',
       {
+        ...guide('deploy-role'),
         'aria-label': `${u.name}: deployment role`,
         onchange: (e) => ctx.setRoster(withDeployRole(ctx.roster, u.id, (e.target as HTMLSelectElement).value as DeploymentRole)),
       },
@@ -214,7 +219,7 @@ function childrenLedger(ctx: RosterContext): HTMLElement {
   const ledger = ctx.engine.ledger(ctx.roster, ctx.plan.settings);
   return h(
     'section',
-    { class: 'rsec ledger', 'aria-label': 'Children ledger' },
+    { ...guide('children-ledger'), class: 'rsec ledger', 'aria-label': 'Children ledger' },
     h('h3', {}, 'Children ledger'),
     h('p', { class: 'muted' }, 'Each child scored in its plan preset. Priority and preset are the same controls as the Plan sidebar.'),
     h(
@@ -258,7 +263,7 @@ function runFacts(ctx: RosterContext): HTMLElement {
   const genders: readonly (Gender | null)[] = [null, 'M', 'F'];
   return h(
     'section',
-    { class: 'rsec run', 'aria-label': 'Run facts' },
+    { ...guide('run-facts'), class: 'rsec run', 'aria-label': 'Run facts' },
     h('h3', {}, 'Run facts'),
     h('p', { class: 'muted' }, 'Fixed at the start of a playthrough. They remove the other Robin, the other Morgan and Robin’s other asset/flaws entirely.'),
     h(
