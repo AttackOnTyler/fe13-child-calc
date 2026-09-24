@@ -201,6 +201,7 @@ function ledgerRow(ctx: RosterContext, e: LedgerEntry): HTMLElement {
       { class: `lstatus ${e.status}`, title: e.leftOut ? `${st.hint}. ${LEFT_OUT_UI[e.leftOut].hint}` : st.hint },
       `${st.mark} ${st.label}`,
       e.leftOut ? h('span', { class: 'small' }, ` · ${LEFT_OUT_UI[e.leftOut].label}`) : null,
+      e.notes.length ? h('span', { class: 'warn', title: e.notes.join('\n'), 'aria-label': e.notes.join('. ') }, ' ⚠') : null,
     ),
     h('td', {}, priorityControl(ctx.plan, e.child, e.name)),
     h('td', {}, presetControl(ctx.plan, e.child, e.name)),

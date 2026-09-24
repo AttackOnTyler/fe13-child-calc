@@ -157,12 +157,14 @@ function childChip(ctx: PlanPageContext, c: PlannedChild, saved: ReadonlyMap<Chi
     `${c.name} × ${c.parent}`,
     `Plan preset: ${ctx.presetLabel(c.preset)} · priority ${c.priority}`,
     was ? `Saved plan: ${was.name} × ${was.parent}, ${was.score ?? '—'}` : 'Not in the saved plan',
+    ...c.notes,
     `Open ${c.name}’s pairings scored with ${ctx.presetLabel(c.preset)}`,
   ].join('\n');
   return h(
     'button',
     { class: `pchild${c.priority === 0 ? ' muted' : ''}`, title, onclick: () => ctx.openChild(c) },
     h('span', {}, c.name),
+    c.notes.length ? h('span', { class: 'warn', 'aria-label': c.notes.join('. ') }, ' ⚠') : null,
     ' ',
     h('b', { class: 'num' }, c.score === undefined ? '—' : String(c.score)),
     delta ? h('span', { class: `small ${tone(delta)}` }, ` ${signed(delta)}`) : null,

@@ -8,6 +8,7 @@ import {
   createEngine,
   diffPlans,
   parseRoster,
+  resolveAssumptions,
   rosterUnits,
   withRuleOut,
   withRun,
@@ -394,6 +395,38 @@ describe('children ledger', () => {
     for (const e of ledger) if (e.planned && e.best && e.best.scaled === e.planned.scaled) expect(e.best.key).toBe(e.planned.key);
     // Lucina's best is her best-scoring pairing that isn't hard-blocked: Sumia is married to Chrom, so nothing better is open.
     expect(row('lucina').best?.key).toBe('lucina|sumia');
+  });
+});
+
+describe('roster notes on the ledger and plan (#47)', () => {
+  const note = 'Sumia died after marrying: the child still comes ⚠';
+  // Chrom × Sumia married, then Sumia died; Robin married Lucina, so Morgan's pairing spans that marriage too.
+  let roster: Roster = withSpouse({ ...EMPTY_ROSTER, run: RUN }, 'chrom', 'sumia', 'married');
+  roster = withState(withSpouse(roster, 'robin', 'lucina', 'married'), 'sumia', 'dead');
+  const planned = (plan: MarriagePlan, child: string) => plan.marriages.flatMap((m) => m.children).find((c) => c.child === child);
+
+  it('gives a married child with a dead parent the pairing’s notes on its ledger row', () => {
+    const ledger = engine.ledger(roster, settings);
+    const row = (c: string) => ledger.find((e) => e.child === c)!;
+    expect(row('lucina')).toMatchObject({ status: 'married', notes: [note] });
+    expect(row('cynthia')).toMatchObject({ status: 'married', notes: [note] });
+    expect(row('morgan-f')).toMatchObject({ status: 'married', notes: [note] });
+    expect(row('kjelle').notes).toEqual([]);
+  });
+
+  it('gives the plan’s child the same notes', () => {
+    const plan = engine.plan(roster, settings);
+    expect(planned(plan, 'lucina')!.notes).toEqual([note]);
+    expect(planned(plan, 'morgan-f')!.notes).toEqual([note]);
+    expect(planned(plan, 'kjelle')?.notes ?? []).toEqual([]);
+    for (const c of plan.marriages.flatMap((m) => m.children)) if (!['lucina', 'cynthia', 'morgan-f'].includes(c.child)) expect(c.notes).toEqual([]);
+  });
+
+  it('has no notes when a dead parent blocks the child', () => {
+    const strict = createEngine(resolveAssumptions({ 'child-after-parent-death': false }));
+    const lucina = strict.ledger(roster, settings).find((e) => e.child === 'lucina')!;
+    expect(lucina).toMatchObject({ status: 'unborn', notes: [] });
+    expect(planned(strict.plan(roster, settings), 'lucina')).toBeUndefined();
   });
 });
 

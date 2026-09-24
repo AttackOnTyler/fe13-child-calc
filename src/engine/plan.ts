@@ -46,6 +46,8 @@ export type PlannedChild = {
   readonly scaled: number | undefined;
   /** priority × scaled score; 0 without a score. */
   readonly value: number;
+  /** The roster's notes on its pairing, which block nothing (e.g. a parent died after marrying). */
+  readonly notes: readonly string[];
 };
 
 /**
@@ -124,6 +126,8 @@ export type LedgerEntry = {
   readonly status: LedgerStatus;
   /** Why the plan leaves it out, when its status is left out. */
   readonly leftOut?: LeftOutReason;
+  /** The roster's notes on its planned pairing, which block nothing; empty for a dead or unborn child. */
+  readonly notes: readonly string[];
 };
 
 /** What the plan needs from the engine. */
@@ -561,7 +565,8 @@ export function childLedger(ctx: PlanContext, plan: MarriagePlan, blocking: (pai
     // Ties go to the plan's pairing.
     const best = bestPairing(ctx, child, mine?.key);
     const plannedPairing = mine && ctx.candidates(child).find((p) => ctx.child(p)?.key === mine.key);
-    const bond = plannedPairing && blocking(plannedPairing).status;
+    const plannedBlocking = plannedPairing && blocking(plannedPairing);
+    const bond = plannedBlocking?.status;
     const was = saved.get(child);
     // Only a pairing that can no longer happen breaks the plan: re-pinning away from it is the user's call. Once a
     // plan is saved, it alone says what was planned: after Adopt, a child the new plan drops is left out, not broken.
@@ -588,6 +593,7 @@ export function childLedger(ctx: PlanContext, plan: MarriagePlan, blocking: (pai
         delta,
         status,
         ...(status === 'left-out' ? { leftOut: leftOut.get(child) } : {}),
+        notes: alive ? (plannedBlocking?.notes ?? []) : [],
       },
     ];
   });

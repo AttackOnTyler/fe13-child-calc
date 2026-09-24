@@ -644,15 +644,17 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       return byPreset.get(preset);
     };
     // Blocking reads only which units a pairing needs, never Robin's asset/flaw: share it across the 56.
-    const hard = new Map<string, boolean>();
-    const isHard = (pairing: Pairing, key: string) => {
+    const blockings = new Map<string, Blocking>();
+    const blockingOf = (pairing: Pairing, key: string) => {
       const units = key.replace(/robin:\w+\/\w+/g, 'robin');
-      let found = hard.get(units);
-      if (found === undefined) hard.set(units, (found = evaluateBlocking(pairing, roster, assumptions).status === 'hard'));
+      let found = blockings.get(units);
+      if (!found) blockings.set(units, (found = evaluateBlocking(pairing, roster, assumptions)));
       return found;
     };
     const value = (pairing: Pairing, key: string): PlannedChild | undefined => {
-      if (!byKey.has(key) || isHard(pairing, key)) return undefined;
+      if (!byKey.has(key)) return undefined;
+      const blocking = blockingOf(pairing, key);
+      if (blocking.status === 'hard') return undefined;
       const { child } = pairing;
       const preset = planPreset(child, s);
       const sc = scoresOf(preset)?.get(key);
@@ -668,6 +670,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         score: sc?.score,
         scaled: sc?.scaled,
         value: priority * (sc?.scaled ?? 0),
+        notes: blocking.notes,
       };
     };
     const candidates = new Map<ChildId, readonly Pairing[]>();
