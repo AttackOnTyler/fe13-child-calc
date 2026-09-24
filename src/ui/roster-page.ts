@@ -30,6 +30,7 @@ import { h } from './dom';
 import { guide } from './guide';
 import { LABELS, LEDGER_UI, LEFT_OUT_UI, PIN_LOSS_UI, ROLE_UI, STATE_UI } from './labels';
 import { compositionStrip, presetControl, priorityControl, roleChip, type ChildPlanControls } from './plan-page';
+import { spouseOptions } from './spouse-options';
 
 /** What the Roster page reads, and how it changes the roster. */
 export type RosterContext = {
@@ -73,16 +74,10 @@ function stateStrip(ctx: RosterContext, u: RosterEntry): HTMLElement {
 
 function spousePicker(ctx: RosterContext, u: RosterEntry): HTMLElement {
   const { roster } = ctx;
-  const gender = roster.run.gender;
   const spouse = roster.spouses[u.id];
   if (u.partners.length === 0) {
     return h('span', { class: 'spouse muted small' }, u.kind === 'child' ? 'Can’t marry in this run' : 'Only Robin: set Robin’s gender');
   }
-  const option = (p: RosterUnit) => {
-    const theirs = roster.spouses[p];
-    const note = theirs && theirs.partner !== u.id ? ` (${theirs.bond === 'married' ? 'married to' : 'pinned to'} ${unitName(theirs.partner, gender)})` : '';
-    return h('option', { value: p, selected: spouse?.partner === p }, `${unitName(p, gender)}${note}`);
-  };
   const bond = spouse?.bond ?? 'pinned';
   const loss = pinLoss(roster, u.id);
   return h(
@@ -99,7 +94,7 @@ function spousePicker(ctx: RosterContext, u: RosterEntry): HTMLElement {
         },
       },
       h('option', { value: '', selected: !spouse }, '— no spouse'),
-      ...u.partners.map(option),
+      ...spouseOptions(roster, u).map((o) => h('option', { value: o.value, selected: spouse?.partner === o.value }, o.label)),
     ),
     h(
       'span',
