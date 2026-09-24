@@ -126,7 +126,7 @@ A marriage the player has forbidden. Soft: the marriage plan works around it unt
 _Avoid_: Ban, block (a blocked pairing is the roster's doing, not the player's)
 
 **Marriage plan**:
-One spouse per unit for the whole roster, chosen by the solver to maximise the sum of each child's priority × score (each child scored with its own preset), with marriages and pins fixed. Re-solved around losses and compared with the saved plan.
+One spouse per unit for the whole roster, chosen by the solver to maximise the sum of each child's priority × score (each child scored with its own preset), with marriages and pins fixed. Re-solved around losses and compared with the saved plan; among plans of equal value it keeps the saved plan's children.
 _Avoid_: Backup (alone), optimal pairing
 
 **Plan preset**:
@@ -134,8 +134,12 @@ The preset a child is scored with in the marriage plan: a curated default per ch
 _Avoid_: Child preset, default preset (ambiguous with the global one)
 
 **Children ledger**:
-The Roster page's one row per child: fixed parent, the marriage plan's pairing (or its parents' marriage), its best pairing that can still happen with Δ vs the plan, and where it stands — open, pinned, on hold (its parents' pin is on hold through a bench), parents married, plan broken (the saved plan's pairing, or its parents' pin, can no longer happen), can't be born, or dead. It edits the same priority and plan preset as the Plan sidebar.
+The Roster page's one row per child: fixed parent, the marriage plan's pairing (or its parents' marriage), its best pairing that can still happen with Δ vs the plan, and where it stands — open, pinned, left out (it can still be born, but the marriage plan doesn't produce it: no score, priority 0, outscored in a husband shortage, or its parent benched), on hold (its parents' pin is on hold through a bench), parents married, plan broken (the saved plan's pairing, or without a saved plan its parents' pin, can no longer happen), can't be born, or dead. Before Adopt, a child whose saved pairing is gone reads plan broken; after Adopt it reads left out. It edits the same priority and plan preset as the Plan sidebar.
 _Avoid_: Child list, tracker
+
+**Left out**:
+A child that can still be born but the marriage plan doesn't produce, because it values the child at 0 (no score, priority 0), a higher-valued child won the husband it needed (outscored), or its fixed parent is benched. Amber and reversible through priority, preset or a pin, unlike can't be born (red, gone for good).
+_Avoid_: Lost (ambiguous between left out and can't be born), dropped
 
 **Deployment role**:
 The job a deployed unit does in the army: Lead, Battery, Staff/Rally or Dancer. A child's comes from its plan preset (a preset's scoring role, or Rallybot/Dancer for no preset); a first-gen unit's is a tag the user sets, defaulted from a curated table. No child can be a Dancer.

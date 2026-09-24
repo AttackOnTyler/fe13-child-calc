@@ -28,7 +28,7 @@ import {
   type UnitState,
 } from '../engine';
 import { h } from './dom';
-import { LABELS, LEDGER_UI, PIN_LOSS_UI, ROLE_UI } from './labels';
+import { LABELS, LEDGER_UI, LEFT_OUT_UI, PIN_LOSS_UI, ROLE_UI } from './labels';
 import { compositionStrip, presetControl, priorityControl, roleChip, type ChildPlanControls } from './plan-page';
 
 /** What the Roster page reads, and how it changes the roster. */
@@ -198,7 +198,12 @@ function ledgerRow(ctx: RosterContext, e: LedgerEntry): HTMLElement {
       ...(same ? [h('span', { class: 'muted' }, '= plan')] : pairing(e.best)),
       e.delta ? h('span', { class: `small ${e.delta > 0 ? 'pos' : 'neg'}` }, ` ${signed(e.delta)}`) : null,
     ),
-    h('td', { class: `lstatus ${e.status}`, title: st.hint }, `${st.mark} ${st.label}`),
+    h(
+      'td',
+      { class: `lstatus ${e.status}`, title: e.leftOut ? `${st.hint}. ${LEFT_OUT_UI[e.leftOut].hint}` : st.hint },
+      `${st.mark} ${st.label}`,
+      e.leftOut ? h('span', { class: 'small' }, ` · ${LEFT_OUT_UI[e.leftOut].label}`) : null,
+    ),
     h('td', {}, priorityControl(ctx.plan, e.child, e.name)),
     h('td', {}, presetControl(ctx.plan, e.child, e.name)),
   );

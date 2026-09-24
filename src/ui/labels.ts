@@ -2,7 +2,7 @@
  * Labels a view and the guide both show. Views render these constants rather than string literals, so the guide can
  * name a control and be sure it matches what the visitor sees.
  */
-import type { DeploymentRole, LedgerStatus, PinLoss, ScoringRole } from '../engine';
+import type { DeploymentRole, LedgerStatus, LeftOutReason, PinLoss, ScoringRole } from '../engine';
 
 const PIN = '📌';
 
@@ -54,7 +54,25 @@ export const LEDGER_UI: Readonly<Record<LedgerStatus, { readonly mark: string; r
   pinned: { mark: PIN, label: 'pinned', hint: 'Its parents are pinned' },
   'on-hold': { mark: '⏸', label: PIN_LOSS_UI['on-hold'].label, hint: 'Its parents’ pin is on hold: a partner is benched, and the pin comes back on un-bench' },
   married: { mark: '✓', label: 'parents married', hint: 'Its parents are married: it will be born' },
-  broken: { mark: '⚠', label: `plan ${PIN_LOSS_UI.broken.label}`, hint: 'The saved plan’s pairing for it, or its parents’ pin, can no longer happen' },
+  broken: { mark: '⚠', label: `plan ${PIN_LOSS_UI.broken.label}`, hint: 'The saved plan’s pairing for it (or, with no saved plan, its parents’ pin) can no longer happen' },
+  'left-out': { mark: '◌', label: 'left out', hint: 'It can still be born, but the current plan doesn’t produce it' },
   unborn: { mark: '✕', label: 'can’t be born', hint: 'No pairing that can still happen produces it' },
   dead: { mark: '☠', label: 'dead', hint: 'Dead' },
+};
+
+/**
+ * Children a re-plan stops producing: can’t be born (red, gone for good) or left out (amber, reversible through its
+ * priority or a pin).
+ */
+export const NOT_BORN_UI = {
+  unborn: `${LEDGER_UI.unborn.mark} Can’t be born`,
+  leftOut: 'Left out by this plan',
+} as const;
+
+/** Why the plan leaves a child out, and the fix. */
+export const LEFT_OUT_UI: Readonly<Record<LeftOutReason, { readonly label: string; readonly hint: string }>> = {
+  'no-score': { label: 'no score', hint: 'Its plan preset gives it no score, so the plan values it at 0: pick a scored preset, or pin its parent' },
+  'priority-0': { label: 'priority 0', hint: 'Its priority is 0, so the plan values it at 0: raise its priority, or pin its parent' },
+  outscored: { label: 'outscored', hint: 'Too few husbands to go round, and higher-valued children won: raise its priority, or pin its parent' },
+  benched: { label: 'parent benched', hint: 'Its parent is benched, so the plan won’t marry them: un-bench them' },
 };

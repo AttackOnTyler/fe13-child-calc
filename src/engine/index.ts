@@ -141,6 +141,8 @@ export {
   adoptPlan,
   canPin,
   diffPlans,
+  type LeftOut,
+  type LeftOutReason,
   type LedgerEntry,
   type LedgerStatus,
   type MarriagePlan,
@@ -667,12 +669,21 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         value: priority * (sc?.scaled ?? 0),
       };
     };
+    const candidates = new Map<ChildId, readonly Pairing[]>();
     return {
       roster,
       child: (pairing) => {
         const key = pairingKey(pairing);
         if (!memo.has(key)) memo.set(key, value(pairing, key));
         return memo.get(key);
+      },
+      candidates: (child) => {
+        let found = candidates.get(child);
+        if (!found) {
+          found = narrowAll(groupsByChild.get(child) ?? [], { run: roster.run }).flatMap((g) => g.results.map((r) => r.pairing));
+          candidates.set(child, found);
+        }
+        return found;
       },
     };
   };
@@ -818,8 +829,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       new Set(roster.savedPlan ? savedPairings(roster, roster.savedPlan).map(pairingKey).filter((k) => byKey.has(k)) : []),
     ledger: (roster, settings) => {
       const ctx = planContext(roster, settings);
-      const candidates = (child: ChildId) => narrowAll(groupsByChild.get(child) ?? [], { run: roster.run }).flatMap((g) => g.results.map((r) => r.pairing));
-      return childLedger(ctx, solvePlan(ctx), candidates, (p) => evaluateBlocking(p, roster, assumptions));
+      return childLedger(ctx, solvePlan(ctx), (p) => evaluateBlocking(p, roster, assumptions));
     },
     suggestRoles: (roster, settings, quotas) => {
       const reach = { context: settings.context, dlc: settings.dlc };

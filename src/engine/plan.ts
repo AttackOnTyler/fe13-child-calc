@@ -47,6 +47,15 @@ export type PlannedChild = {
   readonly value: number;
 };
 
+/**
+ * Why the plan leaves out a child that can still be born: it values it at 0 (no score in its plan preset, or priority
+ * 0), a higher-valued child won the husband it needed, or its fixed parent is benched.
+ */
+export type LeftOutReason = 'no-score' | 'priority-0' | 'outscored' | 'benched';
+
+/** A child left out by the plan: its best pairing that can still happen, and why the plan doesn't produce it. */
+export type LeftOut = PlannedChild & { readonly reason: LeftOutReason };
+
 export type PlanMarriage = {
   readonly husband: RosterUnit;
   readonly wife: RosterUnit;
@@ -67,16 +76,20 @@ export type MarriagePlan = {
   readonly total: number;
   /** Pins broken by a dead or missed unit, or on hold through a benched one: dropped, freeing the partner. */
   readonly lostPins: readonly (PinLoss & { readonly couple: Couple })[];
-  /** Children of this run that the plan doesn't produce (or that can no longer be born). */
+  /** Children of this run that can't be born: no pairing that can still happen produces them. */
   readonly unborn: readonly ChildId[];
+  /** Children that can still be born but the plan doesn't produce. */
+  readonly leftOut: readonly LeftOut[];
 };
 
 export type PlanDiff = {
   /** Σ of the saved plan, and of the new one. */
   readonly before: number;
   readonly after: number;
-  /** Children the saved plan produced and the new one doesn't. */
-  readonly lost: readonly PlannedChild[];
+  /** Children the saved plan produced that can no longer be born (as the saved plan had them). */
+  readonly unborn: readonly PlannedChild[];
+  /** Children the saved plan produced that the new one leaves out, though they can still be born, and why. */
+  readonly leftOut: readonly LeftOut[];
   /** Children only the new plan produces. */
   readonly gained: readonly PlannedChild[];
   /** Units whose spouse changed, e.g. Stahl: Olivia → Tharja. */
@@ -90,10 +103,11 @@ export type PlanDiff = {
 
 /**
  * A child's standing in the run: ☠ dead, ✕ can't be born (no pairing left that can happen), parents married, ⚠ plan
- * broken (the saved plan's pairing for it, or its parents' pin, can no longer happen), on hold (its parents' pin is on
- * hold through a bench), pinned (its parents are pinned), or open.
+ * broken (the saved plan's pairing for it, or, without a saved plan, its parents' pin can no longer happen), on hold
+ * (its parents' pin is on hold through a bench), left out (it can still be born, but the plan doesn't produce it),
+ * pinned (its parents are pinned), or open.
  */
-export type LedgerStatus = 'dead' | 'unborn' | 'married' | 'broken' | 'on-hold' | 'pinned' | 'open';
+export type LedgerStatus = 'dead' | 'unborn' | 'married' | 'broken' | 'on-hold' | 'left-out' | 'pinned' | 'open';
 
 /** One child in the Roster page's children ledger. */
 export type LedgerEntry = {
@@ -107,6 +121,8 @@ export type LedgerEntry = {
   /** best − planned score; undefined unless both have a score. */
   readonly delta: number | undefined;
   readonly status: LedgerStatus;
+  /** Why the plan leaves it out, when its status is left out. */
+  readonly leftOut?: LeftOutReason;
 };
 
 /** What the plan needs from the engine. */
@@ -114,6 +130,8 @@ export type PlanContext = {
   readonly roster: Roster;
   /** The child a pairing produces as the plan values it; undefined when the pairing doesn't exist or is hard-blocked. */
   readonly child: (pairing: Pairing) => PlannedChild | undefined;
+  /** A child's pairings under the run facts, blocked or not. */
+  readonly candidates: (child: ChildId) => readonly Pairing[];
 };
 
 /** A child's priority in the plan: 0 (don't care) to 3 (must be great). */
@@ -178,10 +196,35 @@ function evaluate(ctx: PlanContext, couples: readonly Couple[], robin: RobinRef,
     return { husband, wife, bond: bondOf(husband, wife), children };
   });
   const born = new Set(marriages.flatMap((m) => m.children.map((c) => c.child)));
-  const unborn = rosterUnits({ ...ctx.roster.run, gender: robin.gender })
-    .flatMap((u) => (u.kind === 'child' && !born.has(u.id as ChildId) ? [u.id as ChildId] : []));
+  const unborn: ChildId[] = [];
+  const leftOut: LeftOut[] = [];
+  for (const u of rosterUnits({ ...ctx.roster.run, gender: robin.gender })) {
+    const child = u.id as ChildId;
+    if (u.kind !== 'child' || born.has(child)) continue;
+    const best = bestPairing(ctx, child);
+    if (best) leftOut.push({ ...best, reason: leftOutReason(ctx.roster, child, best) });
+    else unborn.push(child);
+  }
   const total = marriages.reduce((sum, m) => sum + m.children.reduce((s, c) => s + c.value, 0), 0);
-  return { robin, marriages, total, unborn, ...extra };
+  return { robin, marriages, total, unborn, leftOut, ...extra };
+}
+
+/** A child's best-scoring pairing that can still happen, whatever the rest of the plan; ties go to `prefer`. */
+function bestPairing(ctx: PlanContext, child: ChildId, prefer?: string): PlannedChild | undefined {
+  let best: PlannedChild | undefined;
+  for (const p of ctx.candidates(child)) {
+    const c = ctx.child(p);
+    if (!c) continue;
+    const [a, b] = [c.scaled ?? -Infinity, best?.scaled ?? -Infinity];
+    if (!best || a > b || (a === b && c.key === prefer)) best = c;
+  }
+  return best;
+}
+
+function leftOutReason(roster: Roster, child: ChildId, best: PlannedChild): LeftOutReason {
+  if (stateOf(roster, fixedParentOf(child)) === 'benched') return 'benched';
+  if (best.score === undefined) return 'no-score';
+  return best.priority === 0 ? 'priority-0' : 'outscored';
 }
 
 /** The saved plan's Robin: as the run facts say, or else as the plan was solved for. */
@@ -241,6 +284,12 @@ const UNAVAILABLE = ['dead', 'missed', 'benched'];
 const NO_ROBIN: RobinRef = { kind: 'robin', gender: 'M', asset: 'hp', flaw: 'str' };
 /** A tiny bonus per planned marriage, so a marriage worth 0 is still preferred to none (children still get born). */
 const EPS = 1e-6;
+/**
+ * A tinier bonus per saved-plan child a marriage keeps (and tinier still if it keeps the saved pairing), so among
+ * plans of equal value and marriage count the re-plan keeps the saved plan's children (#46): an equal-value change,
+ * such as toggling Free re-plan, never swaps which child is left out.
+ */
+const KEEP = EPS / 1000;
 const BIG = 1e12;
 
 /** Solves the marriage plan; `free` ignores pins (not marriages), to show what keeping them costs. */
@@ -262,7 +311,15 @@ export function solvePlan(ctx: PlanContext, free = false): MarriagePlan {
   const robinPartner = robinCouple?.find((u) => u !== 'robin');
   const robinOpen = !run.gender || !run.asset || !run.flaw;
 
-  const valueOf = (ps: readonly Pairing[]) => ps.reduce((sum, p) => sum + (ctx.child(p)?.value ?? 0), 0);
+  const saved = roster.savedPlan ? savedPairings(roster, roster.savedPlan) : [];
+  const keptChildren = new Set(saved.map((p) => p.child));
+  const keptPairings = new Set(saved.flatMap((p) => ctx.child(p)?.key ?? []));
+  const valueOf = (ps: readonly Pairing[]) =>
+    ps.reduce((sum, p) => {
+      const c = ctx.child(p);
+      if (!c) return sum;
+      return sum + c.value + (keptChildren.has(c.child) ? KEEP : 0) + (keptPairings.has(c.key) ? KEEP / 100 : 0);
+    }, 0);
   // Couples without Robin produce the same children whatever Robin is: value them once.
   const plain = new Map<string, number>();
   const plainValue = (h: RosterUnit, w: RosterUnit) => {
@@ -272,7 +329,7 @@ export function solvePlan(ctx: PlanContext, free = false): MarriagePlan {
     return v;
   };
   const fixedTotal = fixed.filter((c) => !c.includes('robin')).reduce((sum, [a, b]) => sum + plainValue(a, b), 0);
-  // Ties go to the plan with more marriages: children still get born.
+  // Ties go to the plan with more marriages (children still get born), then to the one keeping more saved children.
   let best: { rank: number; robin: RobinRef; couples: readonly Couple[] } | undefined;
   const consider = (total: number, robin: RobinRef, couples: readonly Couple[]) => {
     const rank = total + EPS * couples.length;
@@ -378,6 +435,12 @@ export function diffPlans(before: MarriagePlan, after: MarriagePlan): PlanDiff {
   const [kb, ka] = [born(before), born(after)];
   const [sb, sa] = [spouses(before), spouses(after)];
   const lost = [...kb.values()].filter((c) => !ka.has(c.child));
+  const reasons = new Map(after.leftOut.map((c) => [c.child, c.reason] as const));
+  const unborn = lost.filter((c) => !reasons.has(c.child));
+  const leftOut = lost.flatMap((c): LeftOut[] => {
+    const reason = reasons.get(c.child);
+    return reason ? [{ ...c, reason }] : [];
+  });
   const gained = [...ka.values()].filter((c) => !kb.has(c.child));
   const units = [...new Set([...sb.keys(), ...sa.keys()])];
   const moves = units.flatMap((unit) => (sb.get(unit) === sa.get(unit) ? [] : [{ unit, from: sb.get(unit), to: sa.get(unit) }]));
@@ -390,7 +453,7 @@ export function diffPlans(before: MarriagePlan, after: MarriagePlan): PlanDiff {
     return a && a.deploymentRole !== b.deploymentRole ? [{ child: b.child, name: b.name, from: b.deploymentRole, to: a.deploymentRole }] : [];
   });
   const same = lost.length === 0 && gained.length === 0 && moves.length === 0 && changes.length === 0 && roleMoves.length === 0;
-  return { before: before.total, after: after.total, lost, gained, moves, changes, roleMoves, same };
+  return { before: before.total, after: after.total, unborn, leftOut, gained, moves, changes, roleMoves, same };
 }
 
 /**
@@ -445,52 +508,59 @@ function hungarian(cost: readonly (readonly number[])[]): number[] {
   return out;
 }
 
+/** What decides a child's ledger status. */
+export type LedgerFacts = {
+  readonly dead: boolean;
+  readonly bornable: boolean;
+  readonly married: boolean;
+  readonly broken: boolean;
+  readonly onHold: boolean;
+  readonly leftOut: boolean;
+  readonly pinned: boolean;
+};
+
+/** The first that holds wins: dead > can't be born > parents married > plan broken > on hold > left out > pinned > open. */
+export function ledgerStatus(f: LedgerFacts): LedgerStatus {
+  if (f.dead) return 'dead';
+  if (!f.bornable) return 'unborn';
+  if (f.married) return 'married';
+  if (f.broken) return 'broken';
+  if (f.onHold) return 'on-hold';
+  if (f.leftOut) return 'left-out';
+  return f.pinned ? 'pinned' : 'open';
+}
+
 /**
  * The children ledger: each child of the run with its plan (or marriage), its best remaining pairing and its status.
- * `candidates` are a child's pairings under the run facts; `blocking` reads a pairing against the roster.
+ * `blocking` reads a pairing against the roster.
  */
-export function childLedger(
-  ctx: PlanContext,
-  plan: MarriagePlan,
-  candidates: (child: ChildId) => readonly Pairing[],
-  blocking: (pairing: Pairing) => Blocking,
-): LedgerEntry[] {
+export function childLedger(ctx: PlanContext, plan: MarriagePlan, blocking: (pairing: Pairing) => Blocking): LedgerEntry[] {
   const { roster } = ctx;
   const planned = new Map(plan.marriages.flatMap((m) => m.children.map((c) => [c.child, c] as const)));
+  const leftOut = new Map(plan.leftOut.map((c) => [c.child, c.reason] as const));
   const saved = new Map(roster.savedPlan ? savedPairings(roster, roster.savedPlan).map((p) => [p.child, p] as const) : []);
   return rosterUnits(roster.run).flatMap((u): LedgerEntry[] => {
     if (u.kind !== 'child') return [];
     const child = u.id as ChildId;
     const mine = planned.get(child);
-    let best: PlannedChild | undefined;
-    let plannedPairing: Pairing | undefined;
-    for (const p of candidates(child)) {
-      const c = ctx.child(p);
-      if (!c) continue;
-      if (c.key === mine?.key) plannedPairing = p;
-      // Ties go to the plan's pairing.
-      const [a, b] = [c.scaled ?? -Infinity, best?.scaled ?? -Infinity];
-      if (!best || a > b || (a === b && c.key === mine?.key)) best = c;
-    }
+    // Ties go to the plan's pairing.
+    const best = bestPairing(ctx, child, mine?.key);
+    const plannedPairing = mine && ctx.candidates(child).find((p) => ctx.child(p)?.key === mine.key);
     const bond = plannedPairing && blocking(plannedPairing).status;
     const was = saved.get(child);
-    // Only a pairing that can no longer happen breaks the plan: re-pinning away from it is the user's call.
+    // Only a pairing that can no longer happen breaks the plan: re-pinning away from it is the user's call. Once a
+    // plan is saved, it alone says what was planned: after Adopt, a child the new plan drops is left out, not broken.
     const pinLost = pinLoss(roster, CHILD_UNITS[child].fixedParent)?.status;
-    const broken = (was && blocking(was).status === 'hard') || pinLost === 'broken';
-    const status: LedgerStatus =
-      stateOf(roster, child) === 'dead'
-        ? 'dead'
-        : !best
-          ? 'unborn'
-          : bond === 'married'
-            ? 'married'
-            : broken
-              ? 'broken'
-              : pinLost === 'on-hold'
-                ? 'on-hold'
-                : bond === 'pinned'
-                  ? 'pinned'
-                  : 'open';
+    const broken = roster.savedPlan ? !!was && blocking(was).status === 'hard' : pinLost === 'broken';
+    const status = ledgerStatus({
+      dead: stateOf(roster, child) === 'dead',
+      bornable: !!best,
+      married: bond === 'married',
+      broken,
+      onHold: pinLost === 'on-hold',
+      leftOut: leftOut.has(child),
+      pinned: bond === 'pinned',
+    });
     const alive = status !== 'dead' && status !== 'unborn';
     const delta = alive && mine?.score !== undefined && best?.score !== undefined ? best.score - mine.score : undefined;
     return [
@@ -502,6 +572,7 @@ export function childLedger(
         best: alive ? best : undefined,
         delta,
         status,
+        ...(status === 'left-out' ? { leftOut: leftOut.get(child) } : {}),
       },
     ];
   });

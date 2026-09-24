@@ -308,6 +308,8 @@ button.skill.linkish { padding: 0 6px; font-size: 11px; }
 .banner { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
 .banner.ok { border-color: #3f7a47; color: var(--pos); }
 .banner.warn-b { border-color: #8a6a2c; }
+.left-out { color: var(--warn); }
+.left-out .why { cursor: help; }
 .banner.hard { border-color: #7a3a3a; color: var(--neg); display: block; }
 .banner .adopt { margin-top: 4px; border-color: var(--accent); }
 table.plan td { padding: 4px 6px; vertical-align: middle; }
@@ -337,6 +339,7 @@ button.chip.plan-preset:disabled { cursor: default; color: var(--muted); border-
 .lstatus.pinned { color: var(--accent); }
 .lstatus.on-hold { color: var(--warn); }
 .lstatus.broken { color: var(--neg); }
+.lstatus.left-out { color: var(--warn); }
 .lstatus.unborn, .lstatus.dead { color: var(--neg); }
 .grid.ledger tr.ledger-dead td.uname, .grid.ledger tr.ledger-unborn td.uname { text-decoration: line-through; color: var(--muted); }
 .prio .seg button { padding: 0 6px; }

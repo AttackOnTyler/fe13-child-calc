@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_SPEED,
+  adoptPlan,
   EMPTY_ROSTER,
   STATS,
   createEngine,
@@ -20,6 +21,7 @@ import {
   type SavedPlan,
   type Stat,
 } from './index';
+import { ledgerStatus } from './plan';
 
 const engine = createEngine();
 
@@ -235,14 +237,15 @@ describe('the saved plan', () => {
     ],
   };
 
-  it('diffs Σ, children lost, spouse moves and score changes', () => {
+  it('diffs Σ, children left out, spouse moves and score changes', () => {
     const before = engine.evaluatePlan(saved, RUN, settings);
     const after = engine.evaluatePlan({ ...saved, marriages: [['stahl', 'tharja'], ['chrom', 'sumia'], ['frederick', 'lissa']] }, RUN, settings);
     const diff = diffPlans(before, after);
     expect(diff.before).toBe(before.total);
     expect(diff.after).toBe(after.total);
-    // Olivia no longer marries: Inigo is lost.
-    expect(diff.lost.map((c) => c.child)).toEqual(['inigo']);
+    // Olivia no longer marries: Inigo is left out, though he can still be born.
+    expect(diff.leftOut.map((c) => c.child)).toEqual(['inigo']);
+    expect(diff.unborn).toEqual([]);
     expect(diff.moves).toContainEqual({ unit: 'stahl', from: 'olivia', to: 'tharja' });
     expect(diff.moves).toContainEqual({ unit: 'olivia', from: 'stahl', to: undefined });
     expect(diff.moves).toContainEqual({ unit: 'lissa', from: 'vaike', to: 'frederick' });
@@ -265,7 +268,8 @@ describe('the saved plan', () => {
     const after = engine.plan(roster, settings);
     expect(after.lostPins).toEqual([{ couple: ['stahl', 'olivia'], status: 'broken', reason: 'Olivia is dead' }]);
     const diff = diffPlans(before, after);
-    expect(diff.lost.map((c) => c.child)).toContain('inigo');
+    expect(diff.unborn.map((c) => c.child)).toContain('inigo');
+    expect(diff.leftOut.map((c) => c.child)).not.toContain('inigo');
     expect(diff.moves).toContainEqual({ unit: 'olivia', from: 'stahl', to: undefined });
     expect(after.unborn).toContain('inigo');
   });
@@ -388,5 +392,133 @@ describe('children ledger', () => {
     for (const e of ledger) if (e.planned && e.best && e.best.scaled === e.planned.scaled) expect(e.best.key).toBe(e.planned.key);
     // Lucina's best is her best-scoring pairing that isn't hard-blocked: Sumia is married to Chrom, so nothing better is open.
     expect(row('lucina').best?.key).toBe('lucina|sumia');
+  });
+});
+
+/** Children left out for a reason other than a benched parent (`small` benches most of the roster). */
+const leftOut = (plan: MarriagePlan) => plan.leftOut.filter((c) => c.reason !== 'benched').map((c) => [c.child, c.reason]);
+
+describe('re-plan: can’t be born vs left out (#58)', () => {
+  // Inigo has no score and Noire priority 0: both are worth 0, so which one Stahl marries is a tie.
+  const s: PlanSettings = { ...settings, overrides: { inigo: 'rallybot' }, priorities: { noire: 0 } };
+  const saved: SavedPlan = { robin: null, marriages: [['lonqu', 'olivia'], ['stahl', 'tharja']] };
+  /** Adopt Lon'qu × Olivia and Stahl × Tharja, then mark Lon'qu married to Cordelia: Stahl is the one husband left. */
+  function repro(): Roster {
+    const roster = small(['lonqu', 'stahl', 'olivia', 'tharja', 'cordelia']);
+    return withSpouse(adoptPlan(roster, engine.evaluatePlan(saved, RUN, s)), 'lonqu', 'cordelia', 'married');
+  }
+  const replan = (roster: Roster, free = false) => diffPlans(engine.evaluatePlan(saved, RUN, s), engine.plan(roster, s, { free }));
+
+  it('reports Inigo as left out with no score, not as can’t be born', () => {
+    const diff = replan(repro());
+    expect(diff.leftOut.map((c) => [c.child, c.reason])).toEqual([['inigo', 'no-score']]);
+    expect(diff.unborn).toEqual([]);
+  });
+
+  it('keeps the same child left out when Free re-plan is toggled', () => {
+    const roster = repro();
+    const left = (free: boolean) => replan(roster, free).leftOut.map((c) => c.child);
+    expect(left(true)).toEqual(['inigo']);
+    expect(left(false)).toEqual(['inigo']);
+  });
+
+  it('reports a child whose every pairing is gone as can’t be born', () => {
+    const saved: SavedPlan = { robin: null, marriages: [['stahl', 'olivia']] };
+    const roster = withState(withSavedPlan({ ...EMPTY_ROSTER, run: RUN }, saved), 'olivia', 'dead');
+    const diff = diffPlans(engine.evaluatePlan(saved, RUN, settings), engine.plan(roster, settings));
+    expect(diff.unborn.map((c) => c.child)).toEqual(['inigo']);
+    expect(diff.leftOut).toEqual([]);
+    expect(engine.plan(roster, settings).unborn).toContain('inigo');
+  });
+
+  describe('left-out reasons', () => {
+    // Stahl is the only husband for Olivia and Tharja: one mother stays single.
+    const keep: RosterUnit[] = ['stahl', 'olivia', 'tharja'];
+    const reason = (s: PlanSettings) => leftOut(engine.plan(small(keep), s));
+
+    it('no score: its plan preset has none', () => {
+      expect(reason({ ...settings, overrides: { inigo: 'rallybot' } })).toEqual([['inigo', 'no-score']]);
+    });
+
+    it('priority 0', () => {
+      expect(reason({ ...settings, priorities: { noire: 0 } })).toEqual([['noire', 'priority-0']]);
+    });
+
+    it('outscored: a higher-valued child won the husband', () => {
+      expect(reason({ ...settings, priorities: { noire: 3 } })).toEqual([['inigo', 'outscored']]);
+    });
+
+    it('benched: its fixed parent is benched', () => {
+      const benched = withState(small(keep), 'olivia', 'benched');
+      expect(engine.plan(benched, settings).leftOut.map((c) => [c.child, c.reason])).toContainEqual(['inigo', 'benched']);
+    });
+  });
+});
+
+describe('re-plan: stability tiebreak', () => {
+  // Priority 0 for both: Stahl × Olivia and Stahl × Tharja are worth the same.
+  const keep: RosterUnit[] = ['stahl', 'olivia', 'tharja'];
+  const tie = { ...settings, priorities: { inigo: 0, noire: 0 } };
+  const wife = (roster: Roster, s = tie) => engine.plan(roster, s).marriages.find((m) => m.husband === 'stahl')!.wife;
+  const savedWith = (w: RosterUnit) => withSavedPlan(small(keep), { robin: null, marriages: [['stahl', w]] });
+
+  it('keeps the saved plan’s children among equal plans', () => {
+    expect(wife(savedWith('olivia'))).toBe('olivia');
+    expect(wife(savedWith('tharja'))).toBe('tharja');
+  });
+
+  it('has no effect without a saved plan', () => {
+    const none = engine.plan(small(keep), tie);
+    const empty = engine.plan(withSavedPlan(small(keep), { robin: null, marriages: [] }), tie);
+    // A saved plan whose children are none of Inigo and Noire doesn't pull the tie either way.
+    const unrelated = engine.plan(withSavedPlan(small(keep), { robin: null, marriages: [['chrom', 'sumia']] }), tie);
+    expect(couples(empty)).toEqual(couples(none));
+    expect(couples(unrelated)).toEqual(couples(none));
+    expect(empty.total).toBe(none.total);
+  });
+
+  it('never beats a better plan', () => {
+    expect(wife(savedWith('olivia'), { ...settings, priorities: { inigo: 0, noire: 1 } })).toBe('tharja');
+  });
+});
+
+describe('children ledger: left out', () => {
+  it('reads plan broken before Adopt, and left out after', () => {
+    // Adopted Stahl × Olivia and Vaike × Tharja; then Stahl dies, leaving Vaike the only husband, and Noire is worth more.
+    const keep: RosterUnit[] = ['stahl', 'vaike', 'olivia', 'tharja'];
+    const s = { ...settings, priorities: { noire: 3 } };
+    const saved: SavedPlan = { robin: null, marriages: [['stahl', 'olivia'], ['vaike', 'tharja']] };
+    let roster = withSavedPlan(small(keep), saved);
+    for (const [a, b] of saved.marriages) roster = withSpouse(roster, a, b, 'pinned');
+    roster = withState(roster, 'stahl', 'dead');
+    const inigo = (r: Roster) => engine.ledger(r, s).find((e) => e.child === 'inigo')!;
+    expect(inigo(roster).status).toBe('broken');
+    const adopted = adoptPlan(roster, engine.plan(roster, s));
+    expect(inigo(adopted)).toMatchObject({ status: 'left-out', leftOut: 'outscored' });
+  });
+});
+
+describe('children ledger: status precedence', () => {
+  const none = { dead: false, bornable: true, married: false, broken: false, onHold: false, leftOut: false, pinned: false };
+  // dead > can't be born > parents married > plan broken > on hold > left out > pinned > open
+  const steps = [
+    ['dead', { dead: true }],
+    ['unborn', { bornable: false }],
+    ['married', { married: true }],
+    ['broken', { broken: true }],
+    ['on-hold', { onHold: true }],
+    ['left-out', { leftOut: true }],
+    ['pinned', { pinned: true }],
+  ] as const;
+
+  it('opens with nothing set', () => {
+    expect(ledgerStatus(none)).toBe('open');
+  });
+
+  steps.forEach(([status], i) => {
+    it(`${status} outranks everything below it`, () => {
+      const below = Object.assign({}, none, ...steps.slice(i).map(([, f]) => f));
+      expect(ledgerStatus(below)).toBe(status);
+    });
   });
 });

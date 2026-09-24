@@ -16,6 +16,7 @@ import {
   type Composition,
   type DeploymentRole,
   type Engine,
+  type LeftOut,
   type MarriagePlan,
   type PinLoss,
   type PlanDiff,
@@ -28,7 +29,7 @@ import {
   type RosterUnit,
 } from '../engine';
 import { h } from './dom';
-import { LABELS, PIN_LOSS_UI, ROLE_UI } from './labels';
+import { LABELS, LEFT_OUT_UI, NOT_BORN_UI, PIN_LOSS_UI, ROLE_UI } from './labels';
 import { editQuota } from './plan-prefs';
 
 /** A child's plan controls (priority, plan preset), shared by the Plan sidebar and the Roster page's ledger. */
@@ -224,9 +225,10 @@ function diffBanner(ctx: PlanPageContext, plan: MarriagePlan, diff: PlanDiff | u
     'div',
     { class: 'banner warn-b' },
     h('div', {}, h('b', {}, 'Changed vs saved plan'), ` Σ ${fmt(diff.before)} → ${fmt(diff.after)} `, h('span', { class: tone(change) }, `(${signed(change)})`)),
-    diff.lost.length
-      ? h('div', { class: 'neg' }, '✕ Children lost: ', diff.lost.map((c) => `${c.name} (${c.score ?? '—'})`).join(', '))
+    diff.unborn.length
+      ? h('div', { class: 'neg' }, `${NOT_BORN_UI.unborn}: `, diff.unborn.map((c) => `${c.name} (${c.score ?? '—'})`).join(', '))
       : null,
+    leftOutLine(diff.leftOut, true),
     diff.gained.length ? h('div', { class: 'pos' }, '+ New children: ', diff.gained.map((c) => `${c.name} (${c.score ?? '—'})`).join(', ')) : null,
     diff.moves.length ? h('div', {}, '⇄ ', diff.moves.map((m) => `${name(m.unit)}: ${name(m.from)} → ${name(m.to)}`).join(' · ')) : null,
     diff.roleMoves.length
@@ -247,6 +249,16 @@ function diffBanner(ctx: PlanPageContext, plan: MarriagePlan, diff: PlanDiff | u
       : null,
     adoptButton,
   );
+}
+
+/** Left out by this plan (amber): each child with its reason, and the fix on hover; with its saved score in the diff. */
+function leftOutLine(children: readonly LeftOut[], withScore: boolean): HTMLElement | null {
+  if (!children.length) return null;
+  const entry = (c: LeftOut) => {
+    const ui = LEFT_OUT_UI[c.reason];
+    return h('span', { class: 'why', title: ui.hint }, `${c.name} (${withScore ? `${c.score ?? '—'} · ` : ''}${ui.label})`);
+  };
+  return h('div', { class: 'left-out' }, `${NOT_BORN_UI.leftOut}: `, ...children.flatMap((c, i) => [i ? ', ' : '', entry(c)]));
 }
 
 /** 📌 Broken pins (red: gone for good) or 📌 Pins on hold (amber: back on un-bench), each re-planned around. */
@@ -320,9 +332,16 @@ export function planPage(ctx: PlanPageContext): HTMLElement[] {
     h('tbody', {}, ...plan.marriages.map((m) => marriageRow(ctx, plan, m, saved))),
   );
 
-  const unborn = plan.unborn.length
-    ? h('div', { class: 'muted' }, 'Not born in this plan: ', plan.unborn.map((c) => unitName(c)).join(', '))
-    : null;
+  const notBorn =
+    plan.unborn.length || plan.leftOut.length
+      ? h(
+          'div',
+          { class: 'not-born' },
+          h('div', { class: 'muted' }, 'Not born in this plan:'),
+          plan.unborn.length ? h('div', { class: 'neg' }, `${NOT_BORN_UI.unborn}: `, plan.unborn.map((c) => unitName(c)).join(', ')) : null,
+          leftOutLine(plan.leftOut, false),
+        )
+      : null;
   const ruleOuts = roster.ruleOuts.length
     ? h(
         'div',
@@ -339,7 +358,7 @@ export function planPage(ctx: PlanPageContext): HTMLElement[] {
       )
     : null;
 
-  return [head, h('div', { class: 'scroll plan-view' }, ...notes, table, unborn, ruleOuts)];
+  return [head, h('div', { class: 'scroll plan-view' }, ...notes, table, notBorn, ruleOuts)];
 }
 
 /** A child's priority, 0–3. */
