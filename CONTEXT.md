@@ -113,13 +113,17 @@ _Avoid_: Best class (alone), default class (the child's starting class)
 Facts fixed at the start of a playthrough — Robin's gender and asset/flaw. They remove pairings from the run entirely rather than blocking them.
 _Avoid_: Settings, run config
 
+**Lock (Robin)**:
+The Plan's pick-line action that writes the marriage plan's Robin into the Run facts it leaves open (facts already set stay) and pins Robin's marriage, if the plan marries Robin. Unlock by setting Robin's gender back to — in Run facts. "Lock" alone names only this.
+_Avoid_: Lock for a pin (that is a pin), set Robin
+
 **Unit state**:
 Where a unit stands in the current run: Available, Not yet recruited (prunes nothing), Benched (soft), Missed or Dead (hard).
 _Avoid_: Status (alone), availability
 
 **Pin**:
-A planned marriage the player has locked. Soft: the player can unpin it. It is **broken** for good when either unit is missed or dead, and **on hold** while either unit is benched (it returns when un-benched); either way it is a lost pin and frees the partner.
-_Avoid_: Lock (alone), reservation, planned (every marriage in the marriage plan is planned; only a pinned one is locked)
+A planned marriage the player has kept. Soft: the player can unpin it. It is **broken** for good when either unit is missed or dead, and **on hold** while either unit is benched (it returns when un-benched); either way it is a lost pin and frees the partner.
+_Avoid_: Lock (reserved for Lock (Robin)), reservation, planned (every marriage in the marriage plan is planned; only a pinned one is kept)
 
 **Rule-out**:
 A marriage the player has forbidden. Soft: the marriage plan works around it until it is ruled back in.

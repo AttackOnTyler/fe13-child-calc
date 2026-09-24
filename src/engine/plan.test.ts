@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_SPEED,
   adoptPlan,
+  lockRobin,
   EMPTY_ROSTER,
   STATS,
   createEngine,
@@ -9,6 +10,7 @@ import {
   parseRoster,
   rosterUnits,
   withRuleOut,
+  withRun,
   withSavedPlan,
   withSpouse,
   withState,
@@ -520,5 +522,69 @@ describe('children ledger: status precedence', () => {
       const below = Object.assign({}, none, ...steps.slice(i).map(([, f]) => f));
       expect(ledgerStatus(below)).toBe(status);
     });
+  });
+});
+
+describe('Lock Robin from the plan’s pick (#59)', () => {
+  const OPEN = { gender: null, asset: null, flaw: null } as const;
+  const robinSpouse = (r: Roster) => r.spouses.robin;
+  const robinMarriage = (plan: MarriagePlan) => plan.marriages.find((m) => m.husband === 'robin' || m.wife === 'robin');
+
+  it('fills the open Run facts with the plan’s Robin and pins Robin’s marriage', () => {
+    const roster = small(['robin', 'chrom', 'vaike', 'lissa'], OPEN);
+    const plan = engine.plan(roster, settings);
+    const m = robinMarriage(plan)!;
+    expect(m).toBeDefined();
+    const locked = lockRobin(roster, plan);
+    const { gender, asset, flaw } = plan.robin;
+    expect(locked.run).toEqual({ gender, asset, flaw });
+    expect(robinSpouse(locked)).toEqual({ partner: m.husband === 'robin' ? m.wife : m.husband, bond: 'pinned' });
+    expect(engine.plan(locked, settings).robinOpen).toBe(false);
+  });
+
+  it('keeps the Run facts already set', () => {
+    const run = { gender: 'F', asset: 'mag', flaw: null } as const;
+    const roster = small(['robin', 'chrom', 'vaike', 'lissa'], run);
+    const plan = engine.plan(roster, settings);
+    const locked = lockRobin(roster, plan);
+    expect(locked.run).toEqual({ gender: 'F', asset: 'mag', flaw: plan.robin.flaw });
+    // A stale pick never overwrites a fact set since.
+    const stale = lockRobin(withRun(roster, { asset: 'skl' }), plan);
+    expect(stale.run).toMatchObject({ gender: 'F', asset: 'skl' });
+  });
+
+  it('pins nothing from a plan solved for the other gender', () => {
+    const roster = small(['robin', 'chrom', 'vaike', 'lissa'], OPEN);
+    const plan = engine.plan(roster, settings);
+    expect(robinMarriage(plan)).toBeDefined();
+    const other = plan.robin.gender === 'M' ? 'F' : 'M';
+    expect(robinSpouse(lockRobin(withRun(roster, { gender: other }), plan))).toBeUndefined();
+  });
+
+  it('sets the facts without pinning anything when the plan doesn’t marry Robin', () => {
+    const roster = withState(small(['chrom', 'sumia'], OPEN), 'robin', 'benched');
+    const plan = engine.plan(roster, settings);
+    expect(robinMarriage(plan)).toBeUndefined();
+    const locked = lockRobin(roster, plan);
+    const { gender, asset, flaw } = plan.robin;
+    expect(locked.run).toEqual({ gender, asset, flaw });
+    expect(locked.spouses).toEqual(roster.spouses);
+  });
+
+  it('leaves a married Robin married', () => {
+    const roster = withSpouse(small(['robin', 'chrom', 'vaike', 'lissa'], { gender: 'M', asset: null, flaw: null }), 'robin', 'lissa', 'married');
+    const locked = lockRobin(roster, engine.plan(roster, settings));
+    expect(robinSpouse(locked)).toEqual({ partner: 'lissa', bond: 'married' });
+  });
+
+  it('gives the same roster whether Lock or Adopt comes first', () => {
+    const roster = small(['robin', 'chrom', 'frederick', 'vaike', 'sumia', 'lissa', 'olivia'], OPEN);
+    const onPlan = (r: Roster, step: typeof lockRobin) => step(r, engine.plan(r, settings));
+    const lockFirst = onPlan(onPlan(roster, lockRobin), adoptPlan);
+    const adoptFirst = onPlan(onPlan(roster, adoptPlan), lockRobin);
+    expect(robinSpouse(lockFirst)?.bond).toBe('pinned');
+    // The saved plan lists married and pinned couples first, so compare its marriages as a set.
+    const norm = (r: Roster) => ({ ...r, savedPlan: r.savedPlan && { ...r.savedPlan, marriages: r.savedPlan.marriages.map(([a, b]) => couple(a, b)).sort() } });
+    expect(norm(lockFirst)).toEqual(norm(adoptFirst));
   });
 });

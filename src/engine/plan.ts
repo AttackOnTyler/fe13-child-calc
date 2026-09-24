@@ -14,6 +14,7 @@ import {
   pinLoss,
   rosterUnits,
   stateOf,
+  withRun,
   withSavedPlan,
   withSpouse,
   type Blocking,
@@ -268,6 +269,20 @@ export function adoptPlan(roster: Roster, plan: MarriagePlan): Roster {
   const deploymentRoles = Object.fromEntries(plan.marriages.flatMap((m) => m.children.map((c) => [c.child, c.deploymentRole])));
   let next = withSavedPlan(roster, { robin: robinMarries ? { gender, asset, flaw } : null, marriages, deploymentRoles });
   for (const m of plan.marriages) if (!m.bond && canPin(roster, m)) next = withSpouse(next, m.husband, m.wife, 'pinned');
+  return next;
+}
+
+/**
+ * Locks Robin from the plan's pick: writes the plan's Robin into the Run facts it leaves open (facts already set are
+ * kept) and pins Robin's marriage, if the plan marries Robin. Works before or after {@link adoptPlan}. A plan solved for
+ * the other gender pins nothing: its Robin marriage can't exist in the run.
+ */
+export function lockRobin(roster: Roster, plan: MarriagePlan): Roster {
+  const { run } = roster;
+  const { gender, asset, flaw } = plan.robin;
+  let next = withRun(roster, { gender: run.gender ?? gender, asset: run.asset ?? asset, flaw: run.flaw ?? flaw });
+  const m = plan.marriages.find((m) => m.husband === 'robin' || m.wife === 'robin');
+  if (m && !m.bond && next.run.gender === gender) next = withSpouse(next, m.husband, m.wife, 'pinned');
   return next;
 }
 

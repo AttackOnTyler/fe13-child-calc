@@ -16,6 +16,8 @@ export const LABELS = {
   ruleOutHint: 'Rule out: the plan won’t use this marriage',
   ruledOut: '🚫 Ruled out',
   adoptPlan: 'Adopt the new plan',
+  /** The Plan's pick line: lock the solver's Robin into Run facts. Reserved for this button. */
+  lock: 'Lock',
   suggestRoles: 'Suggest roles',
   freeReplan: 'Free re-plan',
 } as const;

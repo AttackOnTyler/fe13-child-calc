@@ -312,6 +312,7 @@ button.skill.linkish { padding: 0 6px; font-size: 11px; }
 .left-out .why { cursor: help; }
 .banner.hard { border-color: #7a3a3a; color: var(--neg); display: block; }
 .banner .adopt { margin-top: 4px; border-color: var(--accent); }
+.robin-pick .lock { margin-left: 4px; border-color: var(--accent); }
 table.plan td { padding: 4px 6px; vertical-align: middle; }
 table.plan td.uname { font-weight: 600; }
 table.plan td.children { white-space: normal; }

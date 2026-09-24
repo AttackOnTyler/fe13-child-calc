@@ -8,6 +8,7 @@ import {
   composition,
   diffPlans,
   deploymentRoleOf,
+  lockRobin,
   rosterUnits,
   unitName,
   withRuleOut,
@@ -304,8 +305,23 @@ export function planPage(ctx: PlanPageContext): HTMLElement[] {
   );
 
   const notes: (HTMLElement | null)[] = [
-    plan.robinOpen && robinMarried
-      ? h('div', { class: 'muted' }, `Run facts leave Robin open: the solver picked Robin (${gender}) +${STAT_LABELS[asset]} −${STAT_LABELS[flaw]}.`)
+    plan.robinOpen
+      ? h(
+          'div',
+          { class: 'muted robin-pick' },
+          `Run facts leave Robin open: the solver picked Robin (${gender}) +${STAT_LABELS[asset]} −${STAT_LABELS[flaw]}. `,
+          h(
+            'button',
+            {
+              class: 'lock',
+              title: robinMarried
+                ? 'Set the open Run facts to this Robin, and pin Robin’s marriage'
+                : 'Set the open Run facts to this Robin (the plan doesn’t marry Robin, so nothing is pinned)',
+              onclick: () => ctx.setRoster(lockRobin(roster, plan)),
+            },
+            LABELS.lock,
+          ),
+        )
       : null,
     lostPinsBanner(plan, 'broken'),
     lostPinsBanner(plan, 'on-hold'),

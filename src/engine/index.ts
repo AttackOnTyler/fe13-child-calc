@@ -141,6 +141,7 @@ export {
   adoptPlan,
   canPin,
   diffPlans,
+  lockRobin,
   type LeftOut,
   type LeftOutReason,
   type LedgerEntry,
