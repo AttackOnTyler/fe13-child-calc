@@ -118,7 +118,7 @@ Where a unit stands in the current run: Available, Not yet recruited (prunes not
 _Avoid_: Status (alone), availability
 
 **Pin**:
-A planned marriage the player has locked. Soft: the player can unpin it. It is **broken** for good when either unit is missed or dead, and **on hold** while either unit is benched (it returns when un-benched); either way it frees the partner.
+A planned marriage the player has locked. Soft: the player can unpin it. It is **broken** for good when either unit is missed or dead, and **on hold** while either unit is benched (it returns when un-benched); either way it is a lost pin and frees the partner.
 _Avoid_: Lock (alone), reservation, planned (every marriage in the marriage plan is planned; only a pinned one is locked)
 
 **Rule-out**:
@@ -134,7 +134,7 @@ The preset a child is scored with in the marriage plan: a curated default per ch
 _Avoid_: Child preset, default preset (ambiguous with the global one)
 
 **Children ledger**:
-The Roster page's one row per child: fixed parent, the marriage plan's pairing (or its parents' marriage), its best pairing that can still happen with Δ vs the plan, and where it stands — open, planned, parents married, plan broken (the saved plan's pairing can no longer happen), can't be born, or dead. It edits the same priority and plan preset as the Plan sidebar.
+The Roster page's one row per child: fixed parent, the marriage plan's pairing (or its parents' marriage), its best pairing that can still happen with Δ vs the plan, and where it stands — open, pinned, on hold (its parents' pin is on hold through a bench), parents married, plan broken (the saved plan's pairing, or its parents' pin, can no longer happen), can't be born, or dead. It edits the same priority and plan preset as the Plan sidebar.
 _Avoid_: Child list, tracker
 
 **Deployment role**:

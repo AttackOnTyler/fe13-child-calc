@@ -1,7 +1,7 @@
 /**
  * The marriage plan: one spouse per unit for the whole roster, chosen to maximise Σ priority × score over the children
- * the marriages produce (#16, #18). Married pairs and pins are fixed, void pins are dropped (freeing the partner), and
- * rule-outs are never planned. The rest is max-weight bipartite matching (Hungarian algorithm), searched over Robin's
+ * the marriages produce (#16, #18). Married pairs and pins are fixed, lost pins (broken or on hold) are dropped, freeing
+ * the partner, and rule-outs are never planned. The rest is max-weight bipartite matching (Hungarian algorithm), searched over Robin's
  * gender and asset/flaw while the run facts leave them open, and over Robin's partner when it is a child: Morgan's
  * value then rides on the marriage that produces that child. Pure: roster and a child valuation in, plan out.
  */
@@ -11,14 +11,15 @@ import { STATS, type Gender } from '../game-data/stats';
 import { CHROM_FALLBACK_PARTNER } from '../game-data/supports';
 import {
   isRuledOut,
+  pinLoss,
   rosterUnits,
   stateOf,
-  voidPinReason,
   withSavedPlan,
   withSpouse,
   type Blocking,
   type Bond,
   type Couple,
+  type PinLoss,
   type Roster,
   type RosterUnit,
   type SavedPlan,
@@ -64,8 +65,8 @@ export type MarriagePlan = {
   readonly marriages: readonly PlanMarriage[];
   /** Σ priority × score. */
   readonly total: number;
-  /** Pins through a benched, missed or dead unit: dropped, freeing the partner. */
-  readonly brokenPins: readonly { readonly couple: Couple; readonly reason: string }[];
+  /** Pins broken by a dead or missed unit, or on hold through a benched one: dropped, freeing the partner. */
+  readonly lostPins: readonly (PinLoss & { readonly couple: Couple })[];
   /** Children of this run that the plan doesn't produce (or that can no longer be born). */
   readonly unborn: readonly ChildId[];
 };
@@ -89,9 +90,10 @@ export type PlanDiff = {
 
 /**
  * A child's standing in the run: ☠ dead, ✕ can't be born (no pairing left that can happen), parents married, ⚠ plan
- * broken (the saved plan's pairing for it can no longer happen), planned (its parents are pinned), or open.
+ * broken (the saved plan's pairing for it, or its parents' pin, can no longer happen), on hold (its parents' pin is on
+ * hold through a bench), pinned (its parents are pinned), or open.
  */
-export type LedgerStatus = 'dead' | 'unborn' | 'married' | 'broken' | 'planned' | 'open';
+export type LedgerStatus = 'dead' | 'unborn' | 'married' | 'broken' | 'on-hold' | 'pinned' | 'open';
 
 /** One child in the Roster page's children ledger. */
 export type LedgerEntry = {
@@ -163,12 +165,12 @@ function pairingsOf([a, b]: Couple, robin: RobinRef, spouseOf: (u: RosterUnit) =
 }
 
 /** The plan a set of marriages makes, valued by the context. */
-function evaluate(ctx: PlanContext, couples: readonly Couple[], robin: RobinRef, extra: Pick<MarriagePlan, 'robinOpen' | 'brokenPins'>): MarriagePlan {
+function evaluate(ctx: PlanContext, couples: readonly Couple[], robin: RobinRef, extra: Pick<MarriagePlan, 'robinOpen' | 'lostPins'>): MarriagePlan {
   const spouse = new Map<RosterUnit, RosterUnit>();
   for (const [a, b] of couples) spouse.set(a, b).set(b, a);
   const bondOf = (h: RosterUnit, w: RosterUnit): Bond | null => {
     const s = ctx.roster.spouses[h];
-    return s?.partner === w && (s.bond === 'married' || !voidPinReason(ctx.roster, h)) ? s.bond : null;
+    return s?.partner === w && (s.bond === 'married' || !pinLoss(ctx.roster, h)) ? s.bond : null;
   };
   const marriages = couples.map((c): PlanMarriage => {
     const [husband, wife] = orient(c, robin.gender);
@@ -197,7 +199,7 @@ function savedRobin(run: Roster['run'], saved: SavedPlan): RobinRef {
 
 /** Values a saved plan's marriages, each child in the deployment role it had when adopted. */
 export function evaluatePlan(ctx: PlanContext, saved: SavedPlan): MarriagePlan {
-  const plan = evaluate(ctx, saved.marriages, savedRobin(ctx.roster.run, saved), { robinOpen: false, brokenPins: [] });
+  const plan = evaluate(ctx, saved.marriages, savedRobin(ctx.roster.run, saved), { robinOpen: false, lostPins: [] });
   const roles = saved.deploymentRoles;
   if (!roles) return plan;
   const marriages = plan.marriages.map((m) => ({
@@ -245,14 +247,14 @@ const BIG = 1e12;
 export function solvePlan(ctx: PlanContext, free = false): MarriagePlan {
   const { roster } = ctx;
   const { run } = roster;
-  const brokenPins: { couple: Couple; reason: string }[] = [];
+  const lostPins: (PinLoss & { couple: Couple })[] = [];
   const fixed: Couple[] = [];
   const seen = new Set<RosterUnit>();
   for (const [u, s] of Object.entries(roster.spouses) as [RosterUnit, (typeof roster.spouses)[RosterUnit]][]) {
     if (!s || seen.has(u)) continue;
     seen.add(u).add(s.partner);
-    const reason = s.bond === 'pinned' ? voidPinReason(roster, u) : undefined;
-    if (reason) brokenPins.push({ couple: [u, s.partner], reason });
+    const loss = pinLoss(roster, u);
+    if (loss) lostPins.push({ couple: [u, s.partner], ...loss });
     else if (s.bond === 'married' || !free) fixed.push([u, s.partner]);
   }
   const taken = new Set(fixed.flat());
@@ -342,7 +344,7 @@ export function solvePlan(ctx: PlanContext, free = false): MarriagePlan {
       consider(fixedTotal + r.total, other ? morgan(other).robin : robins[0]!, [...couples, ...r.couples]);
     }
   }
-  const plan = evaluate(ctx, best!.couples, best!.robin, { robinOpen, brokenPins });
+  const plan = evaluate(ctx, best!.couples, best!.robin, { robinOpen, lostPins });
   // Married, then pinned, then the solver's.
   const order = (m: PlanMarriage) => (m.bond === 'married' ? 0 : m.bond === 'pinned' ? 1 : 2);
   return { ...plan, marriages: [...plan.marriages].sort((a, b) => order(a) - order(b)) };
@@ -473,7 +475,8 @@ export function childLedger(
     const bond = plannedPairing && blocking(plannedPairing).status;
     const was = saved.get(child);
     // Only a pairing that can no longer happen breaks the plan: re-pinning away from it is the user's call.
-    const broken = was && blocking(was).status === 'hard';
+    const pinLost = pinLoss(roster, CHILD_UNITS[child].fixedParent)?.status;
+    const broken = (was && blocking(was).status === 'hard') || pinLost === 'broken';
     const status: LedgerStatus =
       stateOf(roster, child) === 'dead'
         ? 'dead'
@@ -483,9 +486,11 @@ export function childLedger(
             ? 'married'
             : broken
               ? 'broken'
-              : bond === 'planned'
-                ? 'planned'
-                : 'open';
+              : pinLost === 'on-hold'
+                ? 'on-hold'
+                : bond === 'pinned'
+                  ? 'pinned'
+                  : 'open';
     const alive = status !== 'dead' && status !== 'unborn';
     const delta = alive && mine?.score !== undefined && best?.score !== undefined ? best.score - mine.score : undefined;
     return [

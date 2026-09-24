@@ -4,6 +4,7 @@ import {
   EMPTY_ROSTER,
   createEngine,
   parseRoster,
+  pinLoss,
   resolveAssumptions,
   rosterUnits,
   withRun,
@@ -62,10 +63,10 @@ describe('blocked pairings: marriages and pins', () => {
     expect(blocking('kjelle|vaike', married)).toMatchObject({ status: 'hard', hard: ['Vaike is married to Lissa'] });
   });
 
-  it('marks a pinned pairing as planned, and soft-blocks what contradicts the pin', () => {
-    expect(blocking('owain|vaike', pinned)).toMatchObject({ status: 'planned', hard: [], soft: [] });
-    expect(blocking('owain|frederick', pinned)).toMatchObject({ status: 'soft', hard: [], soft: ['Lissa is planned with Vaike'] });
-    expect(blocking('kjelle|vaike', pinned)).toMatchObject({ status: 'soft', soft: ['Vaike is planned with Lissa'] });
+  it('marks a pinned pairing as pinned, and soft-blocks what contradicts the pin', () => {
+    expect(blocking('owain|vaike', pinned)).toMatchObject({ status: 'pinned', hard: [], soft: [] });
+    expect(blocking('owain|frederick', pinned)).toMatchObject({ status: 'soft', hard: [], soft: ['Lissa is pinned to Vaike'] });
+    expect(blocking('kjelle|vaike', pinned)).toMatchObject({ status: 'soft', soft: ['Vaike is pinned to Lissa'] });
   });
 
   it('keeps one spouse per unit: a new spouse replaces the old one on both sides', () => {
@@ -76,12 +77,33 @@ describe('blocked pairings: marriages and pins', () => {
     expect(withSpouse(moved, 'lissa', null).spouses).toEqual({});
   });
 
-  it('voids a pin through a dead, missed or benched unit, freeing the partner', () => {
+  it('breaks a pin through a dead or missed unit, for good', () => {
+    expect(pinLoss(withState(pinned, 'vaike', 'dead'), 'lissa')).toEqual({ status: 'broken', reason: 'Vaike is dead' });
+    expect(pinLoss(withState(pinned, 'lissa', 'missed'), 'vaike')).toEqual({ status: 'broken', reason: 'Lissa was missed' });
+    // Broken wins over on hold when one side is lost and the other benched.
+    expect(pinLoss(withState(withState(pinned, 'lissa', 'benched'), 'vaike', 'dead'), 'lissa')).toMatchObject({ status: 'broken' });
+  });
+
+  it('puts a pin through a benched unit on hold, and restores it on un-bench', () => {
+    const benched = withState(pinned, 'vaike', 'benched');
+    expect(pinLoss(benched, 'lissa')).toEqual({ status: 'on-hold', reason: 'Vaike is benched' });
+    expect(pinLoss(benched, 'vaike')).toEqual({ status: 'on-hold', reason: 'Vaike is benched' });
+    const back = withState(benched, 'vaike', 'available');
+    expect(pinLoss(back, 'lissa')).toBeUndefined();
+    expect(blocking('owain|vaike', back).status).toBe('pinned');
+  });
+
+  it('never loses a marriage or a missing pin', () => {
+    expect(pinLoss(withState(withSpouse(EMPTY_ROSTER, 'lissa', 'vaike', 'married'), 'vaike', 'benched'), 'lissa')).toBeUndefined();
+    expect(pinLoss(withState(EMPTY_ROSTER, 'vaike', 'dead'), 'vaike')).toBeUndefined();
+  });
+
+  it('frees the partner of a broken or on-hold pin', () => {
     for (const state of ['dead', 'missed', 'benched'] as const) {
       const roster = withState(pinned, 'vaike', state);
       // Lissa is free again: marrying someone else contradicts nothing.
       expect(blocking('owain|frederick', roster)).toMatchObject({ status: 'open', hard: [], soft: [] });
-      // The pinned pairing itself is blocked by Vaike's state, not planned.
+      // The pinned pairing itself is blocked by Vaike's state, not pinned.
       expect(blocking('owain|vaike', roster).status).toBe(state === 'benched' ? 'soft' : 'hard');
     }
   });

@@ -52,6 +52,7 @@ import {
   type Weights,
 } from '../engine';
 import { h } from './dom';
+import { LABELS, SCORING_ROLE_UI } from './labels';
 import { loadOverrides, saveOverrides } from './overrides';
 import {
   BASES,
@@ -316,8 +317,8 @@ function planChip(results: readonly ChildResult[]): HTMLElement | null {
 
 const BLOCK_CHIPS: Readonly<Record<Blocking['status'], { mark: string; label: string } | undefined>> = {
   open: undefined,
-  married: { mark: '✓', label: 'Married' },
-  planned: { mark: '★', label: 'Planned' },
+  married: { mark: '✓', label: LABELS.married },
+  pinned: { mark: LABELS.pin, label: LABELS.pinned },
   soft: { mark: '!', label: 'Soft-blocked' },
   hard: { mark: '✕', label: 'Hard-blocked' },
 };
@@ -1514,6 +1515,7 @@ function segmented<T extends string>(
   names: Record<T, string>,
   onpick: (v: T) => void,
   disabled: (v: T) => string | undefined = () => undefined,
+  hints: Partial<Record<T, string>> = {},
 ): HTMLElement {
   return h(
     'div',
@@ -1525,7 +1527,7 @@ function segmented<T extends string>(
       ...options.map((o) =>
         h(
           'button',
-          { class: o === current ? 'on' : '', 'aria-pressed': String(o === current), disabled: !!disabled(o), title: disabled(o), onclick: () => onpick(o) },
+          { class: o === current ? 'on' : '', 'aria-pressed': String(o === current), disabled: !!disabled(o), title: disabled(o) ?? hints[o], onclick: () => onpick(o) },
           names[o],
         ),
       ),
@@ -1533,15 +1535,16 @@ function segmented<T extends string>(
   );
 }
 
-const ROLE_NAMES: Record<ScoringRole, string> = { lead: 'Lead', support: 'Support' };
 const RANK_CHOICE_NAMES: Record<SupportRank, string> = { none: '—', C: 'C/B', B: 'C/B', A: 'A/S', S: 'A/S' };
 /** The rank input's choice for a rank: C/B and A/S each give the same bonus. */
 const rankChoice = (r: SupportRank): SupportRank => (r === 'B' ? 'C' : r === 'S' ? 'A' : r);
 
-/** Lead/Support, set by the preset; picking the other one overrides it until ↺ or a new preset. */
+/** Lead/Battery (the Lead/Support scoring role), set by the preset; picking the other one overrides it until ↺ or a new preset. */
 function roleControl(): HTMLElement {
   const fromPreset = currentPreset().role ?? 'lead';
-  const el = segmented('Role', ROLES, role(), ROLE_NAMES, (r) => setPrefs({ role: r === fromPreset ? 'preset' : r }));
+  const names = { lead: SCORING_ROLE_UI.lead.label, support: SCORING_ROLE_UI.support.label };
+  const hints = { lead: SCORING_ROLE_UI.lead.hint, support: SCORING_ROLE_UI.support.hint };
+  const el = segmented('Role', ROLES, role(), names, (r) => setPrefs({ role: r === fromPreset ? 'preset' : r }), undefined, hints);
   if (prefs.role !== 'preset') {
     el.append(h('button', { class: 'ghost', title: 'Follow the preset’s role', onclick: () => setPrefs({ role: 'preset' }) }, '↺'));
   }

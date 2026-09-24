@@ -106,10 +106,10 @@ export {
   isDeployable,
   isRuledOut,
   parseRoster,
+  pinLoss,
   rosterUnits,
   stateOf,
   unitName,
-  voidPinReason,
   withRuleOut,
   withRun,
   withSavedPlan,
@@ -121,6 +121,7 @@ export {
   type DeployableUnit,
   type Bond,
   type Couple,
+  type PinLoss,
   type SavedPlan,
   type Spouse,
   type Roster,
@@ -229,7 +230,7 @@ export type Engine = {
   defaultPlanPreset(child: ChildId, settings: Pick<PlanSettings, 'context' | 'preset'>): PresetId;
   /**
    * The marriage plan: max Σ priority × score, each child in its plan preset (Auto class), with marriages and pins
-   * fixed, void pins dropped and rule-outs never planned. `free` ignores the pins.
+   * fixed, broken and on-hold pins dropped and rule-outs never planned. `free` ignores the pins.
    */
   plan(roster: Roster, settings: PlanSettings, options?: { readonly free?: boolean }): MarriagePlan;
   /**

@@ -6,10 +6,10 @@ import {
   composition,
   deploymentOf,
   isDeployable,
+  pinLoss,
   rosterUnits,
   stateOf,
   unitName,
-  voidPinReason,
   withDeploy,
   withDeployRole,
   withRun,
@@ -21,7 +21,6 @@ import {
   type Engine,
   type Gender,
   type LedgerEntry,
-  type LedgerStatus,
   type Roster,
   type RosterEntry,
   type RosterUnit,
@@ -29,7 +28,8 @@ import {
   type UnitState,
 } from '../engine';
 import { h } from './dom';
-import { ROLE_UI, compositionStrip, presetControl, priorityControl, roleChip, type ChildPlanControls } from './plan-page';
+import { LABELS, LEDGER_UI, PIN_LOSS_UI, ROLE_UI } from './labels';
+import { compositionStrip, presetControl, priorityControl, roleChip, type ChildPlanControls } from './plan-page';
 
 /** What the Roster page reads, and how it changes the roster. */
 export type RosterContext = {
@@ -45,12 +45,12 @@ export type RosterContext = {
 const STATE_UI: Readonly<Record<UnitState, { icon: string; label: string; hint: string }>> = {
   available: { icon: '●', label: 'Available', hint: 'Recruited and usable' },
   'not-recruited': { icon: '◌', label: 'Not yet recruited', hint: 'Joins later: prunes nothing' },
-  benched: { icon: '⏸', label: 'Benched', hint: 'Won’t be used: soft, and breaks a pin through the unit' },
+  benched: { icon: '⏸', label: 'Benched', hint: 'Won’t be used: soft, and puts a pin through the unit on hold until un-benched' },
   missed: { icon: '⊘', label: 'Missed', hint: 'Can no longer be recruited: blocks every pairing that needs the unit' },
   dead: { icon: '☠', label: 'Dead', hint: 'Blocks every pairing that still needs the unit' },
 };
 
-const BOND_UI: Readonly<Record<Bond, string>> = { pinned: '★ Planned', married: '✓ Married' };
+const BOND_UI: Readonly<Record<Bond, string>> = { pinned: LABELS.pinned, married: LABELS.married };
 
 function stateStrip(ctx: RosterContext, u: RosterEntry): HTMLElement {
   const current = stateOf(ctx.roster, u.id);
@@ -85,11 +85,11 @@ function spousePicker(ctx: RosterContext, u: RosterEntry): HTMLElement {
   }
   const option = (p: RosterUnit) => {
     const theirs = roster.spouses[p];
-    const note = theirs && theirs.partner !== u.id ? ` (${theirs.bond === 'married' ? 'married to' : 'planned with'} ${unitName(theirs.partner, gender)})` : '';
+    const note = theirs && theirs.partner !== u.id ? ` (${theirs.bond === 'married' ? 'married to' : 'pinned to'} ${unitName(theirs.partner, gender)})` : '';
     return h('option', { value: p, selected: spouse?.partner === p }, `${unitName(p, gender)}${note}`);
   };
   const bond = spouse?.bond ?? 'pinned';
-  const voided = voidPinReason(roster, u.id);
+  const loss = pinLoss(roster, u.id);
   return h(
     'span',
     { class: 'spouse' },
@@ -115,14 +115,20 @@ function spousePicker(ctx: RosterContext, u: RosterEntry): HTMLElement {
             class: spouse?.bond === b ? 'on' : '',
             'aria-pressed': String(spouse?.bond === b),
             disabled: !spouse,
-            title: b === 'pinned' ? 'A planned marriage (soft): it breaks by itself if either unit is benched, missed or dead' : 'Married (hard): the S-support happened',
+            title: b === 'pinned' ? 'Pinned (soft): the plan keeps this marriage. It breaks if either unit dies or is missed, and goes on hold while either is benched' : 'Married (hard): the S-support happened',
             onclick: () => spouse && ctx.setRoster(withSpouse(roster, u.id, spouse.partner, b)),
           },
           BOND_UI[b],
         ),
       ),
     ),
-    voided ? h('span', { class: 'warn small', title: 'A pin through a lost unit is void and frees the partner' }, ` void: ${voided}`) : null,
+    loss
+      ? h(
+          'span',
+          { class: `small pin-${loss.status}`, title: PIN_LOSS_UI[loss.status].hint },
+          ` ${PIN_LOSS_UI[loss.status].label}: ${loss.reason}`,
+        )
+      : null,
   );
 }
 
@@ -171,15 +177,6 @@ function unitRow(ctx: RosterContext, u: RosterEntry): HTMLElement {
     spousePicker(ctx, u),
   );
 }
-
-const LEDGER_UI: Readonly<Record<LedgerStatus, { mark: string; label: string; hint: string }>> = {
-  open: { mark: '○', label: 'open', hint: 'Nothing is pinned or married for it yet' },
-  planned: { mark: '★', label: 'planned', hint: 'Its parents are pinned' },
-  married: { mark: '✓', label: 'parents married', hint: 'Its parents are married: it will be born' },
-  broken: { mark: '⚠', label: 'plan broken', hint: 'The saved plan’s pairing for it can no longer happen as planned' },
-  unborn: { mark: '✕', label: 'can’t be born', hint: 'No pairing that can still happen produces it' },
-  dead: { mark: '☠', label: 'dead', hint: 'Dead' },
-};
 
 const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
 
@@ -298,7 +295,7 @@ export function rosterPage(ctx: RosterContext): HTMLElement[] {
     'div',
     { class: 'main-head' },
     h('h2', {}, 'Roster'),
-    h('span', { class: 'muted' }, `${count('married')} married · ${count('pinned')} planned · ${lost} dead or missed`),
+    h('span', { class: 'muted' }, `${count('married')} married · ${count('pinned')} pinned · ${lost} dead or missed`),
     h(
       'button',
       {

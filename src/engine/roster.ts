@@ -120,21 +120,25 @@ export function withRuleOut(roster: Roster, a: RosterUnit, b: RosterUnit, out: b
 
 export const withSavedPlan = (roster: Roster, savedPlan: SavedPlan | null): Roster => ({ ...roster, savedPlan });
 
-/** A unit that can no longer take part in a planned marriage (benched, missed or dead). */
-const outOfPlay = (roster: Roster, u: RosterUnit) => ['dead', 'missed', 'benched'].includes(stateOf(roster, u));
+/** How a pin is lost: broken for good (a unit is dead or missed), or on hold (a unit is benched; un-benching restores it). */
+export type PinLoss = { readonly status: 'broken' | 'on-hold'; readonly reason: string };
 
-/** Why a unit's pin is void (either side dead, missed or benched), or undefined if it holds or there is no pin. */
-export function voidPinReason(roster: Roster, u: RosterUnit): string | undefined {
+/** Whether a unit's pin is broken or on hold, and why; undefined if it holds or there is no pin. Broken wins. */
+export function pinLoss(roster: Roster, u: RosterUnit): PinLoss | undefined {
   const s = roster.spouses[u];
   if (s?.bond !== 'pinned') return undefined;
-  const lost = [u, s.partner].find((x) => outOfPlay(roster, x));
-  return lost && `${unitName(lost, roster.run.gender)} ${STATE_PHRASES[stateOf(roster, lost)]}`;
+  const pair = [u, s.partner];
+  const why = (x: RosterUnit) => `${unitName(x, roster.run.gender)} ${STATE_PHRASES[stateOf(roster, x)]}`;
+  const lost = pair.find((x) => ['dead', 'missed'].includes(stateOf(roster, x)));
+  if (lost) return { status: 'broken', reason: why(lost) };
+  const benched = pair.find((x) => stateOf(roster, x) === 'benched');
+  return benched && { status: 'on-hold', reason: why(benched) };
 }
 
-/** The unit's pin or marriage, unless it is a void pin (which frees the unit). */
+/** The unit's pin or marriage, unless it is a lost pin (which frees the unit). */
 function bondOf(roster: Roster, u: RosterUnit) {
   const s = roster.spouses[u];
-  return s && (s.bond === 'married' || !voidPinReason(roster, u)) ? s : undefined;
+  return s && (s.bond === 'married' || !pinLoss(roster, u)) ? s : undefined;
 }
 
 const STATE_PHRASES: Readonly<Record<UnitState, string>> = {
@@ -147,7 +151,7 @@ const STATE_PHRASES: Readonly<Record<UnitState, string>> = {
 
 /** A pairing's status on the roster: its hard and soft reasons, plus notes that block nothing. */
 export type Blocking = {
-  readonly status: 'open' | 'planned' | 'married' | 'soft' | 'hard';
+  readonly status: 'open' | 'pinned' | 'married' | 'soft' | 'hard';
   readonly hard: readonly string[];
   readonly soft: readonly string[];
   readonly notes: readonly string[];
@@ -179,18 +183,18 @@ export function evaluateBlocking(pairing: Pairing, roster: Roster, assumptions: 
   const soft: string[] = [];
   const notes: string[] = [];
   let allMarried = true;
-  let allPlanned = true;
+  let allPinned = true;
   for (const [a, b] of marriages) {
     const [ba, bb] = [bondOf(roster, a), bondOf(roster, b)];
     if (ba?.partner === b) {
       if (ba.bond === 'pinned') allMarried = false;
       continue;
     }
-    allMarried = allPlanned = false;
+    allMarried = allPinned = false;
     for (const [u, bond] of [[a, ba], [b, bb]] as const) {
       if (!bond) continue;
       if (bond.bond === 'married') hard.push(`${name(u)} is married to ${name(bond.partner)}`);
-      else soft.push(`${name(u)} is planned with ${name(bond.partner)}`);
+      else soft.push(`${name(u)} is pinned to ${name(bond.partner)}`);
     }
   }
   // A parent in one of the pairing's marriages that has already happened.
@@ -202,7 +206,7 @@ export function evaluateBlocking(pairing: Pairing, roster: Roster, assumptions: 
     else if (st === 'dead' || st === 'missed') hard.push(`${name(u)} ${STATE_PHRASES[st]}`);
     else if (st === 'benched') soft.push(`${name(u)} ${STATE_PHRASES[st]}`);
   }
-  const status = hard.length ? 'hard' : soft.length ? 'soft' : allMarried ? 'married' : allPlanned ? 'planned' : 'open';
+  const status = hard.length ? 'hard' : soft.length ? 'soft' : allMarried ? 'married' : allPinned ? 'pinned' : 'open';
   return { status, hard, soft, notes };
 }
 

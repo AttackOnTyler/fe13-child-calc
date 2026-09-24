@@ -17,6 +17,7 @@ import {
   type DeploymentRole,
   type Engine,
   type MarriagePlan,
+  type PinLoss,
   type PlanDiff,
   type PlanMarriage,
   type PlanSettings,
@@ -27,6 +28,7 @@ import {
   type RosterUnit,
 } from '../engine';
 import { h } from './dom';
+import { LABELS, PIN_LOSS_UI, ROLE_UI } from './labels';
 import { editQuota } from './plan-prefs';
 
 /** A child's plan controls (priority, plan preset), shared by the Plan sidebar and the Roster page's ledger. */
@@ -61,13 +63,6 @@ export type PlanPageContext = ChildPlanControls & {
   /** The quota editor is open (view state). */
   readonly editingQuotas: boolean;
   readonly setEditingQuotas: (open: boolean) => void;
-};
-
-export const ROLE_UI: Readonly<Record<DeploymentRole, { readonly label: string; readonly short: string }>> = {
-  lead: { label: 'Lead', short: 'L' },
-  battery: { label: 'Battery', short: 'B' },
-  staff: { label: 'Staff/Rally', short: 'S' },
-  dancer: { label: 'Dancer', short: 'D' },
 };
 
 const QUOTA_HINT = { ok: 'In range', under: 'Below the minimum', over: 'Over the maximum' } as const;
@@ -186,23 +181,24 @@ function marriageRow(ctx: PlanPageContext, plan: MarriagePlan, m: PlanMarriage, 
               title: locked ? 'Set Robin’s gender to pin Robin’s marriage' : pinned ? 'Unpin: the solver may move them' : 'Pin: the solver keeps this marriage',
               onclick: () => ctx.setRoster(withSpouse(ctx.roster, m.husband, pinned ? null : m.wife, 'pinned')),
             },
-            '📌',
+            LABELS.pin,
           ),
           h(
             'button',
             {
               class: 'mini',
               disabled: locked,
-              title: locked ? 'Set Robin’s gender to rule out Robin’s marriage' : 'Rule this marriage out of the plan',
+              'aria-label': LABELS.ruleOutHint,
+              title: locked ? 'Set Robin’s gender to rule out Robin’s marriage' : LABELS.ruleOutHint,
               onclick: () => ctx.setRoster(withRuleOut(ctx.roster, m.husband, m.wife, true)),
             },
-            '✕',
+            LABELS.ruleOut,
           ),
         ];
   return h(
     'tr',
     { class: m.bond ?? 'proposed' },
-    h('td', { class: 'bond', title: m.bond === 'married' ? 'Married' : pinned ? 'Pinned' : 'Proposed by the solver' }, m.bond === 'married' ? '✓' : pinned ? '📌' : ''),
+    h('td', { class: 'bond', title: m.bond === 'married' ? LABELS.married : pinned ? LABELS.pinned : 'Proposed by the solver' }, m.bond === 'married' ? '✓' : pinned ? LABELS.pin : ''),
     h('td', { class: 'uname' }, name(m.husband)),
     h('td', { class: 'muted' }, '×'),
     h('td', { class: 'uname' }, name(m.wife)),
@@ -219,7 +215,7 @@ function diffBanner(ctx: PlanPageContext, plan: MarriagePlan, diff: PlanDiff | u
   const title = ctx.free
     ? 'Save this free re-plan and pin every marriage it proposes: pins it moves are replaced'
     : 'Save this plan and pin every marriage it proposes';
-  const adoptButton = h('button', { class: 'adopt', title, onclick: () => ctx.setRoster(adoptPlan(ctx.roster, plan)) }, 'Adopt the new plan');
+  const adoptButton = h('button', { class: 'adopt', title, onclick: () => ctx.setRoster(adoptPlan(ctx.roster, plan)) }, LABELS.adoptPlan);
   if (!diff) return h('div', { class: 'banner' }, h('span', {}, 'No saved plan yet. '), adoptButton);
   if (diff.same) return h('div', { class: 'banner ok' }, '✓ Matches the saved plan.');
   const name = (u: RosterUnit | undefined) => (u ? unitName(u, plan.robin.gender) : '—');
@@ -253,6 +249,20 @@ function diffBanner(ctx: PlanPageContext, plan: MarriagePlan, diff: PlanDiff | u
   );
 }
 
+/** 📌 Broken pins (red: gone for good) or 📌 Pins on hold (amber: back on un-bench), each re-planned around. */
+function lostPinsBanner(plan: MarriagePlan, status: PinLoss['status']): HTMLElement | null {
+  const pins = plan.lostPins.filter((p) => p.status === status);
+  if (!pins.length) return null;
+  const ui = PIN_LOSS_UI[status];
+  return h(
+    'div',
+    { class: `banner pin-${status}`, title: ui.hint },
+    `${ui.banner}: `,
+    pins.map((p) => `${unitName(p.couple[0], plan.robin.gender)} × ${unitName(p.couple[1], plan.robin.gender)} (${p.reason})`).join(' · '),
+    status === 'broken' ? ' — re-planned around them.' : ' — re-planned around them until un-benched.',
+  );
+}
+
 export function planPage(ctx: PlanPageContext): HTMLElement[] {
   const { engine, roster, settings } = ctx;
   const t0 = performance.now();
@@ -277,7 +287,7 @@ export function planPage(ctx: PlanPageContext): HTMLElement[] {
       'label',
       { class: 'small', title: 'Ignore the pins (not marriages) to see what keeping them costs' },
       h('input', { type: 'checkbox', checked: ctx.free, onchange: (e) => ctx.setFree((e.target as HTMLInputElement).checked) }),
-      ' Free re-plan',
+      ` ${LABELS.freeReplan}`,
     ),
   );
 
@@ -285,15 +295,8 @@ export function planPage(ctx: PlanPageContext): HTMLElement[] {
     plan.robinOpen && robinMarried
       ? h('div', { class: 'muted' }, `Run facts leave Robin open: the solver picked Robin (${gender}) +${STAT_LABELS[asset]} −${STAT_LABELS[flaw]}.`)
       : null,
-    plan.brokenPins.length
-      ? h(
-          'div',
-          { class: 'banner hard' },
-          '📌✕ Broken pins: ',
-          plan.brokenPins.map((b) => `${unitName(b.couple[0], gender)} × ${unitName(b.couple[1], gender)} (${b.reason})`).join(' · '),
-          ' — re-planned around them.',
-        )
-      : null,
+    lostPinsBanner(plan, 'broken'),
+    lostPinsBanner(plan, 'on-hold'),
     pinCost > 0.5
       ? h(
           'div',
@@ -324,7 +327,7 @@ export function planPage(ctx: PlanPageContext): HTMLElement[] {
     ? h(
         'div',
         { class: 'ruleouts' },
-        h('span', { class: 'muted' }, 'Ruled out: '),
+        h('span', { class: 'muted' }, `${LABELS.ruledOut}: `),
         ...roster.ruleOuts.map(([a, b]) =>
           h(
             'span',
@@ -416,7 +419,7 @@ export function planSidebar(ctx: PlanPageContext): HTMLElement {
           title: 'Pick a plan preset for every child on its default so the army meets the quotas, then re-plan. Your own presets stay.',
           onclick: ctx.suggestRoles,
         },
-        'Suggest roles',
+        LABELS.suggestRoles,
       ),
     ),
     ctx.editingQuotas ? quotaEditor(ctx) : null,

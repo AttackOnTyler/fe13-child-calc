@@ -160,10 +160,21 @@ describe('marriage plan solver: the roster', () => {
     expect(couples(engine.plan(pinned, settings))).toContain(couple('vaike', 'lissa'));
     const dead = withState(pinned, 'vaike', 'dead');
     const plan = engine.plan(dead, settings);
-    expect(plan.brokenPins).toEqual([{ couple: ['vaike', 'lissa'], reason: 'Vaike is dead' }]);
+    expect(plan.lostPins).toEqual([{ couple: ['vaike', 'lissa'], status: 'broken', reason: 'Vaike is dead' }]);
     expect(plan.marriages.some((m) => m.husband === 'vaike' || m.wife === 'vaike')).toBe(false);
     // Lissa is free again and marries someone else.
     expect(plan.marriages.some((m) => m.wife === 'lissa')).toBe(true);
+  });
+
+  it('puts a pin through a benched unit on hold, and keeps it again on un-bench', () => {
+    const pinned = withSpouse({ ...EMPTY_ROSTER, run: RUN }, 'vaike', 'lissa', 'pinned');
+    const benched = withState(pinned, 'vaike', 'benched');
+    const plan = engine.plan(benched, settings);
+    expect(plan.lostPins).toEqual([{ couple: ['vaike', 'lissa'], status: 'on-hold', reason: 'Vaike is benched' }]);
+    expect(couples(plan)).not.toContain(couple('vaike', 'lissa'));
+    const back = engine.plan(withState(benched, 'vaike', 'available'), settings);
+    expect(back.lostPins).toEqual([]);
+    expect(back.marriages.find((m) => m.husband === 'vaike')).toMatchObject({ wife: 'lissa', bond: 'pinned' });
   });
 
   it('never plans a new marriage for a dead, missed or benched unit, and leaves a dead child unborn', () => {
@@ -252,7 +263,7 @@ describe('the saved plan', () => {
     const before = engine.evaluatePlan(saved, roster.run, settings);
     expect(before.marriages.find((m) => m.wife === 'olivia')!.children.map((c) => c.key)).toEqual(['inigo|stahl']);
     const after = engine.plan(roster, settings);
-    expect(after.brokenPins).toEqual([{ couple: ['stahl', 'olivia'], reason: 'Olivia is dead' }]);
+    expect(after.lostPins).toEqual([{ couple: ['stahl', 'olivia'], status: 'broken', reason: 'Olivia is dead' }]);
     const diff = diffPlans(before, after);
     expect(diff.lost.map((c) => c.child)).toContain('inigo');
     expect(diff.moves).toContainEqual({ unit: 'olivia', from: 'stahl', to: undefined });
@@ -329,19 +340,30 @@ describe('children ledger', () => {
   it('gives each child a status', () => {
     expect(row('lucina').status).toBe('married');
     expect(row('cynthia').status).toBe('married');
-    expect(row('inigo').status).toBe('planned');
+    expect(row('inigo').status).toBe('pinned');
     expect(row('owain').status).toBe('broken');
     expect(row('nah').status).toBe('unborn');
     expect(row('severa').status).toBe('dead');
     expect(row('kjelle').status).toBe('open');
   });
 
-  it('keeps a child re-pinned away from the saved plan as planned, not broken', () => {
+  it('keeps a child re-pinned away from the saved plan as pinned, not broken', () => {
     const repinned = withSpouse(roster, 'stahl', 'tharja', 'pinned');
     const ledger = engine.ledger(repinned, settings);
-    // Stahl leaves Olivia for Tharja: Noire is planned; Inigo is open again, not broken.
-    expect(ledger.find((e) => e.child === 'noire')!.status).toBe('planned');
+    // Stahl leaves Olivia for Tharja: Noire is pinned; Inigo is open again, not broken.
+    expect(ledger.find((e) => e.child === 'noire')!.status).toBe('pinned');
     expect(ledger.find((e) => e.child === 'inigo')!.status).toBe('open');
+  });
+
+  it('shows a child whose pin is on hold as on hold, not open, and pinned again on un-bench', () => {
+    const benched = withState(roster, 'olivia', 'benched');
+    expect(engine.ledger(benched, settings).find((e) => e.child === 'inigo')!.status).toBe('on-hold');
+    expect(engine.ledger(withState(benched, 'olivia', 'available'), settings).find((e) => e.child === 'inigo')!.status).toBe('pinned');
+  });
+
+  it('shows a child whose pin is broken as plan broken, without a saved plan', () => {
+    const pinned = withState(withSpouse({ ...EMPTY_ROSTER, run: RUN }, 'stahl', 'olivia', 'pinned'), 'stahl', 'dead');
+    expect(engine.ledger(pinned, settings).find((e) => e.child === 'inigo')!.status).toBe('broken');
   });
 
   it('shows the plan’s pairing or the marriage', () => {

@@ -290,7 +290,7 @@ button.skill.linkish { padding: 0 6px; font-size: 11px; }
 .main-head .clear-all { margin-left: auto; border-color: var(--neg); }
 .chip.block { margin-left: 4px; cursor: help; font-weight: 700; }
 .chip.block.married { color: var(--pos); border-color: #3f7a47; }
-.chip.block.planned { color: var(--accent); border-color: #3a6394; }
+.chip.block.pinned { color: var(--accent); border-color: #3a6394; }
 .chip.block.soft { color: var(--warn); border-color: #8a6a2c; }
 .chip.block.hard { color: var(--neg); border-color: #7a3a3a; }
 .grid tr.blocked-hard th, .grid tr.blocked-hard td { opacity: 0.4; }
@@ -334,8 +334,9 @@ button.chip.plan-preset:disabled { cursor: default; color: var(--muted); border-
 .ledger-scroll { overflow-x: auto; }
 .grid.ledger td { vertical-align: middle; }
 .lstatus.married { color: var(--pos); }
-.lstatus.planned { color: var(--accent); }
-.lstatus.broken { color: var(--warn); }
+.lstatus.pinned { color: var(--accent); }
+.lstatus.on-hold { color: var(--warn); }
+.lstatus.broken { color: var(--neg); }
 .lstatus.unborn, .lstatus.dead { color: var(--neg); }
 .grid.ledger tr.ledger-dead td.uname, .grid.ledger tr.ledger-unborn td.uname { text-decoration: line-through; color: var(--muted); }
 .prio .seg button { padding: 0 6px; }
@@ -360,3 +361,7 @@ button.chip.plan-preset:disabled { cursor: default; color: var(--muted); border-
 .chip.role { margin-left: 2px; color: var(--muted); cursor: help; }
 .chip.role-battery { color: var(--accent); border-color: #3a6394; }
 .chip.role-staff { color: #c59bff; border-color: #6a4f94; }
+.pin-broken { color: var(--neg); cursor: help; }
+.pin-on-hold { color: var(--warn); cursor: help; }
+.banner.pin-broken { border-color: #7a3a3a; display: block; }
+.banner.pin-on-hold { border-color: #8a6a2c; display: block; }
