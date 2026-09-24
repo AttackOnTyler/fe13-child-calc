@@ -54,6 +54,12 @@ export const closeWelcome = (prefs: GuidePrefs): GuidePrefs => ({ ...prefs, seen
 /** The header's `? Guide`: the dock opens on the last journey, or the welcome box shows if none was ever picked. */
 export const reopenGuide = (prefs: GuidePrefs): GuidePrefs | 'welcome' => (prefs.journey === null ? 'welcome' : { ...prefs, dock: 'open' });
 
+/**
+ * On a phone, where the open dock is a bottom sheet: it collapses to its pill when the page loads, when the Scoring
+ * sheet opens, and when a jump needs the screen. The same prefs if the dock isn't open.
+ */
+export const collapseDock = (prefs: GuidePrefs): GuidePrefs => (prefs.dock === 'open' ? { ...prefs, dock: 'pill' } : prefs);
+
 /** Notes loss events as prompted, so the loss prompt doesn't come back for them; the same prefs if none is new. */
 function noteLoss(prefs: GuidePrefs, events: readonly string[]): GuidePrefs {
   const fresh = events.filter((e) => !prefs.lossEvents.includes(e));

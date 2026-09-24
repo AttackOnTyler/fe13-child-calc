@@ -25,6 +25,11 @@ export type GuideContext = {
   readonly go: (view: GuideView) => void;
   /** Takes a Going deeper jump and renders it; for a child's table, returns the child's name. */
   readonly goDeeper: (jump: DeeperJump) => string | undefined;
+  /**
+   * Makes room to see a control the guide jumps to: on a phone the dock collapses to its pill, and the Scoring sheet
+   * opens for a control inside it, or closes for one outside it.
+   */
+  readonly makeRoom: (target: GuideTarget) => void;
   /** Renders the guide again, after a change to its own view state. */
   readonly refresh: () => void;
 };
@@ -62,6 +67,7 @@ function spot(el: HTMLElement | null, block: ScrollLogicalPosition): void {
 /** Switches to the step's view (rendered at once), then scrolls to and highlights its control. */
 function jump(ctx: GuideContext, step: JourneyStep): void {
   ctx.go(step.view);
+  ctx.makeRoom(step.target);
   highlight(step.target);
 }
 
@@ -193,6 +199,7 @@ function deeperItem(ctx: GuideContext, entry: DeeperEntry): HTMLElement {
     const child = ctx.goDeeper(to);
     deeperShown = child ? { id: entry.id, text: `Showing ${child}. Pick another in the left rail.` } : undefined;
     ctx.refresh();
+    ctx.makeRoom(to.target);
     highlight(to.target);
   };
   const terms = h(

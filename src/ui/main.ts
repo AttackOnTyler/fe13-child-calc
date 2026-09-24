@@ -55,7 +55,7 @@ import { h } from './dom';
 import { guide } from './guide';
 import { guideChild } from './guide-deeper';
 import { guideFacts, lossPrompt, noteLosses, settleLosses } from './guide-facts';
-import { hasSavedRun, loadGuidePrefs, saveGuidePrefs, welcomeShows, type GuidePrefs } from './guide-prefs';
+import { collapseDock, hasSavedRun, loadGuidePrefs, saveGuidePrefs, welcomeShows, type GuidePrefs } from './guide-prefs';
 import { guideButton, guideLayer, type GuideContext } from './guide-ui';
 import { BASIS_LABELS, LABELS, SCORING_ROLE_UI } from './labels';
 import { loadOverrides, saveOverrides } from './overrides';
@@ -96,8 +96,11 @@ import {
   type PlanPrefs,
 } from './plan-prefs';
 
-/** The guide's preferences: survive Clear all. */
-let guidePrefs: GuidePrefs = loadGuidePrefs();
+/** Phone width, where the Scoring panel and the open guide dock are bottom sheets (the stylesheet's breakpoint). */
+const phone = (): boolean => matchMedia('(max-width: 700px)').matches;
+
+/** The guide's preferences: survive Clear all. On a phone the dock starts as its pill, whatever was left open. */
+let guidePrefs: GuidePrefs = phone() ? collapseDock(loadGuidePrefs()) : loadGuidePrefs();
 /** The welcome box is showing: by itself only for a new visitor, read before anything this visit saves. */
 let welcomeOpen = welcomeShows(guidePrefs, hasSavedRun());
 
@@ -165,6 +168,18 @@ let board: { robin: 'all' | 'best' | 'pick'; pick: Exclude<RobinMode, string>; s
 const openCards = new Set<string>();
 /** The scoring panel as a bottom sheet (phone width only). */
 let sheetOpen = false;
+
+/** On a phone, collapses the open guide dock (a bottom sheet there) to its pill. */
+function collapseDockOnPhone(): void {
+  const collapsed = phone() ? collapseDock(guidePrefs) : guidePrefs;
+  if (collapsed !== guidePrefs) saveGuidePrefs((guidePrefs = collapsed));
+}
+
+/** Opens the Scoring sheet; on a phone the guide dock collapses to its pill, as only one sheet is open at a time. */
+function openScoring(): void {
+  sheetOpen = true;
+  collapseDockOnPhone();
+}
 /** The Pair-up Spd helper's inputs: a support class, rank and raw Spd. */
 let helper: { cls: ClassId; rank: SupportRank; rawSpd: number } = { cls: 'swordmaster', rank: 'S', rawSpd: 30 };
 
@@ -892,7 +907,7 @@ function inspectable(el: HTMLElement, id: SkillId): HTMLElement {
 function inspect(id: SkillId): void {
   if (!openSkills) return;
   inspected = { line: openSkills, id };
-  sheetOpen = true;
+  openScoring();
   renderParts(['main', 'panel']);
 }
 
@@ -1156,11 +1171,6 @@ function childTable(child: ChildId): HTMLElement[] {
     ),
     planPresetChip(child),
     columnToggles(),
-    h(
-      'button',
-      { class: 'only-phone', 'aria-expanded': String(sheetOpen), onclick: () => ((sheetOpen = true), renderParts(['panel'])) },
-      'Scoring ⚙',
-    ),
   );
   // Without weights (Rallybot / Dancer) Auto has nothing to maximise and rows show their start class.
   const classHead = prefs.classMode === 'auto' && scoreSettings().weights ? 'Class (Auto)' : 'Class';
@@ -1400,11 +1410,6 @@ function leaderboard(): HTMLElement[] {
     h('h2', {}, LABELS.allChildren),
     h('span', { class: 'muted' }, `${entries.length} pairings · ${presetLabel(currentPreset())} · bars: ${capsHeader()} (${BASIS_LABELS[basis()]})`),
     boardControls(),
-    h(
-      'button',
-      { class: 'only-phone', 'aria-expanded': String(sheetOpen), onclick: () => ((sheetOpen = true), renderParts(['panel'])) },
-      'Scoring ⚙',
-    ),
   );
   const more =
     entries.length > limit
@@ -1948,6 +1953,11 @@ const guideContext = (): GuideContext => ({
     guidePrefs = next;
     welcomeOpen = false;
     saveGuidePrefs(guidePrefs);
+    // On a phone the open dock is a bottom sheet: the Scoring sheet closes under it.
+    if (phone() && next.dock === 'open' && sheetOpen) {
+      sheetOpen = false;
+      return renderParts(['panel']);
+    }
     renderGuide();
   },
   showWelcome: () => {
@@ -1976,6 +1986,12 @@ const guideContext = (): GuideContext => ({
     // The Scoring sidebar is on every view: its jump stays put.
     renderParts(['rail', 'main', 'panel']);
     return shown;
+  },
+  makeRoom: (target) => {
+    if (!phone()) return;
+    collapseDockOnPhone();
+    sheetOpen = regions.panel?.querySelector(`[data-guide="${target}"]`) != null;
+    renderParts(['panel']);
   },
   refresh: renderGuide,
 });
@@ -2041,6 +2057,7 @@ function render(): void {
       regions.rail,
       regions.main,
       regions.panel,
+      h('button', { class: 'sheet-handle', title: 'Open scoring', onclick: () => (openScoring(), renderParts(['panel'])) }, 'Scoring ⚙'),
     ),
     regions.guide,
   );

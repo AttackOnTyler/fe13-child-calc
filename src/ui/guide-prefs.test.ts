@@ -3,6 +3,7 @@ import { EMPTY_ROSTER } from '../engine';
 import {
   DEFAULT_GUIDE_PREFS,
   closeWelcome,
+  collapseDock,
   dismissLoss,
   hasSavedRun,
   loadGuidePrefs,
@@ -109,5 +110,13 @@ describe('guide choices', () => {
     const onFresh: GuidePrefs = { ...used, journey: 'fresh', dock: 'pill' };
     expect(takeLoss(onFresh, ['dead:gregor'])).toEqual({ ...onFresh, journey: 'loss', dock: 'open', lossEvents: [...used.lossEvents, 'dead:gregor'] });
     expect(dismissLoss(onFresh, ['dead:gregor', 'dead:frederick'])).toEqual({ ...onFresh, lossEvents: [...used.lossEvents, 'dead:gregor'] });
+  });
+
+  it('on a phone an open dock collapses to its pill; a pill or a closed dock stays as it is', () => {
+    expect(collapseDock({ ...used, dock: 'open' })).toEqual({ ...used, dock: 'pill' });
+    const pill: GuidePrefs = { ...used, dock: 'pill' };
+    expect(collapseDock(pill)).toBe(pill);
+    const closed: GuidePrefs = { ...used, dock: 'closed' };
+    expect(collapseDock(closed)).toBe(closed);
   });
 });

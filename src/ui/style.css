@@ -85,6 +85,7 @@ table.grid { border-collapse: separate; border-spacing: 0; white-space: nowrap; 
 .rail-head { padding: 2px 8px 4px; }
 .rail-item .num { font-variant-numeric: tabular-nums; }
 .only-phone { display: none; }
+.sheet-handle { display: none; }
 
 .panel { border-left: 1px solid var(--line); padding: 10px; overflow: auto; background: var(--panel); }
 .panel h3 { margin: 0; font-size: 11px; text-transform: uppercase; color: var(--muted); }
@@ -113,9 +114,12 @@ table.grid { border-collapse: separate; border-spacing: 0; white-space: nowrap; 
   .rail { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
   .rail-item { white-space: nowrap; flex: none; }
   .only-phone { display: inline-block; }
-  .coltog { margin-left: 0; }
+  .coltog { margin-left: 0; flex-wrap: wrap; }
   .panel { display: none; position: fixed; left: 0; right: 0; bottom: 0; max-height: 75vh; z-index: 10; border-left: 0; border-top: 1px solid var(--line); border-radius: 10px 10px 0 0; box-shadow: 0 -8px 24px #0008; }
   .panel.open { display: block; }
+  .shell { box-sizing: border-box; padding-bottom: 38px; }
+  .sheet-handle { display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 9; padding: 8px; border: 0; border-top: 1px solid var(--line); border-radius: 10px 10px 0 0; background: var(--panel); box-shadow: 0 -4px 16px #0006; }
+  .panel.open ~ .sheet-handle { display: none; }
   .grid .stick { min-width: 96px; }
   .dtable, .dtable tbody, .dtable tr, .dtable th, .dtable td { display: block; }
   .dtable thead { display: none; }
@@ -419,4 +423,11 @@ button.gd-deeper-head:hover { background: var(--hover); }
 .gd-terms dd { margin: 0 0 4px 10px; }
 .guide-spot { outline: 2px solid var(--accent) !important; outline-offset: 3px; border-radius: 4px; animation: guide-spot 1.8s ease-out; }
 @keyframes guide-spot { 0%, 60% { box-shadow: 0 0 0 6px #5aa9ff55; } 100% { box-shadow: 0 0 0 0 transparent; } }
-@media (max-width: 700px) { .gd { left: 8px; right: 8px; width: auto; } }
+/* Phone: the open dock is its own bottom sheet; its pill sits just above the Scoring sheet's handle. */
+@media (max-width: 700px) {
+  .gd { left: 0; right: 0; bottom: 0; width: auto; max-height: 75vh; border-radius: 10px 10px 0 0; border-bottom: 0; box-shadow: 0 -8px 24px #0008; }
+  .gd.gd-pillbox { left: auto; right: 8px; bottom: 46px; max-width: calc(100vw - 16px); max-height: none; border-radius: 0; box-shadow: none; }
+  .gd-head { flex-wrap: wrap; }
+  /* The open Scoring sheet has the screen: the pill waits for it to close (? Guide still opens the dock). */
+  .shell:has(.panel.open) ~ .guide-layer .gd-pillbox { display: none; }
+}
