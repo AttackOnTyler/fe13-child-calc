@@ -53,6 +53,9 @@ import {
 } from '../engine';
 import { h } from './dom';
 import { guide } from './guide';
+import { guideFacts } from './guide-facts';
+import { hasSavedRun, loadGuidePrefs, saveGuidePrefs, welcomeShows, type GuidePrefs } from './guide-prefs';
+import { guideButton, guideLayer, type GuideContext } from './guide-ui';
 import { LABELS, SCORING_ROLE_UI } from './labels';
 import { loadOverrides, saveOverrides } from './overrides';
 import {
@@ -92,6 +95,11 @@ import {
   type PlanPrefs,
 } from './plan-prefs';
 
+/** The guide's preferences: survive Clear all. */
+let guidePrefs: GuidePrefs = loadGuidePrefs();
+/** The welcome box is showing: by itself only for a new visitor, read before anything this visit saves. */
+let welcomeOpen = welcomeShows(guidePrefs, hasSavedRun());
+
 let overrides: Overrides = loadOverrides();
 let assumptions: Assumptions = resolveAssumptions(overrides);
 let engine: Engine = createEngine(assumptions);
@@ -109,7 +117,8 @@ let editingQuotas = false;
 // View state only; all domain answers come from the engine.
 /** A child's table, or the All children leaderboard. */
 let selected: ChildId | 'all' = 'lucina';
-let view: 'table' | 'validation' | 'roster' | 'plan' = selfTest.passed ? 'table' : 'validation';
+/** A new visitor starts on Roster, under the welcome box: setup comes first. */
+let view: 'table' | 'validation' | 'roster' | 'plan' = !selfTest.passed ? 'validation' : welcomeOpen ? 'roster' : 'table';
 /** A Robin group row's identity across children: `child|group key`. */
 const groupId = (child: ChildId, group: PairingGroup) => `${child}|${group.key}`;
 /** Robin group rows (by group id) with their asset × flaw heatmap open. */
@@ -412,7 +421,7 @@ function rail(): HTMLElement[] {
           render();
         },
       },
-      h('span', {}, 'Roster'),
+      h('span', {}, LABELS.roster),
       h('b', { class: 'num muted', title: 'Marriages' }, married ? `✓${married}` : ''),
     ),
     h(
@@ -425,7 +434,7 @@ function rail(): HTMLElement[] {
           render();
         },
       },
-      h('span', {}, 'Plan'),
+      h('span', {}, LABELS.plan),
       h('b', { class: 'num muted', title: 'A saved plan' }, roster.savedPlan ? '◆' : ''),
     ),
     h('div', { class: 'muted small rail-head' }, `Best · ${presetLabel(currentPreset())}`),
@@ -1906,19 +1915,54 @@ function contextSelect(): HTMLElement {
   return h(
     'label',
     { ...guide('play-context'), class: 'context', title: 'What you’re building for: sets the default target breakpoint and whether DLC is reachable' },
-    h('span', { class: 'muted' }, 'Play context '),
+    h('span', { class: 'muted' }, `${LABELS.playContext} `),
     h(
       'select',
-      { 'aria-label': 'Play context', onchange: (e) => setPrefs({ context: (e.target as HTMLSelectElement).value as PlayContext }) },
+      { 'aria-label': LABELS.playContext, onchange: (e) => setPrefs({ context: (e.target as HTMLSelectElement).value as PlayContext }) },
       ...CONTEXTS.map((c) => h('option', { value: c, selected: c === prefs.context }, CONTEXT_LABELS[c])),
     ),
   );
 }
 
+// ---- guide ----
+
+const guideContext = (): GuideContext => ({
+  prefs: guidePrefs,
+  facts: guideFacts(roster, planPrefs, prefs.context),
+  welcome: welcomeOpen,
+  setPrefs: (next) => {
+    guidePrefs = next;
+    welcomeOpen = false;
+    saveGuidePrefs(guidePrefs);
+    renderGuide();
+  },
+  showWelcome: () => {
+    welcomeOpen = true;
+    if (view === 'roster') return renderGuide();
+    view = 'roster';
+    renderParts(['rail', 'main', 'panel']);
+  },
+  go: (next) => {
+    if (view === next) return renderGuide();
+    view = next;
+    renderParts(['rail', 'main', 'panel']);
+  },
+});
+
+/** The guide follows every change: its ticks read the roster, plan preferences and play context. */
+function renderGuide(): void {
+  const layer = regions.guide;
+  if (!layer) return;
+  const scrollTop = layer.querySelector('.gd')?.scrollTop ?? 0;
+  layer.replaceChildren(...guideLayer(guideContext()));
+  const dock = layer.querySelector('.gd');
+  if (dock) dock.scrollTop = scrollTop;
+}
+
 // ---- shell ----
 
 type Part = 'rail' | 'main' | 'panel';
-const regions: Partial<Record<Part, HTMLElement>> = {};
+const regions: Partial<Record<Part | 'guide', HTMLElement>> = {};
 
 function renderParts(parts: readonly Part[]): void {
   const { rail: railEl, main, panel: panelEl } = regions;
@@ -1944,6 +1988,7 @@ function renderParts(parts: readonly Part[]): void {
     panelEl.replaceChildren(...panel());
     panelEl.classList.toggle('open', sheetOpen);
   }
+  renderGuide();
 }
 
 function render(): void {
@@ -1951,15 +1996,17 @@ function render(): void {
   regions.rail = h('nav', { class: 'rail', 'aria-label': 'Children' });
   regions.main = h('section', { class: 'main' });
   regions.panel = h('aside', { class: 'panel', 'aria-label': 'Scoring' });
+  regions.guide = h('div', { class: 'guide-layer' });
   app.replaceChildren(
     h(
       'div',
       { class: 'shell' },
-      h('header', { class: 'topbar' }, h('span', { class: 'brand' }, 'FE13 Child Calc'), contextSelect(), validationButton(selfTest)),
+      h('header', { class: 'topbar' }, h('span', { class: 'brand' }, 'FE13 Child Calc'), contextSelect(), guideButton(guideContext), validationButton(selfTest)),
       regions.rail,
       regions.main,
       regions.panel,
     ),
+    regions.guide,
   );
   renderParts(['rail', 'main', 'panel']);
 }

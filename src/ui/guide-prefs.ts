@@ -45,6 +45,15 @@ export function parseGuidePrefs(raw: unknown): GuidePrefs {
 /** The welcome box shows by itself only to a new visitor: never seen, and nothing saved from an earlier visit. */
 export const welcomeShows = (prefs: GuidePrefs, savedRun: boolean): boolean => !prefs.seen && !savedRun;
 
+/** A welcome-box or dock-switch choice: the welcome box is seen, and the dock opens on the journey. */
+export const pickJourney = (prefs: GuidePrefs, journey: Journey): GuidePrefs => ({ ...prefs, seen: true, journey, dock: 'open' });
+
+/** The welcome box's ✕: seen, with no journey picked. */
+export const closeWelcome = (prefs: GuidePrefs): GuidePrefs => ({ ...prefs, seen: true });
+
+/** The header's `? Guide`: the dock opens on the last journey, or the welcome box shows if none was ever picked. */
+export const reopenGuide = (prefs: GuidePrefs): GuidePrefs | 'welcome' => (prefs.journey === null ? 'welcome' : { ...prefs, dock: 'open' });
+
 /** Whether an earlier visit saved a roster or plan preferences. */
 export const hasSavedRun = (): boolean => hasSavedRoster() || hasSavedPlanPrefs();
 

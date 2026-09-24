@@ -431,7 +431,7 @@ export function planSidebar(ctx: PlanPageContext): HTMLElement {
     h(
       'div',
       { class: 'panel-head' },
-      h('h3', {}, 'Plan'),
+      h('h3', {}, LABELS.plan),
       h(
         'button',
         { class: 'ghost small', title: 'Reset every child’s priority and plan preset, and the quotas of every play context', onclick: ctx.resetPlanPrefs },

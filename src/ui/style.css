@@ -369,3 +369,34 @@ button.chip.plan-preset:disabled { cursor: default; color: var(--muted); border-
 .pin-on-hold { color: var(--warn); cursor: help; }
 .banner.pin-broken { border-color: #7a3a3a; display: block; }
 .banner.pin-on-hold { border-color: #8a6a2c; display: block; }
+
+/* Guide: welcome box, checklist dock and its pill, and the highlight a step's jump leaves on its control. */
+.topbar .guide-open { margin-left: auto; }
+.topbar .guide-open ~ .validation-toggle { margin-left: 0; }
+.gw-scrim { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; background: #000a; }
+.gw { width: min(460px, 100%); max-height: calc(100vh - 32px); overflow: auto; display: grid; gap: 10px; padding: 16px 20px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 40px #000c; }
+.gw-head { display: flex; justify-content: space-between; align-items: center; }
+.gw h2 { margin: 0; font-size: 17px; }
+.gw p { margin: 0; }
+.gw-choice { display: grid; gap: 2px; text-align: left; padding: 10px 12px; }
+.gw-choice:hover, .gw-choice:focus-visible { border-color: var(--accent); }
+.gw-look { justify-self: start; }
+.gd { position: fixed; right: 316px; bottom: 16px; z-index: 45; width: 340px; max-height: min(72vh, 640px); overflow: auto; padding: 10px 12px; background: #1d2330; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 30px #000a; }
+.gd-pill { width: auto; padding: 6px 12px; border-radius: 999px; overflow: visible; }
+.gd-head { display: flex; gap: 6px; align-items: center; }
+.gd-head .seg button.on { border-color: var(--accent); color: var(--accent); }
+.gd-count { margin-left: auto; }
+.gd-ask { margin: 6px 0 4px; }
+.gd-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 1px; }
+.gd-item { display: grid; grid-template-columns: 16px 1fr auto; gap: 6px; align-items: baseline; width: 100%; text-align: left; border: 0; background: transparent; padding: 4px 2px; }
+.gd-item:hover { background: var(--hover); }
+.gd-box { color: var(--muted); text-align: center; }
+.gd li.done .gd-box { color: var(--pos); }
+.gd li.done .gd-title { color: var(--muted); text-decoration: line-through; }
+.gd li.open .gd-title { color: var(--accent); }
+.gd-take { margin: 0 2px 6px 24px; }
+.gd-path { margin-bottom: 2px; }
+.gd-note { margin: 2px 2px 6px 24px; padding-left: 6px; border-left: 2px solid var(--line); }
+.guide-spot { outline: 2px solid var(--accent) !important; outline-offset: 3px; border-radius: 4px; animation: guide-spot 1.8s ease-out; }
+@keyframes guide-spot { 0%, 60% { box-shadow: 0 0 0 6px #5aa9ff55; } 100% { box-shadow: 0 0 0 0 transparent; } }
+@media (max-width: 700px) { .gd { left: 8px; right: 8px; width: auto; } }

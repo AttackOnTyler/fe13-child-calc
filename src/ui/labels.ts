@@ -2,7 +2,7 @@
  * Labels a view and the guide both show. Views render these constants rather than string literals, so the guide can
  * name a control and be sure it matches what the visitor sees.
  */
-import type { DeploymentRole, LedgerStatus, LeftOutReason, PinLoss, ScoringRole } from '../engine';
+import type { DeploymentRole, LedgerStatus, LeftOutReason, PinLoss, ScoringRole, UnitState } from '../engine';
 
 const PIN = '📌';
 
@@ -20,7 +20,23 @@ export const LABELS = {
   lock: 'Lock',
   suggestRoles: 'Suggest roles',
   freeReplan: 'Free re-plan',
+  /** The two views the journeys live on, as the left rail names them. */
+  roster: 'Roster',
+  plan: 'Plan',
+  runFacts: 'Run facts',
+  playContext: 'Play context',
+  /** The header button that brings the guide back. */
+  guide: '? Guide',
 } as const;
+
+/** A unit's state on Roster: its icon, word and hint. */
+export const STATE_UI: Readonly<Record<UnitState, { icon: string; label: string; hint: string }>> = {
+  available: { icon: '●', label: 'Available', hint: 'Recruited and usable' },
+  'not-recruited': { icon: '◌', label: 'Not yet recruited', hint: 'Joins later: prunes nothing' },
+  benched: { icon: '⏸', label: 'Benched', hint: 'Won’t be used: soft, and puts a pin through the unit on hold until un-benched' },
+  missed: { icon: '⊘', label: 'Missed', hint: 'Can no longer be recruited: blocks every pairing that needs the unit' },
+  dead: { icon: '☠', label: 'Dead', hint: 'Blocks every pairing that still needs the unit' },
+};
 
 /** A lost pin on Roster and the Plan banner: broken (red, gone for good) or on hold (amber, back on un-bench). */
 export const PIN_LOSS_UI: Readonly<Record<PinLoss['status'], { readonly label: string; readonly banner: string; readonly hint: string }>> = {

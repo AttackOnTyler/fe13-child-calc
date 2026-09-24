@@ -25,11 +25,10 @@ import {
   type RosterEntry,
   type RosterUnit,
   type Stat,
-  type UnitState,
 } from '../engine';
 import { h } from './dom';
 import { guide } from './guide';
-import { LABELS, LEDGER_UI, LEFT_OUT_UI, PIN_LOSS_UI, ROLE_UI } from './labels';
+import { LABELS, LEDGER_UI, LEFT_OUT_UI, PIN_LOSS_UI, ROLE_UI, STATE_UI } from './labels';
 import { compositionStrip, presetControl, priorityControl, roleChip, type ChildPlanControls } from './plan-page';
 
 /** What the Roster page reads, and how it changes the roster. */
@@ -43,14 +42,6 @@ export type RosterContext = {
   readonly clearAll: () => void;
   /** The children ledger edits the same priorities and plan presets as the Plan sidebar. */
   readonly plan: ChildPlanControls;
-};
-
-const STATE_UI: Readonly<Record<UnitState, { icon: string; label: string; hint: string }>> = {
-  available: { icon: '●', label: 'Available', hint: 'Recruited and usable' },
-  'not-recruited': { icon: '◌', label: 'Not yet recruited', hint: 'Joins later: prunes nothing' },
-  benched: { icon: '⏸', label: 'Benched', hint: 'Won’t be used: soft, and puts a pin through the unit on hold until un-benched' },
-  missed: { icon: '⊘', label: 'Missed', hint: 'Can no longer be recruited: blocks every pairing that needs the unit' },
-  dead: { icon: '☠', label: 'Dead', hint: 'Blocks every pairing that still needs the unit' },
 };
 
 const BOND_UI: Readonly<Record<Bond, string>> = { pinned: LABELS.pinned, married: LABELS.married };
@@ -265,8 +256,8 @@ function runFacts(ctx: RosterContext): HTMLElement {
   const genders: readonly (Gender | null)[] = [null, 'M', 'F'];
   return h(
     'section',
-    { ...guide('run-facts'), class: 'rsec run', 'aria-label': 'Run facts' },
-    h('h3', {}, 'Run facts'),
+    { ...guide('run-facts'), class: 'rsec run', 'aria-label': LABELS.runFacts },
+    h('h3', {}, LABELS.runFacts),
     h('p', { class: 'muted' }, 'Fixed at the start of a playthrough. They remove the other Robin, the other Morgan and Robin’s other asset/flaws entirely.'),
     h(
       'div',
@@ -306,7 +297,7 @@ export function rosterPage(ctx: RosterContext): HTMLElement[] {
   const head = h(
     'div',
     { class: 'main-head' },
-    h('h2', {}, 'Roster'),
+    h('h2', {}, LABELS.roster),
     h('span', { class: 'muted' }, `${count('married')} married · ${count('pinned')} pinned · ${lost} dead or missed`),
     h(
       'button',

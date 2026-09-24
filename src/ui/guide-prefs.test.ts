@@ -1,6 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EMPTY_ROSTER } from '../engine';
-import { DEFAULT_GUIDE_PREFS, hasSavedRun, loadGuidePrefs, parseGuidePrefs, saveGuidePrefs, welcomeShows, type GuidePrefs } from './guide-prefs';
+import {
+  DEFAULT_GUIDE_PREFS,
+  closeWelcome,
+  hasSavedRun,
+  loadGuidePrefs,
+  parseGuidePrefs,
+  pickJourney,
+  reopenGuide,
+  saveGuidePrefs,
+  welcomeShows,
+  type GuidePrefs,
+} from './guide-prefs';
 import { DEFAULT_PLAN_PREFS, savePlanPrefs } from './plan-prefs';
 import { clearRoster, saveRoster } from './roster-store';
 
@@ -74,5 +85,21 @@ describe('guide preferences', () => {
       expect(() => saveGuidePrefs(used)).not.toThrow();
       expect(hasSavedRun()).toBe(false);
     });
+  });
+});
+
+describe('guide choices', () => {
+  it('picking a journey marks the welcome box seen and opens the dock on it', () => {
+    expect(pickJourney(DEFAULT_GUIDE_PREFS, 'fresh')).toEqual({ ...DEFAULT_GUIDE_PREFS, seen: true, journey: 'fresh', dock: 'open' });
+    expect(pickJourney(used, 'fresh').lossEvents).toEqual(used.lossEvents);
+  });
+
+  it('closing the welcome box marks it seen and picks nothing', () => {
+    expect(closeWelcome(DEFAULT_GUIDE_PREFS)).toEqual({ ...DEFAULT_GUIDE_PREFS, seen: true });
+  });
+
+  it('? Guide reopens the dock on the last journey, or the welcome box if none was ever picked', () => {
+    expect(reopenGuide(DEFAULT_GUIDE_PREFS)).toBe('welcome');
+    expect(reopenGuide({ ...used, dock: 'closed' })).toEqual({ ...used, dock: 'open' });
   });
 });
