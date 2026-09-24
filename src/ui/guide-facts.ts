@@ -1,4 +1,5 @@
 import { stateOf, type Couple, type PlayContext, type Roster, type RosterUnit, type UnitState } from '../engine';
+import { dismissLoss, type GuidePrefs } from './guide-prefs';
 import type { PlanPrefs } from './plan-prefs';
 import { DEFAULT_PREFS } from './scoring-prefs';
 
@@ -73,3 +74,32 @@ export function guideFacts(roster: Roster, { acts }: PlanPrefs, context: PlayCon
     marriageRecorded: Object.values(roster.spouses).some((s) => s?.bond === 'married'),
   };
 }
+
+/** Each loss the roster records, as a stable event key: `dead:<unit>`, `missed:<unit>`, or `married:<a>+<b>` off the plan. */
+function currentLosses(roster: Roster): string[] {
+  const lost = (Object.keys(roster.states) as RosterUnit[]).flatMap((u) => {
+    const s = stateOf(roster, u);
+    return LOST.includes(s) ? [`${s}:${u}`] : [];
+  });
+  return [...lost, ...offPlanMarriages(roster).map((c) => `married:${[...c].sort().join('+')}`)];
+}
+
+/** The loss prompt can show: the dock is open or on its pill, in Fresh run or Explore. */
+const promptable = ({ dock, journey }: GuidePrefs): boolean => dock !== 'closed' && journey !== 'loss';
+
+/**
+ * The loss prompt: the new losses to offer After a loss for, or none while it can't show. A dead or missed unit, or a
+ * real marriage off the adopted plan, is new until the prompt is taken or dismissed, or it is settled.
+ */
+export function lossPrompt(roster: Roster, prefs: GuidePrefs): string[] {
+  return promptable(prefs) ? currentLosses(roster).filter((e) => !prefs.lossEvents.includes(e)) : [];
+}
+
+/** Notes every loss the roster records as seen: those already saved when the page loads aren't new. */
+export const noteLosses = (roster: Roster, prefs: GuidePrefs): GuidePrefs => dismissLoss(prefs, currentLosses(roster));
+
+/**
+ * Losses recorded while the prompt can't show (dock closed, or already on After a loss) are noted as seen, so they
+ * don't prompt later. The same prefs come back when nothing changes.
+ */
+export const settleLosses = (roster: Roster, prefs: GuidePrefs): GuidePrefs => (promptable(prefs) ? prefs : noteLosses(roster, prefs));

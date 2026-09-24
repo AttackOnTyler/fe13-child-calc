@@ -12,7 +12,8 @@ import {
   type PlanSettings,
   type Roster,
 } from '../engine';
-import { guideFacts, offPlanMarriages } from './guide-facts';
+import { guideFacts, lossPrompt, noteLosses, offPlanMarriages, settleLosses } from './guide-facts';
+import { DEFAULT_GUIDE_PREFS, dismissLoss, takeLoss, type GuidePrefs } from './guide-prefs';
 import { DEFAULT_PLAN_PREFS, withDeployEdited, withPriority, withSuggestedPresets, type PlanPrefs } from './plan-prefs';
 import { DEFAULT_PREFS } from './scoring-prefs';
 
@@ -129,5 +130,63 @@ describe('guide facts', () => {
   it('say deploy is edited once the Roster’s Deploy or role controls write the flag', () => {
     expect(fresh().deployEdited).toBe(false);
     expect(factsForPrefs(withDeployEdited(DEFAULT_PLAN_PREFS)).deployEdited).toBe(true);
+  });
+});
+
+describe('the loss prompt', () => {
+  const adopted = adoptPlan(EMPTY_ROSTER, engine.plan(EMPTY_ROSTER, settings));
+  const [husband, wife] = adopted.savedPlan!.marriages[0]!;
+  const other = adopted.savedPlan!.marriages.find(([h]) => h !== husband)![1];
+  const onFresh: GuidePrefs = { ...DEFAULT_GUIDE_PREFS, seen: true, journey: 'fresh', dock: 'open' };
+
+  it('offers After a loss for a new death or missed unit', () => {
+    expect(lossPrompt(EMPTY_ROSTER, onFresh)).toEqual([]);
+    expect(lossPrompt(withState(EMPTY_ROSTER, 'frederick', 'dead'), onFresh)).toEqual(['dead:frederick']);
+    expect(lossPrompt(withState(EMPTY_ROSTER, 'gregor', 'missed'), onFresh)).toEqual(['missed:gregor']);
+  });
+
+  it('not for a bench, which is only a what-if', () => {
+    expect(lossPrompt(withState(EMPTY_ROSTER, 'frederick', 'benched'), onFresh)).toEqual([]);
+  });
+
+  it('offers it for a real marriage off the adopted plan, but not one on it or a pin', () => {
+    const [a, b] = [husband, other].sort();
+    expect(lossPrompt(withSpouse(adopted, husband, other, 'married'), onFresh)).toEqual([`married:${a}+${b}`]);
+    expect(lossPrompt(withSpouse(adopted, husband, wife, 'married'), onFresh)).toEqual([]);
+    expect(lossPrompt(withSpouse(adopted, husband, other, 'pinned'), onFresh)).toEqual([]);
+  });
+
+  it('doesn’t come back for an event once taken or dismissed, but does for the next one', () => {
+    const dead = withState(EMPTY_ROSTER, 'frederick', 'dead');
+    const dismissed = dismissLoss(onFresh, lossPrompt(dead, onFresh));
+    expect(lossPrompt(dead, dismissed)).toEqual([]);
+    expect(lossPrompt(withState(dead, 'gregor', 'missed'), dismissed)).toEqual(['missed:gregor']);
+    const taken = takeLoss(onFresh, lossPrompt(dead, onFresh));
+    expect(lossPrompt(dead, { ...taken, journey: 'fresh' })).toEqual([]);
+  });
+
+  it('shows on the open dock or its pill in Fresh run or Explore, never when closed or already on After a loss', () => {
+    const dead = withState(EMPTY_ROSTER, 'frederick', 'dead');
+    expect(lossPrompt(dead, { ...onFresh, dock: 'pill' })).toEqual(['dead:frederick']);
+    expect(lossPrompt(dead, { ...onFresh, journey: 'explore' })).toEqual(['dead:frederick']);
+    expect(lossPrompt(dead, { ...onFresh, dock: 'closed' })).toEqual([]);
+    expect(lossPrompt(dead, { ...onFresh, journey: 'loss' })).toEqual([]);
+  });
+
+  it('counts only losses recorded where it can show: not those from before the page loaded, while closed, or on After a loss', () => {
+    const dead = withState(EMPTY_ROSTER, 'frederick', 'dead');
+    const loaded = noteLosses(dead, onFresh);
+    expect(lossPrompt(dead, loaded)).toEqual([]);
+    for (const where of [{ dock: 'closed' }, { journey: 'loss' }] as const) {
+      const settled = settleLosses(dead, { ...onFresh, ...where });
+      expect(lossPrompt(dead, { ...onFresh, lossEvents: settled.lossEvents })).toEqual([]);
+    }
+  });
+
+  it('leaves the prompt’s events for it to show while it can, and changes nothing with nothing new', () => {
+    const dead = withState(EMPTY_ROSTER, 'frederick', 'dead');
+    expect(settleLosses(dead, onFresh)).toBe(onFresh);
+    const closed: GuidePrefs = { ...onFresh, dock: 'closed', lossEvents: ['dead:frederick'] };
+    expect(settleLosses(dead, closed)).toBe(closed);
   });
 });

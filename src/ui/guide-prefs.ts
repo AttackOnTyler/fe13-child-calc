@@ -54,6 +54,18 @@ export const closeWelcome = (prefs: GuidePrefs): GuidePrefs => ({ ...prefs, seen
 /** The header's `? Guide`: the dock opens on the last journey, or the welcome box shows if none was ever picked. */
 export const reopenGuide = (prefs: GuidePrefs): GuidePrefs | 'welcome' => (prefs.journey === null ? 'welcome' : { ...prefs, dock: 'open' });
 
+/** Notes loss events as prompted, so the loss prompt doesn't come back for them; the same prefs if none is new. */
+function noteLoss(prefs: GuidePrefs, events: readonly string[]): GuidePrefs {
+  const fresh = events.filter((e) => !prefs.lossEvents.includes(e));
+  return fresh.length ? { ...prefs, lossEvents: [...prefs.lossEvents, ...fresh] } : prefs;
+}
+
+/** The loss prompt's switch: the dock opens on After a loss, and the prompt's events are noted. */
+export const takeLoss = (prefs: GuidePrefs, events: readonly string[]): GuidePrefs => noteLoss(pickJourney(prefs, 'loss'), events);
+
+/** The loss prompt's ✕: its events are noted, and the dock stays as it is. */
+export const dismissLoss = noteLoss;
+
 /** Whether an earlier visit saved a roster or plan preferences. */
 export const hasSavedRun = (): boolean => hasSavedRoster() || hasSavedPlanPrefs();
 

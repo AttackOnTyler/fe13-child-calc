@@ -382,7 +382,11 @@ button.chip.plan-preset:disabled { cursor: default; color: var(--muted); border-
 .gw-choice:hover, .gw-choice:focus-visible { border-color: var(--accent); }
 .gw-look { justify-self: start; }
 .gd { position: fixed; right: 316px; bottom: 16px; z-index: 45; width: 340px; max-height: min(72vh, 640px); overflow: auto; padding: 10px 12px; background: #1d2330; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 30px #000a; }
-.gd-pill { width: auto; padding: 6px 12px; border-radius: 999px; overflow: visible; }
+.gd-pillbox { width: auto; max-width: 340px; padding: 0; overflow: visible; display: grid; justify-items: end; gap: 6px; background: transparent; border: 0; box-shadow: none; }
+.gd-pill { padding: 6px 12px; border-radius: 999px; background: #1d2330; box-shadow: 0 8px 30px #000a; }
+.gd-loss { display: flex; gap: 6px; align-items: center; margin: 6px 0 0; padding: 4px 4px 4px 8px; background: #1d2330; border: 1px solid var(--warn); border-radius: 6px; }
+.gd-loss .gd-link { margin-right: auto; }
+.gd-pillbox .gd-loss { margin: 0; box-shadow: 0 8px 30px #000a; }
 .gd-head { display: flex; gap: 6px; align-items: center; }
 .gd-head .seg button.on { border-color: var(--accent); color: var(--accent); }
 .gd-count { margin-left: auto; }

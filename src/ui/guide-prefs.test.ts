@@ -3,12 +3,14 @@ import { EMPTY_ROSTER } from '../engine';
 import {
   DEFAULT_GUIDE_PREFS,
   closeWelcome,
+  dismissLoss,
   hasSavedRun,
   loadGuidePrefs,
   parseGuidePrefs,
   pickJourney,
   reopenGuide,
   saveGuidePrefs,
+  takeLoss,
   welcomeShows,
   type GuidePrefs,
 } from './guide-prefs';
@@ -101,5 +103,11 @@ describe('guide choices', () => {
   it('? Guide reopens the dock on the last journey, or the welcome box if none was ever picked', () => {
     expect(reopenGuide(DEFAULT_GUIDE_PREFS)).toBe('welcome');
     expect(reopenGuide({ ...used, dock: 'closed' })).toEqual({ ...used, dock: 'open' });
+  });
+
+  it('taking the loss prompt switches the dock to After a loss and notes its events; dismissing only notes them', () => {
+    const onFresh: GuidePrefs = { ...used, journey: 'fresh', dock: 'pill' };
+    expect(takeLoss(onFresh, ['dead:gregor'])).toEqual({ ...onFresh, journey: 'loss', dock: 'open', lossEvents: [...used.lossEvents, 'dead:gregor'] });
+    expect(dismissLoss(onFresh, ['dead:gregor', 'dead:frederick'])).toEqual({ ...onFresh, lossEvents: [...used.lossEvents, 'dead:gregor'] });
   });
 });

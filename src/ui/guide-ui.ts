@@ -8,12 +8,14 @@ import type { GuideTarget } from './guide';
 import { DEEPER, deeperEntry, deeperView, type DeeperEntry, type DeeperId, type DeeperJump } from './guide-deeper';
 import type { GuideFacts } from './guide-facts';
 import { JOURNEYS, VIEW_NAMES, journeyProgress, stepDone, type GuideJourney, type GuideView, type JourneyStep } from './guide-journeys';
-import { closeWelcome, pickJourney, reopenGuide, type DockState, type GuidePrefs, type Journey } from './guide-prefs';
+import { closeWelcome, dismissLoss, pickJourney, reopenGuide, takeLoss, type DockState, type GuidePrefs, type Journey } from './guide-prefs';
 import { LABELS } from './labels';
 
 export type GuideContext = {
   readonly prefs: GuidePrefs;
   readonly facts: GuideFacts;
+  /** The losses the loss prompt offers After a loss for; none hides it. */
+  readonly loss: readonly string[];
   /** The welcome box is showing. */
   readonly welcome: boolean;
   /** Saves new guide prefs; the welcome box closes, as every change is a choice made past it. */
@@ -108,12 +110,35 @@ function welcomeBox(ctx: GuideContext): HTMLElement {
   return scrim;
 }
 
+/** Picks a journey from the dock: Going deeper starts collapsed. */
+const switchJourney = (ctx: GuideContext, next: GuidePrefs) => {
+  deeperOpen = false;
+  ctx.setPrefs(next);
+};
+
+/** The loss prompt's one line: it offers After a loss, and never switches by itself. */
+function lossLine(ctx: GuideContext): HTMLElement | null {
+  if (!ctx.loss.length) return null;
+  return h(
+    'div',
+    { class: 'gd-loss small', role: 'status' },
+    h('span', {}, 'Lost someone?'),
+    h('button', { class: 'gd-link', onclick: () => switchJourney(ctx, takeLoss(ctx.prefs, ctx.loss)) }, `Switch to ${JOURNEYS.loss.title}`),
+    h('button', { class: 'ghost small', 'aria-label': 'Dismiss', title: 'Dismiss', onclick: () => ctx.setPrefs(dismissLoss(ctx.prefs, ctx.loss)) }, '✕'),
+  );
+}
+
 function pill(ctx: GuideContext, journey: GuideJourney): HTMLElement {
   const { done, tracked } = journeyProgress(JOURNEYS[journey].steps, ctx.facts);
   return h(
-    'button',
-    { class: 'gd gd-pill', title: 'Open the guide', onclick: () => setDock(ctx, 'open') },
-    journey === 'explore' ? '☰ Guide' : `☰ ${JOURNEYS[journey].title} · ${done}/${tracked}`,
+    'div',
+    { class: 'gd gd-pillbox' },
+    lossLine(ctx),
+    h(
+      'button',
+      { class: 'gd-pill', title: 'Open the guide', onclick: () => setDock(ctx, 'open') },
+      journey === 'explore' ? '☰ Guide' : `☰ ${JOURNEYS[journey].title} · ${done}/${tracked}`,
+    ),
   );
 }
 
@@ -235,13 +260,14 @@ function dock(ctx: GuideContext, journey: GuideJourney): HTMLElement {
         'span',
         { class: 'seg', role: 'group', 'aria-label': 'Journey' },
         ...(Object.keys(JOURNEYS) as GuideJourney[]).map((j) =>
-          h('button', { class: j === journey ? 'on' : '', 'aria-pressed': String(j === journey), onclick: () => ((deeperOpen = false), ctx.setPrefs(pickJourney(ctx.prefs, j))) }, JOURNEYS[j].title),
+          h('button', { class: j === journey ? 'on' : '', 'aria-pressed': String(j === journey), onclick: () => switchJourney(ctx, pickJourney(ctx.prefs, j)) }, JOURNEYS[j].title),
         ),
       ),
       h('span', { class: 'muted small gd-count', title: 'Steps done, of those the guide can tick' }, tracked ? `${done}/${tracked}` : ''),
       h('button', { class: 'ghost small', 'aria-label': 'Collapse', title: 'Collapse to a pill', onclick: () => setDock(ctx, 'pill') }, '—'),
       h('button', { class: 'ghost small', 'aria-label': 'Close the guide', title: `Close the guide (${LABELS.guide} brings it back)`, onclick: () => setDock(ctx, 'closed') }, '✕'),
     ),
+    lossLine(ctx),
     h('p', { class: 'muted small gd-ask' }, content.ask),
     content.steps.length ? h('ol', { class: 'gd-list' }, ...content.steps.map((s, i) => stepItem(ctx, journey, s, i, i === openIndex))) : null,
     deeperSection(ctx, journey === 'explore'),

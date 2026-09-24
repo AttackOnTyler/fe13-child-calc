@@ -54,7 +54,7 @@ import {
 import { h } from './dom';
 import { guide } from './guide';
 import { guideChild } from './guide-deeper';
-import { guideFacts } from './guide-facts';
+import { guideFacts, lossPrompt, noteLosses, settleLosses } from './guide-facts';
 import { hasSavedRun, loadGuidePrefs, saveGuidePrefs, welcomeShows, type GuidePrefs } from './guide-prefs';
 import { guideButton, guideLayer, type GuideContext } from './guide-ui';
 import { BASIS_LABELS, LABELS, SCORING_ROLE_UI } from './labels';
@@ -108,6 +108,8 @@ let selfTest = engine.selfTest();
 let prefs: ScoringPrefs = loadPrefs(engine);
 /** Run state: read by the tables and the leaderboard, never by scoring. */
 let roster: Roster = loadRoster();
+// Losses already saved aren't new: the loss prompt is for those recorded from here on.
+guidePrefs = noteLosses(roster, guidePrefs);
 /** Plan preferences (priorities, plan presets): survive Clear all. */
 let planPrefs: PlanPrefs = loadPlanPrefs(engine);
 /** The Plan view's Free re-plan toggle. */
@@ -1940,6 +1942,7 @@ function contextSelect(): HTMLElement {
 const guideContext = (): GuideContext => ({
   prefs: guidePrefs,
   facts: guideFacts(roster, planPrefs, prefs.context),
+  loss: lossPrompt(roster, guidePrefs),
   welcome: welcomeOpen,
   setPrefs: (next) => {
     guidePrefs = next;
@@ -1977,10 +1980,15 @@ const guideContext = (): GuideContext => ({
   refresh: renderGuide,
 });
 
-/** The guide follows every change: its ticks read the roster, plan preferences and play context. */
+/**
+ * The guide follows every change: its ticks read the roster, plan preferences and play context, and losses recorded
+ * where the loss prompt can't show are noted as seen.
+ */
 function renderGuide(): void {
   const layer = regions.guide;
   if (!layer) return;
+  const settled = settleLosses(roster, guidePrefs);
+  if (settled !== guidePrefs) saveGuidePrefs((guidePrefs = settled));
   const scrollTop = layer.querySelector('.gd')?.scrollTop ?? 0;
   layer.replaceChildren(...guideLayer(guideContext()));
   const dock = layer.querySelector('.gd');
