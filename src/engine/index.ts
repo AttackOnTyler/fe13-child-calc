@@ -681,6 +681,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         if (!memo.has(key)) memo.set(key, value(pairing, key));
         return memo.get(key);
       },
+      parentLabel: (pairing) => parentName(pairing.variableParent),
       candidates: (child) => {
         let found = candidates.get(child);
         if (!found) {

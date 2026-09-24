@@ -184,12 +184,19 @@ function ledgerRow(ctx: RosterContext, e: LedgerEntry): HTMLElement {
   const pairing = (c: LedgerEntry['planned']) =>
     c ? [h('span', {}, c.parent), ' ', h('b', { class: 'num' }, c.score === undefined ? '—' : String(c.score))] : [h('span', { class: 'muted' }, '—')];
   const same = e.best && e.best.key === e.planned?.key;
+  // A plan-broken row adds why its saved pairing can't happen, one reason per line.
+  const statusHint = [e.leftOut ? `${st.hint}. ${LEFT_OUT_UI[e.leftOut].hint}` : st.hint, ...(e.saved?.reasons ?? [])].join('\n');
   return h(
     'tr',
     { class: `ledger-${e.status}` },
     h('td', { class: 'uname' }, e.name, ' ', roleChip(ctx.plan, e.child)),
     h('td', { class: 'muted' }, unitName(e.fixedParent, gender)),
-    h('td', { title: e.status === 'married' ? 'Its parents’ marriage' : 'The marriage plan’s pairing' }, ...pairing(e.planned)),
+    h(
+      'td',
+      { title: e.status === 'married' ? 'Its parents’ marriage' : 'The marriage plan’s pairing' },
+      ...(e.saved ? [h('s', {}, e.saved.parent), ' → '] : []),
+      ...pairing(e.planned),
+    ),
     h(
       'td',
       { title: 'Its best pairing in its plan preset that can still happen, whatever the rest of the plan' },
@@ -198,7 +205,7 @@ function ledgerRow(ctx: RosterContext, e: LedgerEntry): HTMLElement {
     ),
     h(
       'td',
-      { class: `lstatus ${e.status}`, title: e.leftOut ? `${st.hint}. ${LEFT_OUT_UI[e.leftOut].hint}` : st.hint },
+      { class: `lstatus ${e.status}`, title: statusHint },
       `${st.mark} ${st.label}`,
       e.leftOut ? h('span', { class: 'small' }, ` · ${LEFT_OUT_UI[e.leftOut].label}`) : null,
       e.notes.length ? h('span', { class: 'warn', title: e.notes.join('\n'), 'aria-label': e.notes.join('. ') }, ' ⚠') : null,

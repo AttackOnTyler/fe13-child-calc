@@ -213,7 +213,7 @@ const LOSS: JourneyContent = {
       title: 'Scan the children ledger',
       takeaway:
         `One row per child, with its fixed parent (the one it always has). ${ledgerStatus} tells you which children are hurt: ` +
-        `${ledgerLabel('broken')} (the saved pairing can’t happen), ${ledgerLabel('on-hold')} (a parent is benched), ` +
+        `${ledgerLabel('broken')} (the saved pairing can’t happen: it is struck through in the plan column, and hovering the status says why), ${ledgerLabel('on-hold')} (a parent is benched), ` +
         `${ledgerLabel('left-out')} (it can still be born, but this plan doesn’t produce it: ${leftOutReasons}), ` +
         `${ledgerLabel('unborn')}, ${ledgerLabel('dead')}. The plan’s pairing column already shows the re-plan; ${bestRemaining} is ` +
         'the best the child could still get if you prioritised it: raise its priority if that’s worth chasing. ' +

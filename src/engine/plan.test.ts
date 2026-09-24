@@ -533,6 +533,50 @@ describe('children ledger: left out', () => {
   });
 });
 
+describe('children ledger: why the plan broke (#48)', () => {
+  const saved: SavedPlan = {
+    robin: { gender: 'M', asset: 'spd', flaw: 'hp' },
+    marriages: [
+      ['chrom', 'sumia'],
+      ['stahl', 'cordelia'],
+      ['robin', 'lucina'],
+      ['vaike', 'olivia'],
+    ],
+  };
+  const adopted = withSavedPlan({ ...EMPTY_ROSTER, run: RUN }, saved);
+  const row = (r: Roster, c: string) => engine.ledger(r, settings).find((e) => e.child === c)!;
+
+  it('names the saved pairing and why it can’t happen', () => {
+    const severa = row(withState(adopted, 'stahl', 'dead'), 'severa');
+    expect(severa.status).toBe('broken');
+    expect(severa.saved).toEqual({ parent: 'Stahl', reasons: ['Stahl is dead'] });
+    expect(severa.planned?.parent).not.toBe('Stahl');
+  });
+
+  it('names a parent married to someone else', () => {
+    const inigo = row(withSpouse(adopted, 'vaike', 'sully', 'married'), 'inigo');
+    expect(inigo).toMatchObject({ status: 'broken', saved: { parent: 'Vaike', reasons: ['Vaike is married to Sully'] } });
+  });
+
+  it('lists every reason, in the second-gen form of the label', () => {
+    const morgan = row(withSpouse(withState(adopted, 'lucina', 'dead'), 'stahl', 'sumia', 'married'), 'morgan-f');
+    expect(morgan.status).toBe('broken');
+    expect(morgan.saved?.parent).toBe('Lucina ← Sumia');
+    expect(morgan.saved?.reasons).toEqual(expect.arrayContaining(['Lucina is dead', 'Sumia is married to Stahl']));
+  });
+
+  it('labels a broken Robin pairing in the Robin-variant form', () => {
+    const robinCordelia = withSavedPlan({ ...EMPTY_ROSTER, run: RUN }, { ...saved, marriages: [['robin', 'cordelia']] });
+    const severa = row(withSpouse(robinCordelia, 'robin', 'olivia', 'married'), 'severa');
+    expect(severa).toMatchObject({ status: 'broken', saved: { parent: 'Robin (M) +Spd −HP', reasons: ['Robin (M) is married to Olivia'] } });
+  });
+
+  it('says nothing for any other status', () => {
+    const ledger = engine.ledger(withState(adopted, 'stahl', 'dead'), settings);
+    for (const e of ledger) if (e.status !== 'broken') expect(e.saved).toBeUndefined();
+  });
+});
+
 describe('children ledger: status precedence', () => {
   const none = { dead: false, bornable: true, married: false, broken: false, onHold: false, leftOut: false, pinned: false };
   // dead > can't be born > parents married > plan broken > on hold > left out > pinned > open

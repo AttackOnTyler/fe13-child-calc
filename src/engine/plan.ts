@@ -128,6 +128,8 @@ export type LedgerEntry = {
   readonly leftOut?: LeftOutReason;
   /** The roster's notes on its planned pairing, which block nothing; empty for a dead or unborn child. */
   readonly notes: readonly string[];
+  /** When its status is plan broken through the saved plan: that plan's pairing (its variable parent) and every reason it can't happen. */
+  readonly saved?: { readonly parent: string; readonly reasons: readonly string[] };
 };
 
 /** What the plan needs from the engine. */
@@ -135,6 +137,8 @@ export type PlanContext = {
   readonly roster: Roster;
   /** The child a pairing produces as the plan values it; undefined when the pairing doesn't exist or is hard-blocked. */
   readonly child: (pairing: Pairing) => PlannedChild | undefined;
+  /** A pairing's variable parent as `PlannedChild.parent` has it, even for a pairing that can't be valued. */
+  readonly parentLabel: (pairing: Pairing) => string;
   /** A child's pairings under the run facts, blocked or not. */
   readonly candidates: (child: ChildId) => readonly Pairing[];
 };
@@ -571,7 +575,9 @@ export function childLedger(ctx: PlanContext, plan: MarriagePlan, blocking: (pai
     // Only a pairing that can no longer happen breaks the plan: re-pinning away from it is the user's call. Once a
     // plan is saved, it alone says what was planned: after Adopt, a child the new plan drops is left out, not broken.
     const pinLost = pinLoss(roster, CHILD_UNITS[child].fixedParent)?.status;
-    const broken = roster.savedPlan ? !!was && blocking(was).status === 'hard' : pinLost === 'broken';
+    const wasBlocking = was && blocking(was);
+    const savedLost = was && wasBlocking?.status === 'hard' ? { parent: ctx.parentLabel(was), reasons: wasBlocking.hard } : undefined;
+    const broken = roster.savedPlan ? !!savedLost : pinLost === 'broken';
     const status = ledgerStatus({
       dead: stateOf(roster, child) === 'dead',
       bornable: !!best,
@@ -594,6 +600,7 @@ export function childLedger(ctx: PlanContext, plan: MarriagePlan, blocking: (pai
         status,
         ...(status === 'left-out' ? { leftOut: leftOut.get(child) } : {}),
         notes: alive ? (plannedBlocking?.notes ?? []) : [],
+        ...(status === 'broken' && savedLost ? { saved: savedLost } : {}),
       },
     ];
   });

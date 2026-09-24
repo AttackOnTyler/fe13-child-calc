@@ -138,7 +138,7 @@ The preset a child is scored with in the marriage plan: a curated default per ch
 _Avoid_: Child preset, default preset (ambiguous with the global one)
 
 **Children ledger**:
-The Roster page's one row per child: fixed parent, the marriage plan's pairing (or its parents' marriage), its best pairing that can still happen with Δ vs the plan, and where it stands — open, pinned, left out (it can still be born, but the marriage plan doesn't produce it: no score, priority 0, outscored in a husband shortage, or its parent benched), on hold (its parents' pin is on hold through a bench), parents married, plan broken (the saved plan's pairing, or without a saved plan its parents' pin, can no longer happen), can't be born, or dead. Before Adopt, a child whose saved pairing is gone reads plan broken; after Adopt it reads left out. It edits the same priority and plan preset as the Plan sidebar.
+The Roster page's one row per child: fixed parent, the marriage plan's pairing (or its parents' marriage), its best pairing that can still happen with Δ vs the plan, and where it stands — open, pinned, left out (it can still be born, but the marriage plan doesn't produce it: no score, priority 0, outscored in a husband shortage, or its parent benched), on hold (its parents' pin is on hold through a bench), parents married, plan broken (the saved plan's pairing, or without a saved plan its parents' pin, can no longer happen; a broken saved pairing is struck through before the plan's, with why it can't happen on the status), can't be born, or dead. Before Adopt, a child whose saved pairing is gone reads plan broken; after Adopt it reads left out. It edits the same priority and plan preset as the Plan sidebar.
 _Avoid_: Child list, tracker
 
 **Left out**:
