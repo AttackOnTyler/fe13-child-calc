@@ -33,6 +33,7 @@ import { h } from './dom';
 import { guide } from './guide';
 import { LABELS, LEFT_OUT_UI, NOT_BORN_UI, PIN_LOSS_UI, ROLE_UI } from './labels';
 import { editQuota } from './plan-prefs';
+import { shownDelta, shownTotal } from './plan-totals';
 
 /** A child's plan controls (priority, plan preset), shared by the Plan sidebar and the Roster page's ledger. */
 export type ChildPlanControls = {
@@ -146,7 +147,7 @@ function quotaEditor(ctx: PlanPageContext): HTMLElement {
   );
 }
 
-const fmt = (n: number) => String(Math.round(n));
+const fmt = (n: number) => String(shownTotal(n));
 const signed = (n: number) => (n > 0 ? `+${fmt(n)}` : fmt(n));
 const tone = (n: number) => (n > 0 ? 'pos' : n < 0 ? 'neg' : 'muted');
 
@@ -229,7 +230,7 @@ function diffBanner(ctx: PlanPageContext, plan: MarriagePlan, diff: PlanDiff | u
   if (!diff) return h('div', { class: 'banner' }, h('span', {}, 'No saved plan yet. '), adoptButton);
   if (diff.same) return h('div', { ...guide('plan-diff'), class: 'banner ok' }, '✓ Matches the saved plan.');
   const name = (u: RosterUnit | undefined) => (u ? unitName(u, plan.robin.gender) : '—');
-  const change = diff.after - diff.before;
+  const change = shownDelta(diff.before, diff.after);
   return h(
     'div',
     { ...guide('plan-diff'), class: 'banner warn-b' },
@@ -294,7 +295,7 @@ export function planPage(ctx: PlanPageContext): HTMLElement[] {
   const diff = before && diffPlans(before, plan);
   const saved = before && new Map(before.marriages.flatMap((m) => m.children.map((c) => [c.child, c] as const)));
   const [pinnedPlan, freePlan] = ctx.free ? [other, plan] : [plan, other];
-  const pinCost = freePlan.total - pinnedPlan.total;
+  const pinCost = shownDelta(pinnedPlan.total, freePlan.total);
   const robinMarried = plan.marriages.some((m) => m.husband === 'robin' || m.wife === 'robin');
   const { gender, asset, flaw } = plan.robin;
 
@@ -334,7 +335,7 @@ export function planPage(ctx: PlanPageContext): HTMLElement[] {
       : null,
     lostPinsBanner(plan, 'broken'),
     lostPinsBanner(plan, 'on-hold'),
-    pinCost > 0.5
+    pinCost > 0
       ? h(
           'div',
           { class: 'muted' },
