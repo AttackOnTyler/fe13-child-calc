@@ -220,7 +220,8 @@ export function evaluateBlocking(pairing: Pairing, roster: Roster, assumptions: 
   const wed = (u: RosterUnit) => marriages.some(([a, b]) => (u === a || u === b) && roster.spouses[a]?.partner === b && roster.spouses[a]?.bond === 'married');
   for (const u of units) {
     const st = stateOf(roster, u);
-    if (wed(u) && st === 'benched') continue;
+    // A benched child only leaves the deploy count: it stays planned, so its own bench blocks nothing (#125).
+    if ((wed(u) || u === pairing.child) && st === 'benched') continue;
     if (wed(u) && st === 'dead' && assumptions['child-after-parent-death']) notes.push(`${name(u)} died after marrying: the child still comes ⚠`);
     else if (st === 'dead' || st === 'missed') hard.push(`${name(u)} ${STATE_PHRASES[st]}`);
     else if (st === 'benched') soft.push(`${name(u)} ${STATE_PHRASES[st]}`);
