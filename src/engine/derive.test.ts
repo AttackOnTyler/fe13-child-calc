@@ -19,7 +19,7 @@ const settings: PlanSettings = {
   quotas: quotasFor('all'),
 };
 
-const RUN = { gender: 'M', asset: 'mag', flaw: 'str' } as const;
+const RUN = { ...EMPTY_ROSTER.run, gender: 'M', asset: 'mag', flaw: 'str' } as const;
 const withRobin: Roster = withRun(EMPTY_ROSTER, RUN);
 
 describe('standing', () => {

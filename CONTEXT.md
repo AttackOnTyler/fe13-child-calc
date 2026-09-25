@@ -173,7 +173,7 @@ _Avoid_: Role (alone), natural role
 ### Planning
 
 **Run facts**:
-Facts fixed at the start of a playthrough — Robin's gender and asset/flaw. They remove pairings from the run entirely rather than blocking them.
+Facts fixed at the start of a playthrough: Robin's gender, asset and flaw, the **difficulty** (Normal, Hard, Lunatic, Lunatic+), the **mode** (Classic, Casual) and the **route** (Main story, or Full route with the non-grind xenologues and Apotheosis). Play context defaults from the route; changing the play context never changes them.
 _Avoid_: Settings, run config
 
 **Lock (Robin)**:

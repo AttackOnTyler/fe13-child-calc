@@ -8,6 +8,8 @@ import { DEFAULT_PREFS } from './scoring-prefs';
  * and their act flags, and the play context.
  */
 export type GuideFacts = {
+  /** The run's difficulty and route are set in Run facts (#108). */
+  readonly runSetUp: boolean;
   /** The play context is no longer the default. */
   readonly contextChosen: boolean;
   readonly deployEdited: boolean;
@@ -60,6 +62,7 @@ export function guideFacts(roster: Roster, { acts }: PlanPrefs, context: PlayCon
   const { gender, asset, flaw } = roster.run;
   const states = (Object.keys(roster.states) as RosterUnit[]).map((u) => stateOf(roster, u));
   return {
+    runSetUp: !!roster.run.difficulty && !!roster.run.route,
     contextChosen: context !== DEFAULT_PREFS.context,
     deployEdited: acts.deployEditedAt !== undefined,
     prioritiesSet: acts.prioritiesSetAt !== undefined,

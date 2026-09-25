@@ -32,6 +32,9 @@ import { guide } from './guide';
 import { LABELS, LEDGER_UI, LEFT_OUT_UI, PIN_LOSS_UI, ROLE_UI, STATE_UI } from './labels';
 import { compositionStrip, priorityControl, roleChip, sourceChip, type ChildPlanControls } from './plan-page';
 import { unitLink } from './unit-links';
+import { DIFFICULTIES, type Difficulty } from '../engine/roster';
+
+export const DIFFICULTY_LABELS: Readonly<Record<Difficulty, string>> = { normal: 'Normal', hard: 'Hard', lunatic: 'Lunatic', 'lunatic-plus': 'Lunatic+' };
 import { spouseOptions } from './spouse-options';
 
 /** What the Roster page reads, and how it changes the roster. */
@@ -273,11 +276,32 @@ function runFacts(ctx: RosterContext): HTMLElement {
       ...STATS.filter((s) => s !== exclude).map((s) => h('option', { value: s, selected: s === value }, `${sign}${STAT_LABELS[s]}`)),
     );
   const genders: readonly (Gender | null)[] = [null, 'M', 'F'];
+  const choice = <T extends string>(label: string, value: T | null, options: readonly (readonly [T, string])[], on: (v: T | null) => void) =>
+    h(
+      'select',
+      { 'aria-label': label, onchange: (e) => on(((e.target as HTMLSelectElement).value || null) as T | null) },
+      h('option', { value: '', selected: value === null }, '— not set'),
+      ...options.map(([v, t]) => h('option', { value: v, selected: v === value }, t)),
+    );
   return h(
     'section',
     { ...guide('run-facts'), class: 'rsec run', 'aria-label': LABELS.runFacts },
     h('h3', {}, LABELS.runFacts),
     h('p', { class: 'muted' }, 'Fixed at the start of a playthrough. They remove the other Robin, the other Morgan and Robin’s other asset/flaws entirely.'),
+    h(
+      'div',
+      { ...guide('run-setup'), class: 'facts' },
+      h(
+        'span',
+        { class: 'blk' },
+        h('span', { class: 'lbl' }, 'Difficulty'),
+        choice('Difficulty', run.difficulty, DIFFICULTIES.map((d) => [d, DIFFICULTY_LABELS[d]] as const), (difficulty) => setRun({ difficulty })),
+        h('span', { class: 'lbl' }, 'Mode'),
+        choice('Mode', run.mode, [['classic', 'Classic'], ['casual', 'Casual']] as const, (mode) => setRun({ mode })),
+        h('span', { class: 'lbl' }, 'Route'),
+        choice('Route', run.route, [['main-story', 'Main story'], ['full-route', 'Full route']] as const, (route) => setRun({ route })),
+      ),
+    ),
     h(
       'div',
       { class: 'facts' },

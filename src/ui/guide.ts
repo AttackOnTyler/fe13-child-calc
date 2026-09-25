@@ -8,6 +8,7 @@ export const GUIDE_TARGETS = [
   'play-context',
   'validation',
   // Roster
+  'run-setup',
   'run-facts',
   'deploy',
   'deploy-role',

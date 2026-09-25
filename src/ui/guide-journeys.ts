@@ -52,13 +52,24 @@ const FRESH: JourneyContent = {
   steps: [
     {
       view: 'roster',
+      target: 'run-setup',
+      where: `${roster} › ${runFacts}`,
+      title: 'Set the difficulty, mode and route',
+      takeaway:
+        `Your run’s difficulty (Normal to Lunatic+), mode (Classic: the fallen stay dead; Casual: they come back) and route: ` +
+        `${CONTEXT_LABELS['main-story']}, or ${CONTEXT_LABELS['full-route']} (the non-grind DLC woven into the campaign, ending at Apotheosis). ` +
+        `They’re ${runFacts}: the route also sets the ${playContext} to match.`,
+      tick: 'runSetUp',
+    },
+    {
+      view: 'roster',
       target: 'play-context',
       where: `Header › ${playContext}`,
-      title: 'Pick your play context',
+      title: 'Check your play context',
       takeaway:
         `What you’re building for: ${CONTEXT_LABELS.apotheosis}, ${CONTEXT_LABELS['main-story']} (Lunatic/+), ` +
-        `${CONTEXT_LABELS['full-route']} (one playthrough weaving the non-grind DLC into the campaign, ending at Apotheosis) ` +
-        `or ${CONTEXT_LABELS.all}. It sets the Spd target, DLC reach, and the defaults the ${plan} starts from, so everything after depends on it.`,
+        `${CONTEXT_LABELS['full-route']} or ${CONTEXT_LABELS.all}. It starts from your route; change it to explore builds for another ` +
+        `context, which never changes your run. It sets the Spd target, DLC reach, and the defaults the ${plan} starts from.`,
       tick: 'contextChosen',
     },
     {

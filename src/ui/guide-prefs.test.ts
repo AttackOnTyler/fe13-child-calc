@@ -55,7 +55,7 @@ describe('guide preferences', () => {
     it('read back as saved, and survive Clear all', () => {
       expect(loadGuidePrefs()).toEqual(DEFAULT_GUIDE_PREFS);
       saveGuidePrefs(used);
-      saveRoster({ ...EMPTY_ROSTER, run: { gender: 'M', asset: null, flaw: null } });
+      saveRoster({ ...EMPTY_ROSTER, run: { ...EMPTY_ROSTER.run, gender: 'M' } });
       clearRoster();
       expect(loadGuidePrefs()).toEqual(used);
     });

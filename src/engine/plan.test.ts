@@ -49,7 +49,7 @@ const settings: PlanSettings = {
   quotas: ROOMY,
 };
 
-const RUN = { gender: 'M', asset: 'spd', flaw: 'hp' } as const;
+const RUN = { ...EMPTY_ROSTER.run, gender: 'M', asset: 'spd', flaw: 'hp' } as const;
 
 /** A roster where every unit but `keep` is benched: small enough to brute-force. */
 function small(keep: readonly RosterUnit[], run: Roster['run'] = RUN): Roster {
@@ -112,7 +112,7 @@ describe('marriage plan solver: brute force on small rosters', () => {
   });
 
   it('matches brute force while Robin’s asset/flaw is open, and reports the pick', () => {
-    const run = { gender: 'F', asset: null, flaw: null } as const;
+    const run = { ...EMPTY_ROSTER.run, gender: 'F' } as const;
     const keep: RosterUnit[] = ['robin', 'chrom', 'vaike', 'lissa'];
     const roster = small(keep, run);
     const plan = engine.plan(roster, settings);
@@ -612,7 +612,7 @@ describe('children ledger: status precedence', () => {
 });
 
 describe('Lock Robin from the plan’s pick (#59)', () => {
-  const OPEN = { gender: null, asset: null, flaw: null } as const;
+  const OPEN = EMPTY_ROSTER.run;
   const robinSpouse = (r: Roster) => r.spouses.robin;
   const robinMarriage = (plan: MarriagePlan) => plan.marriages.find((m) => m.husband === 'robin' || m.wife === 'robin');
 
@@ -623,17 +623,17 @@ describe('Lock Robin from the plan’s pick (#59)', () => {
     expect(m).toBeDefined();
     const locked = lockRobin(roster, plan);
     const { gender, asset, flaw } = plan.robin;
-    expect(locked.run).toEqual({ gender, asset, flaw });
+    expect(locked.run).toMatchObject({ gender, asset, flaw });
     expect(robinSpouse(locked)).toEqual({ partner: m.husband === 'robin' ? m.wife : m.husband, bond: 'pinned' });
     expect(engine.plan(locked, settings).robinOpen).toBe(false);
   });
 
   it('keeps the Run facts already set', () => {
-    const run = { gender: 'F', asset: 'mag', flaw: null } as const;
+    const run = { ...EMPTY_ROSTER.run, gender: 'F', asset: 'mag' } as const;
     const roster = small(['robin', 'chrom', 'vaike', 'lissa'], run);
     const plan = engine.plan(roster, settings);
     const locked = lockRobin(roster, plan);
-    expect(locked.run).toEqual({ gender: 'F', asset: 'mag', flaw: plan.robin.flaw });
+    expect(locked.run).toMatchObject({ gender: 'F', asset: 'mag', flaw: plan.robin.flaw });
     // A stale pick never overwrites a fact set since.
     const stale = lockRobin(withRun(roster, { asset: 'skl' }), plan);
     expect(stale.run).toMatchObject({ gender: 'F', asset: 'skl' });
@@ -653,12 +653,12 @@ describe('Lock Robin from the plan’s pick (#59)', () => {
     expect(robinMarriage(plan)).toBeUndefined();
     const locked = lockRobin(roster, plan);
     const { gender, asset, flaw } = plan.robin;
-    expect(locked.run).toEqual({ gender, asset, flaw });
+    expect(locked.run).toMatchObject({ gender, asset, flaw });
     expect(locked.spouses).toEqual(roster.spouses);
   });
 
   it('leaves a married Robin married', () => {
-    const roster = withSpouse(small(['robin', 'chrom', 'vaike', 'lissa'], { gender: 'M', asset: null, flaw: null }), 'robin', 'lissa', 'married');
+    const roster = withSpouse(small(['robin', 'chrom', 'vaike', 'lissa'], { ...EMPTY_ROSTER.run, gender: 'M' }), 'robin', 'lissa', 'married');
     const locked = lockRobin(roster, engine.plan(roster, settings));
     expect(robinSpouse(locked)).toEqual({ partner: 'lissa', bond: 'married' });
   });

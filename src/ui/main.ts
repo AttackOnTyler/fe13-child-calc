@@ -285,8 +285,15 @@ const setOverride = (id: AssumptionId, value: unknown) => applyOverrides(withOve
 const rosterParts = (): Part[] => (view === 'plan' ? ['rail', 'main', 'panel'] : ['rail', 'main']);
 
 function setRoster(next: Roster): void {
+  const route = next.run.route;
+  const routeSet = route !== null && route !== roster.run.route;
   roster = next;
   saveRoster(roster);
+  // Play context defaults from the route (#108); the lens never changes the run. The header's lens redraws too.
+  if (routeSet) {
+    setPrefs({ context: route }, []);
+    return render();
+  }
   renderParts(rosterParts());
 }
 

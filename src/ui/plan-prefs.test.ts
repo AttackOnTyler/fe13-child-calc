@@ -89,7 +89,7 @@ describe('plan preferences', () => {
       );
       expect(prefs.acts).toEqual({ prioritiesSetAt: expect.any(Number) });
       savePlanPrefs(prefs);
-      saveRoster({ ...EMPTY_ROSTER, run: { gender: 'M', asset: null, flaw: null } });
+      saveRoster({ ...EMPTY_ROSTER, run: { ...EMPTY_ROSTER.run, gender: 'M' } });
       clearRoster();
       expect(loadRoster()).toEqual(EMPTY_ROSTER);
       expect(loadPlanPrefs(engine)).toEqual(prefs);

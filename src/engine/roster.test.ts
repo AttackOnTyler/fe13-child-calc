@@ -144,7 +144,7 @@ describe('run facts', () => {
   const labels = (child: Parameters<typeof engine.groups>[0], run: Roster['run']) => engine.groups(child, { run }).map((g) => g.label);
 
   it('remove the other Robin and the other Morgan entirely', () => {
-    const run = { gender: 'M', asset: null, flaw: null } as const;
+    const run = { ...EMPTY_ROSTER.run, gender: 'M', asset: null, flaw: null } as const;
     expect(labels('kjelle', run)).toContain('Robin (M)');
     expect(labels('lucina', run)).not.toContain('Robin (F)');
     expect(engine.groups('morgan-m', { run })).toEqual([]);
@@ -152,7 +152,7 @@ describe('run facts', () => {
   });
 
   it('remove Robin’s other asset/flaws, leaving one pairing per Robin group', () => {
-    const run = { gender: 'M', asset: 'spd', flaw: 'def' } as const;
+    const run = { ...EMPTY_ROSTER.run, gender: 'M', asset: 'spd', flaw: 'def' } as const;
     const [robin] = engine.groups('kjelle', { run }).filter((g) => g.label === 'Robin (M)');
     expect(robin!.results.map((r) => r.key)).toEqual(['kjelle|robin:spd/def']);
     for (const g of engine.groups('morgan-f', { run })) expect(g.results.map((r) => engine.robinLabel(r.pairing))).toEqual(['+Spd −Def']);
@@ -160,7 +160,7 @@ describe('run facts', () => {
 
   it('apply to the leaderboard', () => {
     const sc = engine.score(settings);
-    const run = { gender: 'F', asset: 'mag', flaw: 'lck' } as const;
+    const run = { ...EMPTY_ROSTER.run, gender: 'F', asset: 'mag', flaw: 'lck' } as const;
     const board = sc.leaderboard({ robin: 'all', sort: 'score', filter: { run } });
     expect(board.some((e) => e.child === 'Morgan (F)')).toBe(false);
     expect(board.filter((e) => e.robin).every((e) => e.robin === '+Mag −Lck')).toBe(true);
@@ -213,7 +213,7 @@ describe('the Roster page’s units', () => {
   it('lists Robin and the one Morgan only once Robin’s gender is set', () => {
     expect(unit('robin')).toBeUndefined();
     expect(unit('morgan-f')).toMatchObject({ kind: 'child' });
-    const run = { gender: 'F', asset: null, flaw: null } as const;
+    const run = { ...EMPTY_ROSTER.run, gender: 'F', asset: null, flaw: null } as const;
     expect(unit('robin', run)).toMatchObject({ name: 'Robin (F)', gender: 'F', kind: 'robin' });
     expect(unit('morgan-m', run)).toBeDefined();
     expect(unit('morgan-f', run)).toBeUndefined();
@@ -221,13 +221,13 @@ describe('the Roster page’s units', () => {
 
   it('offers each unit the spouses it can S-support, Robin included once set', () => {
     expect(unit('sumia')!.partners).toEqual(['chrom', 'frederick', 'gaius', 'henry']);
-    expect(unit('sumia', { gender: 'M', asset: null, flaw: null })!.partners).toContain('robin');
+    expect(unit('sumia', { ...EMPTY_ROSTER.run, gender: 'M', asset: null, flaw: null })!.partners).toContain('robin');
     expect(unit('chrom')!.partners).toEqual(['sully', 'sumia', 'maribelle', 'olivia', 'maiden']);
     expect(unit('maiden')).toBeUndefined();
   });
 
   it('marks Robin-only units, and children who can marry Robin', () => {
-    const run = { gender: 'M', asset: null, flaw: null } as const;
+    const run = { ...EMPTY_ROSTER.run, gender: 'M', asset: null, flaw: null } as const;
     expect(unit('tiki', run)).toMatchObject({ robinOnly: true, partners: ['robin'] });
     expect(unit('sully', run)!.robinOnly).toBe(false);
     expect(unit('lucina', run)).toMatchObject({ kind: 'child', partners: ['robin'] });
@@ -237,7 +237,7 @@ describe('the Roster page’s units', () => {
 
 describe('saved roster', () => {
   it('round-trips through JSON', () => {
-    const roster = withState(withSpouse({ ...EMPTY_ROSTER, run: { gender: 'M', asset: 'spd', flaw: 'def' } }, 'robin', 'lucina', 'married'), 'vaike', 'dead');
+    const roster = withState(withSpouse({ ...EMPTY_ROSTER, run: { ...EMPTY_ROSTER.run, gender: 'M', asset: 'spd', flaw: 'def' } }, 'robin', 'lucina', 'married'), 'vaike', 'dead');
     expect(parseRoster(JSON.parse(JSON.stringify(roster)))).toEqual(roster);
   });
 
@@ -245,7 +245,7 @@ describe('saved roster', () => {
     expect(parseRoster(null)).toEqual(EMPTY_ROSTER);
     expect(parseRoster('nope')).toEqual(EMPTY_ROSTER);
     const parsed = parseRoster({
-      run: { gender: 'X', asset: 'spd', flaw: 'spd' },
+      run: { ...EMPTY_ROSTER.run, gender: 'X', asset: 'spd', flaw: 'spd' },
       states: { vaike: 'dead', nobody: 'dead', lissa: 'asleep' },
       spouses: {
         lissa: { partner: 'vaike', bond: 'married' },
@@ -256,7 +256,7 @@ describe('saved roster', () => {
         lissa2: { partner: 'chrom', bond: 'pinned' },
       },
     });
-    expect(parsed.run).toEqual({ gender: null, asset: 'spd', flaw: null });
+    expect(parsed.run).toEqual({ ...EMPTY_ROSTER.run, gender: null, asset: 'spd', flaw: null });
     expect(parsed.states).toEqual({ vaike: 'dead' });
     expect(parsed.spouses).toEqual({ lissa: { partner: 'vaike', bond: 'married' }, vaike: { partner: 'lissa', bond: 'married' } });
   });
@@ -264,14 +264,27 @@ describe('saved roster', () => {
 
 describe('changing the run facts', () => {
   it('drops marriages that can’t exist in the new run, and a flaw equal to the new asset', () => {
-    const start = withSpouse({ ...EMPTY_ROSTER, run: { gender: 'M', asset: null, flaw: 'spd' } }, 'robin', 'sumia', 'married');
+    const start = withSpouse({ ...EMPTY_ROSTER, run: { ...EMPTY_ROSTER.run, gender: 'M', asset: null, flaw: 'spd' } }, 'robin', 'sumia', 'married');
     const flipped = withRun(start, { gender: 'F', asset: 'spd' });
-    expect(flipped.run).toEqual({ gender: 'F', asset: 'spd', flaw: null });
+    expect(flipped.run).toEqual({ ...EMPTY_ROSTER.run, gender: 'F', asset: 'spd', flaw: null });
     expect(flipped.spouses).toEqual({});
   });
 
   it('never lets Robin or Chrom be lost: their deaths are a Game Over', () => {
-    const units = rosterUnits({ gender: 'M', asset: null, flaw: null });
+    const units = rosterUnits({ ...EMPTY_ROSTER.run, gender: 'M', asset: null, flaw: null });
     expect(units.filter((u) => !u.canBeLost).map((u) => u.id)).toEqual(['robin', 'chrom']);
+  });
+});
+
+describe('difficulty, mode and route (#108)', () => {
+  it('persist in the run facts, and anything unknown reads as not set', () => {
+    const run = withRun(EMPTY_ROSTER, { difficulty: 'lunatic-plus', mode: 'classic', route: 'full-route' }).run;
+    expect(parseRoster(JSON.parse(JSON.stringify({ ...EMPTY_ROSTER, run }))).run).toMatchObject({ difficulty: 'lunatic-plus', mode: 'classic', route: 'full-route' });
+    expect(parseRoster({ run: { difficulty: 'insane', mode: 'x', route: 'apotheosis' } }).run).toMatchObject({ difficulty: null, mode: null, route: null });
+  });
+
+  it('never touch Robin’s facts', () => {
+    const r = withRun(withRun(EMPTY_ROSTER, { gender: 'F', asset: 'spd', flaw: 'hp' }), { route: 'main-story' });
+    expect(r.run).toMatchObject({ gender: 'F', asset: 'spd', flaw: 'hp', route: 'main-story' });
   });
 });

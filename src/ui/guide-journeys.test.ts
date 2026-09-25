@@ -4,6 +4,7 @@ import { LEDGER_UI, NOT_BORN_UI, PIN_LOSS_UI } from './labels';
 import { JOURNEYS, journeyProgress, stepDone, type JourneyStep } from './guide-journeys';
 
 const none: GuideFacts = {
+  runSetUp: false,
   contextChosen: false,
   deployEdited: false,
   prioritiesSet: false,
@@ -34,17 +35,19 @@ describe('journey steps', () => {
 describe('the Fresh run journey', () => {
   const { steps } = JOURNEYS.fresh;
 
-  it('has the twelve steps, ending on Pin or rule out, Adopt and Lock', () => {
-    expect(steps).toHaveLength(12);
-    expect(steps[9]!.title).toBe('Pin or rule out marriages');
-    expect(steps[10]!.target).toBe('adopt');
-    expect(steps[11]).toMatchObject({ view: 'plan', target: 'robin-lock' });
+  it('has the thirteen steps, from setting up the run to Pin or rule out, Adopt and Lock', () => {
+    expect(steps).toHaveLength(13);
+    expect(steps[0]).toMatchObject({ view: 'roster', target: 'run-setup' });
+    expect(steps[10]!.title).toBe('Pin or rule out marriages');
+    expect(steps[11]!.target).toBe('adopt');
+    expect(steps[12]).toMatchObject({ view: 'plan', target: 'robin-lock' });
   });
 
-  it('tracks context, deploy, bench, priorities, Adopt and Lock', () => {
-    expect(journeyProgress(steps, none)).toEqual({ done: 0, tracked: 6 });
-    expect(journeyProgress(steps, all)).toEqual({ done: 6, tracked: 6 });
+  it('tracks run setup, context, deploy, bench, priorities, Adopt and Lock', () => {
+    expect(journeyProgress(steps, none)).toEqual({ done: 0, tracked: 7 });
+    expect(journeyProgress(steps, all)).toEqual({ done: 7, tracked: 7 });
     const ticks = (facts: Partial<GuideFacts>) => steps.filter((s) => stepDone(s, { ...none, ...facts })).map((s) => s.target);
+    expect(ticks({ runSetUp: true })).toEqual(['run-setup']);
     expect(ticks({ contextChosen: true })).toEqual(['play-context']);
     expect(ticks({ deployEdited: true })).toEqual(['deploy']);
     expect(ticks({ unitBenched: true })).toEqual(['bench']);

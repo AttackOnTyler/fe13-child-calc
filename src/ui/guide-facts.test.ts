@@ -186,3 +186,11 @@ describe('the loss prompt', () => {
     expect(settleLosses(dead, closed)).toBe(closed);
   });
 });
+
+describe('run setup (#108)', () => {
+  it('ticks once difficulty and route are set', () => {
+    expect(fresh().runSetUp).toBe(false);
+    expect(factsFor(withRun(EMPTY_ROSTER, { difficulty: 'lunatic' })).runSetUp).toBe(false);
+    expect(factsFor(withRun(EMPTY_ROSTER, { difficulty: 'lunatic', route: 'main-story' })).runSetUp).toBe(true);
+  });
+});

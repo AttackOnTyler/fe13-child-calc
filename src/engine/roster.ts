@@ -16,8 +16,27 @@ export type RosterUnit = UnitId | ChildId | 'robin';
 /** Where a unit stands in the run. Not yet recruited prunes nothing; Benched is soft; Missed and Dead are hard. */
 export type UnitState = 'available' | 'not-recruited' | 'benched' | 'missed' | 'dead';
 
-/** Facts fixed at the start of a playthrough; null while not set. They remove pairings rather than block them. */
-export type RunFacts = { readonly gender: Gender | null; readonly asset: Stat | null; readonly flaw: Stat | null };
+export const DIFFICULTIES = ['normal', 'hard', 'lunatic', 'lunatic-plus'] as const;
+export type Difficulty = (typeof DIFFICULTIES)[number];
+/** Classic: a fallen unit is dead for good. Casual: it returns after the map. */
+export const MODES = ['classic', 'casual'] as const;
+export type Mode = (typeof MODES)[number];
+/** Main story, or Full route: the main story with the non-grind xenologues woven in, ending at Apotheosis. */
+export const ROUTES = ['main-story', 'full-route'] as const;
+export type Route = (typeof ROUTES)[number];
+
+/**
+ * Facts fixed at the start of a playthrough; null while not set. Robin's remove pairings rather than block them;
+ * difficulty, mode and route (#108) tell the route planner which enemies, deaths and maps apply.
+ */
+export type RunFacts = {
+  readonly gender: Gender | null;
+  readonly asset: Stat | null;
+  readonly flaw: Stat | null;
+  readonly difficulty: Difficulty | null;
+  readonly mode: Mode | null;
+  readonly route: Route | null;
+};
 
 /** A marriage that happened (hard), or a planned marriage the player has pinned (soft). */
 export type Bond = 'married' | 'pinned';
@@ -56,7 +75,7 @@ export type Roster = {
 };
 
 export const EMPTY_ROSTER: Roster = {
-  run: { gender: null, asset: null, flaw: null },
+  run: { gender: null, asset: null, flaw: null, difficulty: null, mode: null, route: null },
   states: {},
   spouses: {},
   ruleOuts: [],
@@ -267,6 +286,9 @@ export function parseRoster(raw: unknown): Roster {
     gender: r.gender === 'M' || r.gender === 'F' ? r.gender : null,
     asset,
     flaw: isStat(r.flaw) && r.flaw !== asset ? r.flaw : null,
+    difficulty: DIFFICULTIES.includes(r.difficulty as Difficulty) ? (r.difficulty as Difficulty) : null,
+    mode: MODES.includes(r.mode as Mode) ? (r.mode as Mode) : null,
+    route: ROUTES.includes(r.route as Route) ? (r.route as Route) : null,
   };
   const units = new Map(rosterUnits(run).map((u) => [u.id as string, u]));
   // The Maiden is never listed, but she can be Chrom's wife.

@@ -41,7 +41,7 @@ const settings: PlanSettings = {
   quotas: ROOMY,
 };
 
-const RUN = { gender: 'M', asset: 'spd', flaw: 'hp' } as const;
+const RUN = { ...EMPTY_ROSTER.run, gender: 'M', asset: 'spd', flaw: 'hp' } as const;
 const ROSTER: Roster = { ...EMPTY_ROSTER, run: RUN };
 
 const counts = (roster: Roster, s: PlanSettings = settings) => {
