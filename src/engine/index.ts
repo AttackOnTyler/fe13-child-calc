@@ -367,10 +367,11 @@ export type Engine = {
    */
   robinGain(roster: Roster, settings: PlanSettings): ReadonlyMap<ChildId, RobinGain>;
   /**
-   * A saved plan as it was adopted, valued under today's settings: only the run facts apply, not the losses and
-   * marriages since, so a diff against today's plan shows what they cost.
+   * A saved plan as it was adopted, valued under today's settings, each child in its plan preset on the roster (as
+   * today's plan has it): only the run facts block its pairings, not the losses and marriages since, so a diff against
+   * today's plan shows what they cost.
    */
-  evaluatePlan(saved: SavedPlan, run: RunFacts, settings: PlanSettings): MarriagePlan;
+  evaluatePlan(saved: SavedPlan, roster: Roster, settings: PlanSettings): MarriagePlan;
   /** The keys of the saved plan's pairings (the tables' ◆ in plan); empty without a saved plan. */
   planKeys(roster: Roster): ReadonlySet<string>;
   /**
@@ -723,10 +724,6 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     }
     return found;
   };
-  // A saved plan is valued on a roster with only the run facts; one object per run, so its values are shared.
-  let lastSaved: Roster | undefined;
-  const savedRoster = (run: RunFacts): Roster =>
-    lastSaved && JSON.stringify(lastSaved.run) === JSON.stringify(run) ? lastSaved : (lastSaved = { ...EMPTY_ROSTER, run });
   // The Plan view asks for the plan and the free re-plan under one roster and settings: share values.
   let lastPlan: { roster: Roster; settings: string; ctx: PlanContext } | undefined;
   const planContext = (roster: Roster, s: PlanSettings): PlanContext => {
@@ -1370,7 +1367,10 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       return out;
     },
     planPreset: (child, roster, settings) => rolesFor(roster, settings).get(child)?.preset ?? settings.overrides[child] ?? settings.preset,
-    evaluatePlan: (saved, run, settings) => evaluatePlan(planContext(savedRoster(run), settings), saved),
+    // Its pairings on a roster with only the run facts, but each child in the roster's own plan preset: army fit reads
+    // the whole roster (benches, deployment), so the run facts alone would put the children in other presets.
+    evaluatePlan: (saved, roster, settings) =>
+      evaluatePlan(newPlanContext({ ...EMPTY_ROSTER, run: roster.run }, settings, rolesFor(roster, settings)), saved),
     planKeys: (roster) =>
       new Set(roster.savedPlan ? savedPairings(roster, roster.savedPlan).map(pairingKey).filter((k) => byKey.has(k)) : []),
     ledger: (roster, settings) => {

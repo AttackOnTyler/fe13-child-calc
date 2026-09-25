@@ -183,13 +183,13 @@ describe('the plan diff', () => {
     expect(saved.deploymentRoles?.lucina).toBe('lead');
     expect(parseRoster(JSON.parse(JSON.stringify(adopted))).savedPlan).toEqual(saved);
     const moved = { ...settings, overrides: { lucina: 'battery' } } as const;
-    const before = engine.evaluatePlan(saved, RUN, moved);
+    const before = engine.evaluatePlan(saved, adopted, moved);
     const after = engine.plan(adopted, moved);
     const diff = diffPlans(before, after);
     expect(diff.roleMoves).toEqual([{ child: 'lucina', name: 'Lucina', from: 'lead', to: 'battery' }]);
     expect(diff.moves).toEqual([]);
     expect(diff.same).toBe(false);
-    expect(diffPlans(engine.evaluatePlan(saved, RUN, settings), engine.plan(adopted, settings)).same).toBe(true);
+    expect(diffPlans(engine.evaluatePlan(saved, adopted, settings), engine.plan(adopted, settings)).same).toBe(true);
   });
 
   it('drops a Dancer or unknown role for a child from a saved plan', () => {

@@ -11,6 +11,8 @@ import {
   parseRoster,
   resolveAssumptions,
   rosterUnits,
+  withDeploy,
+  withDeployRole,
   withRuleOut,
   withRun,
   withSavedPlan,
@@ -50,6 +52,8 @@ const settings: PlanSettings = {
 };
 
 const RUN = { ...EMPTY_ROSTER.run, gender: 'M', asset: 'spd', flaw: 'hp' } as const;
+/** The run facts alone. */
+const BARE: Roster = { ...EMPTY_ROSTER, run: RUN };
 
 /** A roster where every unit but `keep` is benched: small enough to brute-force. */
 function small(keep: readonly RosterUnit[], run: Roster['run'] = RUN): Roster {
@@ -86,7 +90,7 @@ function bruteForce(roster: Roster, keep: readonly RosterUnit[], s: PlanSettings
   for (const marriages of matchings(units, partners)) {
     for (const asset of assets) {
       for (const flaw of flaws(asset)) {
-        const plan = engine.evaluatePlan({ robin: { gender, asset, flaw }, marriages }, roster.run, s);
+        const plan = engine.evaluatePlan({ robin: { gender, asset, flaw }, marriages }, roster, s);
         best = Math.max(best, plan.total);
       }
     }
@@ -261,8 +265,8 @@ describe('the saved plan', () => {
   };
 
   it('diffs Σ, children left out, spouse moves and score changes', () => {
-    const before = engine.evaluatePlan(saved, RUN, settings);
-    const after = engine.evaluatePlan({ ...saved, marriages: [['stahl', 'tharja'], ['chrom', 'sumia'], ['frederick', 'lissa']] }, RUN, settings);
+    const before = engine.evaluatePlan(saved, BARE, settings);
+    const after = engine.evaluatePlan({ ...saved, marriages: [['stahl', 'tharja'], ['chrom', 'sumia'], ['frederick', 'lissa']] }, BARE, settings);
     const diff = diffPlans(before, after);
     expect(diff.before).toBe(before.total);
     expect(diff.after).toBe(after.total);
@@ -286,7 +290,7 @@ describe('the saved plan', () => {
     let roster = withSavedPlan({ ...EMPTY_ROSTER, run: RUN }, saved);
     for (const [a, b] of saved.marriages) roster = withSpouse(roster, a, b, 'pinned');
     roster = withState(roster, 'olivia', 'dead');
-    const before = engine.evaluatePlan(saved, roster.run, settings);
+    const before = engine.evaluatePlan(saved, roster, settings);
     expect(before.marriages.find((m) => m.wife === 'olivia')!.children.map((c) => c.key)).toEqual(['inigo|stahl']);
     const after = engine.plan(roster, settings);
     expect(after.lostPins).toEqual([{ couple: ['stahl', 'olivia'], status: 'broken', reason: 'Olivia is dead' }]);
@@ -314,6 +318,31 @@ describe('the saved plan', () => {
     expect(parsed.ruleOuts).toEqual([['chrom', 'sumia']]);
     expect(parsed.savedPlan).toEqual({ robin: null, marriages: [['stahl', 'olivia']] });
     expect(parseRoster({ savedPlan: 'nope' }).savedPlan).toBeNull();
+  });
+
+  it('matches the plan it was just adopted from, each child in the roster’s plan preset', () => {
+    // Army fit here reads the benched children and the deployed first-gen: a roster with only the run facts would put
+    // Lucina and Inigo in Rallybot and the benched children in Battery.
+    let roster = withRun(EMPTY_ROSTER, { gender: 'F', asset: 'str', flaw: 'def', difficulty: 'lunatic', mode: 'classic', route: 'full-route' });
+    roster = withSpouse(roster, 'robin', 'yarne', 'pinned');
+    for (const u of ['maribelle', 'libra'] as const) roster = withDeploy(roster, u, true);
+    for (const u of ['robin', 'chrom'] as const) roster = withDeployRole(roster, u, 'battery');
+    for (const c of ['owain', 'inigo', 'kjelle', 'cynthia'] as const) roster = withState(roster, c, 'benched');
+    const s: PlanSettings = {
+      ...settings,
+      context: 'full-route',
+      quotas: quotasFor('full-route'),
+      priorities: { 'morgan-m': 3, gerome: 3, yarne: 3, laurent: 3, noire: 3, brady: 2 },
+      overrides: { brady: 'staffbot' },
+      roleOverrides: { gerome: 'lead', yarne: 'lead' },
+    };
+    const adopted = adoptPlan(roster, engine.plan(roster, s));
+    const before = engine.evaluatePlan(adopted.savedPlan!, adopted, s);
+    const after = engine.plan(adopted, s);
+    const scores = (p: MarriagePlan) => Object.fromEntries(p.marriages.flatMap((m) => m.children.map((c) => [c.child, [c.preset, c.score]])));
+    expect(scores(before)).toEqual(scores(after));
+    expect(before.total).toBe(after.total);
+    expect(diffPlans(before, after).same).toBe(true);
   });
 });
 
@@ -455,9 +484,9 @@ describe('re-plan: can’t be born vs left out (#58)', () => {
   /** Adopt Lon'qu × Olivia and Stahl × Tharja, then mark Lon'qu married to Cordelia: Stahl is the one husband left. */
   function repro(): Roster {
     const roster = small(['lonqu', 'stahl', 'olivia', 'tharja', 'cordelia']);
-    return withSpouse(adoptPlan(roster, engine.evaluatePlan(saved, RUN, s)), 'lonqu', 'cordelia', 'married');
+    return withSpouse(adoptPlan(roster, engine.evaluatePlan(saved, roster, s)), 'lonqu', 'cordelia', 'married');
   }
-  const replan = (roster: Roster, free = false) => diffPlans(engine.evaluatePlan(saved, RUN, s), engine.plan(roster, s, { free }));
+  const replan = (roster: Roster, free = false) => diffPlans(engine.evaluatePlan(saved, roster, s), engine.plan(roster, s, { free }));
 
   it('reports Inigo as left out with no score, not as can’t be born', () => {
     const diff = replan(repro());
@@ -475,7 +504,7 @@ describe('re-plan: can’t be born vs left out (#58)', () => {
   it('reports a child whose every pairing is gone as can’t be born', () => {
     const saved: SavedPlan = { robin: null, marriages: [['stahl', 'olivia']] };
     const roster = withState(withSavedPlan({ ...EMPTY_ROSTER, run: RUN }, saved), 'olivia', 'dead');
-    const diff = diffPlans(engine.evaluatePlan(saved, RUN, settings), engine.plan(roster, settings));
+    const diff = diffPlans(engine.evaluatePlan(saved, roster, settings), engine.plan(roster, settings));
     expect(diff.unborn.map((c) => c.child)).toEqual(['inigo']);
     expect(diff.leftOut).toEqual([]);
     expect(engine.plan(roster, settings).unborn).toContain('inigo');
