@@ -377,6 +377,12 @@ describe('children ledger', () => {
     expect(engine.ledger(withState(benched, 'olivia', 'available'), settings).find((e) => e.child === 'inigo')!.status).toBe('pinned');
   });
 
+  it('shows a benched child whose parents are pinned as pinned, and the same on un-bench', () => {
+    const benched = withState(roster, 'inigo', 'benched');
+    expect(engine.ledger(benched, settings).find((e) => e.child === 'inigo')!.status).toBe('pinned');
+    expect(engine.ledger(withState(benched, 'inigo', 'available'), settings).find((e) => e.child === 'inigo')!.status).toBe('pinned');
+  });
+
   it('shows a child whose pin is broken as plan broken, without a saved plan', () => {
     const pinned = withState(withSpouse({ ...EMPTY_ROSTER, run: RUN }, 'stahl', 'olivia', 'pinned'), 'stahl', 'dead');
     expect(engine.ledger(pinned, settings).find((e) => e.child === 'inigo')!.status).toBe('broken');

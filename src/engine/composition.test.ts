@@ -105,7 +105,7 @@ describe('composition counts', () => {
 
   it('leave out benched, missed and dead units', () => {
     const base = counts(ROSTER);
-    // Benched Lucina is still planned (soft) but isn't deployed; a benched Chrom isn't either.
+    // Benched Lucina is still planned but isn't deployed; a benched Chrom isn't either.
     expect(counts(withState(ROSTER, 'lucina', 'benched')).lead).toBe(base.lead - 1);
     expect(counts(withState(ROSTER, 'olivia', 'dead')).dancer).toBe(0);
     expect(counts(withState(withDeploy(ROSTER, 'lissa', true), 'lissa', 'missed')).staff).toBe(0);

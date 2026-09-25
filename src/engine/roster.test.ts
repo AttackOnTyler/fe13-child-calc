@@ -45,6 +45,14 @@ describe('blocked pairings: unit states', () => {
     });
   });
 
+  it('never soft-blocks a pairing through its own child’s bench, only a parent’s', () => {
+    expect(blocking('owain|vaike', withState(EMPTY_ROSTER, 'owain', 'benched'))).toMatchObject({ status: 'open', hard: [], soft: [] });
+    const pinned = withState(withSpouse(EMPTY_ROSTER, 'lissa', 'vaike', 'pinned'), 'owain', 'benched');
+    expect(blocking('owain|vaike', pinned)).toMatchObject({ status: 'pinned', soft: [] });
+    // Morgan (F) × Lucina: Lucina is a parent here, so her bench still soft-blocks.
+    expect(blocking('morgan-f|robin:spd/hp|lucina<sumia', withState(EMPTY_ROSTER, 'lucina', 'benched')).soft).toEqual(['Lucina is benched']);
+  });
+
   it('prunes nothing for a unit not yet recruited', () => {
     expect(blocking('owain|vaike', withState(EMPTY_ROSTER, 'vaike', 'not-recruited'))).toMatchObject({ status: 'open', hard: [], soft: [] });
   });
