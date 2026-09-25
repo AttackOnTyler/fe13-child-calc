@@ -45,6 +45,7 @@ import {
   type SelfTestReport,
   type SkillCard,
   type PageSubject,
+  type Difficulty,
   type Pairing,
   type PageUnitId,
   type RobinRef,
@@ -91,6 +92,7 @@ import {
 import { validationPanel, withOverride } from './validation';
 import { rosterPage } from './roster-page';
 import { unitsView, type UnitsContext } from './unit-page';
+import { mapsView } from './maps-page';
 import { CHILD_UNITS } from '../game-data/children';
 import { unitLink, type OpenUnit } from './unit-links';
 import { clearRoster, loadRoster, saveRoster } from './roster-store';
@@ -139,13 +141,17 @@ let selected: ChildId | 'all' = 'lucina';
 /** The last child the visitor opened from the left rail, which the guide's table jumps show again. */
 let childOpened: ChildId | undefined;
 /** A new visitor starts on Roster, under the welcome box: setup comes first. */
-type View = 'table' | 'validation' | 'roster' | 'plan' | 'units';
+type View = 'table' | 'validation' | 'roster' | 'plan' | 'units' | 'run';
 let view: View = !selfTest.passed ? 'validation' : welcomeOpen ? 'roster' : 'table';
 /** The Units view's open unit page (#101); undefined shows the list. */
 let unitOpen: PageUnitId | 'robin' | ChildId | undefined;
 /** Robin's page preview (#103): page state only, never written to the Run facts. */
 let robinPreview: RobinRef = { kind: 'robin', gender: 'M', asset: 'mag', flaw: 'str' };
 /** Where a unit page's back link returns: the view (and unit page) it was opened from, and its scroll. */
+/** The Run view's open map (#109); undefined shows the Maps list. */
+let mapOpen: string | undefined;
+/** A difficulty picked on the Maps view (view state); otherwise it shows the run's, else Normal. */
+let mapDifficulty: Difficulty | undefined;
 /** A unit page's Partners show every row (view state). */
 let allPartners = false;
 let unitBack: { view: View; unit: PageUnitId | 'robin' | ChildId | undefined; scroll: number } | undefined;
@@ -370,7 +376,7 @@ function openUnit(unit: PageUnitId | 'robin' | ChildId, preview?: RobinRef): voi
   renderParts(['rail', 'main', 'panel']);
 }
 
-const VIEW_LABELS: Readonly<Record<View, string>> = { table: 'Pairings', validation: 'Validation', roster: LABELS.roster, plan: LABELS.plan, units: 'Units' };
+const VIEW_LABELS: Readonly<Record<View, string>> = { table: 'Pairings', validation: 'Validation', roster: LABELS.roster, plan: LABELS.plan, units: 'Units', run: 'Run' };
 
 const unitsContext = (): UnitsContext => ({
   engine,
@@ -664,6 +670,20 @@ function rail(): HTMLElement[] {
         },
       },
       h('span', {}, 'Units'),
+    ),
+    h(
+      'button',
+      {
+        ...guide('run-rail'),
+        class: `rail-item roster-item${view === 'run' ? ' on' : ''}`,
+        title: 'Your run, map by map: every map’s chapter data',
+        onclick: () => {
+          view = 'run';
+          mapOpen = undefined;
+          render();
+        },
+      },
+      h('span', {}, 'Run'),
     ),
     h('div', { class: 'muted small rail-head' }, `Best · ${presetLabel(presetOf(prefs))}`),
     item('all', LABELS.allChildren, 'Leaderboard of every child’s pairings', top.length ? Math.max(...top) : undefined),
@@ -2243,7 +2263,11 @@ const guideContext = (): GuideContext => ({
     let shown: string | undefined;
     if (jump.to === 'leaderboard') showTable('all');
     else if (jump.to === 'validation') view = 'validation';
-    else if (jump.to === 'unit' || jump.to === 'robin' || jump.to === 'door') {
+    else if (jump.to === 'map') {
+      view = 'run';
+      mapOpen = 'prologue';
+      shown = 'the Prologue';
+    } else if (jump.to === 'unit' || jump.to === 'robin' || jump.to === 'door') {
       unitBack = { view, unit: undefined, scroll: mainScroll() };
       view = 'units';
       if (jump.to === 'door') {
@@ -2314,6 +2338,21 @@ function renderParts(parts: readonly Part[]): void {
           ? planPage(planContext())
           : view === 'units'
           ? unitsView(unitsContext())
+          : view === 'run'
+          ? mapsView({
+              engine,
+              map: mapOpen,
+              open: (id) => {
+                mapOpen = id;
+                renderParts(['main']);
+              },
+              difficulty: mapDifficulty ?? roster.run.difficulty ?? 'normal',
+              // Another difficulty here only changes what the view shows, never the run's.
+              setDifficulty: (d) => {
+                mapDifficulty = d;
+                renderParts(['main']);
+              },
+            })
           : selected === 'all'
           ? leaderboard()
           : childTable(selected)),

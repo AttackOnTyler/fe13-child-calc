@@ -1,0 +1,53 @@
+import { describe, expect, it } from 'vitest';
+import { FIRST_GEN_UNITS } from '../game-data/units';
+import { CHAPTER_DIFFICULTIES, createEngine } from './index';
+
+const engine = createEngine();
+const maps = engine.maps();
+const byId = new Map(maps.map((m) => [m.id, m]));
+const names = new Set<string>(['Robin', ...Object.values(FIRST_GEN_UNITS).map((u) => u.name)]);
+const MAP_ID = /^(premonition|prologue|endgame|chapter-\d+|paralogue-\d+|[a-z0-9-]+)$/;
+
+describe('chapter data (consistency)', () => {
+  it('has Premonition, the Prologue and Chapters 1–6 in order', () => {
+    expect(maps.slice(0, 8).map((m) => m.id)).toEqual(['premonition', 'prologue', 'chapter-1', 'chapter-2', 'chapter-3', 'chapter-4', 'chapter-5', 'chapter-6']);
+  });
+
+  it('gives every map its conditions, enemies and boss on Normal, Hard and Lunatic, cited by oldid', () => {
+    for (const m of maps) {
+      expect(m.source.oldid, m.id).toBeGreaterThan(0);
+      for (const d of CHAPTER_DIFFICULTIES) {
+        expect(m.conditions[d]?.victory, `${m.id} ${d}`).toBeTruthy();
+        expect(m.conditions[d]?.deploy, `${m.id} ${d}`).toBeTruthy();
+        expect(m.enemies[d]?.length, `${m.id} ${d}`).toBeGreaterThan(0);
+        expect(m.bosses[d]?.every((b) => b.name), `${m.id} ${d}`).toBe(true);
+      }
+    }
+  });
+
+  it('prints the Lunatic+ pool the rule gives: four skills before Chapter 3, all seven from it', () => {
+    for (const m of maps.filter((x) => x.lunaticPlusPool.length)) expect([...m.lunaticPlusPool].sort(), m.id).toEqual([...engine.lunaticPlusPool(m)].sort());
+    expect(engine.lunaticPlusPool(byId.get('chapter-2')!)).not.toContain('Counter');
+    expect(engine.lunaticPlusPool(byId.get('chapter-3')!)).toContain('Pavise+');
+  });
+
+  it('recruits only known units, and names only well-formed maps it unlocks', () => {
+    for (const m of maps) {
+      for (const r of m.recruits) expect(names.has(r.unit), `${m.id}: ${r.unit}`).toBe(true);
+      for (const u of m.unlocks) expect(u, m.id).toMatch(MAP_ID);
+    }
+    expect(byId.get('chapter-3')!.recruits.map((r) => r.unit)).toEqual(['Sumia', 'Kellam']);
+  });
+
+  it('keeps FEW’s facts: Chapter 5’s Hard-only reinforcements, Chapter 1’s shop and Orton’s drop', () => {
+    const c5 = byId.get('chapter-5')!;
+    expect(c5.reinforcements).toContain('Turn 4 (Hard/Lunatic only)');
+    expect(c5.bosses.lunatic![0]).toMatchObject({ name: 'Orton', class: 'Wyvern Rider', level: '9', skills: ['Tantivy'] });
+    expect(c5.bosses.lunatic![0]!.items).toContainEqual({ name: 'Bullion (M)', drop: true });
+    expect(byId.get('chapter-1')!.shop).toMatchObject({ opensAfter: 'chapter 3', location: 'West of Ylisstol' });
+  });
+
+  it('records disagreements against loaded maps', () => {
+    for (const d of engine.chapterDisagreements()) expect(byId.has(d.map), d.id).toBe(true);
+  });
+});

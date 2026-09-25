@@ -6,14 +6,14 @@ import { DEFAULT_PRIORITY, type ChildId } from '../engine';
 import type { GuideTarget } from './guide';
 import { BASIS_LABELS, LABELS, ROLE_UI } from './labels';
 
-export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners' | 'robin-preview' | 'front-door-pairings' | 'unit-opinion';
+export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners' | 'robin-preview' | 'front-door-pairings' | 'unit-opinion' | 'map-data';
 
 /**
  * Where an entry's jump goes: the All children leaderboard, a child's table (the one `guideChild` picks, with its Robin
  * row open for `robinRow`), the Validation panel, the Scoring sidebar on the current view, or Lon'qu's unit page. Then it highlights `target`.
  */
 export type DeeperJump = {
-  readonly to: 'leaderboard' | 'child' | 'validation' | 'scoring' | 'unit' | 'robin' | 'door';
+  readonly to: 'leaderboard' | 'child' | 'validation' | 'scoring' | 'unit' | 'robin' | 'door' | 'map';
   readonly target: GuideTarget;
   readonly robinRow?: true;
 };
@@ -194,6 +194,18 @@ export const DEEPER: readonly DeeperEntry[] = [
       { term: 'unit opinion', def: 'What a named source says about one unit in a play context. Shown beside the app’s scores, never scored.' },
       { term: 'provenance', def: 'How a source reached the app and how far to trust it. Hover the source link.' },
     ],
+  },
+  {
+    id: 'map-data',
+    question: 'What am I facing on this map?',
+    answer: [
+      'Run in the rail lists every map; each shows its chapter data on your difficulty (or one you pick to look ahead).',
+      'Win and lose conditions, deploy count, forced units and recruits; the boss; every enemy group with its items, skills and what sets it moving; reinforcements; items, and the shop.',
+      'On Normal, reinforcements arrive before your phase. On Hard and up they arrive at the start of enemy phase and can act at once.',
+      'Lunatic+ is Lunatic with two extra random skills per enemy, from Pass, Hawkeye, Luna+, Vantage+, Counter, Aegis+ and Pavise+ (no Counter, Aegis+ or Pavise+ before Chapter 3).',
+    ],
+    jump: { to: 'map', target: 'map-data' },
+    terms: [{ term: 'chapter data', def: 'A map’s cited facts on every difficulty, from Fire Emblem Wiki, cross-checked against Serenes Forest.' }],
   },
 ];
 

@@ -172,6 +172,14 @@ _Avoid_: Role (alone), natural role
 
 ### Planning
 
+**Chapter data**:
+A map's cited facts on every difficulty: win and lose conditions, deploy count, forced units, recruits, bosses, enemy groups with their movement triggers, reinforcements, items and shops. From Fire Emblem Wiki at a fixed revision, cross-checked against Serenes Forest. Game data, not opinion.
+_Avoid_: Walkthrough, map guide
+
+**Lunatic+ rule**:
+Lunatic+ is Lunatic plus two random skills per enemy from Pass, Hawkeye, Luna+, Vantage+, Counter, Aegis+ and Pavise+ (the last three not before Chapter 3). A rule, not separate enemy data.
+_Avoid_: Lunatic+ enemy table
+
 **Run facts**:
 Facts fixed at the start of a playthrough: Robin's gender, asset and flaw, the **difficulty** (Normal, Hard, Lunatic, Lunatic+), the **mode** (Classic, Casual) and the **route** (Main story, or Full route with the non-grind xenologues and Apotheosis). Play context defaults from the route; changing the play context never changes them.
 _Avoid_: Settings, run config

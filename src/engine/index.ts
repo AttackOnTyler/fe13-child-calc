@@ -40,6 +40,7 @@ import type { BuildTemplate } from '../curated/builds';
 import { skillCard } from './skill-card';
 import { unitPage, unitReach, type FrontDoor, type FrontDoorTile, type OpinionBlock, type OpinionMark, type PageSubject, type PageUnitId, type ParentedChild, type PartnerChild, type PartnerRow, type UnitPage } from './unit-page';
 import { SPOTPASS_UNITS } from '../game-data/join';
+import { CHAPTER_DISAGREEMENTS, MAPS, lunaticPlusPoolFor, type ChapterData, type ChapterDisagreement } from '../game-data/chapters';
 import { matchBuilds, matchTemplate, shownMatch, templateSummary, templatesFor } from './builds';
 import type { SkillId } from '../game-data/skills';
 import { createScorer } from './scoring';
@@ -96,6 +97,18 @@ export {
 } from './assumptions';
 export { DEFAULT_SPEED, RALLY_OPTIONS, TONIC_SPD } from './speed';
 export type { Citation } from '../game-data/citations';
+export {
+  CHAPTER_DIFFICULTIES,
+  LUNATIC_PLUS,
+  REINFORCEMENT_RULE,
+  SEAL_RULES,
+  type BossRow,
+  type ChapterData,
+  type ChapterDifficulty,
+  type ChapterDisagreement,
+  type EnemyGroup,
+  type MapConditions,
+} from '../game-data/chapters';
 export { SOURCES, SOURCE_IDS, type SourceEntry, type SourceId, type SourceKind, type SourceRef } from '../curated/sources';
 export type { ResolvedDisagreement } from '../game-data/disagreements';
 // Stat vocabulary, re-exported so the UI only talks to the engine.
@@ -135,6 +148,12 @@ export {
   type RosterUnit,
   type RunFacts,
   type UnitState,
+  DIFFICULTIES,
+  MODES,
+  ROUTES,
+  type Difficulty,
+  type Mode,
+  type Route,
 } from './roster';
 export type { PresetId, ScoringRole, Weights } from '../curated/presets';
 export { DEPLOYMENT_ROLES, type ChildDeploymentRole, type DeploymentRole, type DeploymentTag, type QuotaRange, type Quotas } from '../curated/deployment';
@@ -234,6 +253,12 @@ export type Engine = {
    * whether it can ever be inherited, synergy and conflict partners with reachability, and the builds that use it.
    */
   skillCard(result: ChildResult, id: SkillId, settings: SkillViewSettings): SkillCard;
+  /** Every map with chapter data, in Maps-list order (#109). */
+  maps(): readonly ChapterData[];
+  /** A map's Lunatic+ skill pool by the rule: the whole pool from Chapter 3, four skills before (#109). */
+  lunaticPlusPool(map: ChapterData): readonly string[];
+  /** FEW/SF disagreements in the chapter data, resolved or open. */
+  chapterDisagreements(): readonly ChapterDisagreement[];
   /** The first-gen units with a page (#101), in roster order, SpotPass last. Robin's page comes from the run facts. */
   pageUnits(): readonly { readonly id: PageUnitId; readonly name: string; readonly spotPass: boolean }[];
   /**
@@ -1256,6 +1281,9 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       return filteredCache.get(k);
     },
     skillCard: (r, id, settings) => skillCard(id, reachFor(r, settings), settings.context, builds(r, settings)),
+    maps: () => MAPS,
+    lunaticPlusPool: lunaticPlusPoolFor,
+    chapterDisagreements: () => CHAPTER_DISAGREEMENTS,
     pageUnits: () => {
       const units = (Object.keys(FIRST_GEN_UNITS) as UnitId[]).filter((u): u is PageUnitId => u !== 'maiden');
       const spot = new Set<string>(SPOTPASS_UNITS);
