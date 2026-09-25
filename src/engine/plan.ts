@@ -254,7 +254,7 @@ function savedRobin(run: Roster['run'], saved: SavedPlan): RobinRef {
   return robin;
 }
 
-/** Values a saved plan's marriages, each child in the deployment role it had when adopted. */
+/** Values a saved plan's marriages in the context's plan presets, each child in the deployment role it had when adopted. */
 export function evaluatePlan(ctx: PlanContext, saved: SavedPlan): MarriagePlan {
   const plan = evaluate(ctx, saved.marriages, savedRobin(ctx.roster.run, saved), { robinOpen: false, lostPins: [] });
   const roles = saved.deploymentRoles;

@@ -334,7 +334,7 @@ export function planPage(ctx: PlanPageContext): HTMLElement[] {
   const t0 = performance.now();
   const plan = engine.plan(roster, settings, { free: ctx.free });
   const other = engine.plan(roster, settings, { free: !ctx.free });
-  const before = roster.savedPlan ? engine.evaluatePlan(roster.savedPlan, roster.run, settings) : undefined;
+  const before = roster.savedPlan ? engine.evaluatePlan(roster.savedPlan, roster, settings) : undefined;
   const ms = Math.round(performance.now() - t0);
   const diff = before && diffPlans(before, plan);
   const saved = before && new Map(before.marriages.flatMap((m) => m.children.map((c) => [c.child, c] as const)));
