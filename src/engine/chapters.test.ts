@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { CHILD_UNITS } from '../game-data/children';
 import { FIRST_GEN_UNITS } from '../game-data/units';
 import { CHAPTER_DIFFICULTIES, createEngine } from './index';
 
 const engine = createEngine();
 const maps = engine.maps();
 const byId = new Map(maps.map((m) => [m.id, m]));
-const names = new Set<string>(['Robin', ...Object.values(FIRST_GEN_UNITS).map((u) => u.name)]);
+const names = new Set<string>(['Robin', ...Object.values(FIRST_GEN_UNITS).map((u) => u.name), ...Object.values(CHILD_UNITS).map((u) => u.name)]);
 const MAP_ID = /^(premonition|prologue|endgame|chapter-\d+|paralogue-\d+|[a-z0-9-]+)$/;
 
 describe('chapter data (consistency)', () => {
@@ -67,5 +68,14 @@ describe('Chapters 7–12 (#110)', () => {
     expect(byId.get('chapter-10')!.conditions.normal!.victory).toMatch(/Mustafa/);
     expect(byId.get('chapter-11')!.recruits.map((r) => r.unit)).toEqual(['Olivia']);
     expect(byId.get('chapter-12')!.recruits.map((r) => r.unit)).toEqual(['Cherche']);
+  });
+});
+
+describe('Chapters 13–19 (#111)', () => {
+  it('recruit Henry and Lucina in Chapter 13 and Say’ri in Chapter 15, and end on Walhart', () => {
+    expect(byId.get('chapter-13')!.recruits.map((r) => r.unit)).toEqual(['Henry', 'Lucina']);
+    expect(byId.get('chapter-15')!.recruits.map((r) => r.unit)).toEqual(["Say'ri"]);
+    expect(byId.get('chapter-19')!.conditions.lunatic!.victory).toMatch(/Walhart/);
+    expect(byId.get('chapter-13')!.unlocks).toEqual(['chapter-14', ...Array.from({ length: 12 }, (_, i) => `paralogue-${i + 5}`)]);
   });
 });

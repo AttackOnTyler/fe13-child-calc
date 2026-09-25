@@ -8,6 +8,7 @@
  */
 import { EARLY_MAPS } from './chapters/early';
 import { CHAPTERS_7_12 } from './chapters/ch07-12';
+import { CHAPTERS_13_19 } from './chapters/ch13-19';
 
 export type ChapterDifficulty = 'normal' | 'hard' | 'lunatic';
 export const CHAPTER_DIFFICULTIES: readonly ChapterDifficulty[] = ['normal', 'hard', 'lunatic'];
@@ -164,11 +165,19 @@ export const CHAPTER_DISAGREEMENTS: readonly ChapterDisagreement[] = [
     other: 'SF item locations: a chest',
     status: 'open',
     why: 'No third source was read. Check in game.',
+  },  {
+    id: 'C14',
+    map: 'chapter-18',
+    item: 'Killer Lance',
+    used: 'FEW: an enemy drop',
+    other: 'SF item locations: a chest',
+    status: 'open',
+    why: 'No third source was read. Check in game.',
   },
 ];
 
 /** Every map with chapter data, in Maps-list order. */
-export const MAPS: readonly ChapterData[] = [...EARLY_MAPS, ...CHAPTERS_7_12].sort((a, b) => a.order - b.order);
+export const MAPS: readonly ChapterData[] = [...EARLY_MAPS, ...CHAPTERS_7_12, ...CHAPTERS_13_19].sort((a, b) => a.order - b.order);
 
 export function mapOrder(id: string): number {
   const m = MAPS.find((x) => x.id === id);

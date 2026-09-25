@@ -1,0 +1,73 @@
+{
+ "__range": "Chapters 13–19",
+ "__ticket": "111",
+ "chapter-13": {
+  "kind": "story",
+  "order": 1400,
+  "label": "Chapter 13",
+  "unlocks": [
+   "chapter-14",
+   "paralogue-5",
+   "paralogue-6",
+   "paralogue-7",
+   "paralogue-8",
+   "paralogue-9",
+   "paralogue-10",
+   "paralogue-11",
+   "paralogue-12",
+   "paralogue-13",
+   "paralogue-14",
+   "paralogue-15",
+   "paralogue-16"
+  ]
+ },
+ "chapter-14": {
+  "kind": "story",
+  "order": 1500,
+  "label": "Chapter 14",
+  "unlocks": [
+   "chapter-15"
+  ]
+ },
+ "chapter-15": {
+  "kind": "story",
+  "order": 1600,
+  "label": "Chapter 15",
+  "unlocks": [
+   "chapter-16"
+  ]
+ },
+ "chapter-16": {
+  "kind": "story",
+  "order": 1700,
+  "label": "Chapter 16",
+  "unlocks": [
+   "chapter-17"
+  ]
+ },
+ "chapter-17": {
+  "kind": "story",
+  "order": 1800,
+  "label": "Chapter 17",
+  "unlocks": [
+   "chapter-18"
+  ]
+ },
+ "chapter-18": {
+  "kind": "story",
+  "order": 1900,
+  "label": "Chapter 18",
+  "unlocks": [
+   "chapter-19",
+   "paralogue-17"
+  ]
+ },
+ "chapter-19": {
+  "kind": "story",
+  "order": 2000,
+  "label": "Chapter 19",
+  "unlocks": [
+   "chapter-20"
+  ]
+ }
+}
