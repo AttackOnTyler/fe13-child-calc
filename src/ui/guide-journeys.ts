@@ -128,12 +128,13 @@ const FRESH: JourneyContent = {
     {
       view: 'plan',
       target: 'plan-preset',
-      where: `${plan} › plan preset`,
-      title: 'Override the plan presets you disagree with',
+      where: `${plan} › Roles › preset override`,
+      title: 'Pin the roles and presets you disagree with',
       takeaway:
         'A plan preset is how a child is judged (lead, support, tank, staff…), and it sets the child’s deployment letter. ' +
-        'derived is its best role against the cast, or where army fit moved it (marked, with the quota that forced it). ' +
-        'Pick a preset to override it; ↺ goes back to derived.',
+        'The Roles matrix shows where each child stands in every role: derived is its best role, or where army fit moved it ' +
+        '(marked, with the quota that forced it). Click a cell to pin a role (its preset stays derived), or pick a preset ' +
+        'in the menu to pin that; ↺ goes back to derived.',
       deeper: ['preset'],
     },
     {

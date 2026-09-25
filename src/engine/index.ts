@@ -237,6 +237,11 @@ export type Engine = {
   /** Every child's deployment role and plan preset after army fit, and where each comes from. */
   roles(roster: Roster, settings: PlanSettings): ReadonlyMap<ChildId, RoleAssignment>;
   /**
+   * The children who qualify for Staff/Rally: their planned pairing (their best Lead pairing when unplanned) reaches a
+   * staff class or a rally skill (#71).
+   */
+  staffQualified(roster: Roster, settings: PlanSettings): ReadonlySet<ChildId>;
+  /**
    * The marriage plan: max Σ priority × score, each child in its plan preset (Auto class), with marriages and pins
    * fixed, broken and on-hold pins dropped and rule-outs never planned. `free` ignores the pins.
    */
@@ -904,6 +909,14 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     plan: (roster, settings, options) => solvePlan(planContext(roster, settings), options?.free),
     deriveRoles: derivationFor,
     roles: rolesFor,
+    staffQualified: (roster, settings) => {
+      const plan = solvePlan(planContext(roster, settings));
+      const plannedKey = new Map(plan.marriages.flatMap((m) => m.children.map((c) => [c.child, c.key] as const)));
+      const out = new Set<ChildId>();
+      for (const d of derivationFor(roster, settings).roles)
+        if (qualifiesStaff(plannedKey.get(d.child) ?? d.bestPairing[d.rolePreset.lead], settings)) out.add(d.child);
+      return out;
+    },
     planPreset: (child, roster, settings) => rolesFor(roster, settings).get(child)?.preset ?? settings.overrides[child] ?? settings.preset,
     evaluatePlan: (saved, run, settings) => evaluatePlan(planContext(savedRoster(run), settings), saved),
     planKeys: (roster) =>

@@ -91,14 +91,14 @@ export const DEEPER: readonly DeeperEntry[] = [
   {
     id: 'preset',
     question: 'Which preset suits this child?',
-    answer: `Its plan preset is derived: the preset where it stands highest against the cast, in its best role. Switch the Scoring sidebar’s preset to compare its table under others, and override the plan preset on the ${plan} if you want a different build.`,
+    answer: `Its plan preset is derived: the preset where it stands highest against the cast, in its best role. Switch the Scoring sidebar’s preset to compare its table under others, and pin a role or preset on the ${plan}’s Roles matrix if you want a different build.`,
     jump: { to: 'child', target: 'scoring-preset' },
     terms: [
       {
         term: 'sidebar preset vs plan preset',
         def:
           `The Scoring sidebar’s preset is how the tables score, for every child at once. A plan preset is how the ${plan} judges ` +
-          `one child, and it sets the child’s ${ROLE_UI.lead.short}/${ROLE_UI.battery.short}/${ROLE_UI.staff.short} letter. Picking a sidebar preset never changes the plan.`,
+          `one child, and it sets the child’s ${ROLE_UI.lead.short}/${ROLE_UI.battery.short}/${ROLE_UI.staff.short} letter. A child’s table opens on its plan preset; picking a sidebar preset explores others and never changes the plan.`,
       },
     ],
   },

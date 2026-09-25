@@ -93,6 +93,7 @@ import {
   savePlanPrefs,
   withDeployEdited,
   withPlanPreset,
+  withRoleOverride,
   withPriority,
   withQuotas,
   type PlanPrefs,
@@ -313,6 +314,12 @@ const planControls = (): ChildPlanControls => ({
   settings: planSettings(),
   setPriority: (child, priority) => setPlanPrefs(withPriority(planPrefs, child, priority)),
   setPlanPreset: (child, preset) => setPlanPrefs(withPlanPreset(planPrefs, child, preset)),
+  setRoleOverride: (child, role) => setPlanPrefs(withRoleOverride(planPrefs, child, role)),
+  openRoles: () => {
+    view = 'plan';
+    render();
+    document.querySelector('[data-guide="role-matrix"]')?.scrollIntoView({ block: 'start' });
+  },
   presetLabel: (id: PresetId) => presetLabel(engine.presets().find((p) => p.id === id)!),
   quotas: quotasFor(prefs.context, planPrefs.quotas),
 });
@@ -438,11 +445,14 @@ function validationButton(report: SelfTestReport): HTMLElement {
 /** The children with a pairing in this run (the run facts remove the other Morgan), in rail order. */
 const childrenInRun = () => engine.children().filter((c) => engine.groups(c.id, { run: roster.run }).length > 0);
 
-/** Switches to a child's table or the leaderboard, with rows collapsed and no visit. */
+/**
+ * Switches to a child's table or the leaderboard, with rows collapsed. A child's table opens on its plan preset (#97):
+ * a visit, which the Scoring sidebar's preset ends to explore others — the plan never reads the table's preset.
+ */
 function showTable(id: ChildId | 'all'): void {
   selected = id;
   view = 'table';
-  visit = undefined;
+  visit = id === 'all' ? undefined : { child: id, preset: engine.planPreset(id, roster, planSettings()), key: '' };
   expanded.clear();
   openCards.clear();
   limit = FIRST_PAGE;

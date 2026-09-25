@@ -2,6 +2,8 @@ import {
   DEFAULT_PRIORITY,
   PLAN_PRIORITIES,
   STAT_LABELS,
+  CANDIDATE_PRESETS,
+  CHILD_DEPLOYMENT_ROLES,
   DEPLOYMENT_ROLES,
   adoptPlan,
   canPin,
@@ -13,6 +15,7 @@ import {
   unitName,
   withRuleOut,
   withSpouse,
+  type ChildDeploymentRole,
   type ChildId,
   type Composition,
   type Derivation,
@@ -26,6 +29,8 @@ import {
   type PlanSettings,
   type PlannedChild,
   type PresetId,
+  type RoleAssignment,
+  type RoleSource,
   type Quotas,
   type Roster,
   type RosterUnit,
@@ -41,8 +46,12 @@ export type ChildPlanControls = {
   readonly engine: Engine;
   readonly settings: PlanSettings;
   readonly setPriority: (child: ChildId, priority: number) => void;
-  /** Sets a child's plan preset; null resets it to the default. */
+  /** Sets a child's preset override; null returns it to derived. */
   readonly setPlanPreset: (child: ChildId, preset: PresetId | null) => void;
+  /** Sets a child's role override; null returns it to derived. */
+  readonly setRoleOverride: (child: ChildId, role: ChildDeploymentRole | null) => void;
+  /** Opens the Plan's role matrix, where roles and presets are set. */
+  readonly openRoles: () => void;
   /** A preset's name, with `*` when the user edited it. */
   readonly presetLabel: (id: PresetId) => string;
   /** The play context's composition quotas (the user's, else the curated seed). */
@@ -402,7 +411,7 @@ export function planPage(ctx: PlanPageContext): HTMLElement[] {
       )
     : null;
 
-  return [head, h('div', { class: 'scroll plan-view' }, ...notes, table, notBorn, ruleOuts)];
+  return [head, h('div', { class: 'scroll plan-view' }, ...notes, table, notBorn, ruleOuts, roleMatrix(ctx))];
 }
 
 /** A child's priority, 0–3. */
@@ -417,16 +426,20 @@ export function priorityControl(ctl: ChildPlanControls, id: ChildId, name: strin
   );
 }
 
+/** Staffbot scores as Lead but deploys as Staff/Rally (#71): it sits with Staff/Rally, override only. */
+const OVERRIDE_ONLY: readonly PresetId[] = ['staffbot'];
+
 /**
- * A child's plan preset: "derived (X)" — its best role's role preset, or where army fit moved it — or the user's preset
- * override, which holds in every play context; ↺ returns it to derived.
+ * A child's preset override: "derived (X)" — its role preset, where army fit may have moved it — or any preset the
+ * user pins, candidates by role and niche presets last; ↺ returns it to derived.
  */
 export function presetControl(ctl: ChildPlanControls, id: ChildId, name: string): HTMLElement {
   const { engine, settings } = ctl;
   const own = settings.overrides[id];
   const derived = engine.roles(ctl.roster, { ...settings, overrides: {} }).get(id);
   const fallback = derived?.preset ?? settings.preset;
-  const fit = !own && derived?.source === 'army fit' ? derived : undefined;
+  const candidates = new Set<PresetId>(CHILD_DEPLOYMENT_ROLES.flatMap((r) => CANDIDATE_PRESETS[r]));
+  const opt = (p: PresetId) => h('option', { value: p, selected: p === own }, ctl.presetLabel(p));
   return h(
     'span',
     { class: 'ppreset' },
@@ -434,19 +447,128 @@ export function presetControl(ctl: ChildPlanControls, id: ChildId, name: string)
       'select',
       {
         ...guide('plan-preset'),
-        'aria-label': `${name}: plan preset`,
-        title: own ? `Set: ${ctl.presetLabel(own)} in every play context (derived ${ctl.presetLabel(fallback)})` : 'Derived from where it stands against the cast',
+        'aria-label': `${name}: preset override`,
+        title: own
+          ? `Pinned: ${ctl.presetLabel(own)} in every play context (derived ${ctl.presetLabel(fallback)})`
+          : 'Derived from where it stands against the cast',
         onchange: (e) => ctl.setPlanPreset(id, ((e.target as HTMLSelectElement).value || null) as PresetId | null),
       },
       h('option', { value: '', selected: !own }, `derived (${ctl.presetLabel(fallback)})`),
-      ...engine.presets().map((p) => h('option', { value: p.id, selected: p.id === own }, ctl.presetLabel(p.id))),
+      ...CHILD_DEPLOYMENT_ROLES.map((r) =>
+        h('optgroup', { label: ROLE_UI[r].label }, ...[...CANDIDATE_PRESETS[r], ...(r === 'staff' ? OVERRIDE_ONLY : [])].map(opt)),
+      ),
+      h(
+        'optgroup',
+        { label: 'Niche (override only)' },
+        ...engine
+          .presets()
+          .map((p) => p.id)
+          .filter((p) => !candidates.has(p) && !OVERRIDE_ONLY.includes(p))
+          .map(opt),
+      ),
     ),
-    own
-      ? h('span', { class: 'chip set', title: 'Set by you: holds in every play context' }, 'set')
-      : fit
-        ? h('span', { class: 'chip suggested', title: `Moved by army fit: ${fit.reason}` }, 'army fit')
-        : null,
-    h('button', { ...guide('plan-preset-reset'), class: 'mini', disabled: !own, title: own ? 'Back to derived' : 'Derived', onclick: () => ctl.setPlanPreset(id, null) }, '↺'),
+    h(
+      'button',
+      { ...guide('plan-preset-reset'), class: 'mini', disabled: !own, title: own ? 'Back to derived' : 'Derived', onclick: () => ctl.setPlanPreset(id, null) },
+      '↺',
+    ),
+  );
+}
+
+const SOURCE_UI: Readonly<Record<RoleSource, { readonly label: string; readonly cls: string }>> = {
+  derived: { label: 'derived', cls: 'derived' },
+  'army fit': { label: 'army fit', cls: 'fit' },
+  'role override': { label: 'role pinned', cls: 'pinned' },
+  'preset override': { label: 'preset pinned', cls: 'pinned' },
+};
+
+/** Where a child's plan preset comes from, as a chip; army fit's says which quota moved it. */
+export function sourceChip(a: RoleAssignment | undefined): HTMLElement {
+  if (!a) return h('span', { class: 'chip src', title: 'Out of the cast: the global preset' }, 'global');
+  const ui = SOURCE_UI[a.source];
+  return h('span', { class: `chip src ${ui.cls}`, title: a.reason ? `Moved by army fit: ${a.reason}` : ui.label }, ui.label);
+}
+
+/**
+ * The role matrix (#97): a row per child, a column per deployment role. Each cell is the child's standing there, with
+ * its role preset; tags mark its best role, army fit's move and a pinned role. Clicking a cell pins that role (again
+ * unpins it); the row's menu pins a preset.
+ */
+function roleMatrix(ctx: PlanPageContext): HTMLElement {
+  const { engine, roster, settings } = ctx;
+  const derivation = engine.deriveRoles(roster, settings);
+  const derived = new Map(derivation.roles.map((r) => [r.child, r]));
+  const roles = engine.roles(roster, settings);
+  const qualified = engine.staffQualified(roster, settings);
+  const children = rosterUnits(roster.run).filter((u) => u.kind === 'child');
+  const comp = composition(roster, engine.plan(roster, settings, { free: ctx.free }), ctx.quotas);
+  const cell = (id: ChildId, role: ChildDeploymentRole) => {
+    const d = derived.get(id)!;
+    const a = roles.get(id);
+    const standing = Math.round(d.roleStanding[role] * 100);
+    const pinned = settings.roleOverrides[id] === role;
+    const disq = role === 'staff' && !qualified.has(id);
+    const on = a?.role === role;
+    return h(
+      'td',
+      {
+        class: `rm-cell${on ? ' on' : ''}${pinned ? ' pinned' : ''}${disq ? ' disq' : ''}`,
+        title: disq
+          ? 'Doesn’t reach a staff class or rally skill on its planned pairing: pinning it here warns'
+          : pinned
+            ? 'Pinned: click to unpin'
+            : `Click to pin ${ROLE_UI[role].label}`,
+        onclick: () => ctx.setRoleOverride(id, pinned ? null : role),
+      },
+      h('div', { class: 'rm-bar' }, h('i', { style: `width:${standing}%` })),
+      h('span', { class: 'num' }, String(standing)),
+      ' ',
+      h('span', { class: 'small' }, ctx.presetLabel(d.rolePreset[role])),
+      d.bestRole === role ? h('span', { class: 'tag' }, 'best') : null,
+      on && a?.source === 'army fit' ? h('span', { class: 'tag fit', title: a.reason ?? '' }, '← army fit') : null,
+      pinned ? h('span', { class: 'tag pinned' }, 'pinned') : null,
+      pinned && disq ? h('span', { class: 'tag warn' }, '⚠ doesn’t qualify') : null,
+    );
+  };
+  return h(
+    'section',
+    { ...guide('role-matrix'), class: 'role-matrix' },
+    h('div', { class: 'panel-head' }, h('h3', {}, 'Roles'), compositionStrip(comp)),
+    h('p', { class: 'muted small' }, 'Standing (0–100) against the cast in each deployment role. Click a cell to pin that role; the menu pins a preset.'),
+    h(
+      'table',
+      { class: 'grid rm' },
+      h(
+        'thead',
+        {},
+        h(
+          'tr',
+          {},
+          h('th', {}, 'Child'),
+          ...CHILD_DEPLOYMENT_ROLES.map((r) => h('th', {}, ROLE_UI[r].label)),
+          h('th', {}, 'Plan preset'),
+          h('th', {}, 'Preset override'),
+        ),
+      ),
+      h(
+        'tbody',
+        {},
+        ...children.map((u) => {
+          const id = u.id as ChildId;
+          const out = derivation.leftOut.get(id);
+          if (out) return h('tr', { class: 'out' }, h('td', {}, u.name), h('td', { colspan: '5', class: 'muted' }, OUT_OF_CAST[out]));
+          const a = roles.get(id);
+          return h(
+            'tr',
+            {},
+            h('td', {}, u.name),
+            ...CHILD_DEPLOYMENT_ROLES.map((r) => cell(id, r)),
+            h('td', {}, h('b', {}, ctx.presetLabel(engine.planPreset(id, roster, settings))), ' ', sourceChip(a)),
+            h('td', {}, presetControl(ctx, id, u.name)),
+          );
+        }),
+      ),
+    ),
   );
 }
 
@@ -494,7 +616,6 @@ export function planSidebar(ctx: PlanPageContext): HTMLElement {
         h('span', { class: 'pname' }, u.name, ' ', roleChip(ctx, id)),
         derivedLine(ctx, derived, id),
         priorityControl(ctx, id, u.name),
-        presetControl(ctx, id, u.name),
       );
     }),
   );

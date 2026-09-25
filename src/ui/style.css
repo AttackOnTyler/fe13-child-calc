@@ -438,3 +438,22 @@ button.gd-deeper-head:hover { background: var(--hover); }
   /* The open Scoring sheet has the screen: the pill waits for it to close (? Guide still opens the dock). */
   .shell:has(.panel.open) ~ .guide-layer .gd-pillbox { display: none; }
 }
+
+/* Role matrix (#97) */
+.role-matrix { margin-top: 16px; }
+.role-matrix .panel-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.rm td, .rm th { vertical-align: top; }
+.rm-cell { cursor: pointer; min-width: 150px; }
+.rm-cell:hover { background: var(--hover, rgba(127, 127, 127, 0.12)); }
+.rm-cell.on { box-shadow: inset 3px 0 0 var(--accent, #7fb4ff); }
+.rm-cell.pinned { outline: 1px dashed var(--accent, #7fb4ff); outline-offset: -2px; }
+.rm-cell.disq { opacity: 0.55; }
+.rm-bar { height: 4px; background: var(--line); border-radius: 2px; margin-bottom: 2px; }
+.rm-bar i { display: block; height: 100%; background: var(--accent, #7fb4ff); border-radius: 2px; }
+.rm .tag { font-size: 11px; margin-left: 4px; color: var(--muted); }
+.rm .tag.fit { color: var(--pos, #5fc48a); }
+.rm .tag.pinned { color: var(--accent, #7fb4ff); }
+.rm .tag.warn { color: var(--neg, #f0a35e); }
+.rm tr.out td { color: var(--muted); }
+.chip.src.fit { color: var(--pos, #5fc48a); }
+.chip.src.pinned { color: var(--accent, #7fb4ff); }

@@ -16,6 +16,7 @@ import {
   withSpouse,
   withState,
   type Bond,
+  type ChildId,
   type DeployableUnit,
   type DeploymentRole,
   type Engine,
@@ -29,7 +30,7 @@ import {
 import { h } from './dom';
 import { guide } from './guide';
 import { LABELS, LEDGER_UI, LEFT_OUT_UI, PIN_LOSS_UI, ROLE_UI, STATE_UI } from './labels';
-import { compositionStrip, presetControl, priorityControl, roleChip, type ChildPlanControls } from './plan-page';
+import { compositionStrip, priorityControl, roleChip, sourceChip, type ChildPlanControls } from './plan-page';
 import { spouseOptions } from './spouse-options';
 
 /** What the Roster page reads, and how it changes the roster. */
@@ -206,7 +207,21 @@ function ledgerRow(ctx: RosterContext, e: LedgerEntry): HTMLElement {
       e.notes.length ? h('span', { class: 'warn', title: e.notes.join('\n'), 'aria-label': e.notes.join('. ') }, ' ⚠') : null,
     ),
     h('td', {}, priorityControl(ctx.plan, e.child, e.name)),
-    h('td', {}, presetControl(ctx.plan, e.child, e.name)),
+    h('td', {}, planPresetCell(ctx.plan, e.child)),
+  );
+}
+
+/** A child's plan preset, read-only, and where it comes from; roles and presets are set on the Plan's role matrix. */
+function planPresetCell(ctl: ChildPlanControls, id: ChildId): HTMLElement {
+  const preset = ctl.engine.planPreset(id, ctl.roster, ctl.settings);
+  return h(
+    'span',
+    { class: 'ppreset' },
+    ctl.presetLabel(preset),
+    ' ',
+    sourceChip(ctl.engine.roles(ctl.roster, ctl.settings).get(id)),
+    ' ',
+    h('button', { class: 'mini', title: 'Set roles and presets on the Plan’s role matrix', onclick: ctl.openRoles }, 'Roles →'),
   );
 }
 
