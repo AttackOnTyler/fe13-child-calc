@@ -16,6 +16,8 @@ export const SF_CLASS_CAPS: Citation = { label: 'SF class max stats', url: 'http
 export const SF_CLASS_BASES: Citation = { label: 'SF class base stats', url: 'https://serenesforest.net/awakening/classes/base-stats/' };
 export const SF_CALCULATIONS: Citation = { label: 'SF calculations (doubling)', url: 'https://serenesforest.net/awakening/miscellaneous/calculations/' };
 export const SF_CHILDREN: Citation = { label: 'SF children', url: 'https://serenesforest.net/awakening/characters/children/' };
+export const SF_BASES: Citation = { label: 'SF base stats (main story)', url: 'https://serenesforest.net/awakening/characters/base-stats/main-story/' };
+export const SF_RECRUITMENT: Citation = { label: 'SF recruitment (main story)', url: 'https://serenesforest.net/awakening/characters/recruitment/main-story/' };
 
 export const FEW_GROWTH_MODULE: Citation = {
   label: 'FEW Module:CharGrowths/FE13',
@@ -30,6 +32,11 @@ export const FEW_INHERITANCE: Citation = { label: 'FEW Inheritance', url: 'https
 export const FEW_CONQUEROR: Citation = { label: 'FEW Conqueror', url: 'https://fireemblemwiki.org/wiki/Conqueror' };
 export const FEW_WALHART: Citation = { label: 'FEW Walhart', url: 'https://fireemblemwiki.org/w/index.php?title=Walhart&oldid=765770' };
 export const FEW_FLAVIA: Citation = { label: 'FEW Flavia', url: 'https://fireemblemwiki.org/wiki/Flavia' };
+export const FEW_OLIVIA: Citation = { label: 'FEW Olivia', url: 'https://fireemblemwiki.org/wiki/Olivia' };
+export const FEW_AVERSA: Citation = { label: 'FEW Aversa', url: 'https://fireemblemwiki.org/wiki/Aversa' };
+export const FEW_PARALOGUE_22: Citation = { label: 'FEW Paralogue 22 (NPC Aversa)', url: 'https://fireemblemwiki.org/wiki/Paralogue_22_(Awakening)' };
+export const FANDOM_OLIVIA: Citation = { label: 'Fandom Olivia', url: 'https://fireemblem.fandom.com/wiki/Olivia' };
+export const FANDOM_AVERSA: Citation = { label: 'Fandom Aversa', url: 'https://fireemblem.fandom.com/wiki/Aversa' };
 export const FEW_LUCINA_STATS: Citation = { label: 'FEW Lucina/Stats', url: 'https://fireemblemwiki.org/wiki/Lucina/Stats?oldid=746071' };
 export const FEW_KJELLE_STATS: Citation = { label: 'FEW Kjelle/Stats', url: 'https://fireemblemwiki.org/wiki/Kjelle/Stats' };
 export const FEW_LORD: Citation = { label: 'FEW Lord', url: 'https://fireemblemwiki.org/wiki/Lord' };

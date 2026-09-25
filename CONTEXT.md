@@ -67,6 +67,14 @@ _Avoid_: Hybrid run, DLC run
 A curated 5-slot skill loadout for one role, tagged with the play contexts it suits. Each slot is a fixed skill or an ordered preference group. Matched against a pairing's reachable skills to produce a coverage tier (5/5, 4/5, 3/5).
 _Avoid_: Build (alone, when the template is meant), preset (a preset weights stats)
 
+**Join data**:
+When and how a first-gen unit or Robin joins (chapter or paralogue, recruit condition), its join class and level, and its base stats per difficulty.
+_Avoid_: Recruitment info, bases (alone)
+
+**Starting skill**:
+A skill a unit already has when it joins. A unit keeps every skill it learns, so a starting skill stays reachable even when its class set can't teach it (Walhart's Conquest, Priam's Luna).
+_Avoid_: Personal skill (only Conquest and Shadowgift are personal)
+
 **Source registry**:
 The list of named sources curated data cites, each with an ID (S1, S2…), a name, a kind (reference, guide, FAQ, blog, crowd-sourced, video creator), a link and its provenance. Build templates, synergies and conflicts cite it by ID; the app shows the name.
 _Avoid_: References, bibliography
