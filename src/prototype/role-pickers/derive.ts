@@ -148,11 +148,11 @@ export function derive(s: State): { rows: Derived[]; counts: Record<ChildDeploym
   return { rows, counts, quotas: q, overCap };
 }
 
-export function topPairings(child: ChildId, preset: PresetId, s: State, n = 5) {
+export function topPairings(child: ChildId, preset: PresetId, s: State, n = 5, anyRobin = false) {
   const sc = scoringFor(preset);
   return engine
     .pairings(child)
-    .filter((r) => robinOk(r, s.robin, s.leaveOut))
+    .filter((r) => (anyRobin ? true : robinOk(r, s.robin, s.leaveOut)))
     .map((r) => ({ label: `${engine.parentName(r.pairing.variableParent)}${engine.robinLabel(r.pairing) ? ` ${engine.robinLabel(r.pairing)}` : ''}`, score: sc.get(r.key).score }))
     .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
     .slice(0, n);

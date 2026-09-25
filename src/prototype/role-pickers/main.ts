@@ -93,14 +93,26 @@ function variantB() {
       <div class="bar"><i style="width:${pct(st)}%"></i></div><div>${role === 'lead' ? esc(presetName(r.rolePreset.lead)) : role === 'battery' ? 'Battery' : 'Rallybot'} <small>${pct(st)}</small></div>
       ${best ? '<small class="tag">best</small>' : ''}${on && r.source === 'army fit' ? `<small class="tag af" title="${esc(r.fitReason ?? '')}">← army fit</small>` : ''}${pinned ? '<small class="tag ov">pinned</small>' : ''}</td>`;
   };
+  // Robin gain: the child's best score under its Lead role preset with Robin in the gene pool, minus without.
+  // With Robin set, only that Robin; unset, any Robin (so it answers "who gains most from Robin at all").
+  const gain = (r: Derived) => {
+    if (r.child.startsWith('morgan')) return '<small>—</small>';
+    const p = r.rolePreset.lead;
+    const without = topPairings(r.child, p, { ...s, leaveOut: true }, 1)[0];
+    const withR = topPairings(r.child, p, { ...s, leaveOut: false, robin: s.robin }, 1)[0];
+    const anyR = s.robin ? withR : topPairings(r.child, p, { ...s, leaveOut: false, robin: null }, 1, true)[0];
+    const w = anyR ?? withR;
+    const d = (w?.score ?? 0) - (without?.score ?? 0);
+    return `<b class="${d > 0 ? 'up' : ''}">${d > 0 ? '+' : ''}${d}</b> <small>${esc(without?.label ?? '')} ${without?.score ?? '—'} → ${esc(w?.label ?? '')} ${w?.score ?? '—'}</small>`;
+  };
   return `<div class="b"><div class="top">${compStrip(d)}${leaveOutSwitch()}</div>
-    <table class="m"><thead><tr><th>Child</th><th>Lead (standing, best lead preset)</th><th>Battery</th><th>Staff/Rally</th><th>Plan preset</th><th>Preset override</th></tr></thead><tbody>
+    <table class="m"><thead><tr><th>Child</th><th>Lead (standing, best lead preset)</th><th>Battery</th><th>Staff/Rally</th><th>Plan preset</th><th>Preset override</th><th title="Best score under the Lead role preset with Robin in the gene pool, minus without">Robin gain</th></tr></thead><tbody>
     ${d.rows
       .map((r) =>
         r.inCast
           ? `<tr><td>${esc(r.name)}<div><small>best pairing: ${esc(r.bestLeadPairing ?? '')}</small></div></td>${ROLES.map((x) => cell(r, x)).join('')}
-             <td><b>${esc(presetName(r.planPreset))}</b><div>${sourceChip(r)} ${warn(r)}</div></td><td>${presetPicker(r)}${reset(r)}</td></tr>`
-          : `<tr class="out"><td>${esc(r.name)}</td><td colspan="5"><i>${esc(r.why ?? '')}</i> ${r.why?.startsWith('needs') ? '<button data-act="set-robin">Set Robin</button>' : ''}</td></tr>`,
+             <td><b>${esc(presetName(r.planPreset))}</b><div>${sourceChip(r)} ${warn(r)}</div></td><td>${presetPicker(r)}${reset(r)}</td><td>${gain(r)}</td></tr>`
+          : `<tr class="out"><td>${esc(r.name)}</td><td colspan="6"><i>${esc(r.why ?? '')}</i> ${r.why?.startsWith('needs') ? '<button data-act="set-robin">Set Robin</button>' : ''}</td></tr>`,
       )
       .join('')}</tbody></table>
     <p class="note">Bars are standing (0–100) against the cast. Battery's spread is zero today, so every child derives Lead and army fit fills Battery from the lowest Lead standings.</p></div>`;

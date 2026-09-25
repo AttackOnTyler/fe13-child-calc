@@ -27,3 +27,4 @@ small { color: var(--dim); } .note { color: var(--dim); font-size: 12px; }
 .t { border-collapse: collapse; } .t td, .t th { border-bottom: 1px solid var(--line); padding: 3px 10px; text-align: left; }
 #switcher { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: center; background: #fff; color: #000; border-radius: 20px; padding: 6px 12px; box-shadow: 0 4px 16px #0008; font-weight: 600; }
 #switcher button { background: #000; color: #fff; border: 0; border-radius: 12px; }
+.up { color: var(--ok); }
