@@ -9,7 +9,7 @@ const none: GuideFacts = {
   deployEdited: false,
   prioritiesSet: false,
   robinLocked: false,
-  unitBenched: false,
+  childBenched: false,
   planAdopted: false,
   adoptedPlanHolds: false,
   unitLost: false,
@@ -50,10 +50,22 @@ describe('the Fresh run journey', () => {
     expect(ticks({ runSetUp: true })).toEqual(['run-setup']);
     expect(ticks({ contextChosen: true })).toEqual(['play-context']);
     expect(ticks({ deployEdited: true })).toEqual(['deploy']);
-    expect(ticks({ unitBenched: true })).toEqual(['bench']);
+    expect(ticks({ childBenched: true })).toEqual(['bench']);
     expect(ticks({ prioritiesSet: true })).toEqual(['priority']);
     expect(ticks({ planAdopted: true })).toEqual(['adopt']);
     expect(ticks({ robinLocked: true })).toEqual(['robin-lock']);
+  });
+
+  it('benches children only: a first-gen unit you won’t field unticks Deploy, since benching drops it from the plan', () => {
+    const bench = steps.find((s) => s.target === 'bench')!;
+    expect(bench.title).toMatch(/children/);
+    expect(bench.title).not.toMatch(/too/);
+    expect(bench.where).toContain('Children');
+    expect(bench.takeaway).toMatch(/first-gen unit you won’t field.*Deploy/);
+    expect(bench.takeaway).toMatch(/out of the marriage plan/);
+    // Only the children they're the fixed parent of drop out; a benched child can't be Robin's planned spouse.
+    expect(bench.takeaway).toMatch(/fixed parent/);
+    expect(bench.takeaway).toMatch(/benched child isn’t planned to marry Robin/);
   });
 });
 

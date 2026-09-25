@@ -63,7 +63,8 @@ function stateStrip(ctx: RosterContext, u: RosterEntry): HTMLElement {
       return h(
         'button',
         {
-          ...(st === 'benched' ? guide('bench') : {}),
+          // The guide's bench step is about children: a benched first-gen unit leaves the marriage plan (#127).
+          ...(st === 'benched' && u.kind === 'child' ? guide('bench') : {}),
           class: `st-${st}${st === current ? ' on' : ''}`,
           'aria-pressed': String(st === current),
           'aria-label': label,
