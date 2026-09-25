@@ -1,0 +1,534 @@
+[
+ {
+  "id": "premonition",
+  "kind": "story",
+  "label": "Premonition",
+  "page": "Invisible Ties (premonition)",
+  "oldid": 754697
+ },
+ {
+  "id": "prologue",
+  "kind": "story",
+  "label": "Prologue",
+  "page": "The Verge of History",
+  "oldid": 741973
+ },
+ {
+  "id": "chapter-1",
+  "kind": "story",
+  "label": "Chapter 1",
+  "page": "Unwelcome Change",
+  "oldid": 741770
+ },
+ {
+  "id": "chapter-2",
+  "kind": "story",
+  "label": "Chapter 2",
+  "page": "Shepherds (chapter)",
+  "oldid": 742135
+ },
+ {
+  "id": "chapter-3",
+  "kind": "story",
+  "label": "Chapter 3",
+  "page": "Warrior Realm",
+  "oldid": 741809
+ },
+ {
+  "id": "chapter-4",
+  "kind": "story",
+  "label": "Chapter 4",
+  "page": "Two Falchions",
+  "oldid": 693840
+ },
+ {
+  "id": "chapter-5",
+  "kind": "story",
+  "label": "Chapter 5",
+  "page": "The Exalt and the King",
+  "oldid": 741857
+ },
+ {
+  "id": "chapter-6",
+  "kind": "story",
+  "label": "Chapter 6",
+  "page": "Foreseer",
+  "oldid": 685293
+ },
+ {
+  "id": "chapter-7",
+  "kind": "story",
+  "label": "Chapter 7",
+  "page": "Incursion",
+  "oldid": 701948
+ },
+ {
+  "id": "chapter-8",
+  "kind": "story",
+  "label": "Chapter 8",
+  "page": "The Grimleal",
+  "oldid": 741956
+ },
+ {
+  "id": "chapter-9",
+  "kind": "story",
+  "label": "Chapter 9",
+  "page": "Emmeryn (chapter)",
+  "oldid": 742082
+ },
+ {
+  "id": "chapter-10",
+  "kind": "story",
+  "label": "Chapter 10",
+  "page": "Renewal (chapter)",
+  "oldid": 741819
+ },
+ {
+  "id": "chapter-11",
+  "kind": "story",
+  "label": "Chapter 11",
+  "page": "Mad King Gangrel",
+  "oldid": 742013
+ },
+ {
+  "id": "chapter-12",
+  "kind": "story",
+  "label": "Chapter 12",
+  "page": "The Seacomers",
+  "oldid": 754984
+ },
+ {
+  "id": "chapter-13",
+  "kind": "story",
+  "label": "Chapter 13",
+  "page": "Of Sacred Blood",
+  "oldid": 742107
+ },
+ {
+  "id": "chapter-14",
+  "kind": "story",
+  "label": "Chapter 14",
+  "page": "Flames on the Blue",
+  "oldid": 742076
+ },
+ {
+  "id": "chapter-15",
+  "kind": "story",
+  "label": "Chapter 15",
+  "page": "Smoldering Resistance",
+  "oldid": 742090
+ },
+ {
+  "id": "chapter-16",
+  "kind": "story",
+  "label": "Chapter 16",
+  "page": "Naga's Voice",
+  "oldid": 742218
+ },
+ {
+  "id": "chapter-17",
+  "kind": "story",
+  "label": "Chapter 17",
+  "page": "Inexorable Death",
+  "oldid": 742188
+ },
+ {
+  "id": "chapter-18",
+  "kind": "story",
+  "label": "Chapter 18",
+  "page": "Sibling Blades",
+  "oldid": 741909
+ },
+ {
+  "id": "chapter-19",
+  "kind": "story",
+  "label": "Chapter 19",
+  "page": "The Conqueror",
+  "oldid": 741914
+ },
+ {
+  "id": "chapter-20",
+  "kind": "story",
+  "label": "Chapter 20",
+  "page": "The Sword or the Knee",
+  "oldid": 742133
+ },
+ {
+  "id": "chapter-21",
+  "kind": "story",
+  "label": "Chapter 21",
+  "page": "Five Gemstones",
+  "oldid": 741929
+ },
+ {
+  "id": "chapter-22",
+  "kind": "story",
+  "label": "Chapter 22",
+  "page": "An Ill Presage",
+  "oldid": 703669
+ },
+ {
+  "id": "chapter-23",
+  "kind": "story",
+  "label": "Chapter 23",
+  "page": "Invisible Ties",
+  "oldid": 741846
+ },
+ {
+  "id": "chapter-24",
+  "kind": "story",
+  "label": "Chapter 24",
+  "page": "Awakening (chapter)",
+  "oldid": 742151
+ },
+ {
+  "id": "chapter-25",
+  "kind": "story",
+  "label": "Chapter 25",
+  "page": "To Slay a God",
+  "oldid": 685912
+ },
+ {
+  "id": "endgame",
+  "kind": "story",
+  "label": "Endgame",
+  "page": "Grima (chapter)",
+  "oldid": 741863
+ },
+ {
+  "id": "paralogue-1",
+  "kind": "paralogue",
+  "label": "Paralogue 1",
+  "page": "Sickle to Sword",
+  "oldid": 741974
+ },
+ {
+  "id": "paralogue-2",
+  "kind": "paralogue",
+  "label": "Paralogue 2",
+  "page": "The Secret Seller",
+  "oldid": 742033
+ },
+ {
+  "id": "paralogue-3",
+  "kind": "paralogue",
+  "label": "Paralogue 3",
+  "page": "A Strangled Peace",
+  "oldid": 742001
+ },
+ {
+  "id": "paralogue-4",
+  "kind": "paralogue",
+  "label": "Paralogue 4",
+  "page": "Anna the Merchant",
+  "oldid": 742193
+ },
+ {
+  "id": "paralogue-5",
+  "kind": "paralogue",
+  "label": "Paralogue 5",
+  "page": "Scion of Legend",
+  "oldid": 742102
+ },
+ {
+  "id": "paralogue-6",
+  "kind": "paralogue",
+  "label": "Paralogue 6",
+  "page": "A Man for Flowers",
+  "oldid": 742030
+ },
+ {
+  "id": "paralogue-7",
+  "kind": "paralogue",
+  "label": "Paralogue 7",
+  "page": "Noble Lineage",
+  "oldid": 769016
+ },
+ {
+  "id": "paralogue-8",
+  "kind": "paralogue",
+  "label": "Paralogue 8",
+  "page": "A Duel Disgraced",
+  "oldid": 742211
+ },
+ {
+  "id": "paralogue-9",
+  "kind": "paralogue",
+  "label": "Paralogue 9",
+  "page": "Wings of Justice",
+  "oldid": 742121
+ },
+ {
+  "id": "paralogue-10",
+  "kind": "paralogue",
+  "label": "Paralogue 10",
+  "page": "Ambivalence",
+  "oldid": 742184
+ },
+ {
+  "id": "paralogue-11",
+  "kind": "paralogue",
+  "label": "Paralogue 11",
+  "page": "Twin Wyverns",
+  "oldid": 769229
+ },
+ {
+  "id": "paralogue-12",
+  "kind": "paralogue",
+  "label": "Paralogue 12",
+  "page": "Disowned by Time",
+  "oldid": 741938
+ },
+ {
+  "id": "paralogue-13",
+  "kind": "paralogue",
+  "label": "Paralogue 13",
+  "page": "Rival Bands",
+  "oldid": 741913
+ },
+ {
+  "id": "paralogue-14",
+  "kind": "paralogue",
+  "label": "Paralogue 14",
+  "page": "Shadow in the Sands",
+  "oldid": 741822
+ },
+ {
+  "id": "paralogue-15",
+  "kind": "paralogue",
+  "label": "Paralogue 15",
+  "page": "A Shot from the Dark",
+  "oldid": 741793
+ },
+ {
+  "id": "paralogue-16",
+  "kind": "paralogue",
+  "label": "Paralogue 16",
+  "page": "Daughter to Dragons",
+  "oldid": 742094
+ },
+ {
+  "id": "paralogue-17",
+  "kind": "paralogue",
+  "label": "Paralogue 17",
+  "page": "The Threat of Silence",
+  "oldid": 742205
+ },
+ {
+  "id": "paralogue-18",
+  "kind": "paralogue",
+  "label": "Paralogue 18",
+  "page": "The Dead King's Lament",
+  "oldid": 741895
+ },
+ {
+  "id": "paralogue-19",
+  "kind": "paralogue",
+  "label": "Paralogue 19",
+  "page": "Irreconcilable Paths",
+  "oldid": 741858
+ },
+ {
+  "id": "paralogue-20",
+  "kind": "paralogue",
+  "label": "Paralogue 20",
+  "page": "A Hard Miracle",
+  "oldid": 742087
+ },
+ {
+  "id": "paralogue-21",
+  "kind": "paralogue",
+  "label": "Paralogue 21",
+  "page": "Ghost of a Blade",
+  "oldid": 741791
+ },
+ {
+  "id": "paralogue-22",
+  "kind": "paralogue",
+  "label": "Paralogue 22",
+  "page": "The Wellspring of Truth",
+  "oldid": 700134
+ },
+ {
+  "id": "paralogue-23",
+  "kind": "paralogue",
+  "label": "Paralogue 23",
+  "page": "The Radiant Hero (Awakening)",
+  "oldid": 747812
+ },
+ {
+  "id": "champions-of-yore-1",
+  "kind": "xenologue",
+  "label": "Champions of Yore 1",
+  "page": "Champions of Yore 1",
+  "oldid": 685221
+ },
+ {
+  "id": "champions-of-yore-2",
+  "kind": "xenologue",
+  "label": "Champions of Yore 2",
+  "page": "Champions of Yore 2",
+  "oldid": 685237
+ },
+ {
+  "id": "champions-of-yore-3",
+  "kind": "xenologue",
+  "label": "Champions of Yore 3",
+  "page": "Champions of Yore 3",
+  "oldid": 685408
+ },
+ {
+  "id": "lost-bloodlines-1",
+  "kind": "xenologue",
+  "label": "Lost Bloodlines 1",
+  "page": "Lost Bloodlines 1",
+  "oldid": 685829
+ },
+ {
+  "id": "lost-bloodlines-2",
+  "kind": "xenologue",
+  "label": "Lost Bloodlines 2",
+  "page": "Lost Bloodlines 2",
+  "oldid": 704475
+ },
+ {
+  "id": "lost-bloodlines-3",
+  "kind": "xenologue",
+  "label": "Lost Bloodlines 3",
+  "page": "Lost Bloodlines 3",
+  "oldid": 704473
+ },
+ {
+  "id": "smash-brethren-1",
+  "kind": "xenologue",
+  "label": "Smash Brethren 1",
+  "page": "Smash Brethren 1",
+  "oldid": 685763
+ },
+ {
+  "id": "smash-brethren-2",
+  "kind": "xenologue",
+  "label": "Smash Brethren 2",
+  "page": "Smash Brethren 2",
+  "oldid": 704471
+ },
+ {
+  "id": "smash-brethren-3",
+  "kind": "xenologue",
+  "label": "Smash Brethren 3",
+  "page": "Smash Brethren 3",
+  "oldid": 704472
+ },
+ {
+  "id": "rogues-redeemers-1",
+  "kind": "xenologue",
+  "label": "Rogues & Redeemers 1",
+  "page": "Rogues & Redeemers 1",
+  "oldid": 734383
+ },
+ {
+  "id": "rogues-redeemers-2",
+  "kind": "xenologue",
+  "label": "Rogues & Redeemers 2",
+  "page": "Rogues & Redeemers 2",
+  "oldid": 704474
+ },
+ {
+  "id": "rogues-redeemers-3",
+  "kind": "xenologue",
+  "label": "Rogues & Redeemers 3",
+  "page": "Rogues & Redeemers 3",
+  "oldid": 734389
+ },
+ {
+  "id": "the-golden-gaffe",
+  "kind": "xenologue",
+  "label": "The Golden Gaffe",
+  "page": "The Golden Gaffe",
+  "oldid": 685927
+ },
+ {
+  "id": "exponential-growth",
+  "kind": "xenologue",
+  "label": "EXPonential Growth",
+  "page": "EXPonential Growth",
+  "oldid": 704469
+ },
+ {
+  "id": "infinite-regalia",
+  "kind": "xenologue",
+  "label": "Infinite Regalia",
+  "page": "Infinite Regalia",
+  "oldid": 685352
+ },
+ {
+  "id": "harvest-scramble",
+  "kind": "xenologue",
+  "label": "Harvest Scramble",
+  "page": "Harvest Scramble",
+  "oldid": 685268
+ },
+ {
+  "id": "summer-scramble",
+  "kind": "xenologue",
+  "label": "Summer Scramble",
+  "page": "Summer Scramble",
+  "oldid": 698193
+ },
+ {
+  "id": "hot-spring-scramble",
+  "kind": "xenologue",
+  "label": "Hot-Spring Scramble",
+  "page": "Hot-Spring Scramble",
+  "oldid": 741812
+ },
+ {
+  "id": "death-s-embrace",
+  "kind": "xenologue",
+  "label": "Death's Embrace",
+  "page": "Death's Embrace",
+  "oldid": 685249
+ },
+ {
+  "id": "five-anna-firefight",
+  "kind": "xenologue",
+  "label": "Five-Anna Firefight",
+  "page": "Five-Anna Firefight",
+  "oldid": 698187
+ },
+ {
+  "id": "roster-rescue",
+  "kind": "xenologue",
+  "label": "Roster Rescue",
+  "page": "Roster Rescue",
+  "oldid": 754285
+ },
+ {
+  "id": "the-future-past-1",
+  "kind": "xenologue",
+  "label": "The Future Past 1",
+  "page": "The Future Past 1",
+  "oldid": 763420
+ },
+ {
+  "id": "the-future-past-2",
+  "kind": "xenologue",
+  "label": "The Future Past 2",
+  "page": "The Future Past 2",
+  "oldid": 763419
+ },
+ {
+  "id": "the-future-past-3",
+  "kind": "xenologue",
+  "label": "The Future Past 3",
+  "page": "The Future Past 3",
+  "oldid": 763418
+ },
+ {
+  "id": "apotheosis",
+  "kind": "xenologue",
+  "label": "Apotheosis",
+  "page": "Apotheosis",
+  "oldid": 763417
+ }
+]

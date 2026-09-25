@@ -51,3 +51,21 @@ describe('chapter data (consistency)', () => {
     for (const d of engine.chapterDisagreements()) expect(byId.has(d.map), d.id).toBe(true);
   });
 });
+
+describe('Chapters 7–12 (#110)', () => {
+  it('are loaded in order after Chapter 6', () => {
+    const ids = maps.map((m) => m.id);
+    expect(ids.slice(ids.indexOf('chapter-6') + 1, ids.indexOf('chapter-6') + 7)).toEqual(['chapter-7', 'chapter-8', 'chapter-9', 'chapter-10', 'chapter-11', 'chapter-12']);
+  });
+
+  it('use FEW’s Short Spear for Campari on Hard (C6)', () => {
+    expect(byId.get('chapter-9')!.bosses.hard![0]).toMatchObject({ name: 'Campari' });
+    expect(byId.get('chapter-9')!.bosses.hard![0]!.items.map((i) => i.name)).toContain('Short Spear');
+  });
+
+  it('defeat Mustafa to clear Chapter 10, and recruit Olivia and Cherche', () => {
+    expect(byId.get('chapter-10')!.conditions.normal!.victory).toMatch(/Mustafa/);
+    expect(byId.get('chapter-11')!.recruits.map((r) => r.unit)).toEqual(['Olivia']);
+    expect(byId.get('chapter-12')!.recruits.map((r) => r.unit)).toEqual(['Cherche']);
+  });
+});

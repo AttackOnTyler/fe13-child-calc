@@ -1,0 +1,54 @@
+{
+ "__range": "Chapters 7–12",
+ "__ticket": "110",
+ "chapter-7": {
+  "kind": "story",
+  "order": 800,
+  "label": "Chapter 7",
+  "unlocks": [
+   "chapter-8",
+   "paralogue-3"
+  ]
+ },
+ "chapter-8": {
+  "kind": "story",
+  "order": 900,
+  "label": "Chapter 8",
+  "unlocks": [
+   "chapter-9"
+  ]
+ },
+ "chapter-9": {
+  "kind": "story",
+  "order": 1000,
+  "label": "Chapter 9",
+  "unlocks": [
+   "chapter-10",
+   "paralogue-4"
+  ]
+ },
+ "chapter-10": {
+  "kind": "story",
+  "order": 1100,
+  "label": "Chapter 10",
+  "unlocks": [
+   "chapter-11"
+  ]
+ },
+ "chapter-11": {
+  "kind": "story",
+  "order": 1200,
+  "label": "Chapter 11",
+  "unlocks": [
+   "chapter-12"
+  ]
+ },
+ "chapter-12": {
+  "kind": "story",
+  "order": 1300,
+  "label": "Chapter 12",
+  "unlocks": [
+   "chapter-13"
+  ]
+ }
+}

@@ -25,6 +25,7 @@ for r in data:
         'lunaticPlusPool': r['lunaticPlusPool'],
         'bosses': r['bosses'],
         'unlocks': e.get('unlocks', []),
+        **({'grind': True} if e.get('grind') else {}),
         'source': {'page': r['page'], 'oldid': r['oldid']},
     }
     recs.append(rec)

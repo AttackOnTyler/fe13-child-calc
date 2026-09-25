@@ -49,7 +49,7 @@ export const EARLY_MAPS: readonly ChapterData[] = [
   {
     id: "prologue",
     kind: "story",
-    order: 5,
+    order: 50,
     label: "Prologue",
     title: "The Verge of History",
     location: "Southtown",
@@ -105,7 +105,7 @@ export const EARLY_MAPS: readonly ChapterData[] = [
   {
     id: "chapter-1",
     kind: "story",
-    order: 20,
+    order: 200,
     label: "Chapter 1",
     title: "Unwelcome Change",
     location: "West of Ylisstol",
@@ -158,7 +158,7 @@ export const EARLY_MAPS: readonly ChapterData[] = [
   {
     id: "chapter-2",
     kind: "story",
-    order: 30,
+    order: 300,
     label: "Chapter 2",
     title: "Shepherds",
     location: "The Northroad",
@@ -220,7 +220,7 @@ export const EARLY_MAPS: readonly ChapterData[] = [
   {
     id: "chapter-3",
     kind: "story",
-    order: 40,
+    order: 400,
     label: "Chapter 3",
     title: "Warrior Realm",
     location: "The Longfort",
@@ -293,7 +293,7 @@ export const EARLY_MAPS: readonly ChapterData[] = [
   {
     id: "chapter-4",
     kind: "story",
-    order: 50,
+    order: 500,
     label: "Chapter 4",
     title: "Two Falchions",
     location: "Arena Ferox",
@@ -356,7 +356,7 @@ export const EARLY_MAPS: readonly ChapterData[] = [
   {
     id: "chapter-5",
     kind: "story",
-    order: 60,
+    order: 600,
     label: "Chapter 5",
     title: "The Exalt and the King",
     location: "Border Pass",
@@ -431,7 +431,7 @@ export const EARLY_MAPS: readonly ChapterData[] = [
   {
     id: "chapter-6",
     kind: "story",
-    order: 70,
+    order: 700,
     label: "Chapter 6",
     title: "Foreseer",
     location: "Ylisstol",

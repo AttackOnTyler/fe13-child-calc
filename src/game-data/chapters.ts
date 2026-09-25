@@ -7,6 +7,7 @@
  * Lunatic+ is Lunatic plus a rule (LUNATIC_PLUS), not separate enemy data.
  */
 import { EARLY_MAPS } from './chapters/early';
+import { CHAPTERS_7_12 } from './chapters/ch07-12';
 
 export type ChapterDifficulty = 'normal' | 'hard' | 'lunatic';
 export const CHAPTER_DIFFICULTIES: readonly ChapterDifficulty[] = ['normal', 'hard', 'lunatic'];
@@ -80,6 +81,8 @@ export type ChapterData = {
   readonly bosses: Readonly<Partial<Record<ChapterDifficulty, readonly BossRow[]>>>;
   /** What clearing it opens next. */
   readonly unlocks: readonly string[];
+  /** A grind map (Golden Gaffe, EXPonential Growth, Infinite Regalia): never offered as a next map. */
+  readonly grind?: boolean;
   readonly source: { readonly page: string; readonly oldid: number };
 };
 
@@ -144,11 +147,28 @@ export const CHAPTER_DISAGREEMENTS: readonly ChapterDisagreement[] = [
     other: 'SF wiki: turns 3, 5 and 6',
     status: 'open',
     why: 'FEW is the primary source; no independent third source was read (kamikouryaku.com is the tie-breaker). Check in game.',
+  },  {
+    id: 'C6',
+    map: 'chapter-9',
+    item: 'Campari’s Hard weapon',
+    used: 'FEW: Short Spear',
+    other: 'SF boss data: Short Axe',
+    status: 'resolved',
+    why: 'SF’s own Normal and Lunatic rows give Short Spear; its Hard row is the odd one out.',
+  },
+  {
+    id: 'C13',
+    map: 'chapter-11',
+    item: 'Spirit Dust',
+    used: 'FEW: dropped by an enemy Sage',
+    other: 'SF item locations: a chest',
+    status: 'open',
+    why: 'No third source was read. Check in game.',
   },
 ];
 
 /** Every map with chapter data, in Maps-list order. */
-export const MAPS: readonly ChapterData[] = [...EARLY_MAPS].sort((a, b) => a.order - b.order);
+export const MAPS: readonly ChapterData[] = [...EARLY_MAPS, ...CHAPTERS_7_12].sort((a, b) => a.order - b.order);
 
 export function mapOrder(id: string): number {
   const m = MAPS.find((x) => x.id === id);
