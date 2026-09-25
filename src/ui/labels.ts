@@ -59,7 +59,11 @@ export const BASIS_LABELS: Readonly<Record<ScoreBasis, string>> = { 'caps-lb': '
 export const STATE_UI: Readonly<Record<UnitState, { icon: string; label: string; hint: string }>> = {
   available: { icon: '●', label: 'Available', hint: 'Recruited and usable' },
   'not-recruited': { icon: '◌', label: 'Not yet recruited', hint: 'Joins later: prunes nothing' },
-  benched: { icon: '⏸', label: 'Benched', hint: 'Won’t be used: soft, and puts a pin through the unit on hold until un-benched' },
+  benched: {
+    icon: '⏸',
+    label: 'Benched',
+    hint: 'Won’t be used (soft): out of the plan as a spouse, with a pin through the unit on hold until un-benched. A benched child is still born, just not deployed',
+  },
   missed: { icon: '⊘', label: 'Missed', hint: 'Can no longer be recruited: blocks every pairing that needs the unit' },
   dead: { icon: '☠', label: 'Dead', hint: 'Blocks every pairing that still needs the unit' },
 };

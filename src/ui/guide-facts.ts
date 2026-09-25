@@ -1,4 +1,5 @@
 import { stateOf, type Couple, type PlayContext, type Roster, type RosterUnit, type UnitState } from '../engine';
+import { CHILD_UNITS } from '../game-data/children';
 import { dismissLoss, type GuidePrefs } from './guide-prefs';
 import type { PlanPrefs } from './plan-prefs';
 import { DEFAULT_PREFS } from './scoring-prefs';
@@ -16,7 +17,8 @@ export type GuideFacts = {
   readonly prioritiesSet: boolean;
   /** Robin is locked: every run fact is set (by the Plan's Lock or in Run facts), so there is no Robin left to pick. */
   readonly robinLocked: boolean;
-  readonly unitBenched: boolean;
+  /** A child is benched: the Fresh run's bench step is about children only (#127). */
+  readonly childBenched: boolean;
   /** The run's marriage plan is adopted. */
   readonly planAdopted: boolean;
   /**
@@ -60,14 +62,15 @@ function adoptedPlanHolds(roster: Roster): boolean {
 
 export function guideFacts(roster: Roster, { acts }: PlanPrefs, context: PlayContext): GuideFacts {
   const { gender, asset, flaw } = roster.run;
-  const states = (Object.keys(roster.states) as RosterUnit[]).map((u) => stateOf(roster, u));
+  const units = Object.keys(roster.states) as RosterUnit[];
+  const states = units.map((u) => stateOf(roster, u));
   return {
     runSetUp: !!roster.run.difficulty && !!roster.run.route,
     contextChosen: context !== DEFAULT_PREFS.context,
     deployEdited: acts.deployEditedAt !== undefined,
     prioritiesSet: acts.prioritiesSetAt !== undefined,
     robinLocked: !!gender && !!asset && !!flaw,
-    unitBenched: states.includes('benched'),
+    childBenched: units.some((u) => u in CHILD_UNITS && stateOf(roster, u) === 'benched'),
     planAdopted: roster.savedPlan !== null,
     adoptedPlanHolds: adoptedPlanHolds(roster),
     unitLost: states.some((s) => LOST.includes(s)),

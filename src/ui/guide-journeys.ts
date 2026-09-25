@@ -90,18 +90,21 @@ const FRESH: JourneyContent = {
       takeaway:
         `Deploy is whether you’ll field a unit, and its deployment role is its job: ${ROLE_UI.lead.label} fights, ` +
         `${ROLE_UI.battery.label} pairs up behind a lead, ${ROLE_UI.staff.label} heals or rallies, ${ROLE_UI.dancer.label} dances. ` +
-        `Children get theirs from their plan preset (how the ${plan} judges them). These count toward the ${plan}’s role quotas, so do it before reading a plan.`,
+        `Children get theirs from their plan preset (how the ${plan} judges them). These count toward the ${plan}’s role quotas, so do it before reading a plan. ` +
+        'Untick a first-gen unit you won’t field: it leaves the deploy count but stays in the marriage plan.',
       tick: 'deployEdited',
     },
     {
       view: 'roster',
       target: 'bench',
-      where: `${roster} › ${STATE_UI.benched.icon} Bench`,
-      title: 'Bench who you won’t field, children too',
+      where: `${roster} › Children › ${STATE_UI.benched.icon} Bench`,
+      title: 'Bench the children you won’t field',
       takeaway:
-        `${stateLabel('benched')} is your choice and reversible: a benched child stays in the marriage plan, just not counted as deployed. ` +
-        'Every child the plan produces counts as deployed, so benching is the only way under the deploy cap (how many units you’ll field).',
-      tick: 'unitBenched',
+        `${stateLabel('benched')} on a child is your choice and reversible: its parents’ marriage stays in the plan, and it just isn’t counted as deployed. ` +
+        'Every child the plan produces counts as deployed, so benching is the only way under the deploy cap (how many units you’ll field). ' +
+        'A bench does take a unit out of the plan as a spouse, so a benched child isn’t planned to marry Robin, and a first-gen unit you won’t field ' +
+        'only needs Deploy unticked: benching one takes them out of the marriage plan, and leaves out any child they’re the fixed parent of.',
+      tick: 'childBenched',
       note:
         `Skip for now: ${stateLabel('not-recruited')} (changes nothing), ${stateLabel('missed')} and ${stateLabel('dead')} (they’re for After a loss), ` +
         `and ${married}. Use the spouse picker and ${pinned} only for a marriage already decided. A pinned marriage is one ` +

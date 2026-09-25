@@ -55,9 +55,10 @@ describe('guide facts', () => {
     expect(factsFor(lockRobin(EMPTY_ROSTER, engine.plan(EMPTY_ROSTER, settings))).robinLocked).toBe(true);
   });
 
-  it('say a unit is benched', () => {
-    expect(fresh().unitBenched).toBe(false);
-    expect(factsFor(withState(EMPTY_ROSTER, 'lucina', 'benched')).unitBenched).toBe(true);
+  it('say a child is benched, which a first-gen bench is not', () => {
+    expect(fresh().childBenched).toBe(false);
+    expect(factsFor(withState(EMPTY_ROSTER, 'lucina', 'benched')).childBenched).toBe(true);
+    expect(factsFor(withState(EMPTY_ROSTER, 'frederick', 'benched')).childBenched).toBe(false);
   });
 
   it('say a unit is lost once one is dead or missed, but not benched', () => {
