@@ -188,6 +188,10 @@ _Avoid_: Save file, history
 What an entry records about the army: each unit's class, level, promoted/reclassed status, EXP, stats (as the stat screen shows them, without pair-up), equipped skills, inventory with forges, and support ranks; plus the convoy, gold, unit states and marriages.
 _Avoid_: State, save
 
+**Convoy**:
+The army's shared storage, recorded in each entry's snapshot with the gold on hand. Items there and in inventories hold their uses left and any forge (name and bonuses), checked against the item data.
+_Avoid_: Storage, bag
+
 **Copy-forward**:
 A new entry starts as a copy of the one before, with the map's recruits filled in from join data. Editing a past entry never changes later ones; they're flagged instead.
 _Avoid_: Inherit, carry over

@@ -105,6 +105,7 @@ export {
   editEntry,
   exportRun,
   flaggedEntries,
+  heldProblems,
   importRun,
   latestEntry,
   parseRun,

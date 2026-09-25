@@ -4,7 +4,7 @@
  * A new entry copies the one before; editing a past entry never reaches later ones, which are flagged instead.
  */
 import type { Engine, HeldItem, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitSnapshot } from '../engine';
-import { SUPPORT_LEVELS, addEntry, editEntry, exportRun, flaggedEntries, importRun, removeEntry, unitName, withUnit } from '../engine';
+import { SUPPORT_LEVELS, addEntry, editEntry, exportRun, flaggedEntries, heldProblems, importRun, removeEntry, unitName, withUnit } from '../engine';
 import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
 import { h } from './dom';
 import { guide } from './guide';
@@ -159,6 +159,15 @@ function entryBlock(ctx: RunContext, e: RunEntry, latest: boolean, flagged: bool
   );
 }
 
+/** Inventory and convoy entries the item data doesn't allow (#117), listed under the editor. */
+function problems(s: Snapshot): HTMLElement | null {
+  const list = [
+    ...(Object.entries(s.units) as [RosterUnit, UnitSnapshot][]).flatMap(([unit, u]) => u.inventory.flatMap(heldProblems).map((p) => `${unit}: ${p}`)),
+    ...s.convoy.flatMap(heldProblems).map((p) => `Convoy: ${p}`),
+  ];
+  return list.length ? h('ul', { class: 'warn small' }, ...list.map((p) => h('li', {}, `⚠ ${p}`))) : null;
+}
+
 function snapshotEditor(ctx: RunContext, e: RunEntry): HTMLElement {
   const edit = (f: (s: Snapshot) => Snapshot) => ctx.setRun(editEntry(ctx.run, e.id, f, ctx.now()));
   const s = e.snapshot;
@@ -208,6 +217,7 @@ function snapshotEditor(ctx: RunContext, e: RunEntry): HTMLElement {
       ),
     ),
     units.some(([, u]) => !u.stats) ? h('div', { class: 'muted' }, 'Blank stats: a child’s stats depend on its parents, so record them from the game.') : null,
+    problems(s),
     h('div', { class: 'muted' }, 'Stats as the stat screen shows them, without pair-up. Unit states and marriages are edited on the Roster page; they’re recorded in the latest entry.'),
   );
 }

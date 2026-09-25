@@ -409,8 +409,8 @@ export const CHAPTERS_20_END: readonly ChapterData[] = [
     location: "The Dragon's Table",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "2–15+2 (Upon Basilio and Flavia arriving)", "enemies": "26+12 (Reinforcements)"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "2–15+2 (Upon Basilio and Flavia arriving)", "enemies": "34+12 (Reinforcements)"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "2–15+2 (Upon Basilio and Flavia arriving)", "enemies": "41+15 (Reinforcements)"}},
     recruits: [
-      {"unit": "Basilio", "class": "Warrior", "level": "10", "how": "Automatically after the first defeat of Validar"},
-      {"unit": "Flavia", "class": "Hero", "level": "10", "how": "Automatically after the first defeat of Validar"},
+      {"unit": "Basilio", "class": "Warrior", "level": "10", "how": "Automatically after the first defeat of Validar", "inventory": ["Silver Axe", "Hammer", "Silver Bow"]},
+      {"unit": "Flavia", "class": "Hero", "level": "10", "how": "Automatically after the first defeat of Validar", "inventory": ["Silver Sword", "Short Axe"]},
     ],
     forced: ["Chrom", "Robin"],
     items: [

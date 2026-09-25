@@ -55,10 +55,10 @@ export const EARLY_MAPS: readonly ChapterData[] = [
     location: "Southtown",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "4", "enemies": "5"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "4", "enemies": "8"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "4", "enemies": "11"}},
     recruits: [
-      {"unit": "Chrom", "class": "Lord", "level": "1", "how": "Automatically from turn 1"},
-      {"unit": "Robin", "class": "Tactician", "level": "1", "how": "Automatically from turn 1"},
-      {"unit": "Lissa", "class": "Cleric", "level": "1", "how": "Automatically from turn 1"},
-      {"unit": "Frederick", "class": "Great Knight", "level": "1", "how": "Automatically from turn 1"},
+      {"unit": "Chrom", "class": "Lord", "level": "1", "how": "Automatically from turn 1", "inventory": ["Falchion", "Rapier"]},
+      {"unit": "Robin", "class": "Tactician", "level": "1", "how": "Automatically from turn 1", "inventory": ["Bronze Sword", "Thunder"]},
+      {"unit": "Lissa", "class": "Cleric", "level": "1", "how": "Automatically from turn 1", "inventory": ["Heal", "Vulnerary"]},
+      {"unit": "Frederick", "class": "Great Knight", "level": "1", "how": "Automatically from turn 1", "inventory": ["Silver Lance"]},
     ],
     forced: [],
     items: [],
@@ -111,8 +111,8 @@ export const EARLY_MAPS: readonly ChapterData[] = [
     location: "West of Ylisstol",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "4+2 (Upon Sully and Virion arriving)", "enemies": "7"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "4+2 (Upon Sully and Virion arriving)", "enemies": "8"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "4+2 (Upon Sully and Virion arriving)", "enemies": "8"}},
     recruits: [
-      {"unit": "Sully", "class": "Cavalier", "level": "2", "how": "Automatically from turn 2"},
-      {"unit": "Virion", "class": "Archer", "level": "2", "how": "Automatically from turn 2"},
+      {"unit": "Sully", "class": "Cavalier", "level": "2", "how": "Automatically from turn 2", "inventory": ["Bronze Lance"]},
+      {"unit": "Virion", "class": "Archer", "level": "2", "how": "Automatically from turn 2", "inventory": ["Iron Bow", "Elixir"]},
     ],
     forced: ["Chrom"],
     items: [],
@@ -164,9 +164,9 @@ export const EARLY_MAPS: readonly ChapterData[] = [
     location: "The Northroad",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "8+1 (Upon Miriel arriving)", "enemies": "12"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "8+1 (Upon Miriel arriving)", "enemies": "14"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "8+1 (Upon Miriel arriving)", "enemies": "16"}},
     recruits: [
-      {"unit": "Stahl", "class": "Cavalier", "level": "2", "how": "Automatically from turn 1"},
+      {"unit": "Stahl", "class": "Cavalier", "level": "2", "how": "Automatically from turn 1", "inventory": ["Bronze Sword"]},
       {"unit": "Vaike", "class": "Fighter", "level": "3", "how": "Automatically from turn 1"},
-      {"unit": "Miriel", "class": "Mage", "level": "1", "how": "Automatically from turn 2"},
+      {"unit": "Miriel", "class": "Mage", "level": "1", "how": "Automatically from turn 2", "inventory": ["Fire", "Iron Axe"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -226,8 +226,8 @@ export const EARLY_MAPS: readonly ChapterData[] = [
     location: "The Longfort",
     conditions: {"normal": {"victory": "Defeat Raimi", "defeat": "Chrom or Robin dies, or both door keys are lost before either door can be opened", "deploy": "1–8+1 (Upon Sumia arriving)+1 (Upon Kellam being recruited)", "enemies": "13"}, "hard": {"victory": "Defeat Raimi", "defeat": "Chrom or Robin dies, or both door keys are lost before either door can be opened", "deploy": "1–8+1 (Upon Sumia arriving)+1 (Upon Kellam being recruited)", "enemies": "17"}, "lunatic": {"victory": "Defeat Raimi", "defeat": "Chrom or Robin dies, or both door keys are lost before either door can be opened", "deploy": "1–8+1 (Upon Sumia arriving)", "enemies": "18"}},
     recruits: [
-      {"unit": "Sumia", "class": "Pegasus Knight", "level": "1", "how": "Automatically from turn 1"},
-      {"unit": "Kellam", "class": "Knight", "level": "5", "how": "NPC, talk to with Chrom"},
+      {"unit": "Sumia", "class": "Pegasus Knight", "level": "1", "how": "Automatically from turn 1", "inventory": ["Iron Lance", "Vulnerary"]},
+      {"unit": "Kellam", "class": "Knight", "level": "5", "how": "NPC, talk to with Chrom", "inventory": ["Iron Lance", "Javelin", "Vulnerary"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -299,7 +299,7 @@ export const EARLY_MAPS: readonly ChapterData[] = [
     location: "Arena Ferox",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–6", "enemies": "9"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–6", "enemies": "9"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–6", "enemies": "9"}},
     recruits: [
-      {"unit": "Lon'qu", "class": "Myrmidon", "level": "4", "how": "Automatically at the end of the chapter"},
+      {"unit": "Lon'qu", "class": "Myrmidon", "level": "4", "how": "Automatically at the end of the chapter", "inventory": ["Killing Edge"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -362,8 +362,8 @@ export const EARLY_MAPS: readonly ChapterData[] = [
     location: "Border Pass",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–9+2 (Upon Ricken and Maribelle arriving)", "enemies": "15 (Shortly increases to 16 before the first turn while Gangrel is on the map; returns to 15 after Gangrel leaves)+5 (Reinforcements)"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–9+2 (Upon Ricken and Maribelle arriving)", "enemies": "19 (Shortly increases to 20 before the first turn while Gangrel is on the map; returns to 19 after Gangrel leaves)+8 (Reinforcements)"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–9+2 (Upon Ricken and Maribelle arriving)", "enemies": "22 (Shortly increases to 23 before the first turn while Gangrel is on the map; returns to 22 after Gangrel leaves)+10 (Reinforcements)"}},
     recruits: [
-      {"unit": "Ricken", "class": "Mage", "level": "3", "how": "Automatically from turn 1"},
-      {"unit": "Maribelle", "class": "Troubadour", "level": "3", "how": "Automatically from turn 1"},
+      {"unit": "Ricken", "class": "Mage", "level": "3", "how": "Automatically from turn 1", "inventory": ["Elwind"]},
+      {"unit": "Maribelle", "class": "Troubadour", "level": "3", "how": "Automatically from turn 1", "inventory": ["Mend", "Vulnerary"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -437,8 +437,8 @@ export const EARLY_MAPS: readonly ChapterData[] = [
     location: "Ylisstol",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom, Robin, or Emmeryn dies", "deploy": "1–10+2 (Upon Panne arriving and Gaius being recruited)", "enemies": "24−1 (Upon Gaius being recruited)"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom, Robin, or Emmeryn dies", "deploy": "1–10+2 (Upon Panne arriving and Gaius being recruited)", "enemies": "24−1 (Upon Gaius being recruited)"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom, Robin, or Emmeryn dies", "deploy": "1–10+2 (Upon Panne arriving and Gaius being recruited)", "enemies": "24−1 (Upon Gaius being recruited)"}},
     recruits: [
-      {"unit": "Panne", "class": "Taguel", "level": "6", "how": "Automatically from turn 2"},
-      {"unit": "Gaius", "class": "Thief", "level": "5", "how": "Enemy, talk to with Chrom"},
+      {"unit": "Panne", "class": "Taguel", "level": "6", "how": "Automatically from turn 2", "inventory": ["Beaststone", "Concoction"]},
+      {"unit": "Gaius", "class": "Thief", "level": "5", "how": "Enemy, talk to with Chrom", "inventory": ["Iron Sword"]},
     ],
     forced: ["Chrom"],
     items: [

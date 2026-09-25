@@ -219,7 +219,8 @@ def parse(path, meta):
     if chars:
         cp = chars[0][0]
         for p, _ in templates(text, 'NewUnit'):
-            recruits.append({'unit': clean(p.get('name')), 'class': clean(p.get('class')), 'level': clean(p.get('lv')), 'how': clean(p.get('recruitment method')) or None})
+            inv = [n.strip() for n in re.findall(r'\{\{Item\|13\|([^|}]*)', p.get('inventory', '') or '')]
+            recruits.append({'unit': clean(p.get('name')), 'class': clean(p.get('class')), 'level': clean(p.get('lv')), 'how': clean(p.get('recruitment method')) or None, **({'inventory': inv} if inv else {})})
         i = 1
         while f'forced{i}' in cp:
             forced.append(clean(cp.get(f'forced{i}article') or cp[f'forced{i}']))

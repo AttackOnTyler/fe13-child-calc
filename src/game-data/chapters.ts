@@ -70,7 +70,8 @@ export type ChapterData = {
   readonly title: string;
   readonly location?: string;
   readonly conditions: Readonly<Partial<Record<ChapterDifficulty, MapConditions>>>;
-  readonly recruits: readonly { readonly unit: string; readonly class: string; readonly level: string; readonly how: string | null }[];
+  /** Recruits, with the items they join with (FEW's names). */
+  readonly recruits: readonly { readonly unit: string; readonly class: string; readonly level: string; readonly how: string | null; readonly inventory?: readonly string[] }[];
   readonly forced: readonly string[];
   readonly items: readonly { readonly item: string; readonly how: string }[];
   readonly shop: {

@@ -15,8 +15,8 @@ export const CHAPTERS_13_19: readonly ChapterData[] = [
     location: "Carrion Isle",
     conditions: {"normal": {"victory": "Defeat the Risen Chief", "defeat": "Chrom or Robin dies", "deploy": "1–12+1 (Upon Henry arriving)", "enemies": "26+13 (Reinforcements)"}, "hard": {"victory": "Defeat the Risen Chief", "defeat": "Chrom or Robin dies", "deploy": "1–12+1 (Upon Henry arriving)", "enemies": "29+17 (Reinforcements)"}, "lunatic": {"victory": "Defeat the Risen Chief", "defeat": "Chrom or Robin dies", "deploy": "1–12+1 (Upon Henry arriving)", "enemies": "29+22 (Reinforcements)"}},
     recruits: [
-      {"unit": "Henry", "class": "Dark Mage", "level": "12", "how": "Automatically from turn 1"},
-      {"unit": "Lucina", "class": "Lord", "level": "10", "how": "Automatically at the end of the chapter"},
+      {"unit": "Henry", "class": "Dark Mage", "level": "12", "how": "Automatically from turn 1", "inventory": ["Ruin", "Elfire", "Concoction"]},
+      {"unit": "Lucina", "class": "Lord", "level": "10", "how": "Automatically at the end of the chapter", "inventory": ["Parallel Falchion", "Rapier"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -206,7 +206,7 @@ export const CHAPTERS_13_19: readonly ChapterData[] = [
     location: "Valm Harbor",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Say'ri being recruited)", "enemies": "31"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Say'ri being recruited)", "enemies": "33"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Say'ri being recruited)", "enemies": "37"}},
     recruits: [
-      {"unit": "Say'ri", "class": "Swordmaster", "level": "1", "how": "NPC, talk to with Chrom, or automatically at the end if she survived"},
+      {"unit": "Say'ri", "class": "Swordmaster", "level": "1", "how": "NPC, talk to with Chrom, or automatically at the end if she survived", "inventory": ["Concoction"]},
     ],
     forced: ["Chrom"],
     items: [

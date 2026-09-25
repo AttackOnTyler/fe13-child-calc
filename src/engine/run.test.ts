@@ -6,6 +6,7 @@ import {
   editEntry,
   exportRun,
   flaggedEntries,
+  heldProblems,
   importRun,
   latestEntry,
   rosterOf,
@@ -73,5 +74,37 @@ describe('the chapter log', () => {
     run = editEntry(run, latestEntry(run)!.id, (s) => ({ ...s, gold: 900, convoy: [{ item: 'Iron Sword', uses: 40, forge: { name: 'Shiny', mt: 1, hit: 0, crit: 0 } }] }), 2);
     expect(importRun(exportRun(run))).toEqual(run);
     expect(importRun('{"version":2}')).toEqual(EMPTY_RUN);
+  });
+});
+
+describe('inventory, convoy and gold (#117)', () => {
+  it('fill a recruit’s starting items at full uses', () => {
+    const run = addEntry(runFromRoster(facts), 'prologue', 1);
+    expect(latestEntry(run)!.snapshot.units.frederick!.inventory).toEqual([{ item: 'Silver Lance', uses: 30 }]);
+  });
+
+  it('validate held items against the item data', () => {
+    expect(heldProblems({ item: 'Iron Sword', uses: 40 })).toEqual([]);
+    expect(heldProblems({ item: 'Iron Sword', uses: 41 })[0]).toMatch(/at most 40/);
+    expect(heldProblems({ item: 'Excalibur Sword', uses: 1 })[0]).toMatch(/not an item/);
+    expect(heldProblems({ item: 'Steel Sword', uses: 30, forge: { name: 'Kiri', mt: 2, hit: 10, crit: 3 } })).toEqual([]);
+    expect(heldProblems({ item: 'Steel Sword', uses: 30, forge: { name: 'Kiri', mt: 2, hit: 7, crit: 0 } })[0]).toMatch(/steps/);
+    expect(heldProblems({ item: 'Steel Sword', uses: 30, forge: { name: 'Kiri', mt: 5, hit: 20, crit: 0 } })[0]).toMatch(/8 intervals/);
+    expect(heldProblems({ item: 'Falchion', uses: null, forge: { name: 'X', mt: 1, hit: 0, crit: 0 } })[0]).toMatch(/can’t be forged/);
+  });
+
+  it('carry inventory, convoy and gold forward, and keep them per entry', () => {
+    let run = addEntry(runFromRoster(facts), 'prologue', 1);
+    run = editEntry(
+      run,
+      latestEntry(run)!.id,
+      (s) => ({ ...withUnit(s, 'chrom', { ...s.units.chrom!, inventory: [{ item: 'Rapier', uses: 30 }] }), convoy: [{ item: 'Vulnerary', uses: 3 }], gold: 800 }),
+      2,
+    );
+    run = addEntry(run, 'chapter-1', 3);
+    const s = latestEntry(run)!.snapshot;
+    expect([s.units.chrom!.inventory, s.convoy, s.gold]).toEqual([[{ item: 'Rapier', uses: 30 }], [{ item: 'Vulnerary', uses: 3 }], 800]);
+    run = editEntry(run, latestEntry(run)!.id, (x) => ({ ...x, gold: 100 }), 4);
+    expect(run.entries[1]!.snapshot.gold).toBe(800);
   });
 });

@@ -9,6 +9,7 @@ import { MAPS } from '../game-data/chapters';
 import { JOIN_DATA, basesOn } from '../game-data/join';
 import { STATS, type Gender, type Stat } from '../game-data/stats';
 import { className } from './classes';
+import { FORGE, forgeProblem, itemByName } from '../game-data/items';
 import { FIRST_GEN_UNITS, type UnitId } from '../game-data/units';
 import { EMPTY_ROSTER, parseRoster, type Roster, type RosterUnit } from './roster';
 
@@ -106,11 +107,11 @@ const UNIT_BY_NAME = new Map<string, RosterUnit>([
 ]);
 
 /** A recruit's first snapshot (#116): a first-gen unit or Robin from its join data, a child from the map's record. */
-export function recruitSnapshot(unit: RosterUnit, run: Run, fromMap?: { readonly class: string; readonly level: string }): UnitSnapshot {
+export function recruitSnapshot(unit: RosterUnit, run: Run, fromMap?: { readonly class: string; readonly level: string; readonly inventory?: readonly string[] }): UnitSnapshot {
   const difficulty = run.roster.run.difficulty === 'normal' ? 'normal' : run.roster.run.difficulty === 'hard' ? 'hard' : run.roster.run.difficulty ? 'lunatic' : 'normal';
   if (unit !== 'robin' && unit in CHILD_UNITS) {
     // A child's stats depend on its parents: record them from the game.
-    return { class: fromMap?.class ?? '', level: Number(fromMap?.level) || 1, promoted: false, reclassed: false, exp: 0, stats: null, skills: [], inventory: [], supports: [] };
+    return { class: fromMap?.class ?? '', level: Number(fromMap?.level) || 1, promoted: false, reclassed: false, exp: 0, stats: null, skills: [], inventory: startingItems(fromMap), supports: [] };
   }
   const j = JOIN_DATA[unit as Exclude<UnitId, 'maiden'> | 'robin'];
   const bases = basesOn(j, difficulty);
@@ -123,9 +124,37 @@ export function recruitSnapshot(unit: RosterUnit, run: Run, fromMap?: { readonly
     exp: 0,
     stats: Object.fromEntries(STATS.map((s) => [s, bases[s]])) as Record<Stat, number>,
     skills: j.startingSkills.slice(0, 5),
-    inventory: [],
+    inventory: startingItems(fromMap),
     supports: [],
   };
+}
+
+/** The items a recruit joins with (the map's record), each at full uses. */
+function startingItems(fromMap?: { readonly inventory?: readonly string[] }): HeldItem[] {
+  return (fromMap?.inventory ?? []).map((name) => {
+    const it = itemByName(name);
+    return { item: it?.name ?? name, uses: it?.uses ?? null };
+  });
+}
+
+/**
+ * What's wrong with a held item against the item data (#117): an unknown item, more uses than it has, or a forge the
+ * rules don't allow (a weapon that can't be forged, bonuses off the +1 Mt / +5 Hit / +3 Crit steps, or past the limits).
+ */
+export function heldProblems(h: HeldItem): string[] {
+  const it = itemByName(h.item);
+  if (!it) return [`${h.item}: not an item in the data`];
+  const out: string[] = [];
+  if (h.uses !== null && it.uses !== undefined && (h.uses < 0 || h.uses > it.uses)) out.push(`${it.name}: ${h.uses} uses, but it has at most ${it.uses}`);
+  if (h.forge) {
+    const levels = { mt: h.forge.mt / FORGE.step.mt, hit: h.forge.hit / FORGE.step.hit, crit: h.forge.crit / FORGE.step.crit };
+    if (!Number.isInteger(levels.hit) || !Number.isInteger(levels.crit)) out.push(`${it.name}: forge bonuses come in +${FORGE.step.hit} Hit and +${FORGE.step.crit} Crit steps`);
+    else {
+      const problem = forgeProblem(it, levels);
+      if (problem) out.push(`${it.name}: ${problem}`);
+    }
+  }
+  return out;
 }
 
 /**

@@ -15,7 +15,7 @@ export const PARALOGUES: readonly ChapterData[] = [
     location: "The Farfort",
     conditions: {"normal": {"victory": "Defeat Roddick", "defeat": "Chrom or Robin dies", "deploy": "1–8+1 (Upon Donnel arriving)", "enemies": "16"}, "hard": {"victory": "Defeat Roddick", "defeat": "Chrom or Robin dies", "deploy": "1–8+1 (Upon Donnel arriving)", "enemies": "20"}, "lunatic": {"victory": "Defeat Roddick", "defeat": "Chrom or Robin dies", "deploy": "1–8+1 (Upon Donnel arriving)", "enemies": "22"}},
     recruits: [
-      {"unit": "Donnel", "class": "Villager", "level": "1", "how": "Automatically from turn 1; To keep at chapter's end, he must gain at least 1 level within the chapter"},
+      {"unit": "Donnel", "class": "Villager", "level": "1", "how": "Automatically from turn 1; To keep at chapter's end, he must gain at least 1 level within the chapter", "inventory": ["Bronze Lance", "Vulnerary"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -212,7 +212,7 @@ export const PARALOGUES: readonly ChapterData[] = [
     location: "The Twins' Hideout",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–12+1 (Upon Anna being recruited)", "enemies": "26"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–12+1 (Upon Anna being recruited)", "enemies": "30"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–12+1 (Upon Anna being recruited)", "enemies": "34"}},
     recruits: [
-      {"unit": "Anna", "class": "Trickster", "level": "1", "how": "NPC, talk to with Chrom"},
+      {"unit": "Anna", "class": "Trickster", "level": "1", "how": "NPC, talk to with Chrom", "inventory": ["Steel Sword", "Heal", "Concoction"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -284,7 +284,7 @@ export const PARALOGUES: readonly ChapterData[] = [
     location: "Sage's Hamlet",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Owain being recruited)", "enemies": "21"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Owain being recruited)", "enemies": "26"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Owain being recruited)", "enemies": "29"}},
     recruits: [
-      {"unit": "Owain", "class": "Myrmidon", "level": "10", "how": "NPC, talk to with Chrom or Lissa"},
+      {"unit": "Owain", "class": "Myrmidon", "level": "10", "how": "NPC, talk to with Chrom or Lissa", "inventory": ["Steel Sword"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -366,7 +366,7 @@ export const PARALOGUES: readonly ChapterData[] = [
     location: "Great Gate",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Inigo being recruited)", "enemies": "27"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Inigo being recruited)", "enemies": "32"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Inigo being recruited)", "enemies": "38"}},
     recruits: [
-      {"unit": "Inigo", "class": "Mercenary", "level": "10", "how": "NPC, talk to with Chrom or Olivia"},
+      {"unit": "Inigo", "class": "Mercenary", "level": "10", "how": "NPC, talk to with Chrom or Olivia", "inventory": ["Killing Edge", "Concoction"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -463,7 +463,7 @@ export const PARALOGUES: readonly ChapterData[] = [
     location: "Mila Shrine Ruins",
     conditions: {"normal": {"victory": "Defeat Xalbador", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Brady being recruited)", "enemies": "30"}, "hard": {"victory": "Defeat Xalbador", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Brady being recruited)", "enemies": "33"}, "lunatic": {"victory": "Defeat Xalbador", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Brady being recruited)", "enemies": "36"}},
     recruits: [
-      {"unit": "Brady", "class": "Priest", "level": "10", "how": "NPC, talk to with Chrom or Maribelle"},
+      {"unit": "Brady", "class": "Priest", "level": "10", "how": "NPC, talk to with Chrom or Maribelle", "inventory": ["Mend", "Concoction"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -536,7 +536,7 @@ export const PARALOGUES: readonly ChapterData[] = [
     location: "Dueling Grounds",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Kjelle being recruited)", "enemies": "19+17 (Reinforcements)"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Kjelle being recruited)", "enemies": "23+21 (Reinforcements)"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Kjelle being recruited)", "enemies": "27+25 (Reinforcements)"}},
     recruits: [
-      {"unit": "Kjelle", "class": "Knight", "level": "10", "how": "NPC, talk to with Chrom or Sully"},
+      {"unit": "Kjelle", "class": "Knight", "level": "10", "how": "NPC, talk to with Chrom or Sully", "inventory": ["Steel Lance", "Concoction"]},
     ],
     forced: ["Chrom"],
     items: [],
@@ -640,7 +640,7 @@ export const PARALOGUES: readonly ChapterData[] = [
     location: "Verdant Forest",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Cynthia being recruited)", "enemies": "24 (Divided into two factions; 23 Ruffian, 1 unaffiliated)+10 (NPCs recruited by Ruger, representing the unfaffiliated faction)−1 (Upon Cynthia being recruited)"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Cynthia being recruited)", "enemies": "28 (Divided into two factions; 27 Ruffian, 1 unaffiliated)+10 (NPCs recruited by Ruger, representing the unfaffiliated faction)−1 (Upon Cynthia being recruited)"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Cynthia being recruited)", "enemies": "32 (Divided into two factions; 31 Ruffian, 1 unaffiliated)+10 (NPCs recruited by Ruger, representing the unfaffiliated faction)−1 (Upon Cynthia being recruited)"}},
     recruits: [
-      {"unit": "Cynthia", "class": "Pegasus Knight", "level": "10", "how": "Enemy, talk to with Chrom or Sumia"},
+      {"unit": "Cynthia", "class": "Pegasus Knight", "level": "10", "how": "Enemy, talk to with Chrom or Sumia", "inventory": ["Steel Lance"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -718,7 +718,7 @@ export const PARALOGUES: readonly ChapterData[] = [
     location: "Mercenary Fortress",
     conditions: {"normal": {"victory": "Defeat Nelson", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Severa being recruited)", "enemies": "24 (Divided into two factions; 23 Valmese, 1 unaffiliated)+8 (Reinforcements, representing the Valmese faction)+1 (If Severa defects to the enemy)"}, "hard": {"victory": "Defeat Nelson", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Severa being recruited)", "enemies": "30 (Divided into two factions; 29 Valmese, 1 unaffiliated)+12 (Reinforcements, representing the Valmese faction)+1 (If Severa defects to the enemy)"}, "lunatic": {"victory": "Defeat Nelson", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Severa being recruited)", "enemies": "35 (Divided into two factions; 34 Valmese, 1 unaffiliated)+20 (Reinforcements, representing the Valmese faction)+1 (If Severa defects to the enemy)"}},
     recruits: [
-      {"unit": "Severa", "class": "Mercenary", "level": "10", "how": "NPC, have her talk to the enemy Holland; (If Holland dies before this can happen, Severa will join the enemy force instead)"},
+      {"unit": "Severa", "class": "Mercenary", "level": "10", "how": "NPC, have her talk to the enemy Holland; (If Holland dies before this can happen, Severa will join the enemy force instead)", "inventory": ["Steel Sword"]},
     ],
     forced: ["Chrom"],
     items: [],
@@ -820,7 +820,7 @@ export const PARALOGUES: readonly ChapterData[] = [
     location: "Wyvern Valley",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Gerome being recruited)", "enemies": "30+6 (Reinforcements)"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Gerome being recruited)", "enemies": "33+6 (Reinforcements)"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Gerome being recruited)", "enemies": "39+12 (Reinforcements)"}},
     recruits: [
-      {"unit": "Gerome", "class": "Wyvern Rider", "level": "10", "how": "NPC, talk to with Chrom or Cherche"},
+      {"unit": "Gerome", "class": "Wyvern Rider", "level": "10", "how": "NPC, talk to with Chrom or Cherche", "inventory": ["Steel Axe", "Concoction"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -905,7 +905,7 @@ export const PARALOGUES: readonly ChapterData[] = [
     location: "The Ruins of Time",
     conditions: {"normal": {"victory": "Defeat the Risen Chief", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Morgan being recruited)", "enemies": "24 (Divided into two factions; 22 Risen, 2 Ruffians)+7 (Reinforcements, representing the Risen faction)"}, "hard": {"victory": "Defeat the Risen Chief", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Morgan being recruited)", "enemies": "28 (Divided into two factions; 26 Risen, 2 Ruffians)+7 (Reinforcements, representing the Risen faction)"}, "lunatic": {"victory": "Defeat the Risen Chief", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Morgan being recruited)", "enemies": "34 (Divided into two factions; 32 Risen, 2 Ruffians)+11 (Reinforcements, representing the Risen faction)"}},
     recruits: [
-      {"unit": "Morgan", "class": "Varies", "level": "10", "how": "NPC, talk to with Chrom or Robin"},
+      {"unit": "Morgan", "class": "Varies", "level": "10", "how": "NPC, talk to with Chrom or Robin", "inventory": ["Concoction"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -1011,7 +1011,7 @@ export const PARALOGUES: readonly ChapterData[] = [
     location: "Law's End",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Yarne being recruited)", "enemies": "11 (Initially assigned to the Stonewall Knights; switches to the Riders of Dawn should the player back them; count increases to 22 should the player back neither side)+(12/24) (First-turn reinforcements; 12 if the player backs a side, 24 if the player backs neither side)"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Yarne being recruited)", "enemies": "11 (Initially assigned to the Stonewall Knights; switches to the Riders of Dawn should the player back them; count increases to 22 should the player back neither side)+(16/24) (First-turn reinforcements; 16 if the player backs a side, 28 if the player backs neither side)"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Yarne being recruited)", "enemies": "11 (Initially assigned to the Stonewall Knights; switches to the Riders of Dawn should the player back them; count increases to 22 should the player back neither side)+(22/28) (First-turn reinforcements; 16 if the player backs a side, 24 if the player backs neither side)"}},
     recruits: [
-      {"unit": "Yarne", "class": "Taguel", "level": "10", "how": "Enemy or NPC, talk to with Chrom or Panne; (Enemy/NPC status depends on whether or not the player is backing the Stonewall Knights)"},
+      {"unit": "Yarne", "class": "Taguel", "level": "10", "how": "Enemy or NPC, talk to with Chrom or Panne; (Enemy/NPC status depends on whether or not the player is backing the Stonewall Knights)", "inventory": ["Beaststone", "Elixir"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -1148,7 +1148,7 @@ export const PARALOGUES: readonly ChapterData[] = [
     location: "Desert Oasis",
     conditions: {"normal": {"victory": "Defeat Nombry", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Laurent being recruited)", "enemies": "17+29 (Reinforcements)"}, "hard": {"victory": "Defeat Nombry", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Laurent being recruited)", "enemies": "23+29 (Reinforcements)"}, "lunatic": {"victory": "Defeat Nombry", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Laurent being recruited)", "enemies": "29+31 (Reinforcements)"}},
     recruits: [
-      {"unit": "Laurent", "class": "Mage", "level": "10", "how": "Visit the southwestern of the two mirage villages available at the start of the chapter with either Chrom or Miriel"},
+      {"unit": "Laurent", "class": "Mage", "level": "10", "how": "Visit the southwestern of the two mirage villages available at the start of the chapter with either Chrom or Miriel", "inventory": ["Elwind"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -1269,7 +1269,7 @@ export const PARALOGUES: readonly ChapterData[] = [
     location: "Kidnapper's Keep",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Noire being recruited)", "enemies": "27"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Noire being recruited)", "enemies": "32"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Noire being recruited)", "enemies": "36"}},
     recruits: [
-      {"unit": "Noire", "class": "Archer", "level": "10", "how": "NPC, automatically becomes playable on turn 2"},
+      {"unit": "Noire", "class": "Archer", "level": "10", "how": "NPC, automatically becomes playable on turn 2", "inventory": ["Steel Bow"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -1346,7 +1346,7 @@ export const PARALOGUES: readonly ChapterData[] = [
     location: "Manor of Lost Souls",
     conditions: {"normal": {"victory": "Defeat the Risen Chief", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Nah being recruited)", "enemies": "34"}, "hard": {"victory": "Defeat the Risen Chief", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Nah being recruited)", "enemies": "41"}, "lunatic": {"victory": "Defeat the Risen Chief", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Nah being recruited)", "enemies": "49"}},
     recruits: [
-      {"unit": "Nah", "class": "Manakete", "level": "10", "how": "NPC, talk to with Chrom or Nowi"},
+      {"unit": "Nah", "class": "Manakete", "level": "10", "how": "NPC, talk to with Chrom or Nowi", "inventory": ["Dragonstone"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -1448,7 +1448,7 @@ export const PARALOGUES: readonly ChapterData[] = [
     location: "Divine Dragon Grounds",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13", "enemies": "7+30 (Reinforcements)"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13", "enemies": "11+30 (Reinforcements)"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13", "enemies": "11+44 (Reinforcements)"}},
     recruits: [
-      {"unit": "Tiki", "class": "Manakete", "level": "20", "how": "Automatically at the end of the chapter if she survived"},
+      {"unit": "Tiki", "class": "Manakete", "level": "20", "how": "Automatically at the end of the chapter if she survived", "inventory": ["Dragonstone+"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -1541,7 +1541,7 @@ export const PARALOGUES: readonly ChapterData[] = [
     location: "Sea-King's Throne",
     conditions: {"normal": {"victory": "Defeat Zanth", "defeat": "Chrom or Robin dies", "deploy": "1–15+1 (Upon Gangrel being recruited)", "enemies": "31−1 (Upon Gangrel being recruited)"}, "hard": {"victory": "Defeat Zanth", "defeat": "Chrom or Robin dies", "deploy": "1–15+1 (Upon Gangrel being recruited)", "enemies": "34−1 (Upon Gangrel being recruited)"}, "lunatic": {"victory": "Defeat Zanth", "defeat": "Chrom or Robin dies", "deploy": "1–15+1 (Upon Gangrel being recruited)", "enemies": "40−1 (Upon Gangrel being recruited)"}},
     recruits: [
-      {"unit": "Gangrel", "class": "Trickster", "level": "15", "how": "Enemy, talk to with Chrom three times"},
+      {"unit": "Gangrel", "class": "Trickster", "level": "15", "how": "Enemy, talk to with Chrom three times", "inventory": ["Levin Sword"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -1626,7 +1626,7 @@ export const PARALOGUES: readonly ChapterData[] = [
     location: "Conqueror's Whetstone",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–15", "enemies": "29 (Divided into two factions; 1 Valmese, 28 Risen)+10 (Reinforcements, representing the Risen faction)"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–15", "enemies": "29 (Divided into two factions; 1 Valmese, 28 Risen)+16 (Reinforcements, representing the Risen faction)"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–15", "enemies": "29 (Divided into two factions; 1 Valmese, 28 Risen)+26 (Reinforcements, representing the Risen faction)"}},
     recruits: [
-      {"unit": "Walhart", "class": "Conqueror", "level": "30", "how": "Automatically at the end of the chapter if Chrom fought him as an enemy in this chapter"},
+      {"unit": "Walhart", "class": "Conqueror", "level": "30", "how": "Automatically at the end of the chapter if Chrom fought him as an enemy in this chapter", "inventory": ["Wolf Berg"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -1816,7 +1816,7 @@ export const PARALOGUES: readonly ChapterData[] = [
     location: "Warriors' Tomb",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–15+1 (Upon Yen'fay being recruited)", "enemies": "30"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–15+1 (Upon Yen'fay being recruited)", "enemies": "36"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–15+1 (Upon Yen'fay being recruited)", "enemies": "40"}},
     recruits: [
-      {"unit": "Yen'fay", "class": "Swordmaster", "level": "20", "how": "NPC, talk to with Say'ri"},
+      {"unit": "Yen'fay", "class": "Swordmaster", "level": "20", "how": "NPC, talk to with Say'ri", "inventory": ["Killing Edge"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -1881,7 +1881,7 @@ export const PARALOGUES: readonly ChapterData[] = [
     location: "Wellspring of Truth",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–15", "enemies": "16"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–15", "enemies": "16"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–15", "enemies": "16"}},
     recruits: [
-      {"unit": "Aversa", "class": "Dark Flier", "level": "20", "how": "Automatically at the end of the chapter if she survived"},
+      {"unit": "Aversa", "class": "Dark Flier", "level": "20", "how": "Automatically at the end of the chapter if she survived", "inventory": ["Bolganone", "Nosferatu"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -1929,7 +1929,7 @@ export const PARALOGUES: readonly ChapterData[] = [
     location: "Garden of Giants",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–30", "enemies": "50"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–30", "enemies": "50"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–30", "enemies": "50"}},
     recruits: [
-      {"unit": "Priam", "class": "Hero", "level": "20", "how": "Automatically at the end of the chapter"},
+      {"unit": "Priam", "class": "Hero", "level": "20", "how": "Automatically at the end of the chapter", "inventory": ["Ragnell", "Tomahawk"]},
     ],
     forced: ["Chrom"],
     items: [

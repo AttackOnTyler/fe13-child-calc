@@ -91,4 +91,9 @@ export const ITEM_DISAGREEMENTS: readonly ItemDisagreement[] = [
   { id: 'I4', item: 'Underdog Bow worth', used: 'SF: 950', other: 'FEW list: 990', status: 'open', why: 'No third source read.' },
 ];
 
-export const itemByName = (name: string): GameItem | undefined => ITEMS.find((i) => i.name === name);
+/** One spelling for FEW's and SF's names (curly apostrophes, British spelling). */
+const normName = (name: string) => name.replace(/’/g, "'").replace(/Armour/g, 'Armor').replace(/Defence/g, 'Defense').trim().toLowerCase();
+const BY_NAME = new Map(ITEM_LIST.map((i) => [normName(i.name), i]));
+
+/** An item by name, however either source spells it; case doesn't matter. */
+export const itemByName = (name: string): GameItem | undefined => BY_NAME.get(normName(name));

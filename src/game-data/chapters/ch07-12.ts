@@ -15,7 +15,7 @@ export const CHAPTERS_7_12: readonly ChapterData[] = [
     location: "Breakneck Pass",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–11+1 (Upon Cordelia arriving)", "enemies": "19+3 (Reinforcements)"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–11+1 (Upon Cordelia arriving)", "enemies": "19+3 (Reinforcements)"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–11+1 (Upon Cordelia arriving)", "enemies": "19+3 (Reinforcements)"}},
     recruits: [
-      {"unit": "Cordelia", "class": "Pegasus Knight", "level": "7", "how": "Automatically from turn 3, or automatically at the end of the chapter if cleared before turn 3"},
+      {"unit": "Cordelia", "class": "Pegasus Knight", "level": "7", "how": "Automatically from turn 3, or automatically at the end of the chapter if cleared before turn 3", "inventory": ["Steel Lance", "Javelin", "Vulnerary"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -98,8 +98,8 @@ export const CHAPTERS_7_12: readonly ChapterData[] = [
     location: "Border Sands",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–10+2 (Upon Gregor and Nowi arriving)", "enemies": "20"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–10+2 (Upon Gregor and Nowi arriving)", "enemies": "23"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–10+2 (Upon Gregor and Nowi arriving)", "enemies": "23"}},
     recruits: [
-      {"unit": "Gregor", "class": "Mercenary", "level": "10", "how": "Automatically from turn 1"},
-      {"unit": "Nowi", "class": "Manakete", "level": "3", "how": "Automatically from turn 1"},
+      {"unit": "Gregor", "class": "Mercenary", "level": "10", "how": "Automatically from turn 1", "inventory": ["Steel Sword", "Vulnerary"]},
+      {"unit": "Nowi", "class": "Manakete", "level": "3", "how": "Automatically from turn 1", "inventory": ["Dragonstone"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -181,8 +181,8 @@ export const CHAPTERS_7_12: readonly ChapterData[] = [
     location: "Plegia Castle Courtyard",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–12+2 (Upon Libra and Tharja being recruited)", "enemies": "17 (Displays 19 during battle preparations; Gangrel and Aversa leave the area before the first turn)+6 (Reinforcements)−1 (Upon Tharja being recruited)"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–12+2 (Upon Libra and Tharja being recruited)", "enemies": "19 (Displays 21 during battle preparations; Gangrel and Aversa leave the area before the first turn)+6 (Reinforcements)−1 (Upon Tharja being recruited)"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–12+2 (Upon Libra and Tharja being recruited)", "enemies": "21 (Displays 23 during battle preparations; Gangrel and Aversa leave the area before the first turn)+8 (Reinforcements)−1 (Upon Tharja being recruited)"}},
     recruits: [
-      {"unit": "Libra", "class": "War Monk", "level": "1", "how": "NPC, talk to with Chrom"},
-      {"unit": "Tharja", "class": "Dark Mage", "level": "10", "how": "Enemy, talk to with Chrom"},
+      {"unit": "Libra", "class": "War Monk", "level": "1", "how": "NPC, talk to with Chrom", "inventory": ["Killer Axe", "Mend", "Ward", "Concoction"]},
+      {"unit": "Tharja", "class": "Dark Mage", "level": "10", "how": "Enemy, talk to with Chrom", "inventory": ["Elthunder", "Nosferatu"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -366,7 +366,7 @@ export const CHAPTERS_7_12: readonly ChapterData[] = [
     location: "Border Wastes",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Olivia arriving)", "enemies": "22 (Split into two factions; 21 Plegians, 1 Ruffian)+18 (Reinforcements, representing the Plegian faction)"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Olivia arriving)", "enemies": "22 (Split into two factions; 21 Plegians, 1 Ruffian)+20 (Reinforcements, representing the Plegian faction)"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–13+1 (Upon Olivia arriving)", "enemies": "22 (Split into two factions; 21 Plegians, 1 Ruffian)+25 (Reinforcements, representing the Plegian faction)"}},
     recruits: [
-      {"unit": "Olivia", "class": "Dancer", "level": "1", "how": "Automatically from turn 1"},
+      {"unit": "Olivia", "class": "Dancer", "level": "1", "how": "Automatically from turn 1", "inventory": ["Iron Sword", "Concoction"]},
     ],
     forced: ["Chrom"],
     items: [
@@ -476,7 +476,7 @@ export const CHAPTERS_7_12: readonly ChapterData[] = [
     location: "Port Ferox",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–12+1 (Upon Cherche arriving)", "enemies": "40"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–12+1 (Upon Cherche arriving)", "enemies": "43"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "1–12+1 (Upon Cherche arriving)", "enemies": "43"}},
     recruits: [
-      {"unit": "Cherche", "class": "Wyvern Rider", "level": "12", "how": "Automatically from turn 1"},
+      {"unit": "Cherche", "class": "Wyvern Rider", "level": "12", "how": "Automatically from turn 1", "inventory": ["Steel Axe", "Hammer"]},
     ],
     forced: ["Chrom"],
     items: [
