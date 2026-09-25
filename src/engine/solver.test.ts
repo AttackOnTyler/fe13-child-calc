@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createEngine, foesOf, itemByName, matchup, pairUpBonus, statValue, type Fighter, type Foe } from './index';
+import { createEngine, dangerFlags, foeKey, foesOf, itemByName, matchup, pairUpBonus, statValue, type Fighter, type Foe } from './index';
 
 const engine = createEngine();
 const map = (id: string) => engine.maps().find((m) => m.id === id)!;
@@ -64,5 +64,33 @@ describe('the map solver’s combat math', () => {
     expect(m.notes.join(' ')).toMatch(/Luna\+/);
     const base = matchup(frederick, undefined, null, foe);
     expect(m.worstHit).toBeGreaterThanOrEqual(base.worstHit);
+  });
+});
+
+describe('threats and danger flags (#120)', () => {
+  const cavalier: Fighter = { name: 'Stahl', className: 'Cavalier', stats: stats(24, 9, 0, 8, 7, 6, 9, 1), skills: [], weapon: weapon('Iron Sword') };
+  const knight = (skills: string[]): Foe => ({ name: 'Soldier', className: 'Soldier', count: 1, stats: stats(25, 9, 0, 6, 5, 2, 6, 0), weapon: itemByName('Beast Killer'), skills, boss: false });
+
+  it('flag a Beast Killer against cavalry', () => {
+    const flags = dangerFlags([cavalier, frederick], [knight([])]);
+    expect(flags.filter((f) => f.kind === 'effective').map((f) => f.unit)).toEqual(['Stahl', 'Frederick']);
+    expect(flags.find((f) => f.unit === 'Stahl')!.text).toMatch(/Beast Killer is effective/);
+  });
+
+  it('flag Counter against melee leads, a boss that doubles, and a round that kills', () => {
+    const boss: Foe = { ...knight(['Counter']), name: 'Boss', boss: true, stats: stats(50, 30, 0, 20, 20, 5, 10, 5), weapon: itemByName('Steel Lance') };
+    const kinds = new Set(dangerFlags([cavalier], [boss]).map((f) => f.kind));
+    expect([...kinds].sort()).toEqual(['counter', 'doubles', 'kills']);
+  });
+
+  it('use the skills recorded on a Lunatic+ foe instead of the worst case', () => {
+    const pool = ['Pass', 'Hawkeye', 'Luna+', 'Vantage+', 'Counter', 'Aegis+', 'Pavise+'];
+    const foe = knight([]);
+    expect(matchup(frederick, undefined, null, foe, pool).foeHit).toBe(100);
+    const recorded = { ...foe, skills: ['Pass', 'Vantage+'] };
+    expect(matchup(frederick, undefined, null, recorded, []).foeHit).toBeLessThan(100);
+    expect(dangerFlags([frederick], [foe], pool, () => ['Pass']).some((f) => f.kind === 'counter')).toBe(false);
+    expect(dangerFlags([frederick], [foe], pool).some((f) => f.kind === 'counter')).toBe(true);
+    expect(foeKey(foe)).toBe('Soldier|Soldier|25');
   });
 });

@@ -6,7 +6,7 @@ import { DEFAULT_PRIORITY, type ChildId } from '../engine';
 import type { GuideTarget } from './guide';
 import { BASIS_LABELS, LABELS, ROLE_UI } from './labels';
 
-export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners' | 'robin-preview' | 'front-door-pairings' | 'unit-opinion' | 'map-data' | 'chapter-log' | 'record-results' | 'matchups';
+export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners' | 'robin-preview' | 'front-door-pairings' | 'unit-opinion' | 'map-data' | 'chapter-log' | 'record-results' | 'matchups' | 'threats';
 
 /**
  * Where an entry's jump goes: the All children leaderboard, a child's table (the one `guideChild` picks, with its Robin
@@ -250,6 +250,17 @@ export const DEEPER: readonly DeeperEntry[] = [
       { term: 'matchup', def: 'A lead and back, with a weapon, against one foe: damage, one-round, doubling, worst round and survival, hit and crit.' },
       { term: 'preparation page', def: 'The next map’s page for getting ready: its matchups, and more to come.' },
     ],
+  },
+  {
+    id: 'threats',
+    question: 'What should I watch out for on this map?',
+    answer: [
+      'The preparation page opens with the map’s threats: every enemy group and the boss on your difficulty, their weapons and skills, what sets them moving, and when reinforcements arrive.',
+      'Danger flags pick out what threatens your army: a weapon effective against a unit (⚔, like Beast Killers against cavalry), Counter against a melee unit (↩), a boss that doubles a unit (»), and a foe whose round can kill a unit (☠).',
+      'On Lunatic+, a checklist lists each enemy to inspect when the map starts. Note the random skills you see: the matchups and flags then use them instead of the worst case.',
+    ],
+    jump: { to: 'log', target: 'prepare' },
+    terms: [{ term: 'danger flag', def: 'Something on the map that threatens one of your units: an effective weapon, Counter, a boss that doubles it, a round that can kill it.' }],
   },
 ];
 

@@ -174,7 +174,7 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
   const worstHit = Math.max(0, (fmagic ? foe.stats.mag : foe.stats.str) + fws.mt * (feff ? 3 : 1) - (luna ? Math.floor(leadDef / 2) : leadDef));
   const foeHits = fw ? (fw.brave ? 2 : 1) * (doubled ? 2 : 1) : 0;
   // Counter returns the lead's damage when it hits in melee and doesn't kill.
-  const melee = !w || !(w.range ?? '1').startsWith('2');
+  const melee = !w || (w.range ?? '1') === '1';
   const counter = skills.has('Counter') && melee && !oneRounds ? damage * Math.min(hits, Math.max(1, Math.ceil(foe.stats.hp / Math.max(1, damage)) - 1)) : 0;
   if (counter) notes.push(`Counter returns ${counter}`);
   const worstRound = worstHit * foeHits + counter;
@@ -233,4 +233,34 @@ export function bestWeapon(fighter: Fighter, weapons: readonly NonNullable<Fight
     if (!best || key(result) > key(best.result)) best = { weapon, result };
   }
   return best;
+}
+
+/** A foe's key on its map: name, class and HP, stable across renders (for recorded skills). */
+export const foeKey = (f: Foe): string => `${f.name}|${f.className}|${f.stats.hp}`;
+
+/** A threat to the army from one foe (#120). */
+export type DangerFlag = { readonly foe: string; readonly unit: string; readonly kind: 'effective' | 'counter' | 'doubles' | 'kills'; readonly text: string };
+
+/**
+ * What in the map threatens the army (#120): a foe whose weapon is effective against a unit (Beast Killers against
+ * cavalry, bows against fliers), Counter against a melee lead, a boss that doubles a unit, and a foe whose worst round
+ * would kill a unit. `pool`: the Lunatic+ skills to assume for foes without recorded skills.
+ */
+export function dangerFlags(army: readonly Fighter[], foes: readonly Foe[], pool: readonly string[] = [], recorded: (f: Foe) => readonly string[] | undefined = () => undefined): DangerFlag[] {
+  const out: DangerFlag[] = [];
+  for (const foe of foes) {
+    const seen = recorded(foe);
+    const skills = new Set([...foe.skills, ...(seen ?? pool)]);
+    for (const u of army) {
+      const eff = foe.weapon?.effective?.filter((e) => classTypes(u.className).includes(e)) ?? [];
+      if (eff.length) out.push({ foe: foe.name, unit: u.name, kind: 'effective', text: `${foe.name}’s ${foe.weapon!.name} is effective against ${u.name} (${eff.join(', ')})` });
+      // Counter only answers an adjacent attack: a 1–2 range weapon can strike from 2 instead.
+      const melee = !!u.weapon && (u.weapon.item.range ?? '1') === '1';
+      if (skills.has('Counter') && melee) out.push({ foe: foe.name, unit: u.name, kind: 'counter', text: `${foe.name} ${seen ? 'has' : 'may have'} Counter: ${u.name}’s melee hits come back` });
+      if (foe.boss && foe.stats.spd - u.stats.spd >= 5) out.push({ foe: foe.name, unit: u.name, kind: 'doubles', text: `${foe.name} doubles ${u.name}` });
+      const m = matchup(u, undefined, null, foe, seen ? [] : pool.filter((s) => !foe.skills.includes(s)));
+      if (!m.survives) out.push({ foe: foe.name, unit: u.name, kind: 'kills', text: `${foe.name} can kill ${u.name} in one round (${m.worstRound} vs ${u.stats.hp} HP)` });
+    }
+  }
+  return out;
 }

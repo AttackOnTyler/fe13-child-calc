@@ -2376,6 +2376,7 @@ function renderParts(parts: readonly Part[]): void {
           ? prepPage({
               engine,
               run,
+              setRun,
               map: preparing,
               close: () => {
                 preparing = undefined;

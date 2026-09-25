@@ -60,6 +60,8 @@ export type RunEntry = {
 
 export type Run = {
   readonly version: 1;
+  /** Lunatic+ random skills the player saw on a map's enemies (#120): map id → foe key → skills. */
+  readonly seen?: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>;
   /** Everything on the roster but unit states and spouses: Run facts, rule-outs, the saved plan, deploy flags. */
   readonly roster: Roster;
   /** In play order. */
@@ -266,6 +268,15 @@ export function recordFallen(run: Run, id: string, unit: RosterUnit, now: number
 export const recordMarriage = (run: Run, id: string, a: RosterUnit, b: RosterUnit, now: number): Run =>
   withEntryRoster(run, id, (r) => withSpouse(r, a, b, 'married'), now);
 
+/** Records the Lunatic+ skills seen on one of a map's foes; an empty list clears them. */
+export function withSeenSkills(run: Run, map: string, foe: string, skills: readonly string[]): Run {
+  const { [foe]: _, ...rest } = run.seen?.[map] ?? {};
+  const forMap = skills.length ? { ...rest, [foe]: skills } : rest;
+  const { [map]: __, ...others } = run.seen ?? {};
+  const seen = Object.keys(forMap).length ? { ...others, [map]: forMap } : others;
+  return { ...run, ...(Object.keys(seen).length ? { seen } : { seen: undefined }) };
+}
+
 // ---- storage: parse, export, import ----
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -336,7 +347,12 @@ export function parseRun(raw: unknown): Run {
       },
     ];
   });
-  return entries.length ? { version: 1, roster: { ...roster, states: {}, spouses: {} }, entries } : runFromRoster(roster);
+  const seen: Record<string, Record<string, string[]>> = {};
+  for (const [map, foes] of Object.entries(isObject(raw.seen) ? raw.seen : {}))
+    for (const [foe, skills] of Object.entries(isObject(foes) ? foes : {}))
+      if (Array.isArray(skills)) (seen[map] ??= {})[foe] = skills.filter((x): x is string => typeof x === 'string');
+  const base: Run = entries.length ? { version: 1, roster: { ...roster, states: {}, spouses: {} }, entries } : runFromRoster(roster);
+  return Object.keys(seen).length ? { ...base, seen } : base;
 }
 
 /** The run as a file (JSON), read back by importRun. */

@@ -16,6 +16,7 @@ import {
   runFromRoster,
   withRoster,
   withRun,
+  withSeenSkills,
   withSpouse,
   withState,
   withUnit,
@@ -147,5 +148,15 @@ describe('next-map offers and Record results (#118)', () => {
     let run = addEntry(runFromRoster(facts), 'chapter-3', 1);
     run = recordMarriage(run, latestEntry(run)!.id, 'chrom', 'sumia', 2);
     expect(rosterOf(run).spouses.chrom).toEqual({ partner: 'sumia', bond: 'married' });
+  });
+});
+
+describe('Lunatic+ skills seen (#120)', () => {
+  it('are kept per map and foe, cleared by an empty list, and survive export', () => {
+    let run = withSeenSkills(runFromRoster(facts), 'chapter-5', 'Orton|Wyvern Rider|41', ['Luna+', 'Pass']);
+    expect(run.seen).toEqual({ 'chapter-5': { 'Orton|Wyvern Rider|41': ['Luna+', 'Pass'] } });
+    expect(importRun(exportRun(run)).seen).toEqual(run.seen);
+    run = withSeenSkills(run, 'chapter-5', 'Orton|Wyvern Rider|41', []);
+    expect(run.seen).toBeUndefined();
   });
 });

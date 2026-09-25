@@ -4,7 +4,7 @@ import { DEEPER, deeperEntry, deeperView, guideChild, type DeeperId } from './gu
 import { JOURNEYS } from './guide-journeys';
 
 describe('Going deeper', () => {
-  it('asks its sixteen questions in order', () => {
+  it('asks its seventeen questions in order', () => {
     expect(DEEPER.map((e) => e.question)).toEqual([
       'Who’s strongest overall?',
       'Why this spouse for this child?',
@@ -22,6 +22,7 @@ describe('Going deeper', () => {
       'How do I record my run?',
       'What do I do after clearing a map?',
       'Can my units handle the next map?',
+      'What should I watch out for on this map?',
     ]);
   });
 
@@ -42,6 +43,7 @@ describe('Going deeper', () => {
       ['map', 'map-data'],
       ['log', 'chapter-log'],
       ['log', 'next-map'],
+      ['log', 'prepare'],
       ['log', 'prepare'],
     ]);
     expect(deeperEntry('robin').jump).toMatchObject({ robinRow: true });
