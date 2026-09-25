@@ -348,7 +348,7 @@ export function rosterPage(ctx: RosterContext): HTMLElement[] {
         class: 'clear-all',
         title: 'Wipe run facts, unit states and marriages (scoring settings are kept)',
         onclick: () => {
-          if (confirm('Clear the whole roster: run facts, unit states and marriages? Scoring settings are kept.')) ctx.clearAll();
+          if (confirm('Clear the whole roster: run facts, unit states and marriages? Scoring settings and your chapter log’s units, gold and convoy are kept.')) ctx.clearAll();
         },
       },
       'Clear all',

@@ -102,7 +102,7 @@ import { runView } from './run-page';
 import { prepPage } from './prep-page';
 import { CHILD_UNITS } from '../game-data/children';
 import { unitLink, type OpenUnit } from './unit-links';
-import { clearRoster, loadRun, saveRun } from './roster-store';
+import { loadRun, saveRun } from './roster-store';
 import { planPage, planSidebar, type ChildPlanControls, type PlanPageContext } from './plan-page';
 import {
   loadPlanPrefs,
@@ -330,10 +330,11 @@ function setDeployment(next: Roster): void {
   setRoster(next);
 }
 
+/** Clear all (Roster): Run facts, unit states and marriages go; the chapter log's units, gold and convoy stay. */
 function clearRosterState(): void {
-  clearRoster();
-  run = EMPTY_RUN;
+  run = { ...run, roster: EMPTY_ROSTER, entries: run.entries.map((e) => ({ ...e, snapshot: { ...e.snapshot, states: {}, spouses: {} } })) };
   roster = rosterOf(run);
+  saveRun(run);
   renderParts(rosterParts());
 }
 

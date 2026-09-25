@@ -94,3 +94,13 @@ describe('threats and danger flags (#120)', () => {
     expect(foeKey(foe)).toBe('Soldier|Soldier|25');
   });
 });
+
+describe('review fixes: dragonstones fall under Aegis+', () => {
+  it('halves a dragonstone for Aegis+, not Pavise+', () => {
+    const nowi: Fighter = { name: 'Nowi', className: 'Manakete', stats: stats(30, 12, 5, 8, 8, 10, 12, 10), skills: [], weapon: weapon('Dragonstone') };
+    const foe = (skills: string[]): Foe => ({ name: 'F', className: 'Fighter', count: 1, stats: stats(40, 10, 0, 5, 5, 0, 6, 0), weapon: itemByName('Iron Axe'), skills, boss: false });
+    const plain = matchup(nowi, undefined, null, foe([]));
+    expect(matchup(nowi, undefined, null, foe(['Aegis+'])).damage).toBe(Math.floor(plain.damage / 2));
+    expect(matchup(nowi, undefined, null, foe(['Pavise+'])).damage).toBe(plain.damage);
+  });
+});

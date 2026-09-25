@@ -207,8 +207,15 @@ function chapterLog(ctx: RunContext): HTMLElement {
           type: 'file',
           accept: 'application/json,.json',
           onchange: async (e) => {
-            const f = (e.target as HTMLInputElement).files?.[0];
-            if (f && confirm('Replace this run with the file’s? Export first to keep it.')) ctx.setRun(importRun(await f.text()));
+            const input = e.target as HTMLInputElement;
+            const f = input.files?.[0];
+            input.value = '';
+            if (!f || !confirm('Replace this run with the file’s? Export first to keep it.')) return;
+            try {
+              ctx.setRun(importRun(await f.text()));
+            } catch {
+              alert(`${f.name} isn’t a run file.`);
+            }
           },
         }),
       ),

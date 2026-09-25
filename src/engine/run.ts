@@ -9,6 +9,7 @@ import { MAPS } from '../game-data/chapters';
 import { JOIN_DATA, basesOn } from '../game-data/join';
 import { STATS, type Gender, type Stat } from '../game-data/stats';
 import { className } from './classes';
+import { robinBases } from './unit-page';
 import { FORGE, forgeProblem, itemByName } from '../game-data/items';
 import { FIRST_GEN_UNITS, type UnitId } from '../game-data/units';
 import { EMPTY_ROSTER, parseRoster, withSpouse, withState, type Roster, type RosterUnit } from './roster';
@@ -116,7 +117,9 @@ export function recruitSnapshot(unit: RosterUnit, run: Run, fromMap?: { readonly
     return { class: fromMap?.class ?? '', level: Number(fromMap?.level) || 1, promoted: false, reclassed: false, exp: 0, stats: null, skills: [], inventory: startingItems(fromMap), supports: [] };
   }
   const j = JOIN_DATA[unit as Exclude<UnitId, 'maiden'> | 'robin'];
-  const bases = basesOn(j, difficulty);
+  // Robin's bases shift with the run's asset and flaw.
+  const r = run.roster.run;
+  const bases = unit === 'robin' && r.gender && r.asset && r.flaw ? robinBases({ kind: 'robin', gender: r.gender, asset: r.asset, flaw: r.flaw }) : basesOn(j, difficulty);
   const gender = unit === 'robin' ? (run.roster.run.gender ?? 'M') : (FIRST_GEN_UNITS[unit as UnitId].gender as Gender);
   return {
     class: className(j.joinClass, gender),

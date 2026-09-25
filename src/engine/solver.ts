@@ -134,8 +134,10 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
   const tri = triangle(w, foe.weapon);
   const attack = (magic ? st('mag') : st('str')) + ws.mt * (effective ? 3 : 1);
   let damage = Math.max(0, attack - (magic ? foe.stats.res : foe.stats.def));
-  const shieldPlusHit = (magic || w?.kind === 'bow') ? skills.has('Aegis+') : skills.has('Pavise+');
-  const shield = (magic || w?.kind === 'bow') ? skills.has('Aegis') : skills.has('Pavise');
+  // Aegis covers bows, tomes and dragonstones; Pavise the rest, beaststones included (SF Skills).
+  const aegisSide = (x: GameItem | undefined, m: boolean) => m || x?.kind === 'bow' || x?.kind === 'stone';
+  const shieldPlusHit = aegisSide(w, magic) ? skills.has('Aegis+') : skills.has('Pavise+');
+  const shield = aegisSide(w, magic) ? skills.has('Aegis') : skills.has('Pavise');
   const dragonskin = skills.has('Dragonskin');
   if (shieldPlusHit || dragonskin) damage = Math.floor(damage / 2);
   const brave = w?.brave ? 2 : 1;
@@ -151,11 +153,11 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
     const bws = weaponStats(back.weapon);
     const beff = bw?.effective?.some((e) => classTypes(foe.className).includes(e)) ?? false;
     backDamage = Math.max(0, (bmagic ? back.stats.mag : back.stats.str) + bws.mt * (beff ? 3 : 1) - (bmagic ? foe.stats.res : foe.stats.def));
-    const bPlus = (bmagic || bw?.kind === 'bow') ? skills.has('Aegis+') : skills.has('Pavise+');
+    const bPlus = aegisSide(bw, bmagic) ? skills.has('Aegis+') : skills.has('Pavise+');
     if (bPlus || dragonskin) {
       backDamage = Math.floor(backDamage / 2);
-      notes.push(`${bPlus ? ((bmagic || bw?.kind === 'bow') ? 'Aegis+' : 'Pavise+') : 'Dragonskin'} halves dual strikes too`);
-    } else if (shield) notes.push(`${(magic || w?.kind === 'bow') ? 'Aegis' : 'Pavise'} may halve the lead’s hits; dual strikes get past it`);
+      notes.push(`${bPlus ? (aegisSide(bw, bmagic) ? 'Aegis+' : 'Pavise+') : 'Dragonskin'} halves dual strikes too`);
+    } else if (shield) notes.push(`${aegisSide(w, magic) ? 'Aegis' : 'Pavise'} may halve the lead’s hits; dual strikes get past it`);
     const skl = lead.stats.skl + back.stats.skl;
     dualStrikeRate = clamp(skl / 4 + { none: 20, C: 30, B: 40, A: 50, S: 60 }[support ?? 'none'] + ([...lead.skills, ...back.skills].includes('Dual Strike+') ? 10 : 0));
   }

@@ -160,3 +160,11 @@ describe('Lunatic+ skills seen (#120)', () => {
     expect(run.seen).toBeUndefined();
   });
 });
+
+describe('review fixes (#108–#123 review)', () => {
+  it('pre-fills Robin with the asset/flaw shift', () => {
+    const run = addEntry(runFromRoster(facts), 'prologue', 1);
+    // +Mag −Str: Mag 5 + 2, Str 6 − 1.
+    expect(latestEntry(run)!.snapshot.units.robin!.stats).toMatchObject({ mag: 7, str: 5 });
+  });
+});
