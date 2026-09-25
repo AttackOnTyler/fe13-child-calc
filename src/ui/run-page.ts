@@ -25,6 +25,8 @@ export type RunContext = {
   /** Record results in progress: the entry it created and the step (view state). */
   readonly recording: { readonly entry: string; readonly step: number } | undefined;
   readonly setRecording: (r: { readonly entry: string; readonly step: number } | undefined) => void;
+  /** Opens a map's preparation page (#119). */
+  readonly prepare: (map: string) => void;
 };
 
 const RECORD_STEPS = ['Deployed units', 'Recruits', 'Deaths and marriages', 'Convoy and gold'] as const;
@@ -58,6 +60,7 @@ function nextMapSection(ctx: RunContext): HTMLElement {
       { class: `row${first ? ' next-first' : ''}` },
       h('b', {}, label(o.map)),
       o.note ? h('span', { class: 'muted small' }, o.note) : null,
+      h('button', { ...(first ? guide('prepare') : {}), class: first ? '' : 'mini', title: 'Matchups for this map from your latest entry', onclick: () => ctx.prepare(o.map) }, 'Prepare'),
       h('button', { ...(first ? guide('record-results') : {}), class: first ? '' : 'mini', title: 'Played it: record how it went', onclick: () => record(o.map) }, 'Record results'),
     );
   const story = offers.filter((o) => o.kind === 'story');

@@ -49,6 +49,7 @@ import {
   type SkillCard,
   type PageSubject,
   type Run,
+  type RosterUnit,
   type Difficulty,
   type Pairing,
   type PageUnitId,
@@ -97,6 +98,7 @@ import { validationPanel, withOverride } from './validation';
 import { rosterPage } from './roster-page';
 import { unitsView, type UnitsContext } from './unit-page';
 import { runView } from './run-page';
+import { prepPage } from './prep-page';
 import { CHILD_UNITS } from '../game-data/children';
 import { unitLink, type OpenUnit } from './unit-links';
 import { clearRoster, loadRun, saveRun } from './roster-store';
@@ -159,6 +161,10 @@ let openEntry: string | undefined;
 let showingMaps = false;
 /** Record results in progress (#118; view state). */
 let recording: { entry: string; step: number } | undefined;
+/** The preparation page open (#119), its chosen backs and foe (view state). */
+let preparing: string | undefined;
+let prepBacks: Partial<Record<RosterUnit, RosterUnit | 'none'>> = {};
+let prepFoe = 0;
 /** The Run view's open map (#109); undefined shows the Maps list. */
 let mapOpen: string | undefined;
 /** A difficulty picked on the Maps view (view state); otherwise it shows the run's, else Normal. */
@@ -662,6 +668,7 @@ function rail(): HTMLElement[] {
           view = 'run';
           mapOpen = undefined;
           showingMaps = false;
+          preparing = undefined;
           render();
         },
       },
@@ -2365,6 +2372,26 @@ function renderParts(parts: readonly Part[]): void {
           ? planPage(planContext())
           : view === 'units'
           ? unitsView(unitsContext())
+          : view === 'run' && preparing
+          ? prepPage({
+              engine,
+              run,
+              map: preparing,
+              close: () => {
+                preparing = undefined;
+                renderParts(['main']);
+              },
+              backs: prepBacks,
+              setBack: (lead, back) => {
+                prepBacks = { ...prepBacks, [lead]: back };
+                renderParts(['main']);
+              },
+              foe: prepFoe,
+              setFoe: (i) => {
+                prepFoe = i;
+                renderParts(['main']);
+              },
+            })
           : view === 'run'
           ? runView({
               engine,
@@ -2374,6 +2401,11 @@ function renderParts(parts: readonly Part[]): void {
               openEntry,
               setOpenEntry: (id) => {
                 openEntry = id;
+                renderParts(['main']);
+              },
+              prepare: (map) => {
+                preparing = map;
+                prepFoe = 0;
                 renderParts(['main']);
               },
               recording,

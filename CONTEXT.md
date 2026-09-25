@@ -200,6 +200,18 @@ _Avoid_: Next chapter (paralogues and xenologues count)
 The guided flow after a map: it makes the map's entry (a copy of the last) and steps through deployed units, recruits, deaths and marriages, then convoy and gold. On Casual a fallen unit isn't recorded as dead.
 _Avoid_: Save, end chapter
 
+**Map solver**:
+The engine's combat math for the next map: a lead and back, with a weapon and forge, against each enemy group and the boss on the run's difficulty. It doesn't plan movement.
+_Avoid_: Simulator, AI
+
+**Matchup**:
+One lead and back against one foe: damage, whether one round kills (with and without dual strikes), doubling, the worst round the lead can take and whether it survives, hit and crit both ways.
+_Avoid_: Forecast (the game's single-attack preview)
+
+**Preparation page**:
+The page for getting ready for the next map, reached from Next map: its matchups first.
+_Avoid_: Prep screen, battle prep
+
 **Copy-forward**:
 A new entry starts as a copy of the one before, with the map's recruits filled in from join data. Editing a past entry never changes later ones; they're flagged instead.
 _Avoid_: Inherit, carry over

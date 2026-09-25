@@ -6,7 +6,7 @@ import { DEFAULT_PRIORITY, type ChildId } from '../engine';
 import type { GuideTarget } from './guide';
 import { BASIS_LABELS, LABELS, ROLE_UI } from './labels';
 
-export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners' | 'robin-preview' | 'front-door-pairings' | 'unit-opinion' | 'map-data' | 'chapter-log' | 'record-results';
+export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners' | 'robin-preview' | 'front-door-pairings' | 'unit-opinion' | 'map-data' | 'chapter-log' | 'record-results' | 'matchups';
 
 /**
  * Where an entry's jump goes: the All children leaderboard, a child's table (the one `guideChild` picks, with its Robin
@@ -234,6 +234,21 @@ export const DEEPER: readonly DeeperEntry[] = [
     terms: [
       { term: 'next map', def: 'A map your route and the maps you’ve cleared have opened.' },
       { term: 'map played', def: 'The map an entry records: a chapter, paralogue, xenologue, or “other”.' },
+    ],
+  },
+  {
+    id: 'matchups',
+    question: 'Can my units handle the next map?',
+    answer: [
+      'Prepare, beside the next map, opens its preparation page. Pick a foe (the boss is starred) to see each of your units against it, paired with its back.',
+      'Each row uses your latest entry’s stats, the unit’s best weapon from its inventory (forges count), and the back’s pair-up bonus and dual strikes: damage, whether one round kills (with dual strikes landing, too), doubling, the worst round it can take against its HP, and hit and crit both ways.',
+      'Dual strikes get past plain Pavise and Aegis but not Pavise+ or Aegis+. On Lunatic+ the table assumes the worst of the map’s random-skill pool.',
+      'Weapon ranks aren’t recorded, so no rank bonus is counted. There’s no movement planning: no source publishes terrain or enemy AI.',
+    ],
+    jump: { to: 'log', target: 'prepare' },
+    terms: [
+      { term: 'matchup', def: 'A lead and back, with a weapon, against one foe: damage, one-round, doubling, worst round and survival, hit and crit.' },
+      { term: 'preparation page', def: 'The next map’s page for getting ready: its matchups, and more to come.' },
     ],
   },
 ];

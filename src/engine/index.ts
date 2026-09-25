@@ -97,6 +97,7 @@ export {
 } from './assumptions';
 export { DEFAULT_SPEED, RALLY_OPTIONS, TONIC_SPD } from './speed';
 export type { Citation } from '../game-data/citations';
+export { bestWeapon, classTypes, foeOf, foesOf, matchup, pairUpBonus, statValue, type Fighter, type Foe, type Matchup } from './solver';
 export {
   EMPTY_RUN,
   EMPTY_SNAPSHOT,
