@@ -31,6 +31,7 @@ import { h } from './dom';
 import { guide } from './guide';
 import { LABELS, LEDGER_UI, LEFT_OUT_UI, PIN_LOSS_UI, ROLE_UI, STATE_UI } from './labels';
 import { compositionStrip, priorityControl, roleChip, sourceChip, type ChildPlanControls } from './plan-page';
+import { unitLink } from './unit-links';
 import { spouseOptions } from './spouse-options';
 
 /** What the Roster page reads, and how it changes the roster. */
@@ -185,8 +186,8 @@ function ledgerRow(ctx: RosterContext, e: LedgerEntry): HTMLElement {
   return h(
     'tr',
     { class: `ledger-${e.status}` },
-    h('td', { class: 'uname' }, e.name, ' ', roleChip(ctx.plan, e.child)),
-    h('td', { class: 'muted' }, unitName(e.fixedParent, gender)),
+    h('td', { class: 'uname' }, unitLink(ctx.plan.openUnit, e.child, e.name), ' ', roleChip(ctx.plan, e.child)),
+    h('td', { class: 'muted' }, unitLink(ctx.plan.openUnit, e.fixedParent, unitName(e.fixedParent, gender))),
     h(
       'td',
       { title: e.status === 'married' ? 'Its parents’ marriage' : 'The marriage plan’s pairing' },

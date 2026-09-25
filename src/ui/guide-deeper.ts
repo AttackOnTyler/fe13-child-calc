@@ -83,7 +83,7 @@ export const DEEPER: readonly DeeperEntry[] = [
   {
     id: 'robin',
     question: 'Which Robin does this child want?',
-    answer: `Expand the child’s Robin row: its asset × flaw heatmap scores every Robin. To get that Robin, raise the child’s priority and ${lock} Robin from the ${plan}’s pick line.`,
+    answer: `Expand the child’s Robin row with ▸: its asset × flaw heatmap scores every Robin (the name itself opens Robin’s page on that Robin). To get that Robin, raise the child’s priority and ${lock} Robin from the ${plan}’s pick line.`,
     jump: { to: 'child', target: 'robin-heatmap', robinRow: true },
     lockedAnswer: 'Robin is locked, so there’s nothing left to choose.',
     terms: [],

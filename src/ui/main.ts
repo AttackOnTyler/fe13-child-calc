@@ -45,6 +45,7 @@ import {
   type SelfTestReport,
   type SkillCard,
   type PageSubject,
+  type Pairing,
   type PageUnitId,
   type RobinRef,
   type SkillCardEdge,
@@ -90,6 +91,8 @@ import {
 import { validationPanel, withOverride } from './validation';
 import { rosterPage } from './roster-page';
 import { unitsView, type UnitsContext } from './unit-page';
+import { CHILD_UNITS } from '../game-data/children';
+import { unitLink, type OpenUnit } from './unit-links';
 import { clearRoster, loadRoster, saveRoster } from './roster-store';
 import { planPage, planSidebar, type ChildPlanControls, type PlanPageContext } from './plan-page';
 import {
@@ -327,6 +330,17 @@ const planSettings = (): PlanSettings => ({
 /** The scroll position of the main view. */
 const mainScroll = (): number => regions.main?.querySelector('.scroll')?.scrollTop ?? regions.main?.scrollTop ?? 0;
 
+/** Opens any unit's page (#107): a child's front door, Robin's page on this Robin, a first-gen unit's page. */
+const openAnyUnit: OpenUnit = (u, robin) => {
+  if (u !== 'maiden') openUnit(u as PageUnitId | 'robin' | ChildId, robin);
+};
+
+/** A pairing's variable parent as a link: its page, Robin's (on this Robin) or, for Morgan's child parent, its front door. */
+function parentLink(pairing: Pairing, label: string): HTMLElement {
+  const v = pairing.variableParent;
+  return v.kind === 'robin' ? unitLink(openAnyUnit, 'robin', label, v) : unitLink(openAnyUnit, v.id, label);
+}
+
 /** Opens a unit's page, remembering where its back link returns. */
 /** The Robin Robin's page shows: the run facts, with anything they leave open taken from the preview. */
 const pageRobin = (): RobinRef => ({
@@ -424,6 +438,7 @@ const planControls = (): ChildPlanControls => ({
     render();
     document.querySelector('[data-guide="role-matrix"]')?.scrollIntoView({ block: 'start' });
   },
+  openUnit: openAnyUnit,
   openRunFacts: () => {
     view = 'roster';
     render();
@@ -1256,7 +1271,7 @@ function lineRows(child: ChildId, line: Line, gender: Gender, sc: Scoring, ncols
     const head = h(
       'th',
       { class: 'stick', scope: 'row' },
-      line.label,
+      parentLink(line.result.pairing, line.label),
       af ? h('span', { class: 'af' }, ` ${af}`) : null,
       warnMark([line.result]),
       blockChip(line.blocking),
@@ -1283,9 +1298,10 @@ function lineRows(child: ChildId, line: Line, gender: Gender, sc: Scoring, ncols
           renderParts(['main']);
         },
       },
-      open ? '▾ ' : '▸ ',
-      line.label,
+      open ? '▾' : '▸',
     ),
+    ' ',
+    parentLink(line.result.pairing, line.label),
     h(
       'span',
       {
@@ -1379,11 +1395,13 @@ function childTable(child: ChildId): HTMLElement[] {
   const head = h(
     'div',
     { class: 'main-head' },
-    h('h2', {}, summary.name),
+    h('h2', {}, unitLink(openAnyUnit, child, summary.name)),
     h(
       'span',
       { class: 'muted' },
-      `Fixed parent: ${summary.fixedParentName} · ${pairingCount} pairings` +
+      'Fixed parent: ',
+      unitLink(openAnyUnit, CHILD_UNITS[child].fixedParent, summary.fixedParentName),
+      ` · ${pairingCount} pairings` +
         (lines.length < allGroups ? ` · ${lines.length} of ${allGroups} parents shown` : '') +
         (hardCount ? ` · ${hardCount} blocked` : ''),
     ),

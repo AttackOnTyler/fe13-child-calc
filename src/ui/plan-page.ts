@@ -40,6 +40,7 @@ import { h } from './dom';
 import { guide } from './guide';
 import { LABELS, LEFT_OUT_UI, NOT_BORN_UI, PIN_LOSS_UI, ROLE_UI } from './labels';
 import { editQuota } from './plan-prefs';
+import { unitLink, type OpenUnit } from './unit-links';
 import { shownDelta, shownTotal } from './plan-totals';
 
 /** A child's plan controls (priority, plan preset), shared by the Plan sidebar and the Roster page's ledger. */
@@ -55,6 +56,8 @@ export type ChildPlanControls = {
   readonly openRoles: () => void;
   /** Opens the Run facts, where Robin is set. */
   readonly openRunFacts: () => void;
+  /** Opens a unit's page, Robin's or a child's front door (#107). */
+  readonly openUnit: OpenUnit;
   /** A preset's name, with `*` when the user edited it. */
   readonly presetLabel: (id: PresetId) => string;
   /** The play context's composition quotas (the user's, else the curated seed). */
@@ -206,7 +209,7 @@ function childChip(ctx: PlanPageContext, c: PlannedChild, saved: ReadonlyMap<Chi
 }
 
 function marriageRow(ctx: PlanPageContext, plan: MarriagePlan, m: PlanMarriage, saved: ReadonlyMap<ChildId, PlannedChild> | undefined): HTMLElement {
-  const name = (u: RosterUnit) => unitName(u, plan.robin.gender);
+  const spouse = (u: RosterUnit) => unitLink(ctx.openUnit, u, unitName(u, plan.robin.gender), u === 'robin' ? plan.robin : undefined);
   const pinned = m.bond === 'pinned';
   const locked = !canPin(ctx.roster, m);
   const actions =
@@ -242,13 +245,22 @@ function marriageRow(ctx: PlanPageContext, plan: MarriagePlan, m: PlanMarriage, 
     'tr',
     { class: m.bond ?? 'proposed' },
     h('td', { class: 'bond', title: m.bond === 'married' ? LABELS.married : pinned ? LABELS.pinned : 'Proposed by the solver' }, m.bond === 'married' ? '✓' : pinned ? LABELS.pin : ''),
-    h('td', { class: 'uname' }, name(m.husband)),
+    h('td', { class: 'uname' }, spouse(m.husband)),
     h('td', { class: 'muted' }, '×'),
-    h('td', { class: 'uname' }, name(m.wife)),
+    h('td', { class: 'uname' }, spouse(m.wife)),
     h(
       'td',
       { class: 'children' },
-      ...(m.children.length ? m.children.map((c) => childChip(ctx, c, saved)) : [h('span', { class: 'muted' }, 'no child can be born')]),
+      ...(m.children.length
+        ? m.children.map((c) =>
+            h(
+              'span',
+              { class: 'pchild-wrap' },
+              childChip(ctx, c, saved),
+              h('button', { class: 'unit-link about', title: `${c.name}’s front door`, onclick: () => ctx.openUnit(c.child) }, 'about'),
+            ),
+          )
+        : [h('span', { class: 'muted' }, 'no child can be born')]),
     ),
     h('td', { class: 'acts' }, ...actions),
   );

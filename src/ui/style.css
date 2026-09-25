@@ -500,3 +500,9 @@ button.gd-deeper-head:hover { background: var(--hover); }
 .opinions .chip.small, .chip.op { margin-left: 4px; font-size: 11px; }
 .chip.op.recommended { color: var(--pos, #5fc48a); }
 .chip.op.warned { color: var(--neg, #f0a35e); }
+
+/* Unit names as links (#107): one style everywhere */
+.unit-link { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.unit-link:hover { color: var(--accent, #7fb4ff); }
+.unit-link.about { font-size: 11px; margin: 0 6px 0 2px; color: var(--muted); }
+.pchild-wrap { display: inline-flex; align-items: center; }
