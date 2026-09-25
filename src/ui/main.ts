@@ -370,8 +370,11 @@ const planSettings = (): PlanSettings => ({
   noRobin: noRobinView,
 });
 
+/** A main view's scroller: its `.scroll`, else the region itself. */
+const scrollerOf = (region: HTMLElement): HTMLElement => region.querySelector<HTMLElement>('.scroll') ?? region;
+
 /** The scroll position of the main view. */
-const mainScroll = (): number => regions.main?.querySelector('.scroll')?.scrollTop ?? regions.main?.scrollTop ?? 0;
+const mainScroll = (): number => (regions.main ? scrollerOf(regions.main).scrollTop : 0);
 
 /** Opens any unit's page (#107): a child's front door, Robin's page on this Robin, a first-gen unit's page. */
 const openAnyUnit: OpenUnit = (u, robin) => {
@@ -403,6 +406,8 @@ function openUnit(unit: PageUnitId | 'robin' | ChildId, preview?: RobinRef): voi
   unitBack = { view, unit: view === 'units' ? unitOpen : undefined, scroll: mainScroll() };
   view = 'units';
   unitOpen = unit;
+  // A new page, even Robin's again on another Robin: it starts at the top.
+  delete shownScreens.main;
   renderParts(['rail', 'main', 'panel']);
 }
 
@@ -436,8 +441,7 @@ const unitsContext = (): UnitsContext => ({
     unitOpen = b.unit;
     unitBack = undefined;
     renderParts(['rail', 'main', 'panel']);
-    const el = regions.main?.querySelector('.scroll') ?? regions.main;
-    if (el) el.scrollTop = b.scroll;
+    if (regions.main) scrollerOf(regions.main).scrollTop = b.scroll;
   },
   backLabel: unitBack
     ? unitBack.view === 'units' && unitBack.unit
@@ -503,7 +507,7 @@ const planContext = (): PlanPageContext => ({
   },
   setNoRobin: (on) => {
     noRobinView = on;
-    render();
+    renderParts(['rail', 'main', 'panel']);
   },
   resetPlanPrefs: () => setPlanPrefs(resetPlanPrefs(planPrefs)),
   quotasEdited: !!planPrefs.quotas[quotaContext(prefs.context)],
@@ -2357,6 +2361,29 @@ function renderGuide(): void {
 type Part = 'rail' | 'main' | 'panel';
 const regions: Partial<Record<Part | 'guide', HTMLElement>> = {};
 
+/** Which screen a region shows: the view, and for the main region the page within it. */
+function screenOf(part: 'main' | 'panel'): string {
+  if (part === 'panel') return view;
+  const page =
+    view === 'table' ? selected : view === 'units' ? unitOpen : view === 'run' ? [preparing, showingMaps, mapOpen, recording?.entry, recording?.step] : null;
+  return JSON.stringify([view, page]);
+}
+const shownScreens: Partial<Record<'main' | 'panel', string>> = {};
+
+/**
+ * Replaces a region's content. Re-rendering the same screen keeps its scroll (#126); another screen is left as it
+ * lands, for the main region the top, or where `scrollToPlanned` or Back puts it.
+ */
+function replaceRegion(part: 'main' | 'panel', region: HTMLElement, content: readonly Node[]): void {
+  const scroller = () => (part === 'main' ? scrollerOf(region) : region);
+  const screen = screenOf(part);
+  const same = shownScreens[part] === screen;
+  shownScreens[part] = screen;
+  const { scrollTop, scrollLeft } = scroller();
+  region.replaceChildren(...content);
+  if (same) Object.assign(scroller(), { scrollTop, scrollLeft });
+}
+
 function renderParts(parts: readonly Part[]): void {
   const { rail: railEl, main, panel: panelEl } = regions;
   if (!railEl || !main || !panelEl) return render();
@@ -2366,7 +2393,7 @@ function renderParts(parts: readonly Part[]): void {
   const card = cardKey();
   if (parts.includes('main')) {
     drawerPairing = undefined;
-    main.replaceChildren(
+    replaceRegion('main', main, [
       ...(view === 'validation'
         ? [validationPanel({ engine, assumptions, selfTest, setOverride, resetAll: () => applyOverrides({}), render })]
         : view === 'roster'
@@ -2454,7 +2481,7 @@ function renderParts(parts: readonly Part[]): void {
           : selected === 'all'
           ? leaderboard()
           : childTable(selected)),
-    );
+    ]);
     if (scrollToPlanned) {
       scrollToPlanned = false;
       main.querySelector('tr.planned')?.scrollIntoView({ block: 'center', inline: 'nearest' });
@@ -2462,7 +2489,7 @@ function renderParts(parts: readonly Part[]): void {
   }
   // The Skill card lives in the panel but follows the drawer: refresh the panel when the card would change.
   if (parts.includes('panel') || cardKey() !== card) {
-    panelEl.replaceChildren(...panel());
+    replaceRegion('panel', panelEl, panel());
     panelEl.classList.toggle('open', sheetOpen);
   }
   renderGuide();
