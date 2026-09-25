@@ -6,7 +6,7 @@ import { DEFAULT_PRIORITY, type ChildId } from '../engine';
 import type { GuideTarget } from './guide';
 import { BASIS_LABELS, LABELS, ROLE_UI } from './labels';
 
-export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners' | 'robin-preview' | 'front-door-pairings' | 'unit-opinion' | 'map-data' | 'chapter-log';
+export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners' | 'robin-preview' | 'front-door-pairings' | 'unit-opinion' | 'map-data' | 'chapter-log' | 'record-results';
 
 /**
  * Where an entry's jump goes: the All children leaderboard, a child's table (the one `guideChild` picks, with its Robin
@@ -220,6 +220,20 @@ export const DEEPER: readonly DeeperEntry[] = [
     terms: [
       { term: 'chapter log', def: 'A run’s record, one entry per map played, each copied forward from the last.' },
       { term: 'snapshot', def: 'An entry’s record of the army: every unit, the convoy, gold, unit states and marriages.' },
+    ],
+  },
+  {
+    id: 'record-results',
+    question: 'What do I do after clearing a map?',
+    answer: [
+      'Next map, at the top of Run, offers what your route has opened: the story’s next chapter first, then paralogues (with any condition, and a note that SpotPass downloads may be gone), then on a Full route the DLC. Grind maps are never offered: log them as “other”.',
+      'Record results makes the map’s entry, a copy of the last, and walks you through what changed: deployed units, the map’s recruits (pre-filled), deaths and marriages, then convoy and gold.',
+      'On Classic a unit that falls is dead for good; on Casual it comes back, so nothing is recorded. Anything you skip keeps its copied value.',
+    ],
+    jump: { to: 'log', target: 'next-map' },
+    terms: [
+      { term: 'next map', def: 'A map your route and the maps you’ve cleared have opened.' },
+      { term: 'map played', def: 'The map an entry records: a chapter, paralogue, xenologue, or “other”.' },
     ],
   },
 ];

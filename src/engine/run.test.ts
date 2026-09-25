@@ -9,6 +9,9 @@ import {
   heldProblems,
   importRun,
   latestEntry,
+  nextMaps,
+  recordFallen,
+  recordMarriage,
   rosterOf,
   runFromRoster,
   withRoster,
@@ -106,5 +109,43 @@ describe('inventory, convoy and gold (#117)', () => {
     expect([s.units.chrom!.inventory, s.convoy, s.gold]).toEqual([[{ item: 'Rapier', uses: 30 }], [{ item: 'Vulnerary', uses: 3 }], 800]);
     run = editEntry(run, latestEntry(run)!.id, (x) => ({ ...x, gold: 100 }), 4);
     expect(run.entries[1]!.snapshot.gold).toBe(800);
+  });
+});
+
+describe('next-map offers and Record results (#118)', () => {
+  const played = (route: 'main-story' | 'full-route', ...maps: string[]) =>
+    maps.reduce((r, m, i) => addEntry(r, m, i + 1), runFromRoster(withRun(facts, { route })));
+
+  it('start at the Premonition, then follow the story and its unlocks', () => {
+    expect(nextMaps(runFromRoster(facts)).map((o) => o.map)).toEqual(['premonition']);
+    expect(nextMaps(played('main-story', 'premonition', 'prologue', 'chapter-1', 'chapter-2', 'chapter-3')).map((o) => o.map)).toEqual(['chapter-4', 'paralogue-1']);
+  });
+
+  it('never offer xenologues on the Main story, nor grind maps on either route', () => {
+    const main = nextMaps(played('main-story', 'premonition'));
+    expect(main.some((o) => o.kind === 'xenologue')).toBe(false);
+    const full = nextMaps(played('full-route', 'premonition')).filter((o) => o.kind === 'xenologue').map((o) => o.map);
+    expect(full).toContain('apotheosis');
+    expect(full).not.toContain('the-golden-gaffe');
+    expect(full).not.toContain('exponential-growth');
+  });
+
+  it('note the SpotPass paralogues’ availability, and a child paralogue’s marriage', () => {
+    const story = ['premonition', 'prologue', ...Array.from({ length: 25 }, (_, i) => `chapter-${i + 1}`)];
+    const offers = nextMaps(played('main-story', ...story));
+    expect(offers.find((o) => o.map === 'paralogue-18')!.note).toMatch(/SpotPass/);
+    expect(offers.find((o) => o.map === 'paralogue-5')!.note).toMatch(/married/);
+    expect(offers.map((o) => o.map)).toContain('endgame');
+  });
+
+  it('records a death on Classic, but not on Casual, and a marriage', () => {
+    for (const mode of ['classic', 'casual'] as const) {
+      let run = addEntry(runFromRoster(withRun(facts, { mode })), 'prologue', 1);
+      run = recordFallen(run, latestEntry(run)!.id, 'frederick', 2);
+      expect(rosterOf(run).states.frederick).toBe(mode === 'classic' ? 'dead' : undefined);
+    }
+    let run = addEntry(runFromRoster(facts), 'chapter-3', 1);
+    run = recordMarriage(run, latestEntry(run)!.id, 'chrom', 'sumia', 2);
+    expect(rosterOf(run).spouses.chrom).toEqual({ partner: 'sumia', bond: 'married' });
   });
 });

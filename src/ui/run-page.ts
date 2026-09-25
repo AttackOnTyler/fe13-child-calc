@@ -4,7 +4,7 @@
  * A new entry copies the one before; editing a past entry never reaches later ones, which are flagged instead.
  */
 import type { Engine, HeldItem, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitSnapshot } from '../engine';
-import { SUPPORT_LEVELS, addEntry, editEntry, exportRun, flaggedEntries, heldProblems, importRun, removeEntry, unitName, withUnit } from '../engine';
+import { SUPPORT_LEVELS, addEntry, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, withUnit } from '../engine';
 import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
 import { h } from './dom';
 import { guide } from './guide';
@@ -22,7 +22,12 @@ export type RunContext = {
   readonly showingMaps: boolean;
   readonly setShowingMaps: (on: boolean) => void;
   readonly maps: MapsContext;
+  /** Record results in progress: the entry it created and the step (view state). */
+  readonly recording: { readonly entry: string; readonly step: number } | undefined;
+  readonly setRecording: (r: { readonly entry: string; readonly step: number } | undefined) => void;
 };
+
+const RECORD_STEPS = ['Deployed units', 'Recruits', 'Deaths and marriages', 'Convoy and gold'] as const;
 
 export function runView(ctx: RunContext): HTMLElement[] {
   if (ctx.showingMaps || ctx.maps.map) {
@@ -31,7 +36,113 @@ export function runView(ctx: RunContext): HTMLElement[] {
       ...mapsView(ctx.maps),
     ];
   }
-  return [chapterLog(ctx)];
+  const rec = ctx.recording && ctx.run.entries.find((e) => e.id === ctx.recording!.entry);
+  return [rec ? recordResults(ctx, rec, ctx.recording!.step) : chapterLog(ctx)];
+}
+
+/** The maps the run can play next (#118): the story's next map first; Record results starts its entry. */
+function nextMapSection(ctx: RunContext): HTMLElement {
+  const offers = nextMaps(ctx.run);
+  const label = (id: string) => {
+    const m = ctx.engine.maps().find((x) => x.id === id)!;
+    return m.kind === 'xenologue' ? m.label : `${m.label}: ${m.title}`;
+  };
+  const record = (map: string) => {
+    const next = addEntry(ctx.run, map, ctx.now());
+    ctx.setRun(next);
+    ctx.setRecording({ entry: latestEntry(next)!.id, step: 0 });
+  };
+  const row = (o: (typeof offers)[number], first: boolean) =>
+    h(
+      'div',
+      { class: `row${first ? ' next-first' : ''}` },
+      h('b', {}, label(o.map)),
+      o.note ? h('span', { class: 'muted small' }, o.note) : null,
+      h('button', { ...(first ? guide('record-results') : {}), class: first ? '' : 'mini', title: 'Played it: record how it went', onclick: () => record(o.map) }, 'Record results'),
+    );
+  const story = offers.filter((o) => o.kind === 'story');
+  const rest = offers.filter((o) => o.kind !== 'story');
+  return h(
+    'div',
+    { ...guide('next-map'), class: 'banner next-map' },
+    h('b', {}, 'Next map'),
+    ...(offers.length ? [...story.map((o, i) => row(o, i === 0)), ...(rest.length ? [h('details', {}, h('summary', { class: 'small' }, `Also open (${rest.length})`), ...rest.map((o) => row(o, false)))] : [])] : [h('span', { class: 'muted' }, 'Nothing left to play on this route.')]),
+  );
+}
+
+/**
+ * Record results (#118): the entry is already a copy of the last, so every step only records changes: deployed units,
+ * the map's recruits (pre-filled), deaths and marriages, then convoy and gold.
+ */
+function recordResults(ctx: RunContext, e: RunEntry, step: number): HTMLElement {
+  const i = ctx.run.entries.findIndex((x) => x.id === e.id);
+  const before = ctx.run.entries[i - 1]?.snapshot.units ?? {};
+  const all = Object.keys(e.snapshot.units) as RosterUnit[];
+  const recruits = all.filter((u) => !before[u]);
+  const veterans = all.filter((u) => before[u]);
+  const roster = rosterOf({ ...ctx.run, entries: ctx.run.entries.slice(0, i + 1) });
+  const name = (u: RosterUnit) => unitName(u, ctx.run.roster.run.gender);
+  const casual = ctx.run.roster.run.mode === 'casual';
+  let a: RosterUnit | '' = '';
+  let b: RosterUnit | '' = '';
+  const body = (() => {
+    switch (step) {
+      case 0:
+        return [h('p', { class: 'muted small' }, 'Update who levelled, promoted or reclassed. Leave the rest: it’s copied from last time.'), unitTable(ctx, e, veterans, true)];
+      case 1:
+        return recruits.length
+          ? [h('p', { class: 'muted small' }, 'Filled in from their join data (a child’s stats come from the game).'), unitTable(ctx, e, recruits)]
+          : [h('p', { class: 'muted' }, 'No one joined on this map.')];
+      case 2:
+        return [
+          h('p', { class: 'muted small' }, casual ? 'Casual: a unit that falls comes back after the map, so nothing changes.' : 'Classic: a unit that falls is dead for good.'),
+          h(
+            'div',
+            { class: 'row' },
+            ...all
+              .filter((u) => roster.states[u] !== 'dead')
+              .map((u) => h('button', { class: 'mini', disabled: casual, title: `${name(u)} fell`, onclick: () => ctx.setRun(recordFallen(ctx.run, e.id, u, ctx.now())) }, `✝ ${name(u)}`)),
+          ),
+          h(
+            'div',
+            { class: 'row' },
+            'Married: ',
+            h('select', { onchange: (ev) => (a = (ev.target as HTMLSelectElement).value as RosterUnit) }, h('option', { value: '' }, '—'), ...all.map((u) => h('option', { value: u }, name(u)))),
+            ' × ',
+            h('select', { onchange: (ev) => (b = (ev.target as HTMLSelectElement).value as RosterUnit) }, h('option', { value: '' }, '—'), ...all.map((u) => h('option', { value: u }, name(u)))),
+            h('button', { class: 'mini', onclick: () => a && b && a !== b && ctx.setRun(recordMarriage(ctx.run, e.id, a, b, ctx.now())) }, 'Record marriage'),
+          ),
+          h(
+            'div',
+            { class: 'small' },
+            'Recorded here: ',
+            [
+              ...Object.entries(e.snapshot.states).filter(([u, st]) => st === 'dead' && !ctx.run.entries[i - 1]?.snapshot.states[u as RosterUnit]).map(([u]) => `${name(u as RosterUnit)} fell`),
+              ...Object.entries(e.snapshot.spouses).filter(([u, sp]) => sp?.bond === 'married' && ctx.run.entries[i - 1]?.snapshot.spouses[u as RosterUnit]?.bond !== 'married').map(([u, sp]) => `${name(u as RosterUnit)} × ${name(sp!.partner)}`),
+            ].join(', ') || 'nothing yet',
+          ),
+        ];
+      default:
+        return [goldAndConvoy(ctx, e), problems(e.snapshot)];
+    }
+  })();
+  const last = step === RECORD_STEPS.length - 1;
+  return h(
+    'section',
+    { ...guide('record-flow'), class: 'units run-log' },
+    h('h2', {}, `Record results: ${mapLabel(ctx.engine, e)}`),
+    h('div', { class: 'chips' }, ...RECORD_STEPS.map((t, k) => h('span', { class: `chip${k === step ? ' plan' : ''}` }, `${k + 1}. ${t}`))),
+    ...body,
+    h(
+      'div',
+      { class: 'row' },
+      h('button', { class: 'ghost', disabled: step === 0, onclick: () => ctx.setRecording({ entry: e.id, step: step - 1 }) }, '← Back'),
+      last
+        ? h('button', { onclick: () => (ctx.setRecording(undefined), ctx.setOpenEntry(undefined)) }, 'Done')
+        : h('button', { onclick: () => ctx.setRecording({ entry: e.id, step: step + 1 }) }, 'Next →'),
+      h('span', { class: 'muted small' }, 'Anything you skip keeps its copied value.'),
+    ),
+  );
 }
 
 const mapLabel = (engine: Engine, e: RunEntry) =>
@@ -99,10 +210,11 @@ function chapterLog(ctx: RunContext): HTMLElement {
         }),
       ),
     ),
+    nextMapSection(ctx),
     h(
       'div',
       { ...guide('log-add'), class: 'banner' },
-      h('b', {}, 'Record a map played'),
+      h('b', {}, 'Log another map (a skirmish, a grind or gold map, or one out of order)'),
       h(
         'div',
         { class: 'row' },
@@ -168,12 +280,13 @@ function problems(s: Snapshot): HTMLElement | null {
   return list.length ? h('ul', { class: 'warn small' }, ...list.map((p) => h('li', {}, `⚠ ${p}`))) : null;
 }
 
-function snapshotEditor(ctx: RunContext, e: RunEntry): HTMLElement {
+const input = (value: string | number, onset: (v: string) => void, attrs: Record<string, string> = {}) =>
+  h('input', { value: String(value), ...attrs, onchange: (ev) => onset((ev.target as HTMLInputElement).value) });
+const numOrNull = (v: string) => (v.trim() === '' ? null : Number(v));
+
+/** Units' rows in an entry, every field editable; `quick` shows only class, level, promoted and EXP. */
+function unitTable(ctx: RunContext, e: RunEntry, units: readonly RosterUnit[], quick = false): HTMLElement {
   const edit = (f: (s: Snapshot) => Snapshot) => ctx.setRun(editEntry(ctx.run, e.id, f, ctx.now()));
-  const s = e.snapshot;
-  const num = (v: string) => (v.trim() === '' ? null : Number(v));
-  const input = (value: string | number, onset: (v: string) => void, attrs: Record<string, string> = {}) =>
-    h('input', { value: String(value), ...attrs, onchange: (ev) => onset((ev.target as HTMLInputElement).value) });
   const unitRow = (unit: RosterUnit, u: UnitSnapshot) => {
     const set = (patch: Partial<UnitSnapshot>) => edit((sn) => withUnit(sn, unit, { ...u, ...patch }));
     const stat = (st: Stat) =>
@@ -190,32 +303,47 @@ function snapshotEditor(ctx: RunContext, e: RunEntry): HTMLElement {
       h('td', {}, input(u.level, (v) => set({ level: Number(v) || 1 }), { class: 'num-in', 'aria-label': `${unit} level` })),
       h('td', {}, h('input', { type: 'checkbox', checked: u.promoted, title: 'Promoted', onchange: (ev) => set({ promoted: (ev.target as HTMLInputElement).checked }) })),
       h('td', {}, input(u.exp, (v) => set({ exp: Number(v) || 0 }), { class: 'num-in', 'aria-label': `${unit} EXP` })),
-      ...STATS.map(stat),
-      h('td', {}, input(u.skills.join(', '), (v) => set({ skills: v.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 5) }), { 'aria-label': `${unit} skills` })),
-      h('td', {}, input(heldText(u.inventory), (v) => set({ inventory: parseHeldText(v) }), { 'aria-label': `${unit} inventory` })),
-      h('td', {}, input(supportsText(u.supports), (v) => set({ supports: parseSupportsText(v) }), { 'aria-label': `${unit} supports` })),
+      ...(quick
+        ? []
+        : [
+            ...STATS.map(stat),
+            h('td', {}, input(u.skills.join(', '), (v) => set({ skills: v.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 5) }), { 'aria-label': `${unit} skills` })),
+            h('td', {}, input(heldText(u.inventory), (v) => set({ inventory: parseHeldText(v) }), { 'aria-label': `${unit} inventory` })),
+            h('td', {}, input(supportsText(u.supports), (v) => set({ supports: parseSupportsText(v) }), { 'aria-label': `${unit} supports` })),
+          ]),
     );
   };
+  const heads = ['Unit', 'Class', 'Lv', 'Pro', 'EXP', ...(quick ? [] : [...STATS.map((x) => STAT_LABELS[x]), 'Skills', 'Inventory (item uses [forge +Mt/+Hit/+Crit])', 'Supports'])];
+  return h(
+    'div',
+    { class: 'scroll-x' },
+    h(
+      'table',
+      { class: 'grid' },
+      h('thead', {}, h('tr', {}, ...heads.map((t) => h('th', {}, t)))),
+      h('tbody', {}, ...units.flatMap((unit) => (e.snapshot.units[unit] ? [unitRow(unit, e.snapshot.units[unit]!)] : []))),
+    ),
+  );
+}
+
+function goldAndConvoy(ctx: RunContext, e: RunEntry): HTMLElement {
+  const edit = (f: (s: Snapshot) => Snapshot) => ctx.setRun(editEntry(ctx.run, e.id, f, ctx.now()));
+  return h(
+    'div',
+    { class: 'row' },
+    h('label', {}, 'Gold ', input(e.snapshot.gold ?? '', (v) => edit((sn) => ({ ...sn, gold: numOrNull(v) })), { class: 'num-in' })),
+    h('label', {}, 'Convoy ', input(heldText(e.snapshot.convoy), (v) => edit((sn) => ({ ...sn, convoy: parseHeldText(v) })), { class: 'wide-in', placeholder: 'Iron Sword 40; Vulnerary 3' })),
+  );
+}
+
+function snapshotEditor(ctx: RunContext, e: RunEntry): HTMLElement {
+  const s = e.snapshot;
   const units = Object.entries(s.units) as [RosterUnit, UnitSnapshot][];
   return h(
     'div',
     { ...guide('log-snapshot'), class: 'snapshot small' },
-    h(
-      'div',
-      { class: 'row' },
-      h('label', {}, 'Gold ', input(s.gold ?? '', (v) => edit((sn) => ({ ...sn, gold: num(v) })), { class: 'num-in' })),
-      h('label', {}, 'Convoy ', input(heldText(s.convoy), (v) => edit((sn) => ({ ...sn, convoy: parseHeldText(v) })), { class: 'wide-in', placeholder: 'Iron Sword 40; Vulnerary 3' })),
-    ),
-    h(
-      'div',
-      { class: 'scroll-x' },
-      h(
-        'table',
-        { class: 'grid' },
-        h('thead', {}, h('tr', {}, ...['Unit', 'Class', 'Lv', 'Pro', 'EXP', ...STATS.map((x) => STAT_LABELS[x]), 'Skills', 'Inventory (item uses [forge +Mt/+Hit/+Crit])', 'Supports'].map((t) => h('th', {}, t)))),
-        h('tbody', {}, ...units.map(([unit, u]) => unitRow(unit, u))),
-      ),
-    ),
+    goldAndConvoy(ctx, e),
+    unitTable(ctx, e, units.map(([u]) => u)),
     units.some(([, u]) => !u.stats) ? h('div', { class: 'muted' }, 'Blank stats: a child’s stats depend on its parents, so record them from the game.') : null,
     problems(s),
     h('div', { class: 'muted' }, 'Stats as the stat screen shows them, without pair-up. Unit states and marriages are edited on the Roster page; they’re recorded in the latest entry.'),

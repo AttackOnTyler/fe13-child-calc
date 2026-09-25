@@ -157,6 +157,8 @@ let robinPreview: RobinRef = { kind: 'robin', gender: 'M', asset: 'mag', flaw: '
 /** The Run view's open chapter-log entry and whether it shows the Maps (#116; view state). */
 let openEntry: string | undefined;
 let showingMaps = false;
+/** Record results in progress (#118; view state). */
+let recording: { entry: string; step: number } | undefined;
 /** The Run view's open map (#109); undefined shows the Maps list. */
 let mapOpen: string | undefined;
 /** A difficulty picked on the Maps view (view state); otherwise it shows the run's, else Normal. */
@@ -2373,6 +2375,11 @@ function renderParts(parts: readonly Part[]): void {
               setOpenEntry: (id) => {
                 openEntry = id;
                 renderParts(['main']);
+              },
+              recording,
+              setRecording: (r) => {
+                recording = r;
+                renderParts(['rail', 'main']);
               },
               showingMaps,
               setShowingMaps: (on) => {

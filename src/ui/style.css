@@ -515,3 +515,7 @@ button.gd-deeper-head:hover { background: var(--hover); }
 .snapshot .wide-in { width: 24em; }
 .snapshot td input { min-width: 0; }
 .scroll-x { overflow-x: auto; }
+
+/* Next map and Record results (#118) */
+.next-map .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.next-map .next-first b { font-size: 1.05em; }

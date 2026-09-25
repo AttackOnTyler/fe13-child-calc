@@ -192,6 +192,14 @@ _Avoid_: State, save
 The army's shared storage, recorded in each entry's snapshot with the gold on hand. Items there and in inventories hold their uses left and any forge (name and bonuses), checked against the item data.
 _Avoid_: Storage, bag
 
+**Next map**:
+A map the run can play next: story maps and paralogues its cleared maps have unlocked, and on a Full route the DLC xenologues. Grind maps are never offered; they're logged as "other".
+_Avoid_: Next chapter (paralogues and xenologues count)
+
+**Record results**:
+The guided flow after a map: it makes the map's entry (a copy of the last) and steps through deployed units, recruits, deaths and marriages, then convoy and gold. On Casual a fallen unit isn't recorded as dead.
+_Avoid_: Save, end chapter
+
 **Copy-forward**:
 A new entry starts as a copy of the one before, with the map's recruits filled in from join data. Editing a past entry never changes later ones; they're flagged instead.
 _Avoid_: Inherit, carry over

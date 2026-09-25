@@ -11,7 +11,7 @@ import { STATS, type Gender, type Stat } from '../game-data/stats';
 import { className } from './classes';
 import { FORGE, forgeProblem, itemByName } from '../game-data/items';
 import { FIRST_GEN_UNITS, type UnitId } from '../game-data/units';
-import { EMPTY_ROSTER, parseRoster, type Roster, type RosterUnit } from './roster';
+import { EMPTY_ROSTER, parseRoster, withSpouse, withState, type Roster, type RosterUnit } from './roster';
 
 export type SupportLevel = 'C' | 'B' | 'A' | 'S';
 export const SUPPORT_LEVELS: readonly SupportLevel[] = ['C', 'B', 'A', 'S'];
@@ -205,6 +205,66 @@ export const withUnit = (s: Snapshot, unit: RosterUnit, u: UnitSnapshot | null):
   const { [unit]: _, ...rest } = s.units;
   return { ...s, units: u ? { ...rest, [unit]: u } : rest };
 };
+
+// ---- next-map offers and Record results (#118) ----
+
+/** A map the run can play next, and anything to know before counting on it. */
+export type MapOffer = { readonly map: string; readonly kind: 'story' | 'paralogue' | 'xenologue'; readonly note?: string };
+
+/** Paralogues with more to them than their unlocking chapter (SF gaiden chapters; research/chapter-data §2). */
+const PARALOGUE_NOTES: Readonly<Record<string, string>> = {
+  ...Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`paralogue-${i + 5}`, 'Opens once the child’s parent is married (after Chapter 13).'])),
+  'paralogue-7': 'Opens once Maribelle has an S support (after Chapter 13).',
+  'paralogue-12': 'Opens once Robin is married (after Chapter 13).',
+  ...Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`paralogue-${i + 18}`, 'Needs SpotPass data, which may no longer be downloadable now the 3DS online services have ended.'])),
+};
+
+/**
+ * The maps the run can play next (#118): story and paralogues its cleared maps have unlocked (the Premonition to start),
+ * and on a Full route every DLC xenologue it hasn't played. Grind maps are never offered: log them as “other”.
+ */
+export function nextMaps(run: Run): MapOffer[] {
+  const cleared = new Set(run.entries.map((e) => e.map));
+  const unlocked = new Set<string>(['premonition']);
+  for (const m of MAPS) if (cleared.has(m.id)) m.unlocks.forEach((u) => unlocked.add(u));
+  const offers: MapOffer[] = [];
+  for (const m of MAPS) {
+    if (cleared.has(m.id) || m.grind) continue;
+    if (m.kind === 'xenologue') {
+      if (run.roster.run.route === 'full-route') offers.push({ map: m.id, kind: 'xenologue' });
+      continue;
+    }
+    if (unlocked.has(m.id)) offers.push({ map: m.id, kind: m.kind, ...(PARALOGUE_NOTES[m.id] ? { note: PARALOGUE_NOTES[m.id] } : {}) });
+  }
+  // The story first, then paralogues, then the DLC; each in map order (a stable sort keeps it).
+  const rank = { story: 0, paralogue: 1, xenologue: 2 } as const;
+  return offers.sort((a, b) => rank[a.kind] - rank[b.kind]);
+}
+
+/** An entry's roster (its states and spouses on the run's facts), to edit with the roster functions. */
+const entryRoster = (run: Run, e: RunEntry): Roster => ({ ...run.roster, states: e.snapshot.states, spouses: e.snapshot.spouses });
+
+const withEntryRoster = (run: Run, id: string, edit: (r: Roster) => Roster, now: number): Run =>
+  editEntry(
+    run,
+    id,
+    (s) => {
+      const e = run.entries.find((x) => x.id === id)!;
+      const r = edit(entryRoster(run, e));
+      return { ...s, states: r.states, spouses: r.spouses };
+    },
+    now,
+  );
+
+/** A unit fell on the map: dead for good on Classic; on Casual it comes back, so nothing changes. */
+export function recordFallen(run: Run, id: string, unit: RosterUnit, now: number): Run {
+  if (run.roster.run.mode === 'casual') return run;
+  return withEntryRoster(run, id, (r) => withState(r, unit, 'dead'), now);
+}
+
+/** Two units married during the map. */
+export const recordMarriage = (run: Run, id: string, a: RosterUnit, b: RosterUnit, now: number): Run =>
+  withEntryRoster(run, id, (r) => withSpouse(r, a, b, 'married'), now);
 
 // ---- storage: parse, export, import ----
 
