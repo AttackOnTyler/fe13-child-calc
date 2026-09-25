@@ -915,13 +915,16 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
   };
   /**
    * The pairing a child partner of Robin brings to Morgan (#103): its parents in the saved plan, else its best pairing
-   * that can still happen in its plan preset.
+   * that can still happen in its plan preset. Robin marries the child, so is never its parent: the pairing holds no
+   * Robin at all, and fits whichever Robin the page previews (#124).
    */
   const childPartnerPairing = (c: ChildId, roster: Roster, s: PlanSettings): { pairing: Pairing; from: 'plan' | 'best' } | undefined => {
     const fixed = CHILD_UNITS[c].fixedParent;
     const spouse = roster.savedPlan?.marriages.find((m) => m.includes(fixed));
     const other = spouse && (spouse[0] === fixed ? spouse[1] : spouse[0]);
-    const pool = narrowAll(groupsByChild.get(c) ?? [], { run: roster.run }).flatMap((g) => g.results);
+    const pool = narrowAll(groupsByChild.get(c) ?? [], { run: roster.run })
+      .flatMap((g) => g.results)
+      .filter((r) => !robinRefOf(r.pairing));
     if (other) {
       const planned = pool.find((r) => parentsOf(r.pairing)[1] === other);
       if (planned) return { pairing: planned.pairing, from: 'plan' };
