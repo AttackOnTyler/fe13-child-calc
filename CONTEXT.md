@@ -79,6 +79,10 @@ _Avoid_: Class list
 A unit page's read-only list of everyone the unit can S-support, with the children each marriage produces (scored in their plan presets) and where the marriage stands: married, in the saved plan, dead or blocked. Sorted by the best child.
 _Avoid_: Spouses, matches
 
+**Preview** (Robin):
+A Robin gender and asset/flaw tried on Robin's page while the Run facts leave Robin open. The page follows it; it is never written to the Run facts.
+_Avoid_: Draft Robin, temporary Robin
+
 **Join data**:
 When and how a first-gen unit or Robin joins (chapter or paralogue, recruit condition), its join class and level, and its base stats per difficulty.
 _Avoid_: Recruitment info, bases (alone)

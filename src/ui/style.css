@@ -484,3 +484,6 @@ button.gd-deeper-head:hover { background: var(--hover); }
 .partners .partner { padding: 6px 0; border-bottom: 1px solid var(--line); }
 .partners .partner.blocked { opacity: 0.55; }
 .partners .chip.small { margin-left: 4px; font-size: 11px; }
+
+/* Robin's preview (#103) */
+.preview-bar .row { display: flex; gap: 10px; flex-wrap: wrap; }

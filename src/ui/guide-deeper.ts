@@ -6,14 +6,14 @@ import { DEFAULT_PRIORITY, type ChildId } from '../engine';
 import type { GuideTarget } from './guide';
 import { BASIS_LABELS, LABELS, ROLE_UI } from './labels';
 
-export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners';
+export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners' | 'robin-preview';
 
 /**
  * Where an entry's jump goes: the All children leaderboard, a child's table (the one `guideChild` picks, with its Robin
  * row open for `robinRow`), the Validation panel, the Scoring sidebar on the current view, or Lon'qu's unit page. Then it highlights `target`.
  */
 export type DeeperJump = {
-  readonly to: 'leaderboard' | 'child' | 'validation' | 'scoring' | 'unit';
+  readonly to: 'leaderboard' | 'child' | 'validation' | 'scoring' | 'unit' | 'robin';
   readonly target: GuideTarget;
   readonly robinRow?: true;
 };
@@ -31,7 +31,7 @@ export type DeeperEntry = {
   readonly terms: readonly DeeperTerm[];
 };
 
-const { inPlan, scoreWithThis, allChildren, skills, assumption, validation, plan, spdToTarget, spdBeyond, lock } = LABELS;
+const { runFacts, inPlan, scoreWithThis, allChildren, skills, assumption, validation, plan, spdToTarget, spdBeyond, lock } = LABELS;
 const bases = Object.values(BASIS_LABELS).join(' / ');
 
 const PAIRING: DeeperTerm = {
@@ -157,6 +157,17 @@ export const DEEPER: readonly DeeperEntry[] = [
     ],
     jump: { to: 'unit', target: 'unit-partners' },
     terms: [{ term: 'Partners', def: 'A unit page’s list of possible spouses and the children each marriage produces, read-only.' }],
+  },
+  {
+    id: 'robin-preview',
+    question: 'What does Robin’s page show before Robin is set?',
+    answer: [
+      `Robin’s page follows the ${runFacts}: your Robin’s gender and asset/flaw.`,
+      'Until they’re set, a Preview bar lets you try any Robin. The page, its builds and its Partners follow the preview, and nothing is saved.',
+      'Partners show Morgan, plus the partner’s own child where Robin is a parent. With a child partner, Morgan uses that child’s saved-plan pairing, else its best pairing left, and says which.',
+    ],
+    jump: { to: 'robin', target: 'robin-preview' },
+    terms: [{ term: 'preview', def: 'A Robin tried on Robin’s page while the Run facts leave Robin open. It never writes to the Run facts.' }],
   },
 ];
 

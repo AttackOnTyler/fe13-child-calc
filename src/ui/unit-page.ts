@@ -2,17 +2,20 @@
  * The Units view (#101): the list of units, and a unit's page. A header with its identity chips, the class tree, then
  * build coverage (open), "As a parent" and pair-up folding away below it. It follows the global play context.
  */
-import type { BuildMatch, ChildId, PresetId, Engine, PageUnitId, PartnerRow, PlanSettings, Roster, SkillRef, SkillViewSettings, TreeClass, UnitPage } from '../engine';
-import { MOD_STATS, STAT_LABELS } from '../game-data/stats';
+import type { BuildMatch, ChildId, PresetId, Engine, PageSubject, PageUnitId, PartnerRow, PlanSettings, RobinRef, Roster, SkillRef, SkillViewSettings, TreeClass, UnitPage } from '../engine';
+import { MOD_STATS, STATS, STAT_LABELS, type Gender, type Stat } from '../game-data/stats';
 import { h } from './dom';
 import { guide } from './guide';
 
 export type UnitsContext = {
   readonly engine: Engine;
   readonly settings: SkillViewSettings;
-  /** The open unit, or undefined for the list. */
-  readonly unit: PageUnitId | undefined;
-  readonly open: (unit: PageUnitId) => void;
+  /** The open page's subject (Robin: the run facts' Robin, filled in by the preview), or undefined for the list. */
+  readonly unit: PageSubject | undefined;
+  /** Opens a page; a Robin row passes the Robin to preview when the run facts leave it open. */
+  readonly open: (unit: PageUnitId | 'robin', preview?: RobinRef) => void;
+  /** Robin's preview (#103): what the run facts leave open, chosen here and never written to them. */
+  readonly preview: { readonly open: { readonly gender: boolean; readonly asset: boolean }; readonly set: (ref: RobinRef) => void } | undefined;
   /** Back to the view the unit page was opened from, with its scroll. */
   readonly back: () => void;
   readonly backLabel: string;
@@ -39,16 +42,16 @@ export function unitsView(ctx: UnitsContext): HTMLElement[] {
   return ctx.unit ? unitPageView(ctx, ctx.engine.unitPage(ctx.unit, ctx.settings)) : [unitList(ctx)];
 }
 
-/** Robin first (with Robin's page), first-gen units in roster order, SpotPass last under a divider. */
+/** Robin first, first-gen units in roster order, SpotPass last under a divider. */
 function unitList(ctx: UnitsContext): HTMLElement {
   const units = ctx.engine.pageUnits();
-  const item = (u: (typeof units)[number]) => h('button', { class: 'unit-item', onclick: () => ctx.open(u.id) }, u.name);
+  const item = (u: { readonly id: PageUnitId | 'robin'; readonly name: string }) => h('button', { class: 'unit-item', onclick: () => ctx.open(u.id) }, u.name);
   return h(
     'section',
     { class: 'units' },
     h('h2', {}, 'Units'),
     h('p', { class: 'muted small' }, 'A unit on its own: its classes and skills, the builds it can fill, and what it passes to its children.'),
-    h('div', { class: 'unit-grid' }, ...units.filter((u) => !u.spotPass).map(item)),
+    h('div', { class: 'unit-grid' }, item({ id: 'robin', name: 'Robin' }), ...units.filter((u) => !u.spotPass).map(item)),
     h('h3', { class: 'muted small' }, 'SpotPass (paralogues 18–23)'),
     h('div', { class: 'unit-grid' }, ...units.filter((u) => u.spotPass).map(item)),
   );
@@ -146,12 +149,14 @@ const PARTNER_MARKS = (r: PartnerRow): string[] => [
 
 /** Partners (#102): each possible spouse, the children the marriage produces, where it stands; read-only. */
 function partners(ctx: UnitsContext, p: UnitPage): HTMLElement {
-  const rows = ctx.engine.partners(p.unit, ctx.roster, ctx.planSettings);
+  const rows = ctx.engine.partners(p.robin ?? (p.unit as PageUnitId), ctx.roster, ctx.planSettings);
   const shown = ctx.allPartners ? rows : rows.slice(0, TOP_PARTNERS);
   const partnerName = (r: PartnerRow) =>
     r.partner === 'robin'
-      ? h('b', {}, r.name)
-      : h('button', { class: 'linkish', title: `${r.name}’s page`, onclick: () => ctx.open(r.partner as PageUnitId) }, r.name);
+      ? h('button', { class: 'linkish', title: 'Robin’s page, on this Robin', onclick: () => ctx.open('robin', r.robin) }, r.name)
+      : ctx.engine.pageUnits().some((u) => u.id === r.partner)
+        ? h('button', { class: 'linkish', title: `${r.name}’s page`, onclick: () => ctx.open(r.partner as PageUnitId) }, r.name)
+        : h('b', {}, r.name);
   return h(
     'section',
     { ...guide('unit-partners'), class: 'partners' },
@@ -171,6 +176,7 @@ function partners(ctx: UnitsContext, p: UnitPage): HTMLElement {
             h('span', { class: 'num', title: `Scored in ${ctx.presetLabel(c.preset)}` }, ` ${c.score ?? '—'}`),
           ]),
         ),
+        r.via ? h('div', { class: 'muted small' }, `Morgan on ${r.via.label} (${r.via.from === 'plan' ? 'its saved-plan pairing' : 'its best pairing left'})`) : null,
         r.blocked && !r.married ? h('div', { class: 'muted small' }, r.blocked) : null,
       ),
     ),
@@ -186,9 +192,44 @@ function unitPageView(ctx: UnitsContext, p: UnitPage): HTMLElement[] {
       'div',
       { class: 'scroll unit-page' },
       header(ctx, p),
+      p.robin ? robinPreview(ctx, p.robin) : null,
       h('div', { class: 'unit-cols' }, h('div', { class: 'unit-main' }, ...mainColumn(ctx, p)), h('aside', { class: 'unit-side' }, partners(ctx, p))),
     ),
   ];
+}
+
+/**
+ * Robin's preview bar (#103): the gender and asset/flaw the run facts leave open, chosen for this page only. The run
+ * facts' own values show read-only.
+ */
+function robinPreview(ctx: UnitsContext, r: RobinRef): HTMLElement {
+  const pv = ctx.preview;
+  if (!pv) return h('div', { class: 'muted small' }, `Your Robin, from the Run facts: +${STAT_LABELS[r.asset]} −${STAT_LABELS[r.flaw]}.`);
+  const select = (label: string, value: string, options: readonly (readonly [string, string])[], on: (v: string) => void, enabled: boolean) =>
+    h(
+      'label',
+      { class: 'small' },
+      `${label} `,
+      h(
+        'select',
+        { disabled: !enabled, onchange: (e) => on((e.target as HTMLSelectElement).value) },
+        ...options.map(([v, t]) => h('option', { value: v, selected: v === value }, t)),
+      ),
+    );
+  const stats = STATS.map((s) => [s, STAT_LABELS[s]] as const);
+  return h(
+    'div',
+    { ...guide('robin-preview'), class: 'banner preview-bar' },
+    h('b', {}, 'Preview'),
+    h('span', { class: 'muted small' }, 'Robin isn’t set in the Run facts: try a Robin here. Nothing is saved.'),
+    h(
+      'div',
+      { class: 'row' },
+      select('Gender', r.gender, [['M', 'Male'], ['F', 'Female']], (g) => pv.set({ ...r, gender: g as Gender }), pv.open.gender),
+      select('Asset', r.asset, stats, (a) => pv.set({ ...r, asset: a as Stat, flaw: r.flaw === a ? (a === 'hp' ? 'str' : 'hp') : r.flaw }), pv.open.asset),
+      select('Flaw', r.flaw, stats.filter(([s]) => s !== r.asset), (f) => pv.set({ ...r, flaw: f as Stat }), pv.open.asset),
+    ),
+  );
 }
 
 /** The class tree, then build coverage (open), As a parent and Pair-up folding away below it. */

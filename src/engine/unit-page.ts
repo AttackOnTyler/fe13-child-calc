@@ -4,17 +4,18 @@
  * build coverage through the matcher over its own reachable skills, what it passes as a parent, and pair-up bonuses.
  * Pure: the engine resolves the children it parents.
  */
-import { CLASSES, DLC_RECLASS_TARGETS, allowsGender, type ClassData, type ClassId, type ClassTier } from '../game-data/classes';
-import { JOIN_DATA, type JoinChapter, type JoinData } from '../game-data/join';
+import { CLASSES, DLC_RECLASS_TARGETS, allowsGender, regularClasses, type ClassData, type ClassId, type ClassTier } from '../game-data/classes';
+import { JOIN_DATA, type BaseStats, type JoinChapter, type JoinData } from '../game-data/join';
+import { ASSET_FLAW, ROBIN_MODIFIERS } from '../game-data/robin';
 import { CLASS_SKILLS, type SkillId } from '../game-data/skills';
 import type { ChildId } from '../game-data/children';
 import type { PresetId } from '../curated/presets';
-import type { Gender, ModStat, Modifiers } from '../game-data/stats';
+import { MOD_STATS, type Gender, type ModStat, type Modifiers, type Stat } from '../game-data/stats';
 import { FIRST_GEN_UNITS, type UnitId } from '../game-data/units';
 import { matchBuilds } from './builds';
 import { className, promotionsOf, reachableClasses } from './classes';
 import { firstGenSkills, ref, skillData, unitSkillReach, type SkillReach } from './skills';
-import type { BuildMatch, PlayContext, SkillRef } from './types';
+import type { BuildMatch, PlayContext, RobinRef, SkillRef } from './types';
 
 /** A unit with a page: every first-gen unit but the Maiden, who never joins. */
 export type PageUnitId = Exclude<UnitId, 'maiden'>;
@@ -68,7 +69,9 @@ export type UnitAsParent = {
 export type ParentedChild = { readonly child: ChildId; readonly name: string; readonly as: 'fixed' | 'variable'; readonly keys: readonly string[] };
 
 export type UnitPage = {
-  readonly unit: PageUnitId;
+  readonly unit: PageUnitId | 'robin';
+  /** Robin's page: the gender and asset/flaw it shows. */
+  readonly robin: RobinRef | undefined;
   readonly name: string;
   readonly gender: Gender;
   readonly join: JoinData & { readonly chapterLabel: string; readonly joinClassName: string };
@@ -95,7 +98,7 @@ export type PartnerChild = {
 
 /** Where a marriage stands: married, in the saved plan, the partner dead, or blocked (with the blocked-pairing reason). */
 export type PartnerRow = {
-  readonly partner: UnitId | 'robin';
+  readonly partner: UnitId | ChildId | 'robin';
   readonly name: string;
   readonly children: readonly PartnerChild[];
   /** The best child's score: the row order. */
@@ -105,6 +108,10 @@ export type PartnerRow = {
   readonly dead: boolean;
   /** Why the marriage can no longer happen, when it can't. */
   readonly blocked: string | undefined;
+  /** Robin × a child (#103): the pairing the child brings to Morgan, from the saved plan or its best that can still happen. */
+  readonly via?: { readonly label: string; readonly from: 'plan' | 'best' };
+  /** A Robin row: the Robin its best child uses (the run's, else the best), so Robin's page can preview it. */
+  readonly robin?: RobinRef;
 };
 
 export const chapterLabel = (c: JoinChapter): string =>
@@ -113,25 +120,66 @@ export const chapterLabel = (c: JoinChapter): string =>
 const isDlc = (c: ClassId) => (CLASSES[c] as ClassData).dlc;
 
 /** The reach a unit page matches builds against. */
-export function unitReach(unit: PageUnitId, dlc: boolean): SkillReach {
-  const u = FIRST_GEN_UNITS[unit];
-  const j = JOIN_DATA[unit];
+/** Who a page is about: a first-gen unit, or Robin with a gender and asset/flaw. */
+export type PageSubject = PageUnitId | RobinRef;
+
+/** Robin's bases shift with the asset/flaw: +5/−3 HP, +4/−2 Lck, +2/−1 any other stat (SF; FEW Robin/Stats). */
+export function robinBases(r: RobinRef): BaseStats {
+  const up = (s: Stat) => (s === 'hp' ? 5 : s === 'lck' ? 4 : 2);
+  const down = (s: Stat) => (s === 'hp' ? 3 : s === 'lck' ? 2 : 1);
+  const b = { ...JOIN_DATA.robin.normal };
+  b[r.asset] += up(r.asset);
+  b[r.flaw] -= down(r.flaw);
+  return b;
+}
+
+/** Everything a page reads about its subject. */
+function subjectOf(s: PageSubject) {
+  if (typeof s === 'string') {
+    const u = FIRST_GEN_UNITS[s];
+    return {
+      id: s as PageUnitId | 'robin',
+      name: u.name as string,
+      gender: u.gender as Gender,
+      classes: u.classes as readonly ClassId[],
+      passesClasses: u.passesClasses as { readonly son: readonly ClassId[] | null; readonly daughter: readonly ClassId[] | null },
+      modifiers: u.modifiers as Modifiers,
+      join: JOIN_DATA[s] as JoinData,
+    };
+  }
+  const modifiers = {} as Record<ModStat, number>;
+  for (const m of MOD_STATS) modifiers[m] = ROBIN_MODIFIERS[m] + (ASSET_FLAW[s.asset].assetModifier[m] ?? 0) + (ASSET_FLAW[s.flaw].flawModifier[m] ?? 0);
+  return {
+    id: 'robin' as const,
+    name: `Robin (${s.gender})`,
+    gender: s.gender,
+    // Robin has, and passes to a child of either gender, every regular class for that gender (SF class sets).
+    classes: regularClasses(s.gender),
+    passesClasses: { son: regularClasses('M'), daughter: regularClasses('F') },
+    modifiers,
+    join: { ...JOIN_DATA.robin, normal: robinBases(s), hard: undefined, lunatic: undefined },
+  };
+}
+
+/** The reach a page matches builds against. */
+export function unitReach(subject: PageSubject, dlc: boolean): SkillReach {
+  const u = subjectOf(subject);
   return unitSkillReach(
     {
       name: u.name,
-      gender: u.gender as Gender,
-      reachable: reachableClasses(u.classes, u.gender as Gender),
-      startLine: [j.joinClass, ...promotionsOf(j.joinClass)],
-      startingSkills: j.startingSkills,
+      gender: u.gender,
+      reachable: reachableClasses(u.classes, u.gender),
+      startLine: [u.join.joinClass, ...promotionsOf(u.join.joinClass)],
+      startingSkills: u.join.startingSkills,
     },
     dlc,
   );
 }
 
-export function unitPage(unit: PageUnitId, context: PlayContext, dlc: boolean, children: readonly ParentedChild[]): UnitPage {
-  const u = FIRST_GEN_UNITS[unit];
-  const gender = u.gender as Gender;
-  const j = JOIN_DATA[unit];
+export function unitPage(subject: PageSubject, context: PlayContext, dlc: boolean, children: readonly ParentedChild[]): UnitPage {
+  const u = subjectOf(subject);
+  const gender = u.gender;
+  const j = u.join;
   const starting = new Set<SkillId>(j.startingSkills);
   const treeClass = (id: ClassId): TreeClass => ({
     id,
@@ -149,7 +197,7 @@ export function unitPage(unit: PageUnitId, context: PlayContext, dlc: boolean, c
   const lines = u.classes.map((c) => ({ base: treeClass(c), promotions: promotionsOf(c).filter((p) => allowsGender(p, gender)).map(treeClass) }));
   const dlcTargets = DLC_RECLASS_TARGETS.filter((c) => allowsGender(c, gender)).map(treeClass);
   const taught = new Set([...lines.flatMap((l) => [l.base, ...l.promotions]), ...dlcTargets].flatMap((c) => c.skills.map((s) => s.skill.id)));
-  const reach = unitReach(unit, dlc);
+  const reach = unitReach(subject, dlc);
   const builds = matchBuilds(reach, context);
   const reachable = reachableClasses(u.classes, gender).filter((c) => dlc || !isDlc(c));
   const skills = new Set<SkillId>([...reach.classSources.keys(), ...starting]);
@@ -162,10 +210,11 @@ export function unitPage(unit: PageUnitId, context: PlayContext, dlc: boolean, c
         return d && d !== c ? [{ from: className(c, 'M'), to: className(d, 'F') }] : [];
       })
     : [];
-  const inheritable = firstGenSkills(unit, u.classes, gender);
+  const inheritable = firstGenSkills(u.id, u.classes, gender);
 
   return {
-    unit,
+    unit: u.id,
+    robin: typeof subject === 'string' ? undefined : subject,
     name: u.name,
     gender,
     join: { ...j, chapterLabel: chapterLabel(j.chapter), joinClassName: className(j.joinClass, gender) },

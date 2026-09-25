@@ -44,7 +44,9 @@ import {
   type ScoringRole,
   type SelfTestReport,
   type SkillCard,
+  type PageSubject,
   type PageUnitId,
+  type RobinRef,
   type SkillCardEdge,
   type SkillId,
   type SkillRef,
@@ -137,11 +139,13 @@ let childOpened: ChildId | undefined;
 type View = 'table' | 'validation' | 'roster' | 'plan' | 'units';
 let view: View = !selfTest.passed ? 'validation' : welcomeOpen ? 'roster' : 'table';
 /** The Units view's open unit page (#101); undefined shows the list. */
-let unitOpen: PageUnitId | undefined;
+let unitOpen: PageUnitId | 'robin' | undefined;
+/** Robin's page preview (#103): page state only, never written to the Run facts. */
+let robinPreview: RobinRef = { kind: 'robin', gender: 'M', asset: 'mag', flaw: 'str' };
 /** Where a unit page's back link returns: the view (and unit page) it was opened from, and its scroll. */
 /** A unit page's Partners show every row (view state). */
 let allPartners = false;
-let unitBack: { view: View; unit: PageUnitId | undefined; scroll: number } | undefined;
+let unitBack: { view: View; unit: PageUnitId | 'robin' | undefined; scroll: number } | undefined;
 /** A Robin group row's identity across children: `child|group key`. */
 const groupId = (child: ChildId, group: PairingGroup) => `${child}|${group.key}`;
 /** Robin group rows (by group id) with their asset × flaw heatmap open. */
@@ -324,7 +328,17 @@ const planSettings = (): PlanSettings => ({
 const mainScroll = (): number => regions.main?.querySelector('.scroll')?.scrollTop ?? regions.main?.scrollTop ?? 0;
 
 /** Opens a unit's page, remembering where its back link returns. */
-function openUnit(unit: PageUnitId): void {
+/** The Robin Robin's page shows: the run facts, with anything they leave open taken from the preview. */
+const pageRobin = (): RobinRef => ({
+  kind: 'robin',
+  gender: roster.run.gender ?? robinPreview.gender,
+  asset: roster.run.asset ?? robinPreview.asset,
+  flaw: roster.run.flaw ?? (roster.run.asset && roster.run.asset === robinPreview.flaw ? robinPreview.asset : robinPreview.flaw),
+});
+const pageSubject = (): PageSubject | undefined => (unitOpen === 'robin' ? pageRobin() : unitOpen);
+
+function openUnit(unit: PageUnitId | 'robin', preview?: RobinRef): void {
+  if (preview) robinPreview = preview;
   unitBack = { view, unit: view === 'units' ? unitOpen : undefined, scroll: mainScroll() };
   view = 'units';
   unitOpen = unit;
@@ -336,10 +350,20 @@ const VIEW_LABELS: Readonly<Record<View, string>> = { table: 'Pairings', validat
 const unitsContext = (): UnitsContext => ({
   engine,
   settings: skillSettings(),
-  unit: unitOpen,
+  unit: pageSubject(),
   open: openUnit,
+  preview:
+    unitOpen === 'robin' && !(roster.run.gender && roster.run.asset && roster.run.flaw)
+      ? {
+          open: { gender: !roster.run.gender, asset: !roster.run.asset },
+          set: (r) => {
+            robinPreview = r;
+            renderParts(['main', 'panel']);
+          },
+        }
+      : undefined,
   back: () => {
-    const b: { view: View; unit: PageUnitId | undefined; scroll: number } = unitBack ?? { view: 'units', unit: undefined, scroll: 0 };
+    const b: { view: View; unit: PageUnitId | 'robin' | undefined; scroll: number } = unitBack ?? { view: 'units', unit: undefined, scroll: 0 };
     view = b.view;
     unitOpen = b.unit;
     unitBack = undefined;
@@ -347,7 +371,13 @@ const unitsContext = (): UnitsContext => ({
     const el = regions.main?.querySelector('.scroll') ?? regions.main;
     if (el) el.scrollTop = b.scroll;
   },
-  backLabel: unitBack ? (unitBack.view === 'units' && unitBack.unit ? engine.pageUnits().find((u) => u.id === unitBack!.unit)!.name : VIEW_LABELS[unitBack.view]) : 'Units',
+  backLabel: unitBack
+    ? unitBack.view === 'units' && unitBack.unit
+      ? unitBack.unit === 'robin'
+        ? 'Robin'
+        : engine.pageUnits().find((u) => u.id === unitBack!.unit)!.name
+      : VIEW_LABELS[unitBack.view]
+    : 'Units',
   skillChip,
   buildCard,
   roster,
@@ -1617,13 +1647,13 @@ function capsTitle(): string {
 
 /** The inspected skill and the open drawer's pairing, when the card belongs to that drawer. */
 /** The inspected skill on the open unit page (#101). */
-const unitCardTarget = () => (view === 'units' && unitOpen && inspected?.line === `unit:${unitOpen}` ? { id: inspected.id, unit: unitOpen } : undefined);
+const unitCardTarget = () => (view === 'units' && unitOpen && inspected?.line === `unit:${unitOpen}` ? { id: inspected.id, unit: pageSubject()! } : undefined);
 const cardTarget = () => (inspected && drawerPairing?.line === inspected.line ? { id: inspected.id, ...drawerPairing } : undefined);
 
 /** The inspected skill's card, when its drawer is the open one. */
 function currentCard(): { card: SkillCard; title: string } | undefined {
   const u = unitCardTarget();
-  if (u) return { card: engine.unitSkillCard(u.unit, u.id, skillSettings()), title: engine.pageUnits().find((x) => x.id === u.unit)!.name };
+  if (u) return { card: engine.unitSkillCard(u.unit, u.id, skillSettings()), title: engine.unitPage(u.unit, skillSettings()).name };
   const t = cardTarget();
   return t && { card: engine.skillCard(t.result, t.id, skillSettings()), title: t.title };
 }
@@ -1631,7 +1661,7 @@ function currentCard(): { card: SkillCard; title: string } | undefined {
 /** What the Skill card depends on, so the panel refreshes when it changes. */
 const cardKey = (): string => {
   const u = unitCardTarget();
-  if (u) return `${u.id}|unit:${u.unit}|${skillSettings().context}|${skillSettings().dlc}`;
+  if (u) return `${u.id}|unit:${JSON.stringify(u.unit)}|${skillSettings().context}|${skillSettings().dlc}`;
   const t = cardTarget();
   if (!t) return '';
   const { context, dlc } = skillSettings();
@@ -2158,11 +2188,11 @@ const guideContext = (): GuideContext => ({
     let shown: string | undefined;
     if (jump.to === 'leaderboard') showTable('all');
     else if (jump.to === 'validation') view = 'validation';
-    else if (jump.to === 'unit') {
+    else if (jump.to === 'unit' || jump.to === 'robin') {
       unitBack = { view, unit: undefined, scroll: mainScroll() };
       view = 'units';
-      unitOpen = 'lonqu';
-      shown = 'Lon’qu';
+      unitOpen = jump.to === 'robin' ? 'robin' : 'lonqu';
+      shown = jump.to === 'robin' ? 'Robin' : 'Lon’qu';
     } else if (jump.to === 'child') {
       const inRun = childrenInRun();
       const child = guideChild(childOpened, planPrefs.priorities, inRun.map((c) => c.id));

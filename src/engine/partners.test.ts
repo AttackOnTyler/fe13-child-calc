@@ -61,3 +61,37 @@ describe('a unit’s Partners', () => {
     expect(engine.partners('walhart', roster, settings).map((r) => r.partner)).toEqual(['robin']);
   });
 });
+
+describe('Robin’s page', () => {
+  const mag = { kind: 'robin', gender: 'M', asset: 'mag', flaw: 'str' } as const;
+  const str = { kind: 'robin', gender: 'M', asset: 'str', flaw: 'mag' } as const;
+
+  it('differs by asset/flaw: modifiers, bases and the children’s pairings', () => {
+    const a = engine.unitPage(mag, { context: 'all', dlc: false });
+    const b = engine.unitPage(str, { context: 'all', dlc: false });
+    expect(a.name).toBe('Robin (M)');
+    expect(a.asParent.modifiers.mag).toBeGreaterThan(b.asParent.modifiers.mag);
+    expect(a.asParent.modifiers.str).toBeLessThan(b.asParent.modifiers.str);
+    expect(a.join.normal).toMatchObject({ mag: 5 + 2, str: 6 - 1 });
+    expect(b.join.normal).toMatchObject({ str: 6 + 2, mag: 5 - 1 });
+    expect(a.tree.lines[0]!.base.join).toBe(true); // Tactician
+    expect(a.asParent.children.every((c) => c.keys.every((k) => k.includes('mag/str')))).toBe(true);
+  });
+
+  it('shows Morgan plus the partner’s own child on a first-gen row', () => {
+    const sumia = engine.partners(mag, EMPTY_ROSTER, settings).find((r) => r.partner === 'sumia')!;
+    expect(sumia.children.map((c) => c.child)).toEqual(['cynthia', 'morgan-f']);
+    expect(sumia.children.every((c) => c.key.includes('robin:mag/str'))).toBe(true);
+  });
+
+  it('names the pairing a child partner brings to Morgan: the saved plan’s, else its best left', () => {
+    const best = engine.partners(mag, EMPTY_ROSTER, settings).find((r) => r.partner === 'lucina')!;
+    expect(best.via).toMatchObject({ from: 'best' });
+    expect(best.via!.label).toMatch(/^Lucina ← /);
+    expect(best.children.map((c) => c.child)).toEqual(['morgan-f']);
+    const planned = { ...EMPTY_ROSTER, savedPlan: { robin: null, marriages: [['chrom', 'olivia'] as const] } };
+    const row = engine.partners(mag, planned, settings).find((r) => r.partner === 'lucina')!;
+    expect(row.via).toEqual({ label: 'Lucina ← Olivia', from: 'plan' });
+    expect(row.children[0]!.key).toContain('lucina<olivia');
+  });
+});
