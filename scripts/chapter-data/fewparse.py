@@ -107,6 +107,15 @@ def tabs(text):
     return res
 
 
+def all_tabs(text):
+    """Every tab, nested tabs included (Apotheosis puts wave tabs inside route tabs)."""
+    res = []
+    for label, content in tabs(text):
+        res.append((label, content))
+        res += all_tabs(content)
+    return res
+
+
 def by_difficulty(text, name):
     """Templates named `name`, per difficulty: from a Tab, or one untabbed set for every difficulty."""
     out = {}
@@ -201,8 +210,9 @@ def parse(path, meta):
     if info:
         rec['title'] = clean(info[0][0].get('title')) or re.sub(r' \(.*\)$', '', meta['page'])
         rec['location'] = clean(info[0][0].get('location'))
+        rec['bossName'] = clean(info[0][0].get('boss'))
     data = section(text, 'Chapter data', 2) or text
-    cd = by_difficulty(data, 'ChapData')
+    cd = by_difficulty(data, 'ChapData') or by_difficulty(data, 'ChapDataDLC')
     rec['conditions'] = {d: {'victory': clean(v[0].get('victory')), 'defeat': clean(v[0].get('defeat')), 'deploy': clean(v[0].get('ally')), 'enemies': clean(v[0].get('enemy'))} for d, v in cd.items() if v}
     chars = templates(text, 'ChapChars')
     recruits, forced = [], []
@@ -240,6 +250,15 @@ def parse(path, meta):
     enemy_sec = section(text, 'Enemy data', 3)
     en = by_difficulty(enemy_sec.split('Lunatic+ mode')[0], 'ChapUnitCellFE13')
     rec['enemies'] = {d: [enemy_group(p) for p in v] for d, v in en.items()}
+    # Apotheosis has no difficulties: its enemy and boss tabs are waves (inside Normal route / Secret route tabs).
+    if any(re.match(r'(secret )?wave', l.strip(), re.I) for l, _ in all_tabs(enemy_sec)):
+        rec['enemies'] = {}
+        for label, content in all_tabs(enemy_sec):
+            if not re.match(r'(secret )?wave', label.strip(), re.I):
+                continue
+            groups = [{**enemy_group(p), 'wave': clean(label)} for p, _ in templates(content, 'ChapUnitCellFE13')]
+            for d in DIFFS:
+                rec['enemies'].setdefault(d, []).extend(groups)
     # Some maps split their enemies into factions (Paralogue 13's Stonewall Knights and Riders of Dawn).
     known = {'Chapter', 'Character', 'Item', 'Shop', 'NPC', 'Boss', 'Enemy', 'Event tile'}
     for faction in re.findall(r'\n===\s*([^=\n]+?) data\s*===', text):
@@ -255,6 +274,9 @@ def parse(path, meta):
     rec['lunaticPlusPool'] = [clean(x) for x in re.findall(r'\{\{Item\|13\|([^|}]*)', pool.group(1))] if pool else []
     boss_sec = section(text, 'Boss data', 3)
     bs = by_difficulty(boss_sec, 'BossStats FE13')
+    waves = [(clean(l), c) for l, c in all_tabs(boss_sec) if re.match(r'(secret )?wave', l.strip(), re.I)]
+    if waves:
+        bs = {d: [{**p, '__wave': w} for w, c in waves for p, _ in templates(c, 'BossStats FE13')] for d in DIFFS}
     bosses = {}
     for d, v in bs.items():
         rows = []
@@ -263,7 +285,7 @@ def parse(path, meta):
             items_, _, _ = items_of(re.sub(r'<br\s*/?>', ' • ', p.get('inventory', '') or ''))
             _, sk2, _ = items_of('<br>' + p.get('skills', ''))
             bstat = {'hp': p.get('HP', p.get('hp')), 'str': p.get('str'), 'mag': p.get('magic', p.get('mag')), 'skl': p.get('skill'), 'spd': p.get('spd'), 'lck': p.get('luck', p.get('lck')), 'def': p.get('def'), 'res': p.get('res'), 'mov': p.get('move', p.get('mov'))}
-            rows.append({'class': clean(p.get('class')), 'level': clean(p.get('lv') or p.get('level')), 'stats': {k: clean(x or '') for k, x in bstat.items()}, 'items': items_, 'skills': sk2})
+            rows.append({'class': clean(p.get('class')), 'level': clean(p.get('lv') or p.get('level')), 'stats': {k: clean(x or '') for k, x in bstat.items()}, 'items': items_, 'skills': sk2, **({'wave': p['__wave']} if p.get('__wave') else {})})
         bosses[d] = rows
     rec['bosses'] = bosses
     return rec

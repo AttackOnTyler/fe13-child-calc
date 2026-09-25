@@ -11,6 +11,7 @@ import { CHAPTERS_7_12 } from './chapters/ch07-12';
 import { CHAPTERS_13_19 } from './chapters/ch13-19';
 import { CHAPTERS_20_END } from './chapters/ch20-end';
 import { PARALOGUES } from './chapters/paralogues';
+import { XENOLOGUES } from './chapters/xenologues';
 
 export type ChapterDifficulty = 'normal' | 'hard' | 'lunatic';
 export const CHAPTER_DIFFICULTIES: readonly ChapterDifficulty[] = ['normal', 'hard', 'lunatic'];
@@ -35,7 +36,8 @@ export type EnemyGroup = {
   /** Movement triggers and AI, e.g. `Begins moving unprovoked on turn 3`. */
   readonly notes?: string;
   /** The side it fights for, on a map with more than one (Paralogue 13's Stonewall Knights, Riders of Dawn). */
-  readonly faction?: string;
+  readonly faction?: string;  /** Apotheosis: the wave it comes in (no difficulties there: the same on each). */
+  readonly wave?: string;
 };
 
 export type BossRow = {
@@ -46,6 +48,8 @@ export type BossRow = {
   readonly stats: StatText;
   readonly items: readonly MapItem[];
   readonly skills: readonly string[];
+  /** Apotheosis: the wave it leads. */
+  readonly wave?: string;
 };
 
 export type MapConditions = {
@@ -225,6 +229,33 @@ export const CHAPTER_DISAGREEMENTS: readonly ChapterDisagreement[] = [
     why: 'No third source was read.',
   },
   {
+    id: 'C7',
+    map: 'the-future-past-2',
+    item: 'Morgan (F), Hard Lck',
+    used: 'FEW: 15',
+    other: 'SF boss data: 14',
+    status: 'open',
+    why: 'Low impact; no third source was read.',
+  },
+  {
+    id: 'C8',
+    map: 'harvest-scramble',
+    item: 'Boss, Hard stats',
+    used: 'FEW: Str 8, Skl 41, Spd 6, Lck 56, Def 5, Res 2',
+    other: 'SF boss data: the Normal row’s numbers',
+    status: 'resolved',
+    why: 'SF’s Hard row repeats its Normal row.',
+  },
+  {
+    id: 'C9',
+    map: 'summer-scramble',
+    item: 'Boss, Hard stats',
+    used: 'FEW’s full rows',
+    other: 'SF boss data: blank (Summer and Hot-Spring Scramble)',
+    status: 'resolved',
+    why: 'A gap in SF, not a disagreement.',
+  },
+  {
     id: 'C14',
     map: 'chapter-18',
     item: 'Killer Lance',
@@ -236,7 +267,7 @@ export const CHAPTER_DISAGREEMENTS: readonly ChapterDisagreement[] = [
 ];
 
 /** Every map with chapter data, in Maps-list order. */
-export const MAPS: readonly ChapterData[] = [...EARLY_MAPS, ...CHAPTERS_7_12, ...CHAPTERS_13_19, ...CHAPTERS_20_END, ...PARALOGUES].sort((a, b) => a.order - b.order);
+export const MAPS: readonly ChapterData[] = [...EARLY_MAPS, ...CHAPTERS_7_12, ...CHAPTERS_13_19, ...CHAPTERS_20_END, ...PARALOGUES, ...XENOLOGUES].sort((a, b) => a.order - b.order);
 
 export function mapOrder(id: string): number {
   const m = MAPS.find((x) => x.id === id);

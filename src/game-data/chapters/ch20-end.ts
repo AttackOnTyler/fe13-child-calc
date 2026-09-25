@@ -923,7 +923,7 @@ export const CHAPTERS_20_END: readonly ChapterData[] = [
         {"class": "Grima", "level": "30", "stats": {"hp": "99", "str": "50", "mag": "40", "skl": "50", "spd": "45", "lck": "45", "def": "50", "res": "50", "mov": ""}, "items": [{"name": "Expiration"}], "skills": ["Anathema", "Ignis", "Pavise", "Dragonskin", "Rightful God"], "name": "Grima"},
       ],
       "lunatic-plus": [
-        {"class": "Grima", "level": "30", "stats": {"hp": "99", "str": "50", "mag": "40", "skl": "50", "spd": "45", "lck": "45", "def": "50", "res": "50", "mov": ""}, "items": [{"name": "Expiration"}], "skills": ["Anathema", "Ignis", "Dragonskin", "Rightful God", "Pavise+"]},
+        {"class": "Grima", "level": "30", "stats": {"hp": "99", "str": "50", "mag": "40", "skl": "50", "spd": "45", "lck": "45", "def": "50", "res": "50", "mov": ""}, "items": [{"name": "Expiration"}], "skills": ["Anathema", "Ignis", "Dragonskin", "Rightful God", "Pavise+"], "name": "Grima"},
       ],
     },
     unlocks: [],

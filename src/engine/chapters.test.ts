@@ -21,7 +21,8 @@ describe('chapter data (consistency)', () => {
         expect(m.conditions[d]?.victory, `${m.id} ${d}`).toBeTruthy();
         expect(m.conditions[d]?.deploy, `${m.id} ${d}`).toBeTruthy();
         expect(m.enemies[d]?.length, `${m.id} ${d}`).toBeGreaterThan(0);
-        expect(m.bosses[d]?.every((b) => b.name), `${m.id} ${d}`).toBe(true);
+        expect((m.bosses[d] ?? []).every((b) => b.name), `${m.id} ${d}`).toBe(true);
+        if (m.kind !== 'xenologue') expect(m.bosses[d]?.length, `${m.id} ${d}`).toBeGreaterThan(0);
       }
     }
   });
@@ -34,7 +35,8 @@ describe('chapter data (consistency)', () => {
 
   it('recruits only known units, and names only well-formed maps it unlocks', () => {
     for (const m of maps) {
-      for (const r of m.recruits) expect(names.has(r.unit), `${m.id}: ${r.unit}`).toBe(true);
+      // Xenologues recruit Einherjar, who have no data here.
+      if (m.kind !== 'xenologue') for (const r of m.recruits) expect(names.has(r.unit), `${m.id}: ${r.unit}`).toBe(true);
       for (const u of m.unlocks) expect(u, m.id).toMatch(MAP_ID);
     }
     expect(byId.get('chapter-3')!.recruits.map((r) => r.unit)).toEqual(['Sumia', 'Kellam']);
@@ -112,5 +114,27 @@ describe('Paralogues 1–23 (#113)', () => {
 
   it('use FEW’s monotone Hard stats where SF’s aren’t (C2–C4)', () => {
     expect(byId.get('paralogue-9')!.bosses.hard!.find((b) => b.name === 'Ruger')!.stats.lck).toBe('17');
+  });
+});
+
+describe('the xenologues and Apotheosis (#114)', () => {
+  const xen = maps.filter((m) => m.kind === 'xenologue');
+
+  it('are the 25 DLC maps, after the story, with the three grind maps flagged', () => {
+    expect(xen).toHaveLength(25);
+    expect(maps.indexOf(xen[0]!)).toBeGreaterThan(maps.findIndex((m) => m.id === 'endgame'));
+    expect(xen.filter((m) => m.grind).map((m) => m.id)).toEqual(['the-golden-gaffe', 'exponential-growth', 'infinite-regalia']);
+  });
+
+  it('give Apotheosis its waves (the same on every difficulty) and 20 deploy slots', () => {
+    const apo = byId.get('apotheosis')!;
+    expect(apo.conditions.normal!.deploy).toBe('20');
+    const waves = new Set(apo.enemies.lunatic!.map((g) => g.wave));
+    expect(waves.has('Wave 1') && waves.has('Secret wave 5')).toBe(true);
+    expect(apo.enemies.normal).toEqual(apo.enemies.lunatic);
+  });
+
+  it('keep Grima’s separate Lunatic+ row in The Future Past 3', () => {
+    expect(byId.get('the-future-past-3')!.bosses['lunatic-plus']).toHaveLength(1);
   });
 });

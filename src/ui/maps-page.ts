@@ -18,6 +18,8 @@ export type MapsContext = {
   readonly setDifficulty: (d: Difficulty) => void;
 };
 
+const KIND_LABEL = { story: 'Story', paralogue: 'Paralogues', xenologue: 'Xenologues (DLC)' } as const;
+
 const DIFF_LABEL: Readonly<Record<Difficulty, string>> = { normal: 'Normal', hard: 'Hard', lunatic: 'Lunatic', 'lunatic-plus': 'Lunatic+' };
 const tableDifficulty = (d: Difficulty): ChapterDifficulty => (d === 'lunatic-plus' ? 'lunatic' : d);
 
@@ -32,11 +34,24 @@ function mapList(ctx: MapsContext): HTMLElement {
     { ...guide('maps-list'), class: 'units maps' },
     h('h2', {}, 'Maps'),
     h('p', { class: 'muted small' }, 'Each map’s chapter data, cited to Fire Emblem Wiki and cross-checked against Serenes Forest.'),
-    h(
-      'div',
-      { class: 'unit-grid' },
-      ...ctx.engine.maps().map((m) => h('button', { class: 'unit-item', onclick: () => ctx.open(m.id) }, h('b', {}, m.label), h('div', { class: 'small muted' }, m.title))),
-    ),
+    ...(['story', 'paralogue', 'xenologue'] as const).flatMap((kind) => [
+      h('h3', { class: 'muted small' }, KIND_LABEL[kind]),
+      h(
+        'div',
+        { class: 'unit-grid' },
+        ...ctx.engine
+          .maps()
+          .filter((m) => m.kind === kind)
+          .map((m) =>
+            h(
+              'button',
+              { class: 'unit-item', onclick: () => ctx.open(m.id) },
+              h('b', {}, m.label),
+              h('div', { class: 'small muted' }, m.kind === 'xenologue' ? (m.grind ? 'grind map' : 'DLC') : m.title),
+            ),
+          ),
+      ),
+    ]),
   );
 }
 
@@ -66,7 +81,7 @@ function enemyTable(groups: readonly EnemyGroup[]): HTMLElement {
           'tr',
           {},
           h('td', { class: 'num' }, g.count),
-          h('td', {}, g.name, g.faction ? h('div', { class: 'muted' }, g.faction) : null),
+          h('td', {}, g.name, g.faction || g.wave ? h('div', { class: 'muted' }, g.faction ?? g.wave ?? '') : null),
           h('td', {}, g.class),
           h('td', { class: 'num' }, g.level),
           h('td', {}, statLine(g.stats)),
@@ -92,7 +107,7 @@ function mapPage(ctx: MapsContext, m: ChapterData): HTMLElement[] {
         'header',
         { class: 'unit-head' },
         h('div', {}, h('button', { class: 'ghost small', onclick: () => ctx.open(undefined) }, '← Maps')),
-        h('h2', {}, `${m.label}: ${m.title}`),
+        h('h2', {}, m.title === m.label ? m.title : `${m.label}: ${m.title}`),
         m.location ? h('div', { class: 'muted small' }, m.location) : null,
         h(
           'div',

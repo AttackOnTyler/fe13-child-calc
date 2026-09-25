@@ -24,7 +24,7 @@ def map_id(section, c0):
     if section == 'paralogues':
         n = re.sub(r'\D', '', c0)
         return f'paralogue-{n}' if n else slug(c0)
-    return slug(c0)
+    return slug(re.sub(r'^Xenologue:\s*', '', c0))
 
 
 def sf_rows(path, section):
@@ -65,6 +65,8 @@ if __name__ == '__main__':
                     continue
                 few = [b for b in rec['bosses'].get(d, []) if b['class'] == sf['class'] and b['level'] == sf['level'] and not b.get('name')]
                 few = few or [b for b in rec['bosses'].get(d, []) if b['class'] == sf['class'] and b['level'] == sf['level']]
+                # Several bosses can share a class and level (Apotheosis): take the closest.
+                few.sort(key=lambda b: sum(num(sf['stats'][k]) != num(b['stats'][k]) for k in sf['stats']))
                 if not few:
                     # Sub-bosses (Deadlords, a flashback Validar) are only in FEW's enemy tables: take the row there.
                     groups = [g for g in rec['enemies'].get(d, []) if sf['name'] in (g['name'] or '') and g['level'] == sf['level']]
@@ -82,7 +84,12 @@ if __name__ == '__main__':
                     continue
                 diffs = [f"{k} SF {sf['stats'][k]} / FEW {b['stats'][k]}" for k in sf['stats'] if num(sf['stats'][k]) != num(b['stats'][k])]
                 report.append(f"{rec['id']} {d} {sf['name']}: " + ('agree' if not diffs else 'DIFFER ' + '; '.join(diffs)))
-    # A boss SF doesn't list keeps the name the map's infobox gives, else none.
+    # A boss SF doesn't list takes the name the map's infobox gives.
+    for rec in data:
+        for rows in rec['bosses'].values():
+            for b in rows:
+                if not b.get('name') and rec.get('bossName'):
+                    b['name'] = rec['bossName']
     json.dump(data, open(path, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
     agree = sum(r.endswith('agree') for r in report)
     print(f'{agree} of {len(report)} SF boss rows agree')

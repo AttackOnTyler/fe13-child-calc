@@ -1,0 +1,157 @@
+{
+ "__range": "the 25 DLC xenologues, Apotheosis included",
+ "__ticket": "114",
+ "champions-of-yore-1": {
+  "kind": "xenologue",
+  "order": 3000,
+  "label": "Champions of Yore 1",
+  "unlocks": []
+ },
+ "champions-of-yore-2": {
+  "kind": "xenologue",
+  "order": 3001,
+  "label": "Champions of Yore 2",
+  "unlocks": []
+ },
+ "champions-of-yore-3": {
+  "kind": "xenologue",
+  "order": 3002,
+  "label": "Champions of Yore 3",
+  "unlocks": []
+ },
+ "lost-bloodlines-1": {
+  "kind": "xenologue",
+  "order": 3003,
+  "label": "Lost Bloodlines 1",
+  "unlocks": []
+ },
+ "lost-bloodlines-2": {
+  "kind": "xenologue",
+  "order": 3004,
+  "label": "Lost Bloodlines 2",
+  "unlocks": []
+ },
+ "lost-bloodlines-3": {
+  "kind": "xenologue",
+  "order": 3005,
+  "label": "Lost Bloodlines 3",
+  "unlocks": []
+ },
+ "smash-brethren-1": {
+  "kind": "xenologue",
+  "order": 3006,
+  "label": "Smash Brethren 1",
+  "unlocks": []
+ },
+ "smash-brethren-2": {
+  "kind": "xenologue",
+  "order": 3007,
+  "label": "Smash Brethren 2",
+  "unlocks": []
+ },
+ "smash-brethren-3": {
+  "kind": "xenologue",
+  "order": 3008,
+  "label": "Smash Brethren 3",
+  "unlocks": []
+ },
+ "rogues-redeemers-1": {
+  "kind": "xenologue",
+  "order": 3009,
+  "label": "Rogues & Redeemers 1",
+  "unlocks": []
+ },
+ "rogues-redeemers-2": {
+  "kind": "xenologue",
+  "order": 3010,
+  "label": "Rogues & Redeemers 2",
+  "unlocks": []
+ },
+ "rogues-redeemers-3": {
+  "kind": "xenologue",
+  "order": 3011,
+  "label": "Rogues & Redeemers 3",
+  "unlocks": []
+ },
+ "the-golden-gaffe": {
+  "kind": "xenologue",
+  "order": 3012,
+  "label": "The Golden Gaffe",
+  "unlocks": [],
+  "grind": true
+ },
+ "exponential-growth": {
+  "kind": "xenologue",
+  "order": 3013,
+  "label": "EXPonential Growth",
+  "unlocks": [],
+  "grind": true
+ },
+ "infinite-regalia": {
+  "kind": "xenologue",
+  "order": 3014,
+  "label": "Infinite Regalia",
+  "unlocks": [],
+  "grind": true
+ },
+ "harvest-scramble": {
+  "kind": "xenologue",
+  "order": 3015,
+  "label": "Harvest Scramble",
+  "unlocks": []
+ },
+ "summer-scramble": {
+  "kind": "xenologue",
+  "order": 3016,
+  "label": "Summer Scramble",
+  "unlocks": []
+ },
+ "hot-spring-scramble": {
+  "kind": "xenologue",
+  "order": 3017,
+  "label": "Hot-Spring Scramble",
+  "unlocks": []
+ },
+ "deaths-embrace": {
+  "kind": "xenologue",
+  "order": 3018,
+  "label": "Death's Embrace",
+  "unlocks": []
+ },
+ "five-anna-firefight": {
+  "kind": "xenologue",
+  "order": 3019,
+  "label": "Five-Anna Firefight",
+  "unlocks": []
+ },
+ "roster-rescue": {
+  "kind": "xenologue",
+  "order": 3020,
+  "label": "Roster Rescue",
+  "unlocks": []
+ },
+ "the-future-past-1": {
+  "kind": "xenologue",
+  "order": 3021,
+  "label": "The Future Past 1",
+  "unlocks": []
+ },
+ "the-future-past-2": {
+  "kind": "xenologue",
+  "order": 3022,
+  "label": "The Future Past 2",
+  "unlocks": []
+ },
+ "the-future-past-3": {
+  "kind": "xenologue",
+  "order": 3023,
+  "label": "The Future Past 3",
+  "unlocks": []
+ },
+ "apotheosis": {
+  "kind": "xenologue",
+  "order": 3024,
+  "label": "Apotheosis",
+  "unlocks": []
+ }
+}
