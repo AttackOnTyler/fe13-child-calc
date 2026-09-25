@@ -437,6 +437,8 @@ export type SkillCard = {
   readonly reason: string | undefined;
   /** Whether any parent can ever pass it, and how. */
   readonly inheritance: { readonly inheritable: boolean; readonly note: string };
+  /** Rank calls that go against a named source, with both values (#106). */
+  readonly sourceCalls: readonly { readonly context: string; readonly ours: string; readonly theirs: string; readonly source: string; readonly call: string; readonly why: string }[];
   readonly synergies: readonly SkillCardEdge[];
   readonly conflicts: readonly SkillCardEdge[];
   /** This pairing's shown builds (3/5 and up) that fill a slot with it; `slot` is 1-based. */

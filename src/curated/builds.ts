@@ -6,8 +6,15 @@
  * A = Apotheosis, L = Main story, G = Apotheosis + Main story (#10). Sources cite the source registry
  * (sources.ts, #99).
  *
- * Full route is seeded with every A, L and G template, pending the user's curation from their own play (#10 seeds it
- * with the templates whose DLC skills come from non-grind xenologues; which xenologue gives which DLC skill is unchecked).
+ * Full route is seeded with every A, L and G template, pending the user's curation from their own play (#10). Which
+ * DLC map gives which DLC skill is checked (research/ellery-claims §1, FEW DLC page): Champions of Yore 3 → All Stats +2;
+ * Lost Bloodlines 2 → Dread Scroll (Dread Fighter: Resistance +10, Aggressor); Lost Bloodlines 3 → Paragon; Smash
+ * Brethren 2 → Wedding Bouquet (Bride: Rally Heart, Bond); Smash Brethren 3 → Iote's Shield; Rogues & Redeemers 3 →
+ * Limit Breaker.
+ *
+ * S10 (Ellery) pass (#106), from claims the check passed: the Galeforce removal stack and the dodge tank join as S10
+ * templates, and S10 joins B07 (backs want Anathema and Dual Support+) and B10 (Vantage, Vengeance, Wrath), raising
+ * their confidence a step.
  *
  * Seed edits against the research:
  * - B12 drops Sol from its sustain group ("Renewal (or Sol / Lifetaker)"): Sol would steal Luna's triggers (#6 §2).
@@ -116,8 +123,8 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'magical-hard-support',
     contexts: A,
     slots: [['tomefaire'], ['magic-plus-2'], ['anathema'], ['dual-support-plus'], ['tomebreaker']],
-    sources: ['S3'],
-    confidence: 'Single',
+    sources: ['S3', 'S10'],
+    confidence: 'Multi',
   },
   {
     id: 'B08',
@@ -149,7 +156,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'crisis-crit',
     contexts: G,
     slots: [['vantage'], ['vengeance', 'astra'], ['wrath'], ['focus', 'gamble', 'anathema'], ['galeforce', 'miracle', 'limit-breaker']],
-    sources: ['S3', 'S4', 'S5'],
+    sources: ['S3', 'S4', 'S5', 'S10'],
     confidence: 'Wide',
   },
   {
@@ -258,6 +265,26 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     contexts: A,
     slots: [['tomefaire', 'lancefaire'], ['acrobat', 'healtouch'], ['movement-plus-1'], ['magic-plus-2'], ['all-stats-plus-2', 'hex', 'charm', 'anathema']],
     sources: ['S3'],
+    confidence: 'Single',
+  },
+  // S10 (#106): Ellery's player-phase removal stack for Apotheosis.
+  {
+    id: 'E01',
+    name: 'Galeforce removal stack (DLC)',
+    role: 'physical-lead',
+    contexts: A,
+    slots: [['galeforce'], ['aggressor'], FAIRES, ['all-stats-plus-2'], ['limit-breaker']],
+    sources: ['S10'],
+    confidence: 'Single',
+  },
+  // S10 (#106): Ellery's main-story evasion stack (Avoid +10, Quick Burn, Lucky Seven, Outdoor Fighter) with a breaker.
+  {
+    id: 'E02',
+    name: 'Dodge tank',
+    role: 'lancekiller',
+    contexts: L,
+    slots: [['avoid-plus-10'], ['quick-burn'], ['lucky-seven'], ['outdoor-fighter'], ['lancebreaker', 'swordbreaker', 'axebreaker', 'bowbreaker', 'tomebreaker']],
+    sources: ['S10'],
     confidence: 'Single',
   },
 ];

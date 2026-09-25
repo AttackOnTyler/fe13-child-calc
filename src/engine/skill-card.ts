@@ -4,7 +4,8 @@
  * pairing's builds that use it. Synergies and conflicts explain, they never score (#10).
  */
 import { CONFLICTS, SYNERGIES, type SkillEdge } from '../curated/synergies';
-import { sourceRefs } from '../curated/sources';
+import { SOURCES, sourceRefs } from '../curated/sources';
+import { RANK_DECISIONS } from '../curated/skill-ranks';
 import { FIXED_INHERITANCE, type SkillId } from '../game-data/skills';
 import { FIRST_GEN_UNITS, type UnitId } from '../game-data/units';
 import { RANK_LETTERS, ref, skillData, skillRank, type SkillReach } from './skills';
@@ -71,6 +72,14 @@ export function skillCard(id: SkillId, reach: SkillReach, context: PlayContext, 
     sources,
     reason: sources.length ? undefined : reach.whyNot(id),
     inheritance: inheritance(id),
+    sourceCalls: RANK_DECISIONS.filter((d) => d.skill === id).map((d) => ({
+      context: d.context === 'mainStory' ? 'Main story' : 'Apotheosis',
+      ours: RANK_LETTERS[d.ours]!,
+      theirs: d.theirs,
+      source: SOURCES[d.source].name,
+      call: d.call,
+      why: d.why,
+    })),
     synergies: edges(SYNERGIES),
     conflicts: edges(CONFLICTS),
     builds: builds.flatMap((b) =>

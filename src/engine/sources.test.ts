@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BUILD_TEMPLATES } from '../curated/builds';
 import { CONFLICTS, SYNERGIES } from '../curated/synergies';
 import { SOURCES, SOURCE_IDS } from '../curated/sources';
+import { RANK_DECISIONS, SKILL_RANKS } from '../curated/skill-ranks';
 import { createEngine } from './index';
 
 const known = new Set<string>(Object.keys(SOURCES));
@@ -28,5 +29,25 @@ describe('the source registry', () => {
   it('reaches the UI as names, not IDs', () => {
     const t = createEngine().buildTemplates('all').find((x) => x.id === BUILD_TEMPLATES[0]!.id)!;
     expect(t.sources.map((s) => s.name)).toEqual(BUILD_TEMPLATES[0]!.sources.map((id) => SOURCES[id].name));
+  });
+});
+
+describe('the S10 curation pass', () => {
+  it('adds S10 templates and edges, and raises confidence where S10 agrees', () => {
+    const t = (id: string) => BUILD_TEMPLATES.find((x) => x.id === id)!;
+    expect(t('E01').sources).toEqual(['S10']);
+    expect(t('B07')).toMatchObject({ sources: ['S3', 'S10'], confidence: 'Multi' });
+    expect(SYNERGIES.find((e) => e.a === 'hex' && e.b === 'anathema')!.sources).toEqual(['S10']);
+    expect(CONFLICTS.find((e) => e.a === 'astra' && e.b === 'counter')!.sources).toEqual(['S10']);
+  });
+
+  it('records each rank call against a source, and keeps the rank it records', () => {
+    for (const d of RANK_DECISIONS) {
+      expect(known.has(d.source)).toBe(true);
+      const rank = SKILL_RANKS[d.skill];
+      expect(rank?.[d.context] ?? rank?.default ?? 0, d.skill).toBe(d.ours);
+    }
+    const astra = createEngine().skillCard(createEngine().pairings('lucina')[0]!, 'astra', { context: 'main-story', dlc: false });
+    expect(astra.sourceCalls[0]).toMatchObject({ context: 'Main story', ours: 'B', source: 'Ellery', call: 'partly adopted' });
   });
 });

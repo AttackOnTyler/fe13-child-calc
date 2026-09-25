@@ -1734,6 +1734,9 @@ function skillCardEl(card: SkillCard, title: string): HTMLElement {
       ? h('ul', { class: 'sources small' }, ...card.sources.map((src) => h('li', {}, describeSource(src))))
       : h('p', { class: 'small neg' }, `Unreachable: ${card.reason}.`),
     h('div', { class: 'muted small' }, card.inheritance.note),
+    ...card.sourceCalls.map((c) =>
+      h('div', { class: 'small', title: c.why }, `${c.context}: ${c.ours} here, ${c.source} ${c.theirs} (${c.call})`),
+    ),
     ...edges('Synergies', card.synergies),
     ...edges('Conflicts', card.conflicts),
     h('h4', {}, 'Builds using it'),

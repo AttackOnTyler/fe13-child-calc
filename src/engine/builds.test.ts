@@ -82,7 +82,7 @@ describe('ranking builds', () => {
     const ids = (context: 'main-story' | 'apotheosis') => engine.builds(get('lucina|sumia'), { context, dlc: false }).map((b) => b.template.id);
     expect(ids('main-story')).not.toContain('B05');
     expect(engine.buildTemplates('main-story').map((t) => t.id)).not.toContain('B05');
-    expect(engine.buildTemplates('all')).toHaveLength(23);
+    expect(engine.buildTemplates('all')).toHaveLength(25); // B01–B22 (B06d, no B23) plus S10’s E01 and E02
   });
 
   it('gives each template its role’s preset', () => {

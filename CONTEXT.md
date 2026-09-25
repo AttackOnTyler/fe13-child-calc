@@ -99,6 +99,10 @@ _Avoid_: Recruitment info, bases (alone)
 A skill a unit already has when it joins. A unit keeps every skill it learns, so a starting skill stays reachable even when its class set can't teach it (Walhart's Conquest, Priam's Luna).
 _Avoid_: Personal skill (only Conquest and Shadowgift are personal)
 
+**Rank decision**:
+A curated skill-rank call that goes against a named source, kept with both values, the source and why (adopted, partly adopted or kept). Shown on the Skill card.
+_Avoid_: Override, dispute
+
 **Source registry**:
 The list of named sources curated data cites, each with an ID (S1, S2…), a name, a kind (reference, guide, FAQ, blog, crowd-sourced, video creator), a link and its provenance. Build templates, synergies and conflicts cite it by ID; the app shows the name.
 _Avoid_: References, bibliography
