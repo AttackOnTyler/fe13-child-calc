@@ -10,6 +10,7 @@ import { EARLY_MAPS } from './chapters/early';
 import { CHAPTERS_7_12 } from './chapters/ch07-12';
 import { CHAPTERS_13_19 } from './chapters/ch13-19';
 import { CHAPTERS_20_END } from './chapters/ch20-end';
+import { PARALOGUES } from './chapters/paralogues';
 
 export type ChapterDifficulty = 'normal' | 'hard' | 'lunatic';
 export const CHAPTER_DIFFICULTIES: readonly ChapterDifficulty[] = ['normal', 'hard', 'lunatic'];
@@ -33,6 +34,8 @@ export type EnemyGroup = {
   readonly randomSkills?: string;
   /** Movement triggers and AI, e.g. `Begins moving unprovoked on turn 3`. */
   readonly notes?: string;
+  /** The side it fights for, on a map with more than one (Paralogue 13's Stonewall Knights, Riders of Dawn). */
+  readonly faction?: string;
 };
 
 export type BossRow = {
@@ -177,6 +180,51 @@ export const CHAPTER_DISAGREEMENTS: readonly ChapterDisagreement[] = [
     why: 'Hard and Lunatic agree; a third source (kamikouryaku.com, which SF credits) would settle it. The other Deadlords differ only in how a legendary weapon’s bonus is written.',
   },
   {
+    id: 'C2',
+    map: 'paralogue-3',
+    item: 'Risen Chief, Hard Def',
+    used: 'FEW: 7',
+    other: 'SF boss data: 3',
+    status: 'resolved',
+    why: 'SF’s Normal/Hard/Lunatic 6/3/8 isn’t monotone; FEW’s 7 is.',
+  },
+  {
+    id: 'C3',
+    map: 'paralogue-9',
+    item: 'Ruger, Hard Lck',
+    used: 'FEW: 17',
+    other: 'SF boss data: 27',
+    status: 'resolved',
+    why: 'SF’s 14/27/21 isn’t monotone; FEW’s 17 is.',
+  },
+  {
+    id: 'C4',
+    map: 'paralogue-15',
+    item: 'Ezra, Hard Def',
+    used: 'FEW: 18',
+    other: 'SF boss data: 9',
+    status: 'resolved',
+    why: 'SF’s 16/9/22 isn’t monotone; FEW’s 18 is.',
+  },
+  {
+    id: 'C5',
+    map: 'paralogue-4',
+    item: 'Vincent, Lunatic HP',
+    used: 'FEW: 56',
+    other: 'SF boss data and SF wiki: 57',
+    status: 'open',
+    why: 'Both SF pages are Othin’s, so they aren’t independent. A third source would settle it.',
+  },
+  {
+    id: 'C10',
+    map: 'paralogue-16',
+    item: 'Eleven Warriors, Lunatic HP',
+    used: 'FEW: 72',
+    other: 'SF wiki: 73',
+    status: 'open',
+    why: 'No third source was read.',
+  },
+  {
     id: 'C14',
     map: 'chapter-18',
     item: 'Killer Lance',
@@ -188,7 +236,7 @@ export const CHAPTER_DISAGREEMENTS: readonly ChapterDisagreement[] = [
 ];
 
 /** Every map with chapter data, in Maps-list order. */
-export const MAPS: readonly ChapterData[] = [...EARLY_MAPS, ...CHAPTERS_7_12, ...CHAPTERS_13_19, ...CHAPTERS_20_END].sort((a, b) => a.order - b.order);
+export const MAPS: readonly ChapterData[] = [...EARLY_MAPS, ...CHAPTERS_7_12, ...CHAPTERS_13_19, ...CHAPTERS_20_END, ...PARALOGUES].sort((a, b) => a.order - b.order);
 
 export function mapOrder(id: string): number {
   const m = MAPS.find((x) => x.id === id);

@@ -1,0 +1,142 @@
+{
+ "__range": "Paralogues 1–23",
+ "__ticket": "113",
+ "paralogue-1": {
+  "kind": "paralogue",
+  "order": 401,
+  "label": "Paralogue 1",
+  "unlocks": []
+ },
+ "paralogue-2": {
+  "kind": "paralogue",
+  "order": 601,
+  "label": "Paralogue 2",
+  "unlocks": []
+ },
+ "paralogue-3": {
+  "kind": "paralogue",
+  "order": 801,
+  "label": "Paralogue 3",
+  "unlocks": []
+ },
+ "paralogue-4": {
+  "kind": "paralogue",
+  "order": 1001,
+  "label": "Paralogue 4",
+  "unlocks": []
+ },
+ "paralogue-5": {
+  "kind": "paralogue",
+  "order": 1401,
+  "label": "Paralogue 5",
+  "unlocks": []
+ },
+ "paralogue-6": {
+  "kind": "paralogue",
+  "order": 1402,
+  "label": "Paralogue 6",
+  "unlocks": []
+ },
+ "paralogue-7": {
+  "kind": "paralogue",
+  "order": 1403,
+  "label": "Paralogue 7",
+  "unlocks": []
+ },
+ "paralogue-8": {
+  "kind": "paralogue",
+  "order": 1404,
+  "label": "Paralogue 8",
+  "unlocks": []
+ },
+ "paralogue-9": {
+  "kind": "paralogue",
+  "order": 1405,
+  "label": "Paralogue 9",
+  "unlocks": []
+ },
+ "paralogue-10": {
+  "kind": "paralogue",
+  "order": 1406,
+  "label": "Paralogue 10",
+  "unlocks": []
+ },
+ "paralogue-11": {
+  "kind": "paralogue",
+  "order": 1407,
+  "label": "Paralogue 11",
+  "unlocks": []
+ },
+ "paralogue-12": {
+  "kind": "paralogue",
+  "order": 1408,
+  "label": "Paralogue 12",
+  "unlocks": []
+ },
+ "paralogue-13": {
+  "kind": "paralogue",
+  "order": 1409,
+  "label": "Paralogue 13",
+  "unlocks": []
+ },
+ "paralogue-14": {
+  "kind": "paralogue",
+  "order": 1410,
+  "label": "Paralogue 14",
+  "unlocks": []
+ },
+ "paralogue-15": {
+  "kind": "paralogue",
+  "order": 1411,
+  "label": "Paralogue 15",
+  "unlocks": []
+ },
+ "paralogue-16": {
+  "kind": "paralogue",
+  "order": 1412,
+  "label": "Paralogue 16",
+  "unlocks": []
+ },
+ "paralogue-17": {
+  "kind": "paralogue",
+  "order": 1901,
+  "label": "Paralogue 17",
+  "unlocks": []
+ },
+ "paralogue-18": {
+  "kind": "paralogue",
+  "order": 2601,
+  "label": "Paralogue 18",
+  "unlocks": []
+ },
+ "paralogue-19": {
+  "kind": "paralogue",
+  "order": 2602,
+  "label": "Paralogue 19",
+  "unlocks": []
+ },
+ "paralogue-20": {
+  "kind": "paralogue",
+  "order": 2603,
+  "label": "Paralogue 20",
+  "unlocks": []
+ },
+ "paralogue-21": {
+  "kind": "paralogue",
+  "order": 2604,
+  "label": "Paralogue 21",
+  "unlocks": []
+ },
+ "paralogue-22": {
+  "kind": "paralogue",
+  "order": 2605,
+  "label": "Paralogue 22",
+  "unlocks": []
+ },
+ "paralogue-23": {
+  "kind": "paralogue",
+  "order": 2606,
+  "label": "Paralogue 23",
+  "unlocks": []
+ }
+}

@@ -66,7 +66,7 @@ function enemyTable(groups: readonly EnemyGroup[]): HTMLElement {
           'tr',
           {},
           h('td', { class: 'num' }, g.count),
-          h('td', {}, g.name),
+          h('td', {}, g.name, g.faction ? h('div', { class: 'muted' }, g.faction) : null),
           h('td', {}, g.class),
           h('td', { class: 'num' }, g.level),
           h('td', {}, statLine(g.stats)),

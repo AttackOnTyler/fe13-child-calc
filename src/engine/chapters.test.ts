@@ -6,12 +6,12 @@ import { CHAPTER_DIFFICULTIES, createEngine } from './index';
 const engine = createEngine();
 const maps = engine.maps();
 const byId = new Map(maps.map((m) => [m.id, m]));
-const names = new Set<string>(['Robin', ...Object.values(FIRST_GEN_UNITS).map((u) => u.name), ...Object.values(CHILD_UNITS).map((u) => u.name)]);
+const names = new Set<string>(['Robin', 'Morgan', ...Object.values(FIRST_GEN_UNITS).map((u) => u.name), ...Object.values(CHILD_UNITS).map((u) => u.name)]);
 const MAP_ID = /^(premonition|prologue|endgame|chapter-\d+|paralogue-\d+|[a-z0-9-]+)$/;
 
 describe('chapter data (consistency)', () => {
   it('has Premonition, the Prologue and Chapters 1–6 in order', () => {
-    expect(maps.slice(0, 8).map((m) => m.id)).toEqual(['premonition', 'prologue', 'chapter-1', 'chapter-2', 'chapter-3', 'chapter-4', 'chapter-5', 'chapter-6']);
+    expect(maps.filter((m) => m.kind === 'story').slice(0, 8).map((m) => m.id)).toEqual(['premonition', 'prologue', 'chapter-1', 'chapter-2', 'chapter-3', 'chapter-4', 'chapter-5', 'chapter-6']);
   });
 
   it('gives every map its conditions, enemies and boss on Normal, Hard and Lunatic, cited by oldid', () => {
@@ -55,7 +55,7 @@ describe('chapter data (consistency)', () => {
 
 describe('Chapters 7–12 (#110)', () => {
   it('are loaded in order after Chapter 6', () => {
-    const ids = maps.map((m) => m.id);
+    const ids = maps.filter((m) => m.kind === 'story').map((m) => m.id);
     expect(ids.slice(ids.indexOf('chapter-6') + 1, ids.indexOf('chapter-6') + 7)).toEqual(['chapter-7', 'chapter-8', 'chapter-9', 'chapter-10', 'chapter-11', 'chapter-12']);
   });
 
@@ -94,5 +94,23 @@ describe('Chapters 20–25 and the Endgame (#112)', () => {
 
   it('recruit Basilio and Flavia in Chapter 23', () => {
     expect(byId.get('chapter-23')!.recruits.map((r) => r.unit)).toEqual(['Basilio', 'Flavia']);
+  });
+});
+
+describe('Paralogues 1–23 (#113)', () => {
+  it('sit just after the chapter that unlocks them', () => {
+    const ids = maps.map((m) => m.id);
+    expect(ids.slice(ids.indexOf('chapter-3') + 1, ids.indexOf('chapter-3') + 3)).toEqual(['paralogue-1', 'chapter-4']);
+    expect(ids.slice(ids.indexOf('chapter-13') + 1, ids.indexOf('chapter-13') + 13)).toEqual(Array.from({ length: 12 }, (_, i) => `paralogue-${i + 5}`));
+  });
+
+  it('recruit each child in its paralogue, and keep Paralogue 13’s two factions', () => {
+    expect(byId.get('paralogue-5')!.recruits.map((r) => r.unit)).toEqual(['Owain']);
+    expect(byId.get('paralogue-23')!.recruits.map((r) => r.unit)).toEqual(['Priam']);
+    expect(new Set(byId.get('paralogue-13')!.enemies.lunatic!.map((g) => g.faction))).toEqual(new Set(['Stonewall Knights', 'Riders of Dawn']));
+  });
+
+  it('use FEW’s monotone Hard stats where SF’s aren’t (C2–C4)', () => {
+    expect(byId.get('paralogue-9')!.bosses.hard!.find((b) => b.name === 'Ruger')!.stats.lck).toBe('17');
   });
 });

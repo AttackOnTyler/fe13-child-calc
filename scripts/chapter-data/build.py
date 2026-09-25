@@ -83,5 +83,5 @@ for d in ['normal', 'hard', 'lunatic']:
         fetch(f'https://serenesforest.net/awakening/characters/boss-data/{d}/{section[k]}/', os.path.join(cache, f'sf-boss-{d}-{section[k]}.html'))
 subprocess.run([sys.executable, os.path.join(HERE, 'bosscheck.py'), parsed, cache, *[section[k] for k in kinds]], check=True)
 subprocess.run([sys.executable, os.path.join(HERE, 'gents.py'), parsed, os.path.join(ROOT, 'src', 'game-data', 'chapters', f'{group}.ts'), const, json.dumps(extra)], check=True)
-json.dump(maps, open(os.path.join(HERE, f'{group}-maps.json'), 'w', encoding='utf-8'), indent=1)
+json.dump([{k: v for k, v in m.items() if k != 'file'} for m in maps], open(os.path.join(HERE, f'{group}-maps.json'), 'w', encoding='utf-8'), indent=1)
 json.dump(extra, open(os.path.join(HERE, f'{group}-extra.json'), 'w', encoding='utf-8'), ensure_ascii=False, indent=1)

@@ -240,6 +240,15 @@ def parse(path, meta):
     enemy_sec = section(text, 'Enemy data', 3)
     en = by_difficulty(enemy_sec.split('Lunatic+ mode')[0], 'ChapUnitCellFE13')
     rec['enemies'] = {d: [enemy_group(p) for p in v] for d, v in en.items()}
+    # Some maps split their enemies into factions (Paralogue 13's Stonewall Knights and Riders of Dawn).
+    known = {'Chapter', 'Character', 'Item', 'Shop', 'NPC', 'Boss', 'Enemy', 'Event tile'}
+    for faction in re.findall(r'\n===\s*([^=\n]+?) data\s*===', text):
+        if faction.strip('[] ') in known:
+            continue
+        fsec = section(text, f'{faction} data', 3)
+        for d, v in by_difficulty(fsec.split('Lunatic+ mode')[0], 'ChapUnitCellFE13').items():
+            rec['enemies'].setdefault(d, []).extend({**enemy_group(p), 'faction': clean(faction)} for p in v)
+            enemy_sec += fsec
     reinf = section(text, 'Reinforcements', 4) or section(text, 'Reinforcements', 3)
     rec['reinforcements'] = bullets(reinf)
     pool = re.search(r'Lunatic\+ mode([\s\S]*?)(?:\n=|\{\{div col end\}\}|\Z)', text)

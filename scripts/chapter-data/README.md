@@ -2,7 +2,7 @@
 
 Regenerates `src/game-data/chapters/*.ts` from Fire Emblem Wiki chapter pages at fixed revisions.
 
-1. Fetch each page's raw wikitext at the oldid in `<group>-maps.json`:
+1. `build.py` does steps 1–4 for a group: `uv run python build.py <cache dir> <group> <CONST> "<range>" <ticket> <map id>...`. By hand:
    `curl -sL "https://fireemblemwiki.org/w/index.php?oldid=<oldid>&action=raw" -o <file>`
 2. Parse: `uv run python fewparse.py "$(cat <group>-maps.json)" <group>.json`
 3. Name bosses and cross-check their stats against Serenes Forest's boss data (save
