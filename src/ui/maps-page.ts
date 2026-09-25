@@ -113,7 +113,7 @@ function mapPage(ctx: MapsContext, m: ChapterData): HTMLElement[] {
           )
         : null,
       h('h3', {}, 'Boss'),
-      ...(m.bosses[d] ?? []).map(bossBlock),
+      ...((lplus && m.bosses['lunatic-plus']) || m.bosses[d] || []).map(bossBlock),
       h('h3', {}, 'Enemies'),
       lplus
         ? h(

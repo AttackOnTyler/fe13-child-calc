@@ -9,6 +9,7 @@
 import { EARLY_MAPS } from './chapters/early';
 import { CHAPTERS_7_12 } from './chapters/ch07-12';
 import { CHAPTERS_13_19 } from './chapters/ch13-19';
+import { CHAPTERS_20_END } from './chapters/ch20-end';
 
 export type ChapterDifficulty = 'normal' | 'hard' | 'lunatic';
 export const CHAPTER_DIFFICULTIES: readonly ChapterDifficulty[] = ['normal', 'hard', 'lunatic'];
@@ -79,7 +80,8 @@ export type ChapterData = {
   readonly reinforcements: readonly string[];
   /** The Lunatic+ skill pool the page prints (none on Premonition). */
   readonly lunaticPlusPool: readonly string[];
-  readonly bosses: Readonly<Partial<Record<ChapterDifficulty, readonly BossRow[]>>>;
+  /** Per difficulty; `lunatic-plus` only where FEW prints separate Lunatic+ boss stats (Grima). */
+  readonly bosses: Readonly<Partial<Record<ChapterDifficulty | 'lunatic-plus', readonly BossRow[]>>>;
   /** What clearing it opens next. */
   readonly unlocks: readonly string[];
   /** A grind map (Golden Gaffe, EXPonential Growth, Infinite Regalia): never offered as a next map. */
@@ -166,6 +168,15 @@ export const CHAPTER_DISAGREEMENTS: readonly ChapterDisagreement[] = [
     status: 'open',
     why: 'No third source was read. Check in game.',
   },  {
+    id: 'C1',
+    map: 'chapter-22',
+    item: 'Draco (Sniper), Normal stats',
+    used: 'FEW: 49 HP, 25 Str, 1 Mag, 24 Spd (+5 Yewfelle), 18 Def, 10 Res',
+    other: 'SF boss data: 50 HP, 23 Str, 2 Mag, 25 Spd, 25 Def, 14 Res',
+    status: 'open',
+    why: 'Hard and Lunatic agree; a third source (kamikouryaku.com, which SF credits) would settle it. The other Deadlords differ only in how a legendary weapon’s bonus is written.',
+  },
+  {
     id: 'C14',
     map: 'chapter-18',
     item: 'Killer Lance',
@@ -177,7 +188,7 @@ export const CHAPTER_DISAGREEMENTS: readonly ChapterDisagreement[] = [
 ];
 
 /** Every map with chapter data, in Maps-list order. */
-export const MAPS: readonly ChapterData[] = [...EARLY_MAPS, ...CHAPTERS_7_12, ...CHAPTERS_13_19].sort((a, b) => a.order - b.order);
+export const MAPS: readonly ChapterData[] = [...EARLY_MAPS, ...CHAPTERS_7_12, ...CHAPTERS_13_19, ...CHAPTERS_20_END].sort((a, b) => a.order - b.order);
 
 export function mapOrder(id: string): number {
   const m = MAPS.find((x) => x.id === id);

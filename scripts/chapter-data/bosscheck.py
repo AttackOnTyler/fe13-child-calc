@@ -66,8 +66,15 @@ if __name__ == '__main__':
                 few = [b for b in rec['bosses'].get(d, []) if b['class'] == sf['class'] and b['level'] == sf['level'] and not b.get('name')]
                 few = few or [b for b in rec['bosses'].get(d, []) if b['class'] == sf['class'] and b['level'] == sf['level']]
                 if not few:
-                    report.append(f"{rec['id']} {d} {sf['name']}: no FEW boss row ({sf['class']} Lv {sf['level']})")
-                    continue
+                    # Sub-bosses (Deadlords, a flashback Validar) are only in FEW's enemy tables: take the row there.
+                    groups = [g for g in rec['enemies'].get(d, []) if sf['name'] in (g['name'] or '') and g['level'] == sf['level']]
+                    groups = groups or [g for g in rec['enemies'].get(d, []) if g['class'] == sf['class'] and g['level'] == sf['level'] and g['count'] == '1']
+                    if not groups:
+                        report.append(f"{rec['id']} {d} {sf['name']}: no FEW boss or enemy row ({sf['class']} Lv {sf['level']})")
+                        continue
+                    g = groups[0]
+                    few = [{'class': g['class'], 'level': g['level'], 'stats': g['stats'], 'items': g['items'], 'skills': g.get('skills', [])}]
+                    rec['bosses'].setdefault(d, []).append(few[0])
                 b = few[0]
                 b['name'] = sf['name']
                 if all(not v for v in sf['stats'].values()):

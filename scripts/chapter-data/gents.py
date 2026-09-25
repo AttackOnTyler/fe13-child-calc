@@ -39,7 +39,8 @@ def emit(rec):
         if isinstance(v, dict) and v and all(isinstance(x, list) for x in v.values()):
             lines.append(f'    {k}: {{')
             for d, rows in v.items():
-                lines.append(f'      {d}: [')
+                key = d if d.isidentifier() else one(d)
+                lines.append(f'      {key}: [')
                 lines += [f'        {one(r)},' for r in rows]
                 lines.append('      ],')
             lines.append('    },')

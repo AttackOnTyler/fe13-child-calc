@@ -1,0 +1,64 @@
+{
+ "__range": "Chapters 20–25 and the Endgame",
+ "__ticket": "112",
+ "chapter-20": {
+  "kind": "story",
+  "order": 2100,
+  "label": "Chapter 20",
+  "unlocks": [
+   "chapter-21"
+  ]
+ },
+ "chapter-21": {
+  "kind": "story",
+  "order": 2200,
+  "label": "Chapter 21",
+  "unlocks": [
+   "chapter-22"
+  ]
+ },
+ "chapter-22": {
+  "kind": "story",
+  "order": 2300,
+  "label": "Chapter 22",
+  "unlocks": [
+   "chapter-23"
+  ]
+ },
+ "chapter-23": {
+  "kind": "story",
+  "order": 2400,
+  "label": "Chapter 23",
+  "unlocks": [
+   "chapter-24"
+  ]
+ },
+ "chapter-24": {
+  "kind": "story",
+  "order": 2500,
+  "label": "Chapter 24",
+  "unlocks": [
+   "chapter-25"
+  ]
+ },
+ "chapter-25": {
+  "kind": "story",
+  "order": 2600,
+  "label": "Chapter 25",
+  "unlocks": [
+   "endgame",
+   "paralogue-18",
+   "paralogue-19",
+   "paralogue-20",
+   "paralogue-21",
+   "paralogue-22",
+   "paralogue-23"
+  ]
+ },
+ "endgame": {
+  "kind": "story",
+  "order": 2700,
+  "label": "Endgame",
+  "unlocks": []
+ }
+}

@@ -83,9 +83,12 @@ DIFFS = ['normal', 'hard', 'lunatic']
 
 
 def diffs_of(label):
-    l = label.lower()
-    if 'all' in l or l.strip() == '':
+    l = label.lower().strip()
+    if 'all' in l or l == '':
         return DIFFS
+    # A tab for Lunatic+ alone (Grima's) is its own entry; "Lunatic(+)" is Lunatic, which Lunatic+ shares.
+    if l == 'lunatic+':
+        return ['lunatic-plus']
     out = []
     for d in DIFFS:
         if d in l:

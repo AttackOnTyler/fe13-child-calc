@@ -79,3 +79,20 @@ describe('Chapters 13–19 (#111)', () => {
     expect(byId.get('chapter-13')!.unlocks).toEqual(['chapter-14', ...Array.from({ length: 12 }, (_, i) => `paralogue-${i + 5}`)]);
   });
 });
+
+describe('Chapters 20–25 and the Endgame (#112)', () => {
+  it('end the story at the Endgame, after Chapter 25, which unlocks the SpotPass paralogues', () => {
+    const ids = maps.map((m) => m.id);
+    expect(ids.indexOf('endgame')).toBeGreaterThan(ids.indexOf('chapter-25'));
+    expect(byId.get('chapter-25')!.unlocks).toEqual(['endgame', ...Array.from({ length: 6 }, (_, i) => `paralogue-${i + 18}`)]);
+    expect(byId.get('endgame')!.conditions.lunatic!.victory).toMatch(/Grima/);
+  });
+
+  it('list Chapter 22’s twelve Deadlords as bosses, from FEW’s enemy table', () => {
+    expect(byId.get('chapter-22')!.bosses.lunatic!.filter((b) => b.name && b.name !== 'Aversa')).toHaveLength(12);
+  });
+
+  it('recruit Basilio and Flavia in Chapter 23', () => {
+    expect(byId.get('chapter-23')!.recruits.map((r) => r.unit)).toEqual(['Basilio', 'Flavia']);
+  });
+});
