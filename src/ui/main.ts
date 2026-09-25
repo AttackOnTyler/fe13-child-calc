@@ -91,12 +91,10 @@ import {
   loadPlanPrefs,
   resetPlanPrefs,
   savePlanPrefs,
-  userOverrides,
   withDeployEdited,
   withPlanPreset,
   withPriority,
   withQuotas,
-  withSuggestedPresets,
   type PlanPrefs,
 } from './plan-prefs';
 
@@ -304,22 +302,23 @@ const planSettings = (): PlanSettings => ({
   supportRank: prefs.supportRank,
   priorities: planPrefs.priorities,
   overrides: planPrefs.overrides,
+  roleOverrides: planPrefs.roleOverrides,
+  quotas: quotasFor(prefs.context, planPrefs.quotas),
 });
 
 /** The priority and plan-preset controls: the Plan sidebar and the Roster page's ledger edit the same values. */
 const planControls = (): ChildPlanControls => ({
   engine,
+  roster,
   settings: planSettings(),
   setPriority: (child, priority) => setPlanPrefs(withPriority(planPrefs, child, priority)),
   setPlanPreset: (child, preset) => setPlanPrefs(withPlanPreset(planPrefs, child, preset)),
   presetLabel: (id: PresetId) => presetLabel(engine.presets().find((p) => p.id === id)!),
   quotas: quotasFor(prefs.context, planPrefs.quotas),
-  suggested: new Set(planPrefs.suggested),
 });
 
 const planContext = (): PlanPageContext => ({
   ...planControls(),
-  roster,
   setRoster,
   free: freeReplan,
   setFree: (free) => {
@@ -327,10 +326,6 @@ const planContext = (): PlanPageContext => ({
     renderParts(['main']);
   },
   resetPlanPrefs: () => setPlanPrefs(resetPlanPrefs(planPrefs)),
-  suggestRoles: () => {
-    const s = engine.suggestRoles(roster, { ...planSettings(), overrides: userOverrides(planPrefs) }, quotasFor(prefs.context, planPrefs.quotas));
-    setPlanPrefs(withSuggestedPresets(planPrefs, s.overrides));
-  },
   quotasEdited: !!planPrefs.quotas[quotaContext(prefs.context)],
   setQuotas: (quotas) => setPlanPrefs(withQuotas(planPrefs, quotaContext(prefs.context), quotas)),
   editingQuotas,
@@ -346,7 +341,7 @@ const planContext = (): PlanPageContext => ({
  * the marriage table the table already scores with it, for this visit; the chip still makes it the global preset.
  */
 function planPresetChip(child: ChildId): HTMLElement {
-  const id = engine.planPreset(child, planSettings());
+  const id = engine.planPreset(child, roster, planSettings());
   const name = presetLabel(engine.presets().find((p) => p.id === id)!);
   const global = id === prefs.preset && (!activeVisit() || prefs.role === 'preset');
   // On a visit the table scores differently from the global prefs unless they already match it.

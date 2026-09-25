@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { CANDIDATE_PRESETS, DEFAULT_SPEED, EMPTY_ROSTER, createEngine, withRun, withSpouse, withState, type PlanSettings, type Roster } from './index';
+import {
+  quotasFor, CANDIDATE_PRESETS, DEFAULT_SPEED, EMPTY_ROSTER, createEngine, withRun, withSpouse, withState, type PlanSettings, type Roster } from './index';
 import { deriveRoles, type DeriveInput } from './derive';
 
 const engine = createEngine();
@@ -14,6 +15,8 @@ const settings: PlanSettings = {
   supportRank: 'A',
   priorities: {},
   overrides: {},
+  roleOverrides: {},
+  quotas: quotasFor('all'),
 };
 
 const RUN = { gender: 'M', asset: 'mag', flaw: 'str' } as const;

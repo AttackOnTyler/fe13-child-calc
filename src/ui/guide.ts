@@ -21,7 +21,6 @@ export const GUIDE_TARGETS = [
   'priority',
   'quota-bar',
   'quota-edit',
-  'suggest-roles',
   'plan-preset',
   'plan-preset-reset',
   'pin',

@@ -14,7 +14,7 @@ import {
 } from '../engine';
 import { guideFacts, lossPrompt, noteLosses, offPlanMarriages, settleLosses } from './guide-facts';
 import { DEFAULT_GUIDE_PREFS, dismissLoss, takeLoss, type GuidePrefs } from './guide-prefs';
-import { DEFAULT_PLAN_PREFS, withDeployEdited, withPriority, withSuggestedPresets, type PlanPrefs } from './plan-prefs';
+import { DEFAULT_PLAN_PREFS, withDeployEdited, withPriority, type PlanPrefs } from './plan-prefs';
 import { DEFAULT_PREFS } from './scoring-prefs';
 
 const engine = createEngine();
@@ -29,6 +29,8 @@ const settings: PlanSettings = {
   supportRank: 'A',
   priorities: {},
   overrides: {},
+  roleOverrides: {},
+  quotas: quotasFor('all'),
 };
 
 const fresh = () => guideFacts(EMPTY_ROSTER, DEFAULT_PLAN_PREFS, DEFAULT_PREFS.context);
@@ -114,12 +116,6 @@ describe('guide facts', () => {
     });
   });
 
-  it('say Suggest roles ran once its picks are written, even when it picked nothing', () => {
-    expect(fresh().rolesSuggested).toBe(false);
-    const picks = engine.suggestRoles(EMPTY_ROSTER, settings, quotasFor('all')).overrides;
-    expect(factsForPrefs(withSuggestedPresets(DEFAULT_PLAN_PREFS, picks)).rolesSuggested).toBe(true);
-    expect(factsForPrefs(withSuggestedPresets(DEFAULT_PLAN_PREFS, {})).rolesSuggested).toBe(true);
-  });
 
   it('say priorities are set once a child’s priority is, even back to its default', () => {
     expect(fresh().prioritiesSet).toBe(false);

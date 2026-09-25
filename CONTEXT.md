@@ -153,7 +153,7 @@ One spouse per unit for the whole roster, chosen by the solver to maximise the s
 _Avoid_: Backup (alone), optimal pairing
 
 **Plan preset**:
-The preset a child is scored with in the marriage plan: a curated default per child (may differ by play context) unless the user sets one, which then holds in every context. Only the preset name is per child; its role comes with it, everything else is global. The pairing tables ignore it and use the global preset, except on a **visit**: a child opened from the marriage plan scores with its plan preset (its scoring role, Auto class) until the visitor leaves its table or sets the preset, scoring role or class.
+The preset a child is scored with in the marriage plan — an output, not a curated default: the child's preset override if set, else the role preset of its role override, else the role preset of the role army fit gives it. A child out of the cast without an override (Morgan before Robin is set) uses the global preset. The pairing tables ignore it and use the global preset, except on a **visit**: a child opened from the marriage plan scores with its plan preset (its scoring role, Auto class) until the visitor leaves its table or sets the preset, scoring role or class.
 _Avoid_: Child preset, default preset (ambiguous with the global one)
 
 **Children ledger**:
@@ -165,16 +165,24 @@ A child that can still be born but the marriage plan doesn't produce, because it
 _Avoid_: Lost (ambiguous between left out and can't be born), dropped
 
 **Deployment role**:
-The job a deployed unit does in the army: Lead, Battery, Staff/Rally or Dancer. A child's comes from its plan preset (a preset's scoring role, or Rallybot/Dancer for no preset); a first-gen unit's is a tag the user sets, defaulted from a curated table. No child can be a Dancer.
+The job a deployed unit does in the army: Lead, Battery, Staff/Rally or Dancer. A child's comes from its plan preset, which army fit may have moved; a first-gen unit's is a tag the user sets, defaulted from a curated table. A preset's deployment role is usually its scoring role (Lead → Lead, Support → Battery, none → Staff/Rally), but Staffbot scores as Lead and deploys as Staff/Rally. No child can be a Dancer.
 _Avoid_: Role (alone — ambiguous with scoring role and build template role), job, position
 
 **Composition quotas**:
 Per play context, a min–max range of deployed units for each deployment role plus a deploy cap, curated and editable. Counted over deployed first-gen units and every child the marriage plan produces, leaving out benched, missed and dead units; All uses Main story's. Out-of-range is a warning, never a block.
 _Avoid_: Slots, army limits
 
-**Suggest roles**:
-A one-shot action that rewrites the plan preset of every child still on its default so the army meets the composition quotas, valuing each child at priority × score in the pairing the marriage plan gives it, then re-plans. Its picks are ordinary overrides marked "suggested", which the next run may rewrite and ↺ resets; the solver itself always scores each child in one role.
-_Avoid_: Auto-roles, role solver
+**Army fit**:
+The last step of deriving roles, run on every re-plan: every child starts in its best role, and a composition quota moves a child only when it forces one — the child whose move costs the least standing. Staff/Rally is filled only from children whose planned pairing reaches a staff class or rally skill. Overrides and first-gen units count but never move; army fit never benches a child, and says which quota moved each child it moved.
+_Avoid_: Suggest roles (replaced), auto-roles, role solver
+
+**Role override**:
+A deployment role the user pins for a child; the role preset inside it stays derived, so it stays correct when Robin or the settings change.
+_Avoid_: Role lock
+
+**Preset override**:
+Any preset the user pins for a child, niche ones included; its deployment role comes with it. The only way to use a niche preset.
+_Avoid_: Custom preset, user preset
 
 **Blocked pairing**:
 A pairing that contradicts the roster: hard when it can no longer happen (a unit is dead or missed, or married to someone else), soft when it only contradicts a pin or a bench.

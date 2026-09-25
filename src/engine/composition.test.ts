@@ -21,6 +21,12 @@ import { createEngine } from './index';
 
 const engine = createEngine();
 
+/** Room in every role: army fit moves nobody, so these tests see composition alone. */
+const ROOMY: Quotas = {
+  cap: 99,
+  roles: { lead: { min: 0, max: 99 }, battery: { min: 0, max: 99 }, staff: { min: 0, max: 99 }, dancer: { min: 0, max: 99 } },
+};
+
 const settings: PlanSettings = {
   context: 'all',
   preset: 'physical-lead',
@@ -31,6 +37,8 @@ const settings: PlanSettings = {
   supportRank: 'A',
   priorities: {},
   overrides: {},
+  roleOverrides: {},
+  quotas: ROOMY,
 };
 
 const RUN = { gender: 'M', asset: 'spd', flaw: 'hp' } as const;
@@ -45,7 +53,7 @@ describe('deployment roles', () => {
   it('come from a preset’s scoring role, and Rallybot is Staff/Rally', () => {
     expect(deploymentRoleOf('physical-lead')).toBe('lead');
     expect(deploymentRoleOf('physical-hard-support')).toBe('lead');
-    expect(deploymentRoleOf('staffbot')).toBe('lead');
+    expect(deploymentRoleOf('staffbot')).toBe('staff');
     expect(deploymentRoleOf('battery')).toBe('battery');
     expect(deploymentRoleOf('rallybot')).toBe('staff');
   });
@@ -55,7 +63,8 @@ describe('deployment roles', () => {
     const kids = new Map(plan.marriages.flatMap((m) => m.children.map((c) => [c.child, c] as const)));
     expect(kids.get('lucina')?.deploymentRole).toBe('staff');
     expect(kids.get('owain')?.deploymentRole).toBe('battery');
-    expect(kids.get('nah')?.deploymentRole).toBe('battery');
+    // Nah derives Lead: Battery's spread is zero, so no child's best role is Battery (#95).
+    expect(kids.get('nah')?.deploymentRole).toBe('lead');
     expect(kids.get('brady')?.deploymentRole).toBe('lead');
     for (const c of kids.values()) expect(c.deploymentRole).not.toBe('dancer');
   });

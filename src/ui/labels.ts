@@ -18,7 +18,6 @@ export const LABELS = {
   adoptPlan: 'Adopt the new plan',
   /** The Plan's pick line: lock the solver's Robin into Run facts. Reserved for this button. */
   lock: 'Lock',
-  suggestRoles: 'Suggest roles',
   freeReplan: 'Free re-plan',
   /** The Plan's diff against the saved plan, and the children ledger's column of what each child could still get. */
   changedVsSaved: 'Changed vs saved plan',

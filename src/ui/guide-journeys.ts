@@ -37,7 +37,7 @@ export type JourneyContent = {
 
 export const VIEW_NAMES: Readonly<Record<GuideView, string>> = { roster: LABELS.roster, plan: LABELS.plan };
 
-const { pinned, married, ruleOut, adoptPlan, lock, suggestRoles, freeReplan, pin, roster, plan, runFacts, playContext, changedVsSaved, bestRemaining } =
+const { pinned, married, ruleOut, adoptPlan, lock, freeReplan, pin, roster, plan, runFacts, playContext, changedVsSaved, bestRemaining } =
   LABELS;
 const { total, swap, assumption, validation, ledgerStatus } = LABELS;
 const stateLabel = (s: keyof typeof STATE_UI) => `${STATE_UI[s].icon} ${STATE_UI[s].label}`;
@@ -122,15 +122,8 @@ const FRESH: JourneyContent = {
       title: 'Check the quota bar',
       takeaway:
         'How many of each deployment role you want, and the deploy cap. Every child the plan produces ' +
-        'counts unless it’s benched. ✎ edits the ranges if your army differs. Out of range is a warning, never a block.',
-    },
-    {
-      view: 'plan',
-      target: 'suggest-roles',
-      where: `${plan} › ${suggestRoles}`,
-      title: `Run ${suggestRoles}`,
-      takeaway: `${suggestRoles} re-picks the plan presets still on their default so the army fits the quotas. Its picks are marked suggested.`,
-      tick: 'rolesSuggested',
+        'counts unless it’s benched. Army fit meets the ranges on its own, moving the children it costs least. ' +
+        '✎ edits the ranges if your army differs. Out of range is a warning, never a block.',
     },
     {
       view: 'plan',
@@ -139,7 +132,8 @@ const FRESH: JourneyContent = {
       title: 'Override the plan presets you disagree with',
       takeaway:
         'A plan preset is how a child is judged (lead, support, tank, staff…), and it sets the child’s deployment letter. ' +
-        'default is the curated pick for this play context; ↺ goes back to it.',
+        'derived is its best role against the cast, or where army fit moved it (marked, with the quota that forced it). ' +
+        'Pick a preset to override it; ↺ goes back to derived.',
       deeper: ['preset'],
     },
     {

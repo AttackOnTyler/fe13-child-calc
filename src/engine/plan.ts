@@ -25,6 +25,7 @@ import {
   type RosterUnit,
   type SavedPlan,
 } from './roster';
+import type { RoleSource } from './army-fit';
 import type { PresetId } from '../curated/presets';
 import type { DeploymentRole } from '../curated/deployment';
 import type { Pairing, ParentRef, RobinRef } from './types';
@@ -48,6 +49,10 @@ export type PlannedChild = {
   readonly value: number;
   /** The roster's notes on its pairing, which block nothing (e.g. a parent died after marrying). */
   readonly notes: readonly string[];
+  /** Where the plan preset comes from; absent on a saved plan's children. */
+  readonly roleSource?: RoleSource;
+  /** Why army fit moved it: the quota that forced the move. */
+  readonly fitReason?: string;
 };
 
 /**

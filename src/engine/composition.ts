@@ -23,9 +23,11 @@ export type Composition = {
 
 /**
  * A child's deployment role from its plan preset's scoring role: Lead → Lead, Support → Battery, none (Rallybot /
- * Dancer) → Staff/Rally. Staffbot scores as a Lead, so it deploys as one.
+ * Dancer) → Staff/Rally. Staffbot scores as a Lead but deploys as Staff/Rally: a preset's deployment role is not
+ * always its scoring role (#71).
  */
 export function deploymentRoleOf(preset: PresetId): DeploymentRole {
+  if (preset === 'staffbot') return 'staff';
   const scoring = PRESETS[preset].role;
   return scoring === 'lead' ? 'lead' : scoring === 'support' ? 'battery' : 'staff';
 }

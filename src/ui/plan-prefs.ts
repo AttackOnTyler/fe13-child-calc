@@ -1,6 +1,8 @@
 import {
+  CHILD_DEPLOYMENT_ROLES,
   DEPLOYMENT_ROLES,
   PLAN_PRIORITIES,
+  type ChildDeploymentRole,
   type ChildId,
   type DeploymentRole,
   type Engine,
@@ -12,15 +14,17 @@ import {
 import { CONTEXTS } from './scoring-prefs';
 
 /**
- * Plan preferences: each child's priority (0–3), the plan preset overrides, which hold in every play context, and the
- * user's composition quotas per play context (All uses Main story's). Preferences, not run state: Clear all leaves them alone.
+ * Plan preferences: each child's priority (0–3), its preset and role overrides, which hold in every play context, and
+ * the user's composition quotas per play context (All uses Main story's). Preferences, not run state: Clear all leaves
+ * them alone. Army fit replaced Suggest roles (#96): a save from before keeps the user's own plan presets as preset
+ * overrides and drops the presets Suggest roles wrote.
  */
 export type PlanPrefs = {
   readonly priorities: Readonly<Partial<Record<ChildId, number>>>;
-  /** The user's plan presets and Suggest roles' picks. */
+  /** Preset overrides: a pinned preset, niche included; its role comes with it. */
   readonly overrides: Readonly<Partial<Record<ChildId, PresetId>>>;
-  /** The overrides Suggest roles wrote: the next run may rewrite them. */
-  readonly suggested: readonly ChildId[];
+  /** Role overrides: a pinned deployment role; the preset inside it stays derived. */
+  readonly roleOverrides: Readonly<Partial<Record<ChildId, ChildDeploymentRole>>>;
   readonly quotas: Readonly<Partial<Record<PlayContext, Quotas>>>;
   readonly acts: PlanActs;
 };
@@ -30,17 +34,15 @@ export type PlanPrefs = {
  * that performs the action writes its flag; the guide only reads them.
  */
 export type PlanActs = {
-  /** Suggest roles ran, even if it picked nothing. */
-  readonly suggestedAt?: number;
   /** A child's priority was set, even back to its default. */
   readonly prioritiesSetAt?: number;
   /** A first-gen unit's Deploy flag or deployment role was edited on Roster. */
   readonly deployEditedAt?: number;
 };
 
-const ACTS: readonly (keyof PlanActs)[] = ['suggestedAt', 'prioritiesSetAt', 'deployEditedAt'];
+const ACTS: readonly (keyof PlanActs)[] = ['prioritiesSetAt', 'deployEditedAt'];
 
-export const DEFAULT_PLAN_PREFS: PlanPrefs = { priorities: {}, overrides: {}, suggested: [], quotas: {}, acts: {} };
+export const DEFAULT_PLAN_PREFS: PlanPrefs = { priorities: {}, overrides: {}, roleOverrides: {}, quotas: {}, acts: {} };
 
 /** The most a quota or the cap can be. */
 const QUOTA_LIMIT = 99;
@@ -60,24 +62,16 @@ export const resetPlanPrefs = (prefs: PlanPrefs): PlanPrefs => ({ ...DEFAULT_PLA
 /** Notes that the user edited a Deploy flag or deployment role: the roster holds the edit, this only the act. */
 export const withDeployEdited = (prefs: PlanPrefs): PlanPrefs => withAct(prefs, 'deployEditedAt');
 
-/** Sets a child's plan preset as the user's, or with null resets it to the default. */
+/** Sets a child's preset override, or with null returns it to derived. */
 export function withPlanPreset(prefs: PlanPrefs, child: ChildId, preset: PresetId | null): PlanPrefs {
   const { [child]: _, ...rest } = prefs.overrides;
-  return { ...prefs, overrides: preset ? { ...rest, [child]: preset } : rest, suggested: prefs.suggested.filter((c) => c !== child) };
+  return { ...prefs, overrides: preset ? { ...rest, [child]: preset } : rest };
 }
 
-/** The plan presets the user set, without Suggest roles' picks. */
-export function userOverrides(prefs: PlanPrefs): Partial<Record<ChildId, PresetId>> {
-  const out = { ...prefs.overrides };
-  for (const c of prefs.suggested) delete out[c];
-  return out;
-}
-
-/** Writes Suggest roles' picks as suggested overrides, replacing the last run's; the user's own are left alone. */
-export function withSuggestedPresets(prefs: PlanPrefs, picks: Readonly<Partial<Record<ChildId, PresetId>>>): PlanPrefs {
-  const mine = userOverrides(prefs);
-  const suggested = (Object.keys(picks) as ChildId[]).filter((c) => !(c in mine));
-  return withAct({ ...prefs, overrides: { ...mine, ...Object.fromEntries(suggested.map((c) => [c, picks[c]])) }, suggested }, 'suggestedAt');
+/** Sets a child's role override, or with null returns it to derived. */
+export function withRoleOverride(prefs: PlanPrefs, child: ChildId, role: ChildDeploymentRole | null): PlanPrefs {
+  const { [child]: _, ...rest } = prefs.roleOverrides;
+  return { ...prefs, roleOverrides: role ? { ...rest, [child]: role } : rest };
 }
 
 /** Sets a play context's quotas, or with null resets them to the curated seed. */
@@ -110,7 +104,7 @@ function parseQuotas(raw: unknown): Quotas | undefined {
   return { cap: raw.cap, roles };
 }
 
-/** Plan preferences as saved, dropping unknown children and presets, out-of-range priorities, broken quotas and act flags. */
+/** Plan preferences as saved, dropping unknown children, presets and roles, out-of-range priorities, broken quotas and act flags. */
 export function parsePlanPrefs(raw: unknown, engine: Engine): PlanPrefs {
   if (!isObject(raw)) return DEFAULT_PLAN_PREFS;
   const children = new Set<string>(engine.children().map((c) => c.id));
@@ -123,9 +117,12 @@ export function parsePlanPrefs(raw: unknown, engine: Engine): PlanPrefs {
   for (const [id, v] of Object.entries(isObject(raw.overrides) ? raw.overrides : {})) {
     if (children.has(id) && presets.has(v as string)) overrides[id as ChildId] = v as PresetId;
   }
-  const suggested = (Array.isArray(raw.suggested) ? raw.suggested : []).filter(
-    (c, i, all): c is ChildId => typeof c === 'string' && c in overrides && all.indexOf(c) === i,
-  );
+  // Before army fit, Suggest roles wrote presets into the overrides and listed them as suggested: drop those (#96).
+  for (const c of Array.isArray(raw.suggested) ? raw.suggested : []) if (typeof c === 'string') delete overrides[c as ChildId];
+  const roleOverrides: Partial<Record<ChildId, ChildDeploymentRole>> = {};
+  for (const [id, v] of Object.entries(isObject(raw.roleOverrides) ? raw.roleOverrides : {})) {
+    if (children.has(id) && CHILD_DEPLOYMENT_ROLES.includes(v as ChildDeploymentRole)) roleOverrides[id as ChildId] = v as ChildDeploymentRole;
+  }
   const quotas: Partial<Record<PlayContext, Quotas>> = {};
   const savedQuotas = isObject(raw.quotas) ? raw.quotas : {};
   for (const context of CONTEXTS.filter((c) => c !== 'all')) {
@@ -138,7 +135,7 @@ export function parsePlanPrefs(raw: unknown, engine: Engine): PlanPrefs {
     const at = savedActs[act];
     if (typeof at === 'number' && Number.isFinite(at) && at >= 0) acts[act] = at;
   }
-  return { priorities, overrides, suggested, quotas, acts };
+  return { priorities, overrides, roleOverrides, quotas, acts };
 }
 
 export function loadPlanPrefs(engine: Engine): PlanPrefs {

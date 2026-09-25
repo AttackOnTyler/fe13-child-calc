@@ -91,7 +91,7 @@ export const DEEPER: readonly DeeperEntry[] = [
   {
     id: 'preset',
     question: 'Which preset suits this child?',
-    answer: `Switch the Scoring sidebar’s preset to compare the child’s table under each, then set the child’s plan preset on the ${plan}.`,
+    answer: `Its plan preset is derived: the preset where it stands highest against the cast, in its best role. Switch the Scoring sidebar’s preset to compare its table under others, and override the plan preset on the ${plan} if you want a different build.`,
     jump: { to: 'child', target: 'scoring-preset' },
     terms: [
       {

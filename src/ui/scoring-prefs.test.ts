@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, createEngine, resolveAssumptions, type PlanSettings } from '../engine';
+import {
+  quotasFor, EMPTY_ROSTER, createEngine, resolveAssumptions, type PlanSettings } from '../engine';
 import {
   DEFAULT_PREFS,
   basisOf,
@@ -96,6 +97,8 @@ describe('plan-preset visit', () => {
     supportRank: globalPrefs.supportRank,
     priorities: {},
     overrides: {},
+    roleOverrides: {},
+    quotas: quotasFor('all'),
   };
 
   it('scores with the plan preset in its own role and Auto class, keeping the rest global', () => {

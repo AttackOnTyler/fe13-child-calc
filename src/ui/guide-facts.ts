@@ -12,8 +12,6 @@ export type GuideFacts = {
   readonly contextChosen: boolean;
   readonly deployEdited: boolean;
   readonly prioritiesSet: boolean;
-  /** Suggest roles ran. */
-  readonly rolesSuggested: boolean;
   /** Robin is locked: every run fact is set (by the Plan's Lock or in Run facts), so there is no Robin left to pick. */
   readonly robinLocked: boolean;
   readonly unitBenched: boolean;
@@ -65,7 +63,6 @@ export function guideFacts(roster: Roster, { acts }: PlanPrefs, context: PlayCon
     contextChosen: context !== DEFAULT_PREFS.context,
     deployEdited: acts.deployEditedAt !== undefined,
     prioritiesSet: acts.prioritiesSetAt !== undefined,
-    rolesSuggested: acts.suggestedAt !== undefined,
     robinLocked: !!gender && !!asset && !!flaw,
     unitBenched: states.includes('benched'),
     planAdopted: roster.savedPlan !== null,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  quotasFor,
   DEFAULT_SPEED,
   adoptPlan,
   lockRobin,
@@ -28,6 +29,12 @@ import { ledgerStatus } from './plan';
 
 const engine = createEngine();
 
+/** Room in every role: army fit moves nobody, so these tests see the solver alone. */
+const ROOMY = {
+  cap: 99,
+  roles: { lead: { min: 0, max: 99 }, battery: { min: 0, max: 99 }, staff: { min: 0, max: 99 }, dancer: { min: 0, max: 99 } },
+} as const;
+
 const settings: PlanSettings = {
   context: 'all',
   preset: 'physical-lead',
@@ -38,6 +45,8 @@ const settings: PlanSettings = {
   supportRank: 'A',
   priorities: {},
   overrides: {},
+  roleOverrides: {},
+  quotas: ROOMY,
 };
 
 const RUN = { gender: 'M', asset: 'spd', flaw: 'hp' } as const;
@@ -122,7 +131,7 @@ describe('marriage plan solver: brute force on small rosters', () => {
       for (const c of m.children) expect(c.value).toBeCloseTo(c.priority * (c.scaled ?? 0), 9);
     }
     const lucina = plan.marriages.flatMap((m) => m.children).find((c) => c.child === 'lucina')!;
-    expect(lucina).toMatchObject({ preset: 'physical-lead', priority: 3 });
+    expect(lucina).toMatchObject({ preset: engine.planPreset('lucina', roster, s), priority: 3 });
   });
 });
 
@@ -210,12 +219,23 @@ describe('marriage plan solver: the roster', () => {
 });
 
 describe('marriage plan: plan presets', () => {
-  it('defaults per child, follows the play context, and falls back to the global preset', () => {
-    const at = (context: PlanSettings['context']) => ({ context, preset: 'battery', overrides: {} }) as const;
-    expect(engine.planPreset('kjelle', at('all'))).toBe('physical-lead');
-    expect(engine.planPreset('kjelle', at('main-story'))).toBe('tank');
-    expect(engine.planPreset('morgan-f', at('apotheosis'))).toBe('battery');
-    expect(engine.planPreset('kjelle', { ...at('main-story'), overrides: { kjelle: 'lancekiller' } })).toBe('lancekiller');
+  it('is derived without an override, and an override wins (#96)', () => {
+    const roster = { ...EMPTY_ROSTER, run: RUN };
+    const derived = engine.deriveRoles(roster, settings).roles.find((r) => r.child === 'kjelle')!;
+    const assigned = engine.roles(roster, settings).get('kjelle')!;
+    expect(assigned.preset).toBe(derived.rolePreset[assigned.role]);
+    expect(engine.planPreset('kjelle', roster, { ...settings, overrides: { kjelle: 'lancekiller' } })).toBe('lancekiller');
+    expect(engine.roles(roster, { ...settings, overrides: { kjelle: 'lancekiller' } }).get('kjelle')!.source).toBe('preset override');
+  });
+
+  it('keeps the derived role preset inside a role override', () => {
+    const roster = { ...EMPTY_ROSTER, run: RUN };
+    const s = { ...settings, roleOverrides: { kjelle: 'battery' } } as const;
+    expect(engine.roles(roster, s).get('kjelle')).toMatchObject({ role: 'battery', preset: 'battery', source: 'role override' });
+  });
+
+  it('gives a child out of the cast the global preset (Morgan before Robin is set)', () => {
+    expect(engine.planPreset('morgan-f', EMPTY_ROSTER, { ...settings, preset: 'battery' })).toBe('battery');
   });
 
   it('scores Rallybot / Dancer children as 0 in Σ', () => {
@@ -298,24 +318,13 @@ describe('the saved plan', () => {
 });
 
 describe('plan preset overrides', () => {
-  it('holds an override in every play context, while defaulted children follow the context', () => {
+  it('holds a preset override in every play context', () => {
     const roster = { ...EMPTY_ROSTER, run: RUN };
     const s = { ...settings, overrides: { kjelle: 'lancekiller' } } as const;
     const presets = (context: PlanSettings['context']) =>
       new Map(engine.plan(roster, { ...s, context }).marriages.flatMap((m) => m.children.map((c) => [c.child, c.preset] as const)));
-    const all = presets('all');
-    const main = presets('main-story');
-    expect(all.get('kjelle')).toBe('lancekiller');
-    expect(main.get('kjelle')).toBe('lancekiller');
-    expect(all.get('nah')).toBe('battery');
-    expect(main.get('nah')).toBe('nostank');
-  });
-
-  it('tells the curated default apart from the preset in force', () => {
-    const s = { context: 'main-story', preset: 'battery', overrides: { kjelle: 'lancekiller' } } as const;
-    expect(engine.defaultPlanPreset('kjelle', s)).toBe('tank');
-    expect(engine.planPreset('kjelle', s)).toBe('lancekiller');
-    expect(engine.defaultPlanPreset('morgan-f', s)).toBe('battery');
+    expect(presets('all').get('kjelle')).toBe('lancekiller');
+    expect(presets('main-story').get('kjelle')).toBe('lancekiller');
   });
 });
 

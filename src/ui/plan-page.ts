@@ -47,20 +47,17 @@ export type ChildPlanControls = {
   readonly presetLabel: (id: PresetId) => string;
   /** The play context's composition quotas (the user's, else the curated seed). */
   readonly quotas: Quotas;
-  /** Children whose plan preset Suggest roles picked. */
-  readonly suggested: ReadonlySet<ChildId>;
+  /** The roster the plan is solved for: army fit reads it. */
+  readonly roster: Roster;
 };
 
 /** What the Plan view reads, and how it changes the roster and the plan preferences. */
 export type PlanPageContext = ChildPlanControls & {
-  readonly roster: Roster;
   readonly setRoster: (next: Roster) => void;
   /** Free re-plan: ignore the pins (view state). */
   readonly free: boolean;
   readonly setFree: (free: boolean) => void;
   readonly resetPlanPrefs: () => void;
-  /** Rewrites the plan preset of every child on its default (or on an earlier suggestion) to meet the quotas. */
-  readonly suggestRoles: () => void;
   /** The user edited this play context's quotas. */
   readonly quotasEdited: boolean;
   /** Sets this play context's quotas; null resets them to the curated seed. */
@@ -108,8 +105,10 @@ export function compositionStrip(c: Composition): HTMLElement {
 
 /** A child's deployment role, from its plan preset: read-only. */
 export function roleChip(ctl: ChildPlanControls, id: ChildId): HTMLElement {
-  const role = deploymentRoleOf(ctl.engine.planPreset(id, ctl.settings));
-  return h('span', { class: `chip role role-${role}`, title: `Deployment role: ${ROLE_UI[role].label} (from its plan preset)` }, ROLE_UI[role].short);
+  const a = ctl.engine.roles(ctl.roster, ctl.settings).get(id);
+  const role = a?.role ?? deploymentRoleOf(ctl.engine.planPreset(id, ctl.roster, ctl.settings));
+  const from = a ? (a.source === 'army fit' ? `moved by army fit: ${a.reason}` : a.source) : 'the global preset';
+  return h('span', { class: `chip role role-${role}`, title: `Deployment role: ${ROLE_UI[role].label} (${from})` }, ROLE_UI[role].short);
 }
 
 const OUT_OF_CAST = { dead: 'dead', unborn: 'can’t be born', 'needs-robin': 'needs Robin set in Run facts' } as const;
@@ -418,11 +417,16 @@ export function priorityControl(ctl: ChildPlanControls, id: ChildId, name: strin
   );
 }
 
-/** A child's plan preset: "default (X)" or the user's, which holds in every play context; ↺ resets it. */
+/**
+ * A child's plan preset: "derived (X)" — its best role's role preset, or where army fit moved it — or the user's preset
+ * override, which holds in every play context; ↺ returns it to derived.
+ */
 export function presetControl(ctl: ChildPlanControls, id: ChildId, name: string): HTMLElement {
   const { engine, settings } = ctl;
   const own = settings.overrides[id];
-  const fallback = engine.defaultPlanPreset(id, settings);
+  const derived = engine.roles(ctl.roster, { ...settings, overrides: {} }).get(id);
+  const fallback = derived?.preset ?? settings.preset;
+  const fit = !own && derived?.source === 'army fit' ? derived : undefined;
   return h(
     'span',
     { class: 'ppreset' },
@@ -431,18 +435,18 @@ export function presetControl(ctl: ChildPlanControls, id: ChildId, name: string)
       {
         ...guide('plan-preset'),
         'aria-label': `${name}: plan preset`,
-        title: own ? `Set: ${ctl.presetLabel(own)} in every play context (default ${ctl.presetLabel(fallback)})` : 'Follows the play context',
+        title: own ? `Set: ${ctl.presetLabel(own)} in every play context (derived ${ctl.presetLabel(fallback)})` : 'Derived from where it stands against the cast',
         onchange: (e) => ctl.setPlanPreset(id, ((e.target as HTMLSelectElement).value || null) as PresetId | null),
       },
-      h('option', { value: '', selected: !own }, `default (${ctl.presetLabel(fallback)})`),
+      h('option', { value: '', selected: !own }, `derived (${ctl.presetLabel(fallback)})`),
       ...engine.presets().map((p) => h('option', { value: p.id, selected: p.id === own }, ctl.presetLabel(p.id))),
     ),
     own
-      ? ctl.suggested.has(id)
-        ? h('span', { class: 'chip suggested', title: 'Picked by Suggest roles: the next run may change it; ↺ resets it' }, 'suggested')
-        : h('span', { class: 'chip set', title: 'Set by you: holds in every play context' }, 'set')
-      : null,
-    h('button', { ...guide('plan-preset-reset'), class: 'mini', disabled: !own, title: own ? 'Reset to the default' : 'On the default', onclick: () => ctl.setPlanPreset(id, null) }, '↺'),
+      ? h('span', { class: 'chip set', title: 'Set by you: holds in every play context' }, 'set')
+      : fit
+        ? h('span', { class: 'chip suggested', title: `Moved by army fit: ${fit.reason}` }, 'army fit')
+        : null,
+    h('button', { ...guide('plan-preset-reset'), class: 'mini', disabled: !own, title: own ? 'Back to derived' : 'Derived', onclick: () => ctl.setPlanPreset(id, null) }, '↺'),
   );
 }
 
@@ -478,16 +482,6 @@ export function planSidebar(ctx: PlanPageContext): HTMLElement {
           onclick: () => ctx.setEditingQuotas(!ctx.editingQuotas),
         },
         ctx.quotasEdited ? '✎*' : '✎',
-      ),
-      h(
-        'button',
-        {
-          ...guide('suggest-roles'),
-          class: 'ghost small',
-          title: 'Pick a plan preset for every child on its default so the army meets the quotas, then re-plan. Your own presets stay.',
-          onclick: ctx.suggestRoles,
-        },
-        LABELS.suggestRoles,
       ),
     ),
     ctx.editingQuotas ? quotaEditor(ctx) : null,

@@ -8,6 +8,7 @@ import type { AssumptionId } from './assumptions';
 import type { PresetData, PresetId, ScoringRole, Weights } from '../curated/presets';
 import type { BuildContext, Confidence } from '../curated/builds';
 import type { Blocking, Roster, RunFacts } from './roster';
+import type { ChildDeploymentRole, Quotas } from '../curated/deployment';
 
 export type RobinRef = { readonly kind: 'robin'; readonly gender: Gender; readonly asset: Stat; readonly flaw: Stat };
 
@@ -159,7 +160,7 @@ export type ScoreSettings = {
 /** The marriage plan's scoring inputs: each child scores in its plan preset, in Auto class, with the global rest. */
 export type PlanSettings = {
   readonly context: PlayContext;
-  /** The global preset: a child with no curated plan preset uses it. */
+  /** The global preset: the plan preset of a child out of the cast (Morgan before Robin is set) without an override. */
   readonly preset: PresetId;
   /** The user's preset edits, which apply wherever a preset is used. */
   readonly edits: Readonly<Partial<Record<PresetId, { readonly weights: Weights; readonly mixed: boolean }>>>;
@@ -171,8 +172,12 @@ export type PlanSettings = {
   readonly supportRank: SupportRank;
   /** 0–3 per child; 1 when unset. */
   readonly priorities: Readonly<Partial<Record<ChildId, number>>>;
-  /** The user's plan presets, which hold in every play context. */
+  /** Preset overrides: a preset the user pinned, niche ones included; its deployment role comes with it. */
   readonly overrides: Readonly<Partial<Record<ChildId, PresetId>>>;
+  /** Role overrides: a deployment role the user pinned; the role preset inside it stays derived. */
+  readonly roleOverrides: Readonly<Partial<Record<ChildId, ChildDeploymentRole>>>;
+  /** The play context's composition quotas, which army fit meets. */
+  readonly quotas: Quotas;
 };
 
 export type PairingScore = {
