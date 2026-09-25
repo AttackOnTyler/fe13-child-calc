@@ -180,6 +180,18 @@ _Avoid_: Upgrade, refine
 A weapon's bonus damage against a unit type (flying, armored, beast, dragon, fell dragon, monster): bows against fliers, Beast Killer against beasts, Wyrmslayer against dragons.
 _Avoid_: Weakness, super-effective
 
+**Chapter log**:
+A run's record of play: one **entry** per map played, in play order, each tagged with the map (or "other" for a skirmish or a grind map). The Roster's unit states and marriages come from the latest entry.
+_Avoid_: Save file, history
+
+**Snapshot**:
+What an entry records about the army: each unit's class, level, promoted/reclassed status, EXP, stats (as the stat screen shows them, without pair-up), equipped skills, inventory with forges, and support ranks; plus the convoy, gold, unit states and marriages.
+_Avoid_: State, save
+
+**Copy-forward**:
+A new entry starts as a copy of the one before, with the map's recruits filled in from join data. Editing a past entry never changes later ones; they're flagged instead.
+_Avoid_: Inherit, carry over
+
 **Chapter data**:
 A map's cited facts on every difficulty: win and lose conditions, deploy count, forced units, recruits, bosses, enemy groups with their movement triggers, reinforcements, items and shops. From Fire Emblem Wiki at a fixed revision, cross-checked against Serenes Forest. Game data, not opinion.
 _Avoid_: Walkthrough, map guide

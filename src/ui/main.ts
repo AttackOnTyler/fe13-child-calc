@@ -12,6 +12,9 @@ import {
   describeSource,
   resolveAssumptions,
   EMPTY_ROSTER,
+  EMPTY_RUN,
+  rosterOf,
+  withRoster,
   type AssumptionId,
   type Blocking,
   type BuildMatch,
@@ -45,6 +48,7 @@ import {
   type SelfTestReport,
   type SkillCard,
   type PageSubject,
+  type Run,
   type Difficulty,
   type Pairing,
   type PageUnitId,
@@ -92,10 +96,10 @@ import {
 import { validationPanel, withOverride } from './validation';
 import { rosterPage } from './roster-page';
 import { unitsView, type UnitsContext } from './unit-page';
-import { mapsView } from './maps-page';
+import { runView } from './run-page';
 import { CHILD_UNITS } from '../game-data/children';
 import { unitLink, type OpenUnit } from './unit-links';
-import { clearRoster, loadRoster, saveRoster } from './roster-store';
+import { clearRoster, loadRun, saveRun } from './roster-store';
 import { planPage, planSidebar, type ChildPlanControls, type PlanPageContext } from './plan-page';
 import {
   loadPlanPrefs,
@@ -123,7 +127,9 @@ let engine: Engine = createEngine(assumptions);
 let selfTest = engine.selfTest();
 let prefs: ScoringPrefs = loadPrefs(engine);
 /** Run state: read by the tables and the leaderboard, never by scoring. */
-let roster: Roster = loadRoster();
+/** The run (#116): the chapter log; the roster is its view (unit states and spouses from the latest entry). */
+let run: Run = loadRun();
+let roster: Roster = rosterOf(run);
 // Losses already saved aren't new: the loss prompt is for those recorded from here on.
 guidePrefs = noteLosses(roster, guidePrefs);
 /** Plan preferences (priorities, plan presets): survive Clear all. */
@@ -148,6 +154,9 @@ let unitOpen: PageUnitId | 'robin' | ChildId | undefined;
 /** Robin's page preview (#103): page state only, never written to the Run facts. */
 let robinPreview: RobinRef = { kind: 'robin', gender: 'M', asset: 'mag', flaw: 'str' };
 /** Where a unit page's back link returns: the view (and unit page) it was opened from, and its scroll. */
+/** The Run view's open chapter-log entry and whether it shows the Maps (#116; view state). */
+let openEntry: string | undefined;
+let showingMaps = false;
 /** The Run view's open map (#109); undefined shows the Maps list. */
 let mapOpen: string | undefined;
 /** A difficulty picked on the Maps view (view state); otherwise it shows the run's, else Normal. */
@@ -293,8 +302,9 @@ const rosterParts = (): Part[] => (view === 'plan' ? ['rail', 'main', 'panel'] :
 function setRoster(next: Roster): void {
   const route = next.run.route;
   const routeSet = route !== null && route !== roster.run.route;
-  roster = next;
-  saveRoster(roster);
+  run = withRoster(run, next);
+  roster = rosterOf(run);
+  saveRun(run);
   // Play context defaults from the route (#108); the lens never changes the run. The header's lens redraws too.
   if (routeSet) {
     setPrefs({ context: route }, []);
@@ -311,9 +321,18 @@ function setDeployment(next: Roster): void {
 }
 
 function clearRosterState(): void {
-  roster = EMPTY_ROSTER;
   clearRoster();
+  run = EMPTY_RUN;
+  roster = rosterOf(run);
   renderParts(rosterParts());
+}
+
+/** A chapter-log change (#116): saved, and the roster re-read from the latest entry. */
+function setRun(next: Run): void {
+  run = next;
+  roster = rosterOf(run);
+  saveRun(run);
+  renderParts(['rail', 'main']);
 }
 
 // ---- marriage plan ----
@@ -634,6 +653,21 @@ function rail(): HTMLElement[] {
     h(
       'button',
       {
+        ...guide('run-rail'),
+        class: `rail-item roster-item${view === 'run' ? ' on' : ''}`,
+        title: 'Your run, map by map: the chapter log and every map’s chapter data',
+        onclick: () => {
+          view = 'run';
+          mapOpen = undefined;
+          showingMaps = false;
+          render();
+        },
+      },
+      h('span', {}, 'Run'),
+    ),
+    h(
+      'button',
+      {
         class: `rail-item roster-item${view === 'roster' ? ' on' : ''}`,
         title: 'Run facts, unit states and marriages',
         onclick: () => {
@@ -671,20 +705,7 @@ function rail(): HTMLElement[] {
       },
       h('span', {}, 'Units'),
     ),
-    h(
-      'button',
-      {
-        ...guide('run-rail'),
-        class: `rail-item roster-item${view === 'run' ? ' on' : ''}`,
-        title: 'Your run, map by map: every map’s chapter data',
-        onclick: () => {
-          view = 'run';
-          mapOpen = undefined;
-          render();
-        },
-      },
-      h('span', {}, 'Run'),
-    ),
+
     h('div', { class: 'muted small rail-head' }, `Best · ${presetLabel(presetOf(prefs))}`),
     item('all', LABELS.allChildren, 'Leaderboard of every child’s pairings', top.length ? Math.max(...top) : undefined),
     ...children
@@ -2267,6 +2288,10 @@ const guideContext = (): GuideContext => ({
       view = 'run';
       mapOpen = 'prologue';
       shown = 'the Prologue';
+    } else if (jump.to === 'log') {
+      view = 'run';
+      mapOpen = undefined;
+      showingMaps = false;
     } else if (jump.to === 'unit' || jump.to === 'robin' || jump.to === 'door') {
       unitBack = { view, unit: undefined, scroll: mainScroll() };
       view = 'units';
@@ -2339,7 +2364,22 @@ function renderParts(parts: readonly Part[]): void {
           : view === 'units'
           ? unitsView(unitsContext())
           : view === 'run'
-          ? mapsView({
+          ? runView({
+              engine,
+              run,
+              setRun,
+              now: () => Date.now(),
+              openEntry,
+              setOpenEntry: (id) => {
+                openEntry = id;
+                renderParts(['main']);
+              },
+              showingMaps,
+              setShowingMaps: (on) => {
+                showingMaps = on;
+                renderParts(['main']);
+              },
+              maps: {
               engine,
               map: mapOpen,
               open: (id) => {
@@ -2351,6 +2391,7 @@ function renderParts(parts: readonly Part[]): void {
               setDifficulty: (d) => {
                 mapDifficulty = d;
                 renderParts(['main']);
+              },
               },
             })
           : selected === 'all'

@@ -506,3 +506,12 @@ button.gd-deeper-head:hover { background: var(--hover); }
 .unit-link:hover { color: var(--accent, #7fb4ff); }
 .unit-link.about { font-size: 11px; margin: 0 6px 0 2px; color: var(--muted); }
 .pchild-wrap { display: inline-flex; align-items: center; }
+
+/* Chapter log (#116) */
+.run-log .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
+.run-log .entry.latest { border-color: var(--accent, #7fb4ff); }
+.snapshot .num-in { width: 3.2em; }
+.snapshot .cls-in { width: 8em; }
+.snapshot .wide-in { width: 24em; }
+.snapshot td input { min-width: 0; }
+.scroll-x { overflow-x: auto; }

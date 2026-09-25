@@ -98,6 +98,30 @@ export {
 export { DEFAULT_SPEED, RALLY_OPTIONS, TONIC_SPD } from './speed';
 export type { Citation } from '../game-data/citations';
 export {
+  EMPTY_RUN,
+  EMPTY_SNAPSHOT,
+  SUPPORT_LEVELS,
+  addEntry,
+  editEntry,
+  exportRun,
+  flaggedEntries,
+  importRun,
+  latestEntry,
+  parseRun,
+  recruitSnapshot,
+  removeEntry,
+  rosterOf,
+  runFromRoster,
+  withRoster,
+  withUnit,
+  type HeldItem,
+  type Run,
+  type RunEntry,
+  type Snapshot,
+  type SupportLevel,
+  type UnitSnapshot,
+} from './run';
+export {
   FORGE,
   ITEMS,
   ITEM_DISAGREEMENTS,
