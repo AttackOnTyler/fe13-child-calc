@@ -11,6 +11,7 @@ import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
 import { FIRST_GEN_UNITS, type UnitId } from '../game-data/units';
 import { h } from './dom';
 import { guide } from './guide';
+import { howToRun } from './maps-page';
 
 export type PrepContext = {
   readonly engine: Engine;
@@ -404,6 +405,7 @@ export function prepPage(ctx: PrepContext): HTMLElement[] {
       loadouts(deployment, byUnit, snap, foes, poolFor, gender),
       supply(ctx, deployment, byUnit, snap, foes, poolFor),
       seals(ctx, deployment, byUnit, snap, foes, poolFor, gender),
+      howToRun(ctx.engine, m.id),
       h('h3', {}, 'Matchups'),
       h(
         'div',

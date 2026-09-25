@@ -35,6 +35,7 @@ import { inheritGrowths, inheritModifiers, type ParentProfile } from './inherita
 import { buildSkillView, candidatesFor, firstGenSkills, ref, secondGenSkills, skillRank, skillReach, type SkillViewInput, type SkillViewSettings } from './skills';
 import { BUILD_TEMPLATES } from '../curated/builds';
 import { UNIT_OPINIONS, type OpinionUnit } from '../curated/unit-opinion';
+import { CHAPTER_GUIDE, type GuideEntry } from '../curated/chapter-guide';
 import { SOURCES } from '../curated/sources';
 import type { BuildTemplate } from '../curated/builds';
 import { skillCard } from './skill-card';
@@ -97,6 +98,7 @@ export {
 } from './assumptions';
 export { DEFAULT_SPEED, RALLY_OPTIONS, TONIC_SPD } from './speed';
 export type { Citation } from '../game-data/citations';
+export { CHAPTER_GUIDE, type GuideEntry } from '../curated/chapter-guide';
 export { classIdByName, classWeaponKinds, openStock, promotionAdvice, sealAvailability, sealsHeld, supplyList, type PromotionAdvice, type SealAvailability, type StockItem, type Supply } from './supply';
 export { coverage, deployMax, deployRoleOf, suggestDeployment, suggestLoadout, type DeployCandidate, type Deployment, type Loadout, type Pair } from './deploy';
 export { bestWeapon, classTypes, dangerFlags, foeKey, foeOf, foesOf, matchup, pairUpBonus, statValue, type DangerFlag, type Fighter, type Foe, type Matchup } from './solver';
@@ -306,6 +308,8 @@ export type Engine = {
   lunaticPlusPool(map: ChapterData): readonly string[];
   /** FEW/SF disagreements in the chapter data, resolved or open. */
   chapterDisagreements(): readonly ChapterDisagreement[];
+  /** A map's chapter-guide entries (#123), grouped by source, each with its source's name and link. */
+  chapterGuide(map: string): readonly { readonly source: { readonly id: string; readonly name: string; readonly link: string }; readonly entries: readonly GuideEntry[] }[];
   /** The first-gen units with a page (#101), in roster order, SpotPass last. Robin's page comes from the run facts. */
   pageUnits(): readonly { readonly id: PageUnitId; readonly name: string; readonly spotPass: boolean }[];
   /**
@@ -1331,6 +1335,11 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     maps: () => MAPS,
     lunaticPlusPool: lunaticPlusPoolFor,
     chapterDisagreements: () => CHAPTER_DISAGREEMENTS,
+    chapterGuide: (map) => {
+      const entries = CHAPTER_GUIDE.filter((e) => e.map === map);
+      const sources = [...new Set(entries.map((e) => e.source))];
+      return sources.map((id) => ({ source: { id, name: SOURCES[id].name, link: SOURCES[id].link }, entries: entries.filter((e) => e.source === id) }));
+    },
     pageUnits: () => {
       const units = (Object.keys(FIRST_GEN_UNITS) as UnitId[]).filter((u): u is PageUnitId => u !== 'maiden');
       const spot = new Set<string>(SPOTPASS_UNITS);

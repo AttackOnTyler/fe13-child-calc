@@ -43,6 +43,7 @@ export const GUIDE_TARGETS = [
   'prep-loadouts',
   'prep-supply',
   'prep-seals',
+  'how-to-run',
   'maps-list',
   'map-data',
   'unit-class-tree',

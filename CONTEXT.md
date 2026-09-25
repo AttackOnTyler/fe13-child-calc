@@ -232,6 +232,10 @@ _Avoid_: Projected stats, averages (alone)
 A new entry starts as a copy of the one before, with the map's recruits filled in from join data. Editing a past entry never changes later ones; they're flagged instead.
 _Avoid_: Inherit, carry over
 
+**Chapter guide**:
+Named sources' tactics for a map (tactic, turn window, units assumed, citation), keyed by map and the difficulty the source played, kept side by side per source and apart from the chapter data's facts. Checked against the chapter data before entry.
+_Avoid_: Walkthrough, strategy (alone)
+
 **Chapter data**:
 A map's cited facts on every difficulty: win and lose conditions, deploy count, forced units, recruits, bosses, enemy groups with their movement triggers, reinforcements, items and shops. From Fire Emblem Wiki at a fixed revision, cross-checked against Serenes Forest. Game data, not opinion.
 _Avoid_: Walkthrough, map guide

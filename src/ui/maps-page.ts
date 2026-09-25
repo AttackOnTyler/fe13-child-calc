@@ -4,7 +4,7 @@
  * reinforcements, items, shop and the Lunatic+ rule.
  */
 import type { BossRow, ChapterData, ChapterDifficulty, Difficulty, EnemyGroup, Engine } from '../engine';
-import { LUNATIC_PLUS, REINFORCEMENT_RULE } from '../engine';
+import { LUNATIC_PLUS, REINFORCEMENT_RULE, unitName, type RosterUnit } from '../engine';
 import { h } from './dom';
 import { guide } from './guide';
 
@@ -22,6 +22,44 @@ const KIND_LABEL = { story: 'Story', paralogue: 'Paralogues', xenologue: 'Xenolo
 
 const DIFF_LABEL: Readonly<Record<Difficulty, string>> = { normal: 'Normal', hard: 'Hard', lunatic: 'Lunatic', 'lunatic-plus': 'Lunatic+' };
 const tableDifficulty = (d: Difficulty): ChapterDifficulty => (d === 'lunatic-plus' ? 'lunatic' : d);
+
+const DIFF_NAME: Readonly<Record<string, string>> = { normal: 'Normal', hard: 'Hard', lunatic: 'Lunatic', 'lunatic-plus': 'Lunatic+' };
+
+/**
+ * How to run it (#123): each named source's chapter-guide entries for the map, side by side and never merged, each
+ * with the difficulty it was played on, its turn window, the units it assumes, and its citation.
+ */
+export function howToRun(engine: Engine, map: string): HTMLElement | null {
+  const guideBySource = engine.chapterGuide(map);
+  if (!guideBySource.length) return null;
+  return h(
+    'section',
+    { ...guide('how-to-run'), class: 'how-to-run' },
+    h('h3', {}, 'How to run it'),
+    ...guideBySource.map((g) =>
+      h(
+        'div',
+        { class: 'opinion' },
+        h('h4', {}, `${g.source.name} says…`),
+        h(
+          'ul',
+          { class: 'small' },
+          ...g.entries.map((e) =>
+            h(
+              'li',
+              {},
+              e.turns ? h('b', {}, `${e.turns}: `) : null,
+              e.tactic,
+              h('span', { class: 'muted' }, ` (${DIFF_NAME[e.difficulty]}${e.units.length ? ` · assumes ${e.units.map((u) => unitName(u as RosterUnit)).join(', ')}` : ''})`),
+            ),
+          ),
+        ),
+        h('div', { class: 'small muted' }, `“${[...new Set(g.entries.map((e) => e.citation.title))].join('”, “')}” · `, h('a', { href: g.source.link, target: '_blank', rel: 'noopener' }, `${g.source.id} ${g.source.name}`)),
+      ),
+    ),
+    h('p', { class: 'muted small' }, 'Opinion, checked against the chapter data before it went in; the facts are in the chapter data.'),
+  );
+}
 
 export function mapsView(ctx: MapsContext): HTMLElement[] {
   const map = ctx.map && ctx.engine.maps().find((m) => m.id === ctx.map);
@@ -147,6 +185,7 @@ function mapPage(ctx: MapsContext, m: ChapterData): HTMLElement[] {
             h('ul', { class: 'small' }, ...m.reinforcements.map((r) => h('li', { style: `margin-left:${(r.length - r.trimStart().length) * 6}px` }, r.trim()))),
           )
         : null,
+      howToRun(ctx.engine, m.id),
       m.items.length ? h('div', {}, h('h3', {}, 'Items'), h('ul', { class: 'small' }, ...m.items.map((i) => h('li', {}, `${i.item}: ${i.how}`)))) : null,
       m.shop
         ? h(

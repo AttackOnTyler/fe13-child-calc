@@ -6,7 +6,7 @@ import { DEFAULT_PRIORITY, type ChildId } from '../engine';
 import type { GuideTarget } from './guide';
 import { BASIS_LABELS, LABELS, ROLE_UI } from './labels';
 
-export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners' | 'robin-preview' | 'front-door-pairings' | 'unit-opinion' | 'map-data' | 'chapter-log' | 'record-results' | 'matchups' | 'threats' | 'deployment' | 'supply';
+export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners' | 'robin-preview' | 'front-door-pairings' | 'unit-opinion' | 'map-data' | 'chapter-log' | 'record-results' | 'matchups' | 'threats' | 'deployment' | 'supply' | 'how-to-run';
 
 /**
  * Where an entry's jump goes: the All children leaderboard, a child's table (the one `guideChild` picks, with its Robin
@@ -289,6 +289,17 @@ export const DEEPER: readonly DeeperEntry[] = [
       { term: 'supply list', def: 'Buys and forges that close the map’s gaps, priced against your gold and limited to open armories.' },
       { term: 'expected stats', def: 'Stats projected from average growths; used only for “promote now or later”.' },
     ],
+  },
+  {
+    id: 'how-to-run',
+    question: 'How do experienced players run this map?',
+    answer: [
+      'How to run it, on a map’s page and its preparation page, gives each named source’s tactics for the map, side by side and never merged: Ellery’s from his Lunatic+ streams, for now.',
+      'Each tactic says the difficulty it was played on, its turn window, and the units it assumes, and cites the stream.',
+      'They were checked against the chapter data first: wrong turn numbers and threats were corrected, tactics that hang on terrain no source publishes were held back, and ones that can’t work were dropped. The facts themselves stay in the chapter data.',
+    ],
+    jump: { to: 'map', target: 'how-to-run' },
+    terms: [{ term: 'chapter guide', def: 'Named sources’ tactics for each map, kept apart from the chapter data’s facts.' }],
   },
 ];
 
