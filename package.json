@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "typecheck": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "proto:roles": "vite --open /src/prototype/role-pickers/index.html"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
