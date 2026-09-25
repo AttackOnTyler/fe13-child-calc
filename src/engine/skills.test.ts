@@ -41,10 +41,11 @@ describe('inheritable-skill candidates', () => {
 
   it('never passes a DLC skill', () => {
     const dlcSkills = ['limit-breaker', 'aggressor', 'resistance-plus-10', 'rally-heart', 'bond', 'all-stats-plus-2', 'paragon', 'iotes-shield'];
-    for (const r of engine.pairings()) {
-      const all = [...r.skillCandidates.fromFixed.skills, ...r.skillCandidates.fromVariable.skills];
-      for (const s of dlcSkills) expect(all, r.key).not.toContain(s);
-    }
+    // One expect for every pairing is too slow: collect the offenders.
+    const passing = engine.pairings().flatMap((r) =>
+      [...r.skillCandidates.fromFixed.skills, ...r.skillCandidates.fromVariable.skills].filter((s) => dlcSkills.includes(s)).map((s) => `${r.key}: ${s}`),
+    );
+    expect(passing).toEqual([]);
   });
 
   it('gives the Maiden nothing to pass', () => {

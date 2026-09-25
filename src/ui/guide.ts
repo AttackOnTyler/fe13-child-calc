@@ -26,6 +26,7 @@ export const GUIDE_TARGETS = [
   'unit-class-tree',
   'unit-partners',
   'robin-preview',
+  'front-door-pairings',
   'no-robin',
   'robin-first',
   'robin-gain',

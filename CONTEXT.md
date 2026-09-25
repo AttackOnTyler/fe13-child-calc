@@ -83,6 +83,10 @@ _Avoid_: Spouses, matches
 A Robin gender and asset/flaw tried on Robin's page while the Run facts leave Robin open. The page follows it; it is never written to the Run facts.
 _Avoid_: Draft Robin, temporary Robin
 
+**Front door**:
+A child's overview page: what stays the same in every pairing (fixed parent, start class, default class set, personal growths, fixed passes), its best parents ranked as the pairing table ranks them, and whether it can marry Robin. It leads into the pairing table.
+_Avoid_: Child page, child summary
+
 **Join data**:
 When and how a first-gen unit or Robin joins (chapter or paralogue, recruit condition), its join class and level, and its base stats per difficulty.
 _Avoid_: Recruitment info, bases (alone)

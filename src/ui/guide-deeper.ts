@@ -6,14 +6,14 @@ import { DEFAULT_PRIORITY, type ChildId } from '../engine';
 import type { GuideTarget } from './guide';
 import { BASIS_LABELS, LABELS, ROLE_UI } from './labels';
 
-export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners' | 'robin-preview';
+export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners' | 'robin-preview' | 'front-door-pairings';
 
 /**
  * Where an entry's jump goes: the All children leaderboard, a child's table (the one `guideChild` picks, with its Robin
  * row open for `robinRow`), the Validation panel, the Scoring sidebar on the current view, or Lon'qu's unit page. Then it highlights `target`.
  */
 export type DeeperJump = {
-  readonly to: 'leaderboard' | 'child' | 'validation' | 'scoring' | 'unit' | 'robin';
+  readonly to: 'leaderboard' | 'child' | 'validation' | 'scoring' | 'unit' | 'robin' | 'door';
   readonly target: GuideTarget;
   readonly robinRow?: true;
 };
@@ -168,6 +168,17 @@ export const DEEPER: readonly DeeperEntry[] = [
     ],
     jump: { to: 'robin', target: 'robin-preview' },
     terms: [{ term: 'preview', def: 'A Robin tried on Robin’s page while the Run facts leave Robin open. It never writes to the Run facts.' }],
+  },
+  {
+    id: 'front-door-pairings',
+    question: 'What’s true of this child whoever its parents are?',
+    answer: [
+      'A child’s front door (Units › Children) shows what every pairing shares: its fixed parent, start class, default class set, personal growths, and what the fixed parent always passes (Chrom’s Aether to Lucina).',
+      'Its best parents show as tiles, ranked as the pairing table ranks them under the Scoring sidebar’s preset; a tile opens that pairing, and a link opens the full table.',
+      'The Robin line says whether the child can marry Robin and, with Robin set, the best Morgan that gives. Morgan’s own front door waits on Robin.',
+    ],
+    jump: { to: 'door', target: 'front-door-pairings' },
+    terms: [{ term: 'front door', def: 'A child’s overview page: what stays the same across pairings, its best parents, and the Robin line.' }],
   },
 ];
 

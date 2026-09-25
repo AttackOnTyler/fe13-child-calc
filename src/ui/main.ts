@@ -139,13 +139,13 @@ let childOpened: ChildId | undefined;
 type View = 'table' | 'validation' | 'roster' | 'plan' | 'units';
 let view: View = !selfTest.passed ? 'validation' : welcomeOpen ? 'roster' : 'table';
 /** The Units view's open unit page (#101); undefined shows the list. */
-let unitOpen: PageUnitId | 'robin' | undefined;
+let unitOpen: PageUnitId | 'robin' | ChildId | undefined;
 /** Robin's page preview (#103): page state only, never written to the Run facts. */
 let robinPreview: RobinRef = { kind: 'robin', gender: 'M', asset: 'mag', flaw: 'str' };
 /** Where a unit page's back link returns: the view (and unit page) it was opened from, and its scroll. */
 /** A unit page's Partners show every row (view state). */
 let allPartners = false;
-let unitBack: { view: View; unit: PageUnitId | 'robin' | undefined; scroll: number } | undefined;
+let unitBack: { view: View; unit: PageUnitId | 'robin' | ChildId | undefined; scroll: number } | undefined;
 /** A Robin group row's identity across children: `child|group key`. */
 const groupId = (child: ChildId, group: PairingGroup) => `${child}|${group.key}`;
 /** Robin group rows (by group id) with their asset × flaw heatmap open. */
@@ -335,9 +335,11 @@ const pageRobin = (): RobinRef => ({
   asset: roster.run.asset ?? robinPreview.asset,
   flaw: roster.run.flaw ?? (roster.run.asset && roster.run.asset === robinPreview.flaw ? robinPreview.asset : robinPreview.flaw),
 });
-const pageSubject = (): PageSubject | undefined => (unitOpen === 'robin' ? pageRobin() : unitOpen);
+/** The open child, when the Units view shows a front door. */
+const doorOpen = (): ChildId | undefined => (unitOpen && unitOpen in CHILD_NAMES ? (unitOpen as ChildId) : undefined);
+const pageSubject = (): PageSubject | undefined => (unitOpen === 'robin' ? pageRobin() : doorOpen() ? undefined : (unitOpen as PageUnitId | undefined));
 
-function openUnit(unit: PageUnitId | 'robin', preview?: RobinRef): void {
+function openUnit(unit: PageUnitId | 'robin' | ChildId, preview?: RobinRef): void {
   if (preview) robinPreview = preview;
   unitBack = { view, unit: view === 'units' ? unitOpen : undefined, scroll: mainScroll() };
   view = 'units';
@@ -351,6 +353,13 @@ const unitsContext = (): UnitsContext => ({
   engine,
   settings: skillSettings(),
   unit: pageSubject(),
+  door: doorOpen() && engine.frontDoor(doorOpen()!, roster, scoreSettings(prefs), prefs.context),
+  children: childrenInRun().map((c) => ({ id: c.id, name: c.name })),
+  openTable: (child) => {
+    showTable(child);
+    childOpened = child;
+    renderParts(['rail', 'main', 'panel']);
+  },
   open: openUnit,
   preview:
     unitOpen === 'robin' && !(roster.run.gender && roster.run.asset && roster.run.flaw)
@@ -363,7 +372,7 @@ const unitsContext = (): UnitsContext => ({
         }
       : undefined,
   back: () => {
-    const b: { view: View; unit: PageUnitId | 'robin' | undefined; scroll: number } = unitBack ?? { view: 'units', unit: undefined, scroll: 0 };
+    const b: { view: View; unit: PageUnitId | 'robin' | ChildId | undefined; scroll: number } = unitBack ?? { view: 'units', unit: undefined, scroll: 0 };
     view = b.view;
     unitOpen = b.unit;
     unitBack = undefined;
@@ -375,7 +384,9 @@ const unitsContext = (): UnitsContext => ({
     ? unitBack.view === 'units' && unitBack.unit
       ? unitBack.unit === 'robin'
         ? 'Robin'
-        : engine.pageUnits().find((u) => u.id === unitBack!.unit)!.name
+        : unitBack.unit in CHILD_NAMES
+          ? CHILD_NAMES[unitBack.unit as ChildId]!
+          : engine.pageUnits().find((u) => u.id === unitBack!.unit)!.name
       : VIEW_LABELS[unitBack.view]
     : 'Units',
   skillChip,
@@ -1099,6 +1110,8 @@ function inspectable(el: HTMLElement, id: SkillId): HTMLElement {
 
 /** The Skill card's owner: the open unit page, else the open Skills drawer. */
 const cardLine = (): string | undefined => (view === 'units' && unitOpen ? `unit:${unitOpen}` : openSkills);
+/** Children's names by id. */
+const CHILD_NAMES: Readonly<Record<string, string>> = Object.fromEntries(engine.children().map((c) => [c.id, c.name]));
 
 function inspect(id: SkillId): void {
   const line = cardLine();
@@ -1647,7 +1660,7 @@ function capsTitle(): string {
 
 /** The inspected skill and the open drawer's pairing, when the card belongs to that drawer. */
 /** The inspected skill on the open unit page (#101). */
-const unitCardTarget = () => (view === 'units' && unitOpen && inspected?.line === `unit:${unitOpen}` ? { id: inspected.id, unit: pageSubject()! } : undefined);
+const unitCardTarget = () => (view === 'units' && pageSubject() && inspected?.line === `unit:${unitOpen}` ? { id: inspected.id, unit: pageSubject()! } : undefined);
 const cardTarget = () => (inspected && drawerPairing?.line === inspected.line ? { id: inspected.id, ...drawerPairing } : undefined);
 
 /** The inspected skill's card, when its drawer is the open one. */
@@ -2188,11 +2201,18 @@ const guideContext = (): GuideContext => ({
     let shown: string | undefined;
     if (jump.to === 'leaderboard') showTable('all');
     else if (jump.to === 'validation') view = 'validation';
-    else if (jump.to === 'unit' || jump.to === 'robin') {
+    else if (jump.to === 'unit' || jump.to === 'robin' || jump.to === 'door') {
       unitBack = { view, unit: undefined, scroll: mainScroll() };
       view = 'units';
-      unitOpen = jump.to === 'robin' ? 'robin' : 'lonqu';
-      shown = jump.to === 'robin' ? 'Robin' : 'Lon’qu';
+      if (jump.to === 'door') {
+        const inRun = childrenInRun();
+        const child = guideChild(childOpened, planPrefs.priorities, inRun.map((c) => c.id));
+        unitOpen = child;
+        shown = inRun.find((c) => c.id === child)!.name;
+      } else {
+        unitOpen = jump.to === 'robin' ? 'robin' : 'lonqu';
+        shown = jump.to === 'robin' ? 'Robin' : 'Lon’qu';
+      }
     } else if (jump.to === 'child') {
       const inRun = childrenInRun();
       const child = guideChild(childOpened, planPrefs.priorities, inRun.map((c) => c.id));

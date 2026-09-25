@@ -2,7 +2,7 @@
  * The Units view (#101): the list of units, and a unit's page. A header with its identity chips, the class tree, then
  * build coverage (open), "As a parent" and pair-up folding away below it. It follows the global play context.
  */
-import type { BuildMatch, ChildId, PresetId, Engine, PageSubject, PageUnitId, PartnerRow, PlanSettings, RobinRef, Roster, SkillRef, SkillViewSettings, TreeClass, UnitPage } from '../engine';
+import type { BuildMatch, ChildId, FrontDoor, PresetId, Engine, PageSubject, PageUnitId, PartnerRow, PlanSettings, RobinRef, Roster, SkillRef, SkillViewSettings, TreeClass, UnitPage } from '../engine';
 import { MOD_STATS, STATS, STAT_LABELS, type Gender, type Stat } from '../game-data/stats';
 import { h } from './dom';
 import { guide } from './guide';
@@ -12,8 +12,14 @@ export type UnitsContext = {
   readonly settings: SkillViewSettings;
   /** The open page's subject (Robin: the run facts' Robin, filled in by the preview), or undefined for the list. */
   readonly unit: PageSubject | undefined;
-  /** Opens a page; a Robin row passes the Robin to preview when the run facts leave it open. */
-  readonly open: (unit: PageUnitId | 'robin', preview?: RobinRef) => void;
+  /** The open child's front door (#104), when a child is open. */
+  readonly door: FrontDoor | undefined;
+  /** Opens a page or a child's front door; a Robin row passes the Robin to preview when the run facts leave it open. */
+  readonly open: (unit: PageUnitId | 'robin' | ChildId, preview?: RobinRef) => void;
+  /** The children with a front door in this run, in rail order. */
+  readonly children: readonly { readonly id: ChildId; readonly name: string }[];
+  /** Opens a child's full pairing table. */
+  readonly openTable: (child: ChildId) => void;
   /** Robin's preview (#103): what the run facts leave open, chosen here and never written to them. */
   readonly preview: { readonly open: { readonly gender: boolean; readonly asset: boolean }; readonly set: (ref: RobinRef) => void } | undefined;
   /** Back to the view the unit page was opened from, with its scroll. */
@@ -39,6 +45,7 @@ export type UnitsContext = {
 const TOP_PARTNERS = 5;
 
 export function unitsView(ctx: UnitsContext): HTMLElement[] {
+  if (ctx.door) return frontDoorView(ctx, ctx.door);
   return ctx.unit ? unitPageView(ctx, ctx.engine.unitPage(ctx.unit, ctx.settings)) : [unitList(ctx)];
 }
 
@@ -54,7 +61,83 @@ function unitList(ctx: UnitsContext): HTMLElement {
     h('div', { class: 'unit-grid' }, item({ id: 'robin', name: 'Robin' }), ...units.filter((u) => !u.spotPass).map(item)),
     h('h3', { class: 'muted small' }, 'SpotPass (paralogues 18–23)'),
     h('div', { class: 'unit-grid' }, ...units.filter((u) => u.spotPass).map(item)),
+    h('h3', { class: 'muted small' }, 'Children'),
+    h('div', { class: 'unit-grid' }, ...ctx.children.map((c) => item(c as never))),
   );
+}
+
+/**
+ * A child's front door (#104): what stays the same in every pairing, its top 5 parents as tiles into their pairing,
+ * a link to the full table, and the Robin line. Morgan waits on Robin.
+ */
+function frontDoorView(ctx: UnitsContext, d: FrontDoor): HTMLElement[] {
+  const tile = (t: FrontDoor['top'][number], i: number) =>
+    h(
+      'button',
+      { class: `tile${i === 0 ? ' first' : ''}`, title: `Open ${d.name}’s table on this pairing`, onclick: () => ctx.openPairing(d.child, t.key) },
+      h('div', { class: 'big num' }, String(t.score ?? '—')),
+      h('div', {}, t.label),
+    );
+  const robinLine = (): HTMLElement => {
+    const r = d.robin;
+    const robinLink = h('button', { class: 'linkish', onclick: () => ctx.open('robin') }, 'Robin’s page →');
+    if (r.kind === 'robins-child') return h('p', { class: 'small' }, `${d.name} is Robin’s own child. `, robinLink);
+    if (r.kind === 'no') return h('p', { class: 'small muted' }, `${d.name} can’t marry this run’s Robin.`);
+    return h(
+      'p',
+      { class: 'small' },
+      `💍 ${d.name} can marry Robin. `,
+      r.morgan
+        ? h('span', {}, 'Their Morgan at best: ', h('button', { class: 'linkish', onclick: () => ctx.openPairing(r.morgan!.key.split('|')[0] as ChildId, r.morgan!.key) }, `${r.morgan.label} ${r.morgan.score ?? '—'}`), '. ')
+        : r.robinSet
+          ? null
+          : h('span', { class: 'muted' }, 'Set Robin to see their Morgan. '),
+      robinLink,
+    );
+  };
+  const facts = h(
+    'div',
+    { class: 'small' },
+    h('div', {}, h('b', {}, 'Fixed parent: '), d.fixedParent),
+    h('div', {}, h('b', {}, 'Start class: '), d.startClass ?? 'varies by pairing'),
+    h('div', {}, h('b', {}, 'Default class set: '), d.defaultClasses.join(', ')),
+    h('div', {}, h('b', {}, 'Personal growths: '), STATS.map((s) => `${STAT_LABELS[s]} ${d.growths[s]}`).join(' · ')),
+    d.fixedPasses.skill || d.fixedPasses.classes.length
+      ? h(
+          'div',
+          {},
+          h('b', {}, `Every pairing gets from ${d.fixedParent}: `),
+          ...(d.fixedPasses.skill ? [ctx.skillChip(d.fixedPasses.skill, [], `${d.fixedPasses.skill.name}: always passed`), ' '] : []),
+          d.fixedPasses.classes.length ? `classes ${d.fixedPasses.classes.join(', ')}` : '',
+        )
+      : null,
+  );
+  return [
+    h(
+      'div',
+      { class: 'scroll unit-page front-door' },
+      h(
+        'header',
+        { class: 'unit-head' },
+        h('div', {}, h('button', { class: 'ghost small', onclick: ctx.back }, `← ${ctx.backLabel}`)),
+        h('h2', {}, d.name),
+        h('div', { class: 'muted small' }, 'Child · front door'),
+        h('div', { class: 'chips' }, chip(`Fixed: ${d.fixedParent}`), chip(d.startClass ? `Starts ${d.startClass}` : 'Start class varies'), d.top[0] ? chip(`Best: ${d.top[0].label} ${d.top[0].score ?? '—'}`, undefined, 'plan') : null),
+      ),
+      d.waitsOnRobin
+        ? h('div', { class: 'banner' }, `${d.name} waits on Robin: set Robin in the Run facts to see ${d.name}’s pairings. `, h('button', { class: 'linkish', onclick: () => ctx.open('robin') }, 'Robin’s page →'))
+        : h(
+            'section',
+            { ...guide('front-door-pairings') },
+            h('h3', {}, 'Best parents'),
+            h('p', { class: 'muted small' }, 'By the Scoring sidebar’s preset, ranked as the pairing table ranks them.'),
+            h('div', { class: 'tiles' }, ...d.top.map(tile)),
+            h('button', { class: 'ghost small', onclick: () => ctx.openTable(d.child) }, `All ${d.parentCount} parents in the pairing table →`),
+          ),
+      robinLine(),
+      h('details', { open: true }, h('summary', {}, 'The same in every pairing'), facts),
+    ),
+  ];
 }
 
 const chip = (text: string, title?: string, cls = '') => h('span', { class: `chip${cls ? ` ${cls}` : ''}`, title }, text);

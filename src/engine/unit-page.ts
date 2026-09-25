@@ -114,6 +114,37 @@ export type PartnerRow = {
   readonly robin?: RobinRef;
 };
 
+/** A top pairing on a child's front door: a parent group through its best pairing, as the pairing table ranks it. */
+export type FrontDoorTile = { readonly label: string; readonly key: string; readonly score: number | undefined };
+
+/**
+ * A child's front door (#104): what stays the same across pairings, its top 5 parent groups by the current scoring
+ * (the pairing table's group-best ranking), how many parents it has, and the Robin line. Morgan waits on Robin.
+ */
+export type FrontDoor = {
+  readonly child: ChildId;
+  readonly name: string;
+  readonly gender: Gender;
+  readonly fixedParent: string;
+  /** Its start class, or undefined when it varies by pairing (Morgan). */
+  readonly startClass: string | undefined;
+  readonly defaultClasses: readonly string[];
+  /** Personal growths, before the parents'. */
+  readonly growths: Readonly<Record<Stat, number>>;
+  /** What the fixed parent passes in every pairing: its fixed skill (Chrom's Aether) and its classes. */
+  readonly fixedPasses: { readonly skill: SkillRef | undefined; readonly classes: readonly string[] };
+  readonly top: readonly FrontDoorTile[];
+  /** Every parent group it has in this run. */
+  readonly parentCount: number;
+  /** Morgan until Robin is set: no pairings shown. */
+  readonly waitsOnRobin: boolean;
+  /** Whether it can marry Robin, and the best Morgan that marriage gives (with Robin set). */
+  readonly robin:
+    | { readonly kind: 'robins-child' }
+    | { readonly kind: 'no' }
+    | { readonly kind: 'yes'; readonly morgan: FrontDoorTile | undefined; readonly robinSet: boolean };
+};
+
 export const chapterLabel = (c: JoinChapter): string =>
   c === 'prologue' ? 'Prologue' : c.startsWith('chapter-') ? `Chapter ${c.slice(8)}` : `Paralogue ${c.slice(10)}`;
 

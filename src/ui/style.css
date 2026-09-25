@@ -487,3 +487,9 @@ button.gd-deeper-head:hover { background: var(--hover); }
 
 /* Robin's preview (#103) */
 .preview-bar .row { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* Child front door (#104) */
+.front-door .tiles { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.front-door .tile { min-width: 120px; text-align: left; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.front-door .tile.first { border-color: var(--accent, #7fb4ff); }
+.front-door .tile .big { font-size: 20px; font-weight: 600; }

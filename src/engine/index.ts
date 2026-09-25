@@ -32,10 +32,10 @@ import {
   startClass,
 } from './classes';
 import { inheritGrowths, inheritModifiers, type ParentProfile } from './inheritance';
-import { buildSkillView, candidatesFor, firstGenSkills, secondGenSkills, skillRank, skillReach, type SkillViewInput, type SkillViewSettings } from './skills';
+import { buildSkillView, candidatesFor, firstGenSkills, ref, secondGenSkills, skillRank, skillReach, type SkillViewInput, type SkillViewSettings } from './skills';
 import { BUILD_TEMPLATES } from '../curated/builds';
 import { skillCard } from './skill-card';
-import { unitPage, unitReach, type PageSubject, type PageUnitId, type ParentedChild, type PartnerChild, type PartnerRow, type UnitPage } from './unit-page';
+import { unitPage, unitReach, type FrontDoor, type FrontDoorTile, type PageSubject, type PageUnitId, type ParentedChild, type PartnerChild, type PartnerRow, type UnitPage } from './unit-page';
 import { SPOTPASS_UNITS } from '../game-data/join';
 import { matchBuilds, matchTemplate, shownMatch, templateSummary, templatesFor } from './builds';
 import type { SkillId } from '../game-data/skills';
@@ -51,7 +51,7 @@ import { deploymentRoleOf, inPlay } from './composition';
 import { ARMY_FIT_PASS_CAP, armyFit, type RoleAssignment } from './army-fit';
 import { deriveRoles, type Derivation, type RobinGain, type RobinGainSide } from './derive';
 import type { ChildDeploymentRole } from '../curated/deployment';
-import { RALLY_SKILLS } from '../game-data/skills';
+import { FIXED_INHERITANCE, RALLY_SKILLS } from '../game-data/skills';
 import { STAFF_CLASSES } from '../game-data/classes';
 import type {
   AssumptionStatus,
@@ -138,7 +138,7 @@ export { DEPLOYMENT_ROLES, type ChildDeploymentRole, type DeploymentRole, type D
 export { composition, deploymentRoleOf, quotaContext, quotasFor, type Composition, type QuotaStatus, type RoleCount } from './composition';
 export { ARMY_FIT_PASS_CAP, type RoleAssignment, type RoleSource } from './army-fit';
 export { CHILD_DEPLOYMENT_ROLES, type Derivation, type DerivedRole, type OutOfCast, type RobinGain, type RobinGainSide } from './derive';
-export type { ClassLine, ClassTree, PageSubject, PageUnitId, ParentedChild, PartnerChild, PartnerRow, PassedClasses, TreeClass, TreeSkill, UnitAsParent, UnitPage } from './unit-page';
+export type { ClassLine, ClassTree, FrontDoor, FrontDoorTile, PageSubject, PageUnitId, ParentedChild, PartnerChild, PartnerRow, PassedClasses, TreeClass, TreeSkill, UnitAsParent, UnitPage } from './unit-page';
 export { CANDIDATE_PRESETS } from '../curated/presets';
 export { STAFF_CLASSES } from '../game-data/classes';
 export {
@@ -246,6 +246,11 @@ export type Engine = {
    * against the roster and the saved plan. Sorted by the best child's score; read-only, no plan re-solve.
    */
   partners(subject: PageSubject, roster: Roster, settings: PlanSettings): readonly PartnerRow[];
+  /**
+   * A child's front door (#104): fixed facts, its top 5 parent groups by the scoring (the pairing table's group-best
+   * ranking) and the Robin line. Morgan shows no pairings until Robin is set in the run facts.
+   */
+  frontDoor(child: ChildId, roster: Roster, settings: ScoreSettings, context: PlayContext): FrontDoor;
   /** Whether the roster blocks a pairing (hard: it can no longer happen; soft: it contradicts a pin or a bench), and why. */
   blocking(result: ChildResult, roster: Roster): Blocking;
   /**
@@ -922,6 +927,57 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     return rows.sort((a, b) => (b.best ?? -1) - (a.best ?? -1));
   };
 
+  /** A child's front door (#104). */
+  const frontDoorFor = (child: ChildId, roster: Roster, settings: ScoreSettings, context: PlayContext): FrontDoor => {
+    const c = CHILD_UNITS[child];
+    const robinSet = !!(roster.run.gender && roster.run.asset && roster.run.flaw);
+    const isMorgan = c.fixedParent === 'robin';
+    const scores = scoreAll(settings);
+    const rawOf = (key: string) => scores.get(key)?.raw ?? -Infinity;
+    const groups = narrowAll(groupsByChild.get(child) ?? [], { run: roster.run });
+    const tiles = groups.map((g): FrontDoorTile & { raw: number } => {
+      const best = g.results.reduce((a, r) => (rawOf(r.key) > rawOf(a.key) ? r : a));
+      return { label: g.label, key: best.key, score: scores.get(best.key)?.score, raw: rawOf(best.key) };
+    });
+    tiles.sort((a, b) => b.raw - a.raw);
+    const starts = new Set((byChild.get(child) ?? []).map((r) => r.startClass));
+    const gender = c.gender as Gender;
+    const fixed = c.fixedParent === 'robin' ? undefined : c.fixedParent;
+    const fixedSkill = fixed && FIXED_INHERITANCE[fixed];
+    const passes = fixed ? FIRST_GEN_UNITS[fixed].passesClasses[gender === 'M' ? 'son' : 'daughter'] : null;
+    const robinGender = opposite(gender);
+    // This run's Robin, once its gender is set, is the only Robin the child could marry.
+    const canMarryRobin = (ROBIN_SUPPORTS[robinGender] as readonly string[]).includes(child) && (roster.run.gender ?? robinGender) === robinGender;
+    let morgan: FrontDoorTile | undefined;
+    if (canMarryRobin && robinSet) {
+      const m: ChildId = robinGender === 'M' ? 'morgan-f' : 'morgan-m';
+      for (const g of narrowAll(groupsByChild.get(m) ?? [], { run: roster.run }))
+        for (const r of g.results) {
+          const v = r.pairing.variableParent;
+          if (v.kind !== 'child' || v.id !== child) continue;
+          if (!morgan || rawOf(r.key) > rawOf(morgan.key)) morgan = { label: `${CHILD_UNITS[m].name} ← ${parentName(v)}`, key: r.key, score: scores.get(r.key)?.score };
+        }
+    }
+    const waits = isMorgan && !robinSet;
+    return {
+      child,
+      name: c.name,
+      gender,
+      fixedParent: isMorgan ? `Robin (${opposite(gender)})` : FIRST_GEN_UNITS[c.fixedParent as UnitId].name,
+      startClass: starts.size === 1 ? className([...starts][0]!, gender) : undefined,
+      defaultClasses: c.defaultClassSet.map((id) => className(id, gender)),
+      growths: c.growths,
+      fixedPasses: {
+        skill: fixedSkill ? ref(gender === 'M' ? fixedSkill.son : fixedSkill.daughter, context) : undefined,
+        classes: (passes ?? []).map((id) => className(id, gender)),
+      },
+      top: waits ? [] : tiles.slice(0, 5).map(({ raw: _, ...t }) => t),
+      parentCount: waits ? 0 : groups.length,
+      waitsOnRobin: waits,
+      robin: isMorgan ? { kind: 'robins-child' } : canMarryRobin ? { kind: 'yes', morgan, robinSet } : { kind: 'no' },
+    };
+  };
+
   /** Derived roles for a roster and settings (#95). */
   const derivationFor = (roster: Roster, settings: PlanSettings): Derivation => {
     const robinSet = roster.run.gender !== null && roster.run.asset !== null && roster.run.flaw !== null;
@@ -1131,6 +1187,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     },
     unitPage: (unit, settings) => unitPage(unit, settings.context, dlcOf(settings), parentedBy(unit)),
     partners: partnersFor,
+    frontDoor: frontDoorFor,
     unitSkillCard: (unit, id, settings) => {
       const reach = unitReach(unit, dlcOf(settings));
       return skillCard(id, reach, settings.context, matchBuilds(reach, settings.context));
