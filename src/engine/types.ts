@@ -178,6 +178,11 @@ export type PlanSettings = {
   readonly roleOverrides: Readonly<Partial<Record<ChildId, ChildDeploymentRole>>>;
   /** The play context's composition quotas, which army fit meets. */
   readonly quotas: Quotas;
+  /**
+   * The no-Robin view (#98): Robin is removed as a parent from every pool, Morgan leaves the cast and Robin isn't counted
+   * as deployed; standing, role presets, army fit and the plan rerun under it. Pairing tables are unchanged.
+   */
+  readonly noRobin?: boolean;
 };
 
 export type PairingScore = {

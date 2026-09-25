@@ -120,6 +120,8 @@ guidePrefs = noteLosses(roster, guidePrefs);
 let planPrefs: PlanPrefs = loadPlanPrefs(engine);
 /** The Plan view's Free re-plan toggle. */
 let freeReplan = false;
+/** The Plan's no-Robin view (#98): view state, carried in the plan settings. */
+let noRobinView = false;
 /** The Plan sidebar's quota editor is open. */
 let editingQuotas = false;
 
@@ -305,6 +307,7 @@ const planSettings = (): PlanSettings => ({
   overrides: planPrefs.overrides,
   roleOverrides: planPrefs.roleOverrides,
   quotas: quotasFor(prefs.context, planPrefs.quotas),
+  noRobin: noRobinView,
 });
 
 /** The priority and plan-preset controls: the Plan sidebar and the Roster page's ledger edit the same values. */
@@ -320,6 +323,11 @@ const planControls = (): ChildPlanControls => ({
     render();
     document.querySelector('[data-guide="role-matrix"]')?.scrollIntoView({ block: 'start' });
   },
+  openRunFacts: () => {
+    view = 'roster';
+    render();
+    document.querySelector('[data-guide="run-facts"]')?.scrollIntoView({ block: 'start' });
+  },
   presetLabel: (id: PresetId) => presetLabel(engine.presets().find((p) => p.id === id)!),
   quotas: quotasFor(prefs.context, planPrefs.quotas),
 });
@@ -331,6 +339,10 @@ const planContext = (): PlanPageContext => ({
   setFree: (free) => {
     freeReplan = free;
     renderParts(['main']);
+  },
+  setNoRobin: (on) => {
+    noRobinView = on;
+    render();
   },
   resetPlanPrefs: () => setPlanPrefs(resetPlanPrefs(planPrefs)),
   quotasEdited: !!planPrefs.quotas[quotaContext(prefs.context)],

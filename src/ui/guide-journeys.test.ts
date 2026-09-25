@@ -34,11 +34,11 @@ describe('journey steps', () => {
 describe('the Fresh run journey', () => {
   const { steps } = JOURNEYS.fresh;
 
-  it('has the eleven steps, ending on Pin or rule out, Adopt and Lock', () => {
-    expect(steps).toHaveLength(11);
-    expect(steps[8]!.title).toBe('Pin or rule out marriages');
-    expect(steps[9]!.target).toBe('adopt');
-    expect(steps[10]).toMatchObject({ view: 'plan', target: 'robin-lock' });
+  it('has the twelve steps, ending on Pin or rule out, Adopt and Lock', () => {
+    expect(steps).toHaveLength(12);
+    expect(steps[9]!.title).toBe('Pin or rule out marriages');
+    expect(steps[10]!.target).toBe('adopt');
+    expect(steps[11]).toMatchObject({ view: 'plan', target: 'robin-lock' });
   });
 
   it('tracks context, deploy, bench, priorities, Adopt and Lock', () => {

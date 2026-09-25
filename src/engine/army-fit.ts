@@ -32,6 +32,8 @@ export type RoleAssignment = {
 export type ArmyFitInput = {
   readonly roster: Roster;
   readonly quotas: Quotas;
+  /** The no-Robin view (#98): Robin isn't counted as deployed. */
+  readonly noRobin?: boolean;
   /** The plan produced with the current assignment: it supplies the first-gen units' counts. */
   readonly plan: MarriagePlan;
   readonly derived: ReadonlyMap<ChildId, DerivedRole>;
@@ -56,7 +58,7 @@ export function armyFit(input: ArmyFitInput): Map<ChildId, RoleAssignment> {
   const out = new Map(base);
   // First-gen units as the plan counts them; every child in the cast counts, planned this pass or not, so the
   // assignment doesn't swing with which marriages one pass happens to pick.
-  const counts = new Map(composition(roster, plan, quotas).roles.map((r) => [r.role, r.count]));
+  const counts = new Map(composition(roster, plan, quotas, input.noRobin).roles.map((r) => [r.role, r.count]));
   // Planned children outside the cast (Morgan before Robin is set) keep counting where the plan put them.
   const inCast = new Set(input.cast);
   for (const m of plan.marriages)

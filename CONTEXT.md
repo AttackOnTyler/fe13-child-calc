@@ -176,6 +176,14 @@ _Avoid_: Slots, army limits
 The Plan's table of every child's standing in each deployment role, with its best role, army fit's moves and the roles and presets the user pinned. Where role and preset overrides are set.
 _Avoid_: Role grid, role picker
 
+**Robin gain**:
+How much more a child scores under its Lead role preset with Robin in the gene pool than without: the run's Robin once set, else the child's best Robin. A view of the children, never a Robin recommendation.
+_Avoid_: Robin bonus, Robin value
+
+**No-Robin view**:
+The cast in a world without Robin: Robin is no one's parent, Morgan leaves the cast and Robin isn't deployed. Standing, roles and the plan rerun under it; pairing tables don't.
+_Avoid_: Hide Robin
+
 **Army fit**:
 The last step of deriving roles, run on every re-plan: every child starts in its best role, and a composition quota moves a child only when it forces one — the child whose move costs the least standing. Staff/Rally is filled only from children whose planned pairing reaches a staff class or rally skill. Overrides and first-gen units count but never move; army fit never benches a child, and says which quota moved each child it moved.
 _Avoid_: Suggest roles (replaced), auto-roles, role solver

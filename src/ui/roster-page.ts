@@ -257,7 +257,7 @@ function childrenLedger(ctx: RosterContext): HTMLElement {
         h('tbody', {}, ...ledger.map((e) => ledgerRow(ctx, e))),
       ),
     ),
-    compositionStrip(composition(ctx.roster, ctx.engine.plan(ctx.roster, ctx.plan.settings), ctx.plan.quotas)),
+    compositionStrip(composition(ctx.roster, ctx.engine.plan(ctx.roster, ctx.plan.settings), ctx.plan.quotas, ctx.plan.settings.noRobin)),
   );
 }
 

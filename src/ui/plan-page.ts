@@ -29,6 +29,7 @@ import {
   type PlanSettings,
   type PlannedChild,
   type PresetId,
+  type RobinGainSide,
   type RoleAssignment,
   type RoleSource,
   type Quotas,
@@ -52,6 +53,8 @@ export type ChildPlanControls = {
   readonly setRoleOverride: (child: ChildId, role: ChildDeploymentRole | null) => void;
   /** Opens the Plan's role matrix, where roles and presets are set. */
   readonly openRoles: () => void;
+  /** Opens the Run facts, where Robin is set. */
+  readonly openRunFacts: () => void;
   /** A preset's name, with `*` when the user edited it. */
   readonly presetLabel: (id: PresetId) => string;
   /** The play context's composition quotas (the user's, else the curated seed). */
@@ -76,6 +79,8 @@ export type PlanPageContext = ChildPlanControls & {
   readonly setEditingQuotas: (open: boolean) => void;
   /** Opens the child's pairing table, scored with its plan preset for that visit, with this pairing highlighted. */
   readonly openChild: (child: PlannedChild) => void;
+  /** Turns the no-Robin view on or off (view state; it lives in the plan settings). */
+  readonly setNoRobin: (on: boolean) => void;
 };
 
 const QUOTA_HINT = { ok: 'In range', under: 'Below the minimum', over: 'Over the maximum' } as const;
@@ -120,7 +125,7 @@ export function roleChip(ctl: ChildPlanControls, id: ChildId): HTMLElement {
   return h('span', { class: `chip role role-${role}`, title: `Deployment role: ${ROLE_UI[role].label} (${from})` }, ROLE_UI[role].short);
 }
 
-const OUT_OF_CAST = { dead: 'dead', unborn: 'can’t be born', 'needs-robin': 'needs Robin set in Run facts' } as const;
+const OUT_OF_CAST = { dead: 'dead', unborn: 'can’t be born', 'needs-robin': 'needs Robin', 'no-robin': 'out: no-Robin view' } as const;
 
 /** The child's derived best role and role preset (#95), read-only: where it stands against the cast. */
 function derivedLine(ctl: ChildPlanControls, d: Derivation, id: ChildId): HTMLElement {
@@ -501,7 +506,21 @@ function roleMatrix(ctx: PlanPageContext): HTMLElement {
   const roles = engine.roles(roster, settings);
   const qualified = engine.staffQualified(roster, settings);
   const children = rosterUnits(roster.run).filter((u) => u.kind === 'child');
-  const comp = composition(roster, engine.plan(roster, settings, { free: ctx.free }), ctx.quotas);
+  const comp = composition(roster, engine.plan(roster, settings, { free: ctx.free }), ctx.quotas, settings.noRobin);
+  const gains = engine.robinGain(roster, settings);
+  const robinSet = !!(roster.run.gender && roster.run.asset && roster.run.flaw);
+  const setRobin = () => h('button', { class: 'mini', onclick: ctx.openRunFacts }, 'Set Robin');
+  const gainCell = (id: ChildId) => {
+    const g = gains.get(id);
+    if (!g) return h('td', { class: 'muted' }, '—');
+    const side = (x: RobinGainSide | undefined) => (x ? `${x.parent} (${x.score})` : 'nothing left');
+    return h(
+      'td',
+      { class: 'num', title: `Under ${ctx.presetLabel(g.preset)}: with Robin ${side(g.with)} · without ${side(g.without)}` },
+      g.gain > 0 ? `+${Math.round(g.gain * 10) / 10}` : '0',
+      h('div', { class: 'small muted' }, g.gain > 0 ? `${g.with.parent} vs ${g.without?.parent ?? '—'}` : g.with.parent),
+    );
+  };
   const cell = (id: ChildId, role: ChildDeploymentRole) => {
     const d = derived.get(id)!;
     const a = roles.get(id);
@@ -533,7 +552,27 @@ function roleMatrix(ctx: PlanPageContext): HTMLElement {
   return h(
     'section',
     { ...guide('role-matrix'), class: 'role-matrix' },
-    h('div', { class: 'panel-head' }, h('h3', {}, 'Roles'), compositionStrip(comp)),
+    h(
+      'div',
+      { class: 'panel-head' },
+      h('h3', {}, 'Roles'),
+      compositionStrip(comp),
+      h(
+        'label',
+        { ...guide('no-robin'), class: 'small', title: 'A world without Robin: Robin is no one’s parent, Morgan leaves the cast and Robin isn’t deployed' },
+        h('input', { type: 'checkbox', checked: !!settings.noRobin, onchange: (e) => ctx.setNoRobin((e.target as HTMLInputElement).checked) }),
+        ' No Robin',
+      ),
+    ),
+    !robinSet && !settings.noRobin
+      ? h(
+          'div',
+          { ...guide('robin-first'), class: 'banner' },
+          'Set Robin first: Morgan waits on Robin, and Robin is the best parent for nearly every child. ',
+          setRobin(),
+        )
+      : null,
+    settings.noRobin ? h('div', { class: 'banner' }, 'No-Robin view: standings, roles and the plan are for a world without Robin.') : null,
     h('p', { class: 'muted small' }, 'Standing (0–100) against the cast in each deployment role. Click a cell to pin that role; the menu pins a preset.'),
     h(
       'table',
@@ -548,6 +587,7 @@ function roleMatrix(ctx: PlanPageContext): HTMLElement {
           ...CHILD_DEPLOYMENT_ROLES.map((r) => h('th', {}, ROLE_UI[r].label)),
           h('th', {}, 'Plan preset'),
           h('th', {}, 'Preset override'),
+          h('th', { ...guide('robin-gain'), title: 'Best score under the Lead role preset with Robin in the gene pool, minus without' }, 'Robin gain'),
         ),
       ),
       h(
@@ -556,7 +596,13 @@ function roleMatrix(ctx: PlanPageContext): HTMLElement {
         ...children.map((u) => {
           const id = u.id as ChildId;
           const out = derivation.leftOut.get(id);
-          if (out) return h('tr', { class: 'out' }, h('td', {}, u.name), h('td', { colspan: '5', class: 'muted' }, OUT_OF_CAST[out]));
+          if (out)
+            return h(
+              'tr',
+              { class: 'out' },
+              h('td', {}, u.name),
+              h('td', { colspan: '6', class: 'muted' }, OUT_OF_CAST[out], out === 'needs-robin' ? ' ' : null, out === 'needs-robin' ? setRobin() : null),
+            );
           const a = roles.get(id);
           return h(
             'tr',
@@ -565,6 +611,7 @@ function roleMatrix(ctx: PlanPageContext): HTMLElement {
             ...CHILD_DEPLOYMENT_ROLES.map((r) => cell(id, r)),
             h('td', {}, h('b', {}, ctx.presetLabel(engine.planPreset(id, roster, settings))), ' ', sourceChip(a)),
             h('td', {}, presetControl(ctx, id, u.name)),
+            gainCell(id),
           );
         }),
       ),
@@ -575,7 +622,7 @@ function roleMatrix(ctx: PlanPageContext): HTMLElement {
 /** The Plan sidebar: the composition strip, then each child's priority, plan preset and deployment role. */
 export function planSidebar(ctx: PlanPageContext): HTMLElement {
   const children = rosterUnits(ctx.roster.run).filter((u) => u.kind === 'child');
-  const comp = composition(ctx.roster, ctx.engine.plan(ctx.roster, ctx.settings, { free: ctx.free }), ctx.quotas);
+  const comp = composition(ctx.roster, ctx.engine.plan(ctx.roster, ctx.settings, { free: ctx.free }), ctx.quotas, ctx.settings.noRobin);
   const derived = ctx.engine.deriveRoles(ctx.roster, ctx.settings);
   return h(
     'section',

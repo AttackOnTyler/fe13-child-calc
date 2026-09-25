@@ -47,7 +47,7 @@ import { DEFAULT_PRIORITY, childLedger, evaluatePlan, savedPairings, solvePlan, 
 import type { SavedPlan } from './roster';
 import { deploymentRoleOf, inPlay } from './composition';
 import { ARMY_FIT_PASS_CAP, armyFit, type RoleAssignment } from './army-fit';
-import { deriveRoles, type Derivation } from './derive';
+import { deriveRoles, type Derivation, type RobinGain, type RobinGainSide } from './derive';
 import type { ChildDeploymentRole } from '../curated/deployment';
 import { RALLY_SKILLS } from '../game-data/skills';
 import { STAFF_CLASSES } from '../game-data/classes';
@@ -134,7 +134,7 @@ export type { PresetId, ScoringRole, Weights } from '../curated/presets';
 export { DEPLOYMENT_ROLES, type ChildDeploymentRole, type DeploymentRole, type DeploymentTag, type QuotaRange, type Quotas } from '../curated/deployment';
 export { composition, deploymentRoleOf, quotaContext, quotasFor, type Composition, type QuotaStatus, type RoleCount } from './composition';
 export { ARMY_FIT_PASS_CAP, type RoleAssignment, type RoleSource } from './army-fit';
-export { CHILD_DEPLOYMENT_ROLES, type Derivation, type DerivedRole, type OutOfCast } from './derive';
+export { CHILD_DEPLOYMENT_ROLES, type Derivation, type DerivedRole, type OutOfCast, type RobinGain, type RobinGainSide } from './derive';
 export { CANDIDATE_PRESETS } from '../curated/presets';
 export { STAFF_CLASSES } from '../game-data/classes';
 export {
@@ -252,6 +252,12 @@ export type Engine = {
    * children with no pairing left are out of the cast, and so is Morgan until Robin is set in the run facts.
    */
   deriveRoles(roster: Roster, settings: PlanSettings): Derivation;
+  /**
+   * Robin gain (#98): per child except Morgan, its best score under its Lead role preset with Robin in the gene pool
+   * minus its best without, both pairings named. The run facts' Robin when set, else each child's best Robin; it never
+   * ranks Robins for the run. Children out of the cast have no entry.
+   */
+  robinGain(roster: Roster, settings: PlanSettings): ReadonlyMap<ChildId, RobinGain>;
   /**
    * A saved plan as it was adopted, valued under today's settings: only the run facts apply, not the losses and
    * marriages since, so a diff against today's plan shows what they cost.
@@ -654,7 +660,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       return found;
     };
     const value = (pairing: Pairing, key: string): PlannedChild | undefined => {
-      if (!byKey.has(key)) return undefined;
+      if (!byKey.has(key) || (s.noRobin && robinRefOf(pairing))) return undefined;
       const blocking = blockingOf(pairing, key);
       if (blocking.status === 'hard') return undefined;
       const { child } = pairing;
@@ -690,7 +696,9 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       candidates: (child) => {
         let found = candidates.get(child);
         if (!found) {
-          found = narrowAll(groupsByChild.get(child) ?? [], { run: roster.run }).flatMap((g) => g.results.map((r) => r.pairing));
+          found = narrowAll(groupsByChild.get(child) ?? [], { run: roster.run })
+            .flatMap((g) => g.results.map((r) => r.pairing))
+            .filter((p) => !s.noRobin || !robinRefOf(p));
           candidates.set(child, found);
         }
         return found;
@@ -698,24 +706,61 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     };
   };
 
+  /**
+   * A child's pool (#95): the keys of its pairings that can still happen (the run facts narrow Robin; hard-blocked ones
+   * are out). `noRobin` drops every pairing with Robin as a parent (#98). Cached per roster.
+   */
+  let poolRoster: Roster | undefined;
+  const pools = new Map<string, string[]>();
+  const poolFor = (roster: Roster, child: ChildId, noRobin: boolean): string[] => {
+    if (poolRoster !== roster) {
+      poolRoster = roster;
+      pools.clear();
+    }
+    const k = `${child}|${noRobin}`;
+    let found = pools.get(k);
+    if (!found)
+      pools.set(
+        k,
+        (found = narrowAll(groupsByChild.get(child) ?? [], { run: roster.run })
+          .flatMap((g) => g.results.map((r) => r.pairing))
+          .filter((p) => !(noRobin && robinRefOf(p)) && evaluateBlocking(p, roster, assumptions).status !== 'hard')
+          .map(pairingKey)
+          .filter((k) => byKey.has(k))),
+      );
+    return found;
+  };
+  /** Robin gain (#98): per child but Morgan, the best under its Lead role preset with Robin minus without. */
+  const robinGainFor = (roster: Roster, settings: PlanSettings): ReadonlyMap<ChildId, RobinGain> => {
+    const derivation = derivationFor(roster, { ...settings, noRobin: false });
+    const out = new Map<ChildId, RobinGain>();
+    for (const d of derivation.roles) {
+      if (CHILD_UNITS[d.child].fixedParent === 'robin') continue;
+      const preset = d.rolePreset.lead;
+      const sc = presetScores(preset, settings);
+      const best = (keys: readonly string[]): RobinGainSide | undefined => {
+        let top: RobinGainSide | undefined;
+        for (const key of keys) {
+          const score = sc?.get(key)?.score;
+          if (score === undefined || (top && top.score >= score)) continue;
+          const r = byKey.get(key)!;
+          top = { key, parent: parentName(r.pairing.variableParent), score };
+        }
+        return top;
+      };
+      const withRobin = best(poolFor(roster, d.child, false));
+      if (!withRobin) continue;
+      const without = best(poolFor(roster, d.child, true));
+      out.set(d.child, { child: d.child, preset, with: withRobin, without, gain: withRobin.score - (without?.score ?? 0) });
+    }
+    return out;
+  };
+
   /** Derived roles for a roster and settings (#95). */
   const derivationFor = (roster: Roster, settings: PlanSettings): Derivation => {
     const robinSet = roster.run.gender !== null && roster.run.asset !== null && roster.run.flaw !== null;
     const children = rosterUnits(roster.run).filter((u) => u.kind === 'child').map((u) => u.id as ChildId);
-    const pools = new Map<ChildId, string[]>();
-    const pool = (child: ChildId) => {
-      let found = pools.get(child);
-      if (!found)
-        pools.set(
-          child,
-          (found = narrowAll(groupsByChild.get(child) ?? [], { run: roster.run })
-            .flatMap((g) => g.results.map((r) => r.pairing))
-            .filter((p) => evaluateBlocking(p, roster, assumptions).status !== 'hard')
-            .map(pairingKey)
-            .filter((k) => byKey.has(k))),
-        );
-      return found;
-    };
+    const pool = (child: ChildId) => poolFor(roster, child, !!settings.noRobin);
     const scores = new Map<PresetId, Map<string, PairingScore> | undefined>();
     const scoresOf = (preset: PresetId) => {
       if (!scores.has(preset)) scores.set(preset, presetScores(preset, settings));
@@ -724,7 +769,15 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     return deriveRoles({
       children,
       leftOut: (child) =>
-        stateOf(roster, child) === 'dead' ? 'dead' : CHILD_UNITS[child].fixedParent === 'robin' && !robinSet ? 'needs-robin' : undefined,
+        stateOf(roster, child) === 'dead'
+          ? 'dead'
+          : CHILD_UNITS[child].fixedParent !== 'robin'
+            ? undefined
+            : settings.noRobin
+              ? 'no-robin'
+              : !robinSet
+                ? 'needs-robin'
+                : undefined,
       pool,
       raw: (preset, key) => scoresOf(preset)?.get(key)?.raw,
     });
@@ -764,7 +817,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         const d = derived.get(child);
         return qualifiesStaff(plannedKey.get(child) ?? d?.bestPairing[d.rolePreset.lead], s);
       };
-      const next = armyFit({ roster, quotas: s.quotas, plan, derived, base, cast, qualifies, order: CHILD_IDS });
+      const next = armyFit({ roster, quotas: s.quotas, noRobin: s.noRobin, plan, derived, base, cast, qualifies, order: CHILD_IDS });
       const same = [...next].every(([c, a]) => roles.get(c)?.preset === a.preset && roles.get(c)?.role === a.role);
       roles = next;
       if (same) break;
@@ -908,6 +961,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     blocking: (r, roster) => evaluateBlocking(r.pairing, roster, assumptions),
     plan: (roster, settings, options) => solvePlan(planContext(roster, settings), options?.free),
     deriveRoles: derivationFor,
+    robinGain: robinGainFor,
     roles: rolesFor,
     staffQualified: (roster, settings) => {
       const plan = solvePlan(planContext(roster, settings));

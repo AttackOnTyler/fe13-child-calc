@@ -68,7 +68,8 @@ const FRESH: JourneyContent = {
       title: 'Set Robin now, or leave Robin open',
       takeaway:
         `${runFacts} are Robin’s gender, asset and flaw: once set, the other Robins and Morgans drop out. Set them now if you ` +
-        `know your Robin, or if Robin’s own marriage is the goal. Otherwise leave them open: the plan picks a Robin and you ${lock} it at the end.`,
+        `know your Robin, or if Robin’s own marriage is the goal. Otherwise leave them open: the plan picks a Robin and you ${lock} it at the end. ` +
+        `Until Robin is set, the ${plan}’s Roles matrix asks you to set Robin first, and Morgan’s rows read “needs Robin”.`,
     },
     {
       view: 'roster',
@@ -136,6 +137,17 @@ const FRESH: JourneyContent = {
         '(marked, with the quota that forced it). Click a cell to pin a role (its preset stays derived), or pick a preset ' +
         'in the menu to pin that; ↺ goes back to derived.',
       deeper: ['preset'],
+    },
+    {
+      view: 'plan',
+      target: 'robin-gain',
+      where: `${plan} › Roles › Robin gain, No Robin`,
+      title: 'Weigh what Robin is worth to each child',
+      takeaway:
+        'Robin is the best parent for nearly every child, and can marry only one. Robin gain is how much more a child ' +
+        'scores (under its Lead role preset) with Robin in the gene pool than without, naming both pairings: your Robin ' +
+        'once set, else its best Robin. Tick No Robin to see the cast in a world without Robin: Robin is no one’s parent, ' +
+        'Morgan leaves the cast and Robin isn’t deployed, and standings, roles and the plan rerun.',
     },
     {
       view: 'plan',

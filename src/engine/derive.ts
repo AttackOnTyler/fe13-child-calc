@@ -15,7 +15,20 @@ import { CANDIDATE_PRESETS, type PresetId } from '../curated/presets';
 export const CHILD_DEPLOYMENT_ROLES: readonly ChildDeploymentRole[] = ['lead', 'battery', 'staff'];
 
 /** Why a child isn't in the cast. */
-export type OutOfCast = 'dead' | 'unborn' | 'needs-robin';
+/** One side of a Robin gain: a child's best pairing and its score. */
+export type RobinGainSide = { readonly key: string; readonly parent: string; readonly score: number };
+
+/** Robin gain (#98): a child's best under its Lead role preset with Robin in the gene pool, minus its best without. */
+export type RobinGain = {
+  readonly child: ChildId;
+  readonly preset: PresetId;
+  readonly with: RobinGainSide;
+  /** Undefined when every pairing left has Robin as a parent. */
+  readonly without: RobinGainSide | undefined;
+  readonly gain: number;
+};
+
+export type OutOfCast = 'dead' | 'unborn' | 'needs-robin' | 'no-robin';
 
 export type DerivedRole = {
   readonly child: ChildId;

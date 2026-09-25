@@ -56,11 +56,11 @@ describe('journey steps link into Going deeper', () => {
   const links = (journey: keyof typeof JOURNEYS) =>
     JOURNEYS[journey].steps.flatMap((s, i): [number, DeeperId[]][] => (s.deeper ? [[i + 1, [...s.deeper]]] : []));
 
-  it('from Fresh run steps 5, 8 and 11', () => {
+  it('from Fresh run steps 5, 8 and 12', () => {
     expect(links('fresh')).toEqual([
       [5, ['why-spouse', 'pairing-build']],
       [8, ['preset']],
-      [11, ['robin']],
+      [12, ['robin']],
     ]);
   });
 

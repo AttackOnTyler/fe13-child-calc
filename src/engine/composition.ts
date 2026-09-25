@@ -49,12 +49,14 @@ export const inPlay = (roster: Roster, u: RosterUnit): boolean => !OUT_OF_PLAY.i
 
 const statusOf = (count: number, { min, max }: QuotaRange): QuotaStatus => (count < min ? 'under' : count > max ? 'over' : 'ok');
 
-export function composition(roster: Roster, plan: MarriagePlan, quotas: Quotas): Composition {
+/** `noRobin`: the no-Robin view (#98), where Robin isn't counted as deployed. */
+export function composition(roster: Roster, plan: MarriagePlan, quotas: Quotas, noRobin = false): Composition {
   const counts = new Map<DeploymentRole, number>(DEPLOYMENT_ROLES.map((r) => [r, 0]));
   const add = (role: DeploymentRole) => counts.set(role, counts.get(role)! + 1);
   // Robin is deployed whether or not the run has set Robin's gender yet.
   const firstGen = rosterUnits({ ...roster.run, gender: roster.run.gender ?? plan.robin.gender }).map((u) => u.id).filter(isDeployable);
   for (const u of firstGen) {
+    if (noRobin && u === 'robin') continue;
     const tag = deploymentOf(roster, u);
     if (tag.deploy && inPlay(roster, u)) add(tag.role);
   }
