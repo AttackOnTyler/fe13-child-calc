@@ -94,6 +94,32 @@ describe('Robin’s page', () => {
     expect(row.via).toEqual({ label: 'Lucina ← Olivia', from: 'plan' });
     expect(row.children[0]!.key).toContain('lucina<olivia');
   });
+
+  it('never has a child partner bring a pairing with Robin as its own parent, so Morgan always scores (#124)', () => {
+    const female = { kind: 'robin', gender: 'F', asset: 'str', flaw: 'def' } as const;
+    const rows = engine.partners(female, EMPTY_ROSTER, settings);
+    const yarne = rows.find((r) => r.partner === 'yarne')!;
+    // Yarne's best non-Robin father, as his mother's Partners score him.
+    const fathers = engine.partners('panne', EMPTY_ROSTER, settings).filter((r) => r.partner !== 'robin');
+    const yarneScore = (r: (typeof fathers)[number]) => r.children.find((c) => c.child === 'yarne')?.score ?? -1;
+    const top = Math.max(...fathers.map(yarneScore));
+    expect(fathers.filter((r) => yarneScore(r) === top).map((r) => `Yarne ← ${r.name}`)).toContain(yarne.via!.label);
+    expect(yarne.children).toEqual([expect.objectContaining({ child: 'morgan-m', score: expect.any(Number) })]);
+    expect(yarne.children[0]!.key).toContain('robin:str/def');
+    expect(rows.filter((r) => r.via).map((r) => r.partner)).toEqual(expect.arrayContaining(['owain', 'inigo', 'brady', 'gerome', 'yarne', 'laurent']));
+    for (const robin of [female, mag]) {
+      for (const r of engine.partners(robin, EMPTY_ROSTER, settings).filter((r) => r.via)) {
+        expect(r.via!.label).not.toMatch(/Robin/);
+        expect(r.children[0]?.score).toEqual(expect.any(Number));
+      }
+    }
+    // Nor for Robin (M): Lucina's mother can't be the Robin marrying her.
+    const saved = { ...EMPTY_ROSTER, savedPlan: { robin: null, marriages: [['chrom', 'robin'] as const] } };
+    const lucina = engine.partners(mag, saved, settings).find((r) => r.partner === 'lucina')!;
+    expect(lucina.via).toMatchObject({ from: 'best' });
+    expect(lucina.via!.label).not.toMatch(/Robin/);
+    expect(lucina.children[0]?.score).toEqual(expect.any(Number));
+  });
 });
 
 describe('review fixes (#107)', () => {
