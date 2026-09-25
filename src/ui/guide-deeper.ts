@@ -6,7 +6,7 @@ import { DEFAULT_PRIORITY, type ChildId } from '../engine';
 import type { GuideTarget } from './guide';
 import { BASIS_LABELS, LABELS, ROLE_UI } from './labels';
 
-export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree';
+export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners';
 
 /**
  * Where an entry's jump goes: the All children leaderboard, a child's table (the one `guideChild` picks, with its Robin
@@ -145,6 +145,18 @@ export const DEEPER: readonly DeeperEntry[] = [
       { term: 'class tree', def: 'A unit’s classes as base → promotion lines plus DLC classes, each with its skills and levels.' },
       { term: 'starting skill', def: 'A skill a unit joins with. It keeps it whatever its class.' },
     ],
+  },
+  {
+    id: 'unit-partners',
+    question: 'Who should this unit marry?',
+    answer: [
+      'Partners on a unit page lists everyone it can S-support, Robin included, with the children each marriage produces.',
+      'Each child is scored in its plan preset; rows are sorted by the best child, so one great child beats two middling ones.',
+      `Marks show a marriage that happened, the saved plan’s pick (◆), a dead partner, and a blocked marriage with why.`,
+      `It never changes your plan: Plan → opens the ${plan}, where pinning the marriage shows what it costs the rest.`,
+    ],
+    jump: { to: 'unit', target: 'unit-partners' },
+    terms: [{ term: 'Partners', def: 'A unit page’s list of possible spouses and the children each marriage produces, read-only.' }],
   },
 ];
 

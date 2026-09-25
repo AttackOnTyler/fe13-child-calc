@@ -8,6 +8,7 @@ import { CLASSES, DLC_RECLASS_TARGETS, allowsGender, type ClassData, type ClassI
 import { JOIN_DATA, type JoinChapter, type JoinData } from '../game-data/join';
 import { CLASS_SKILLS, type SkillId } from '../game-data/skills';
 import type { ChildId } from '../game-data/children';
+import type { PresetId } from '../curated/presets';
 import type { Gender, ModStat, Modifiers } from '../game-data/stats';
 import { FIRST_GEN_UNITS, type UnitId } from '../game-data/units';
 import { matchBuilds } from './builds';
@@ -78,6 +79,32 @@ export type UnitPage = {
   readonly asParent: UnitAsParent;
   /** Pair-up bonuses a partner gets from the unit in each reachable class. */
   readonly pairUp: readonly { readonly id: ClassId; readonly name: string; readonly bonus: Readonly<Partial<Record<ModStat | 'mov', number>>> }[];
+};
+
+/**
+ * A child a marriage produces: its pairing (the run's Robin, else the best Robin) and its score in its plan preset, or
+ * in its Lead role preset when the plan preset scores nothing (Battery, Rallybot).
+ */
+export type PartnerChild = {
+  readonly child: ChildId;
+  readonly name: string;
+  readonly key: string;
+  readonly score: number | undefined;
+  readonly preset: PresetId;
+};
+
+/** Where a marriage stands: married, in the saved plan, the partner dead, or blocked (with the blocked-pairing reason). */
+export type PartnerRow = {
+  readonly partner: UnitId | 'robin';
+  readonly name: string;
+  readonly children: readonly PartnerChild[];
+  /** The best child's score: the row order. */
+  readonly best: number | undefined;
+  readonly married: boolean;
+  readonly planned: boolean;
+  readonly dead: boolean;
+  /** Why the marriage can no longer happen, when it can't. */
+  readonly blocked: string | undefined;
 };
 
 export const chapterLabel = (c: JoinChapter): string =>

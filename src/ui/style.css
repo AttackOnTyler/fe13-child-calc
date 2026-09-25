@@ -476,3 +476,11 @@ button.gd-deeper-head:hover { background: var(--hover); }
 .unit-page .cc .sk.noinh .skill { opacity: 0.6; }
 .unit-page details { margin: 10px 0; }
 .unit-page summary { cursor: pointer; font-weight: 600; }
+
+/* Partners (#102) */
+.unit-cols { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; }
+.unit-side { border-left: 1px solid var(--line); padding-left: 14px; }
+@media (max-width: 900px) { .unit-cols { grid-template-columns: 1fr; } .unit-side { border-left: 0; padding-left: 0; } }
+.partners .partner { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.partners .partner.blocked { opacity: 0.55; }
+.partners .chip.small { margin-left: 4px; font-size: 11px; }

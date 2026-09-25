@@ -75,6 +75,10 @@ _Avoid_: Character page, profile
 A unit's classes as base → promotion lines plus the DLC classes, each with the skills it teaches and their levels, starting skills marked.
 _Avoid_: Class list
 
+**Partners**:
+A unit page's read-only list of everyone the unit can S-support, with the children each marriage produces (scored in their plan presets) and where the marriage stands: married, in the saved plan, dead or blocked. Sorted by the best child.
+_Avoid_: Spouses, matches
+
 **Join data**:
 When and how a first-gen unit or Robin joins (chapter or paralogue, recruit condition), its join class and level, and its base stats per difficulty.
 _Avoid_: Recruitment info, bases (alone)

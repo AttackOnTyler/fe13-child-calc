@@ -2,7 +2,7 @@
  * The Units view (#101): the list of units, and a unit's page. A header with its identity chips, the class tree, then
  * build coverage (open), "As a parent" and pair-up folding away below it. It follows the global play context.
  */
-import type { BuildMatch, Engine, PageUnitId, SkillRef, SkillViewSettings, TreeClass, UnitPage } from '../engine';
+import type { BuildMatch, ChildId, PresetId, Engine, PageUnitId, PartnerRow, PlanSettings, Roster, SkillRef, SkillViewSettings, TreeClass, UnitPage } from '../engine';
 import { MOD_STATS, STAT_LABELS } from '../game-data/stats';
 import { h } from './dom';
 import { guide } from './guide';
@@ -20,7 +20,20 @@ export type UnitsContext = {
   readonly skillChip: (skill: SkillRef, marks: (HTMLElement | string)[], title: string, cls?: string) => HTMLElement;
   /** A build coverage card (the one the Skills drawer uses). */
   readonly buildCard: (m: BuildMatch) => HTMLElement;
+  /** Partners read the roster, the saved plan and each child's plan preset. */
+  readonly roster: Roster;
+  readonly planSettings: PlanSettings;
+  /** Opens a child's table on this pairing. */
+  readonly openPairing: (child: ChildId, key: string) => void;
+  readonly openPlan: () => void;
+  readonly presetLabel: (id: PresetId) => string;
+  /** Every partner row shown, not only the top ones (view state). */
+  readonly allPartners: boolean;
+  readonly setAllPartners: (all: boolean) => void;
 };
+
+/** Partner rows shown before “All partners”. */
+const TOP_PARTNERS = 5;
 
 export function unitsView(ctx: UnitsContext): HTMLElement[] {
   return ctx.unit ? unitPageView(ctx, ctx.engine.unitPage(ctx.unit, ctx.settings)) : [unitList(ctx)];
@@ -124,17 +137,67 @@ function pairUp(p: UnitPage): HTMLElement {
   );
 }
 
+const PARTNER_MARKS = (r: PartnerRow): string[] => [
+  ...(r.married ? ['married'] : []),
+  ...(r.planned ? ['◆ in plan'] : []),
+  ...(r.dead ? ['dead'] : []),
+  ...(r.blocked && !r.married ? ['blocked'] : []),
+];
+
+/** Partners (#102): each possible spouse, the children the marriage produces, where it stands; read-only. */
+function partners(ctx: UnitsContext, p: UnitPage): HTMLElement {
+  const rows = ctx.engine.partners(p.unit, ctx.roster, ctx.planSettings);
+  const shown = ctx.allPartners ? rows : rows.slice(0, TOP_PARTNERS);
+  const partnerName = (r: PartnerRow) =>
+    r.partner === 'robin'
+      ? h('b', {}, r.name)
+      : h('button', { class: 'linkish', title: `${r.name}’s page`, onclick: () => ctx.open(r.partner as PageUnitId) }, r.name);
+  return h(
+    'section',
+    { ...guide('unit-partners'), class: 'partners' },
+    h('h3', {}, `Partners (${rows.length})`),
+    h('p', { class: 'muted small' }, 'Sorted by the best child, each scored in its plan preset. Pin a marriage on the Plan to see what it costs.'),
+    ...shown.map((r) =>
+      h(
+        'div',
+        { class: `partner${r.blocked && !r.married ? ' blocked' : ''}`, title: r.blocked && !r.married ? `Blocked: ${r.blocked}` : undefined },
+        h('div', {}, partnerName(r), ...PARTNER_MARKS(r).map((m) => h('span', { class: 'chip small' }, m)), ' ', h('button', { class: 'mini', title: 'Open the Plan', onclick: ctx.openPlan }, 'Plan →')),
+        h(
+          'div',
+          { class: 'small' },
+          ...r.children.flatMap((c, i) => [
+            i ? ' · ' : '',
+            h('button', { class: 'linkish', title: `Open ${c.name}’s table on this pairing`, onclick: () => ctx.openPairing(c.child, c.key) }, c.name),
+            h('span', { class: 'num', title: `Scored in ${ctx.presetLabel(c.preset)}` }, ` ${c.score ?? '—'}`),
+          ]),
+        ),
+        r.blocked && !r.married ? h('div', { class: 'muted small' }, r.blocked) : null,
+      ),
+    ),
+    rows.length > TOP_PARTNERS
+      ? h('button', { class: 'ghost small', onclick: () => ctx.setAllPartners(!ctx.allPartners) }, ctx.allPartners ? 'Top partners only' : `All partners (${rows.length})`)
+      : null,
+  );
+}
+
 function unitPageView(ctx: UnitsContext, p: UnitPage): HTMLElement[] {
   return [
     h(
       'div',
       { class: 'scroll unit-page' },
       header(ctx, p),
-      classTree(ctx, p),
-      h('details', { open: true }, h('summary', {}, `Build coverage (${p.builds.length})`), ...(p.builds.length ? p.builds.map(ctx.buildCard) : [h('p', { class: 'muted small' }, 'No build template reaches 3/5.')])),
-      h('details', {}, h('summary', {}, 'As a parent'), asParent(ctx, p)),
-      h('details', {}, h('summary', {}, 'Pair-up as a back'), pairUp(p)),
+      h('div', { class: 'unit-cols' }, h('div', { class: 'unit-main' }, ...mainColumn(ctx, p)), h('aside', { class: 'unit-side' }, partners(ctx, p))),
     ),
+  ];
+}
+
+/** The class tree, then build coverage (open), As a parent and Pair-up folding away below it. */
+function mainColumn(ctx: UnitsContext, p: UnitPage): (HTMLElement | null)[] {
+  return [
+    classTree(ctx, p),
+    h('details', { open: true }, h('summary', {}, `Build coverage (${p.builds.length})`), ...(p.builds.length ? p.builds.map(ctx.buildCard) : [h('p', { class: 'muted small' }, 'No build template reaches 3/5.')])),
+    h('details', {}, h('summary', {}, 'As a parent'), asParent(ctx, p)),
+    h('details', {}, h('summary', {}, 'Pair-up as a back'), pairUp(p)),
   ];
 }
 

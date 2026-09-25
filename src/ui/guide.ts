@@ -24,6 +24,7 @@ export const GUIDE_TARGETS = [
   'role-matrix',
   'units-rail',
   'unit-class-tree',
+  'unit-partners',
   'no-robin',
   'robin-first',
   'robin-gain',

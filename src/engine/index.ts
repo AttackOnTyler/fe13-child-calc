@@ -35,7 +35,7 @@ import { inheritGrowths, inheritModifiers, type ParentProfile } from './inherita
 import { buildSkillView, candidatesFor, firstGenSkills, secondGenSkills, skillRank, skillReach, type SkillViewInput, type SkillViewSettings } from './skills';
 import { BUILD_TEMPLATES } from '../curated/builds';
 import { skillCard } from './skill-card';
-import { unitPage, unitReach, type PageUnitId, type ParentedChild, type UnitPage } from './unit-page';
+import { unitPage, unitReach, type PageUnitId, type ParentedChild, type PartnerChild, type PartnerRow, type UnitPage } from './unit-page';
 import { SPOTPASS_UNITS } from '../game-data/join';
 import { matchBuilds, matchTemplate, shownMatch, templateSummary, templatesFor } from './builds';
 import type { SkillId } from '../game-data/skills';
@@ -43,7 +43,7 @@ import { createScorer } from './scoring';
 import { pairUpSpd } from './pair-up';
 import { contextReachesDlc, defaultTargetBreakpoint } from './speed';
 import { runSelfTest } from './self-test';
-import { EMPTY_ROSTER, evaluateBlocking, rosterUnits, stateOf, type Blocking, type Roster, type RunFacts } from './roster';
+import { EMPTY_ROSTER, evaluateBlocking, rosterUnits, stateOf, type Blocking, type Roster, type RosterUnit, type RunFacts } from './roster';
 import { CANDIDATE_PRESETS, PRESETS, type PresetId, type ScoringRole } from '../curated/presets';
 import { DEFAULT_PRIORITY, childLedger, evaluatePlan, savedPairings, solvePlan, type LedgerEntry, type MarriagePlan, type PlanContext, type PlannedChild } from './plan';
 import type { SavedPlan } from './roster';
@@ -138,7 +138,7 @@ export { DEPLOYMENT_ROLES, type ChildDeploymentRole, type DeploymentRole, type D
 export { composition, deploymentRoleOf, quotaContext, quotasFor, type Composition, type QuotaStatus, type RoleCount } from './composition';
 export { ARMY_FIT_PASS_CAP, type RoleAssignment, type RoleSource } from './army-fit';
 export { CHILD_DEPLOYMENT_ROLES, type Derivation, type DerivedRole, type OutOfCast, type RobinGain, type RobinGainSide } from './derive';
-export type { ClassLine, ClassTree, PageUnitId, ParentedChild, PassedClasses, TreeClass, TreeSkill, UnitAsParent, UnitPage } from './unit-page';
+export type { ClassLine, ClassTree, PageUnitId, ParentedChild, PartnerChild, PartnerRow, PassedClasses, TreeClass, TreeSkill, UnitAsParent, UnitPage } from './unit-page';
 export { CANDIDATE_PRESETS } from '../curated/presets';
 export { STAFF_CLASSES } from '../game-data/classes';
 export {
@@ -240,6 +240,12 @@ export type Engine = {
   unitPage(unit: PageUnitId, settings: SkillViewSettings): UnitPage;
   /** The Skill card for one skill seen from a unit on its own (#101). */
   unitSkillCard(unit: PageUnitId, id: SkillId, settings: SkillViewSettings): SkillCard;
+  /**
+   * A unit's Partners (#102): one row per possible S-support partner (Robin's included; SpotPass units have Robin only),
+   * with the children the marriage produces and their scores in their plan presets, and where the marriage stands
+   * against the roster and the saved plan. Sorted by the best child's score; read-only, no plan re-solve.
+   */
+  partners(unit: PageUnitId, roster: Roster, settings: PlanSettings): readonly PartnerRow[];
   /** Whether the roster blocks a pairing (hard: it can no longer happen; soft: it contradicts a pin or a bench), and why. */
   blocking(result: ChildResult, roster: Roster): Blocking;
   /**
@@ -786,6 +792,61 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     });
   };
 
+  /** A pairing's two parents, as roster units. */
+  const parentsOf = (p: Pairing): [RosterUnit, RosterUnit] => {
+    const fixed = CHILD_UNITS[p.child].fixedParent;
+    const v = p.variableParent;
+    return [fixed, v.kind === 'robin' ? 'robin' : v.id];
+  };
+  /** The partners a first-gen unit can S-support: its S-support list (either side), then Robin. */
+  const partnerIds = (unit: PageUnitId): (UnitId | 'robin')[] => {
+    const women = S_SUPPORTS[unit];
+    const list: UnitId[] = women
+      ? [...women]
+      : (Object.keys(S_SUPPORTS) as UnitId[]).filter((w) => S_SUPPORTS[w]!.includes(unit));
+    const robin = (ROBIN_SUPPORTS.M as readonly string[]).includes(unit) || (ROBIN_SUPPORTS.F as readonly string[]).includes(unit);
+    return [...list, ...(robin ? (['robin'] as const) : [])];
+  };
+  const partnersFor = (unit: PageUnitId, roster: Roster, s: PlanSettings): PartnerRow[] => {
+    const derivation = derivationFor(roster, s);
+    const couple = (a: RosterUnit, b: RosterUnit) => (c: readonly [RosterUnit, RosterUnit]) => (c[0] === a && c[1] === b) || (c[0] === b && c[1] === a);
+    const rows = partnerIds(unit).map((partner): PartnerRow => {
+      const children: PartnerChild[] = [];
+      let blocked: string | undefined;
+      for (const child of CHILD_IDS) {
+        let best: { key: string; score: number | undefined; pairing: Pairing } | undefined;
+        const planned = rolesFor(roster, s).get(child)?.preset ?? s.overrides[child] ?? s.preset;
+        const lead = derivation.roles.find((d) => d.child === child)?.rolePreset.lead ?? s.preset;
+        const preset = presetScores(planned, s) ? planned : lead;
+        const scores = presetScores(preset, s);
+        for (const g of narrowAll(groupsByChild.get(child) ?? [], { run: roster.run }))
+          for (const r of g.results) {
+            const [a, b] = parentsOf(r.pairing);
+            if (!((a === unit && b === partner) || (a === partner && b === unit))) continue;
+            const score = scores?.get(r.key)?.score;
+            if (!best || (score ?? -1) > (best.score ?? -1)) best = { key: r.key, score, pairing: r.pairing };
+          }
+        if (!best) continue;
+        children.push({ child, name: CHILD_UNITS[child].name, key: best.key, score: best.score, preset });
+        const blocking = evaluateBlocking(best.pairing, roster, assumptions);
+        if (blocking.status === 'hard') blocked ??= blocking.hard.join('; ');
+      }
+      const spouse = roster.spouses[unit];
+      const defined = children.map((c) => c.score).filter((x): x is number => x !== undefined);
+      return {
+        partner,
+        name: partner === 'robin' ? `Robin (${opposite(FIRST_GEN_UNITS[unit].gender as Gender)})` : FIRST_GEN_UNITS[partner].name,
+        children,
+        best: defined.length ? Math.max(...defined) : undefined,
+        married: spouse?.bond === 'married' && spouse.partner === partner,
+        planned: !!roster.savedPlan?.marriages.some(couple(unit, partner)),
+        dead: stateOf(roster, partner) === 'dead',
+        blocked,
+      };
+    });
+    return rows.sort((a, b) => (b.best ?? -1) - (a.best ?? -1));
+  };
+
   /** Derived roles for a roster and settings (#95). */
   const derivationFor = (roster: Roster, settings: PlanSettings): Derivation => {
     const robinSet = roster.run.gender !== null && roster.run.asset !== null && roster.run.flaw !== null;
@@ -994,6 +1055,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       return [...units.filter((u) => !spot.has(u)), ...SPOTPASS_UNITS].map((id) => ({ id, name: FIRST_GEN_UNITS[id].name, spotPass: spot.has(id) }));
     },
     unitPage: (unit, settings) => unitPage(unit, settings.context, dlcOf(settings), parentedBy(unit)),
+    partners: (unit, roster, settings) => partnersFor(unit, roster, settings),
     unitSkillCard: (unit, id, settings) => {
       const reach = unitReach(unit, dlcOf(settings));
       return skillCard(id, reach, settings.context, matchBuilds(reach, settings.context));

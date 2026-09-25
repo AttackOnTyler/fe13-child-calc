@@ -139,6 +139,8 @@ let view: View = !selfTest.passed ? 'validation' : welcomeOpen ? 'roster' : 'tab
 /** The Units view's open unit page (#101); undefined shows the list. */
 let unitOpen: PageUnitId | undefined;
 /** Where a unit page's back link returns: the view (and unit page) it was opened from, and its scroll. */
+/** A unit page's Partners show every row (view state). */
+let allPartners = false;
 let unitBack: { view: View; unit: PageUnitId | undefined; scroll: number } | undefined;
 /** A Robin group row's identity across children: `child|group key`. */
 const groupId = (child: ChildId, group: PairingGroup) => `${child}|${group.key}`;
@@ -348,6 +350,24 @@ const unitsContext = (): UnitsContext => ({
   backLabel: unitBack ? (unitBack.view === 'units' && unitBack.unit ? engine.pageUnits().find((u) => u.id === unitBack!.unit)!.name : VIEW_LABELS[unitBack.view]) : 'Units',
   skillChip,
   buildCard,
+  roster,
+  planSettings: planSettings(),
+  presetLabel: (id: PresetId) => presetLabel(engine.presets().find((p) => p.id === id)!),
+  openPairing: (child, key) => {
+    showTable(child);
+    visit = { child, preset: engine.planPreset(child, roster, planSettings()), key };
+    scrollToPlanned = true;
+    renderParts(['rail', 'main', 'panel']);
+  },
+  openPlan: () => {
+    view = 'plan';
+    renderParts(['rail', 'main', 'panel']);
+  },
+  allPartners,
+  setAllPartners: (all) => {
+    allPartners = all;
+    renderParts(['main']);
+  },
 });
 
 /** The priority and plan-preset controls: the Plan sidebar and the Roster page's ledger edit the same values. */
