@@ -60,7 +60,7 @@ function nextMapSection(ctx: RunContext): HTMLElement {
       { class: `row${first ? ' next-first' : ''}` },
       h('b', {}, label(o.map)),
       o.note ? h('span', { class: 'muted small' }, o.note) : null,
-      h('button', { ...(first ? guide('prepare') : {}), class: first ? '' : 'mini', title: 'Matchups for this map from your latest entry', onclick: () => ctx.prepare(o.map) }, 'Prepare'),
+      h('button', { ...(first ? guide('prepare') : {}), class: first ? '' : 'mini', title: 'Get ready for this map: your army and the units joining on it', onclick: () => ctx.prepare(o.map) }, 'Prepare'),
       h('button', { ...(first ? guide('record-results') : {}), class: first ? '' : 'mini', title: 'Played it: record how it went', onclick: () => record(o.map) }, 'Record results'),
     );
   const story = offers.filter((o) => o.kind === 'story');

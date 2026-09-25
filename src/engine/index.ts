@@ -100,7 +100,7 @@ export { DEFAULT_SPEED, RALLY_OPTIONS, TONIC_SPD } from './speed';
 export type { Citation } from '../game-data/citations';
 export { CHAPTER_GUIDE, type GuideEntry } from '../curated/chapter-guide';
 export { classIdByName, classWeaponKinds, openStock, promotionAdvice, sealAvailability, sealsHeld, supplyList, type PromotionAdvice, type SealAvailability, type StockItem, type Supply } from './supply';
-export { coverage, deployMax, deployRoleOf, suggestDeployment, suggestLoadout, type DeployCandidate, type Deployment, type Loadout, type Pair } from './deploy';
+export { coverage, deployCount, deployMax, deployRoleOf, forcedOn, suggestDeployment, suggestLoadout, type DeployCandidate, type Deployment, type Loadout, type Pair } from './deploy';
 export { bestWeapon, classTypes, dangerFlags, foeKey, foeOf, foesOf, matchup, pairUpBonus, statValue, type DangerFlag, type Fighter, type Foe, type Matchup } from './solver';
 export {
   EMPTY_RUN,
@@ -115,6 +115,7 @@ export {
   latestEntry,
   nextMaps,
   parseRun,
+  prepUnits,
   recordFallen,
   recordMarriage,
   recruitSnapshot,
@@ -125,7 +126,9 @@ export {
   withSeenSkills,
   withUnit,
   type HeldItem,
+  type LaterRecruit,
   type MapOffer,
+  type PrepUnits,
   type Run,
   type RunEntry,
   type Snapshot,

@@ -10,4 +10,8 @@ Regenerates `src/game-data/chapters/*.ts` from Fire Emblem Wiki chapter pages at
    `uv run python bosscheck.py <group>.json`. Every differing stat is printed; record real ones in `CHAPTER_DISAGREEMENTS`.
 4. Emit: `uv run python gents.py <group>.json ../../src/game-data/chapters/<group>.ts <CONST> "$(cat <group>-extra.json)"`
 
-`<group>-extra.json` holds what the pages don't: each map's kind, list order, label and unlocks.
+`<group>-extra.json` holds what the pages don't: each map's kind, list order, label and unlocks, and forced units a
+page's ChapChars leaves out (`FORCED` in `build.py`, #132).
+
+A page without ChapChars (Premonition) takes its units from the Character data tabs, with their stats: a setup used
+only on that map, which never joins the army (#131).

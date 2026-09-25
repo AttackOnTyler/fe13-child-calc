@@ -209,8 +209,16 @@ One lead and back against one foe: damage, whether one round kills (with and wit
 _Avoid_: Forecast (the game's single-attack preview)
 
 **Preparation page**:
-The page for getting ready for the next map, reached from Next map: its matchups first.
+The page for getting ready for the next map, reached from Next map: threats, deployment and pairs, loadouts, supplies and matchups. It fields the army from the latest entry plus the units on the map from its start: turn-1 recruits (from join data) and any map-only setup. Recruits who come later are listed with when.
 _Avoid_: Prep screen, battle prep
+
+**Forced unit**:
+A unit the map always fields, which the player can't drop: Chrom on nearly every map, Robin too on Chapter 23 alone, and every unit on the map from its start. Naming Robin in the defeat condition doesn't force Robin.
+_Avoid_: Mandatory unit, lord (alone)
+
+**Map-only setup**:
+A unit fielded on one map with a class, level, stats and items used only there (Premonition's Lv 20 Chrom and Robin). Shown on that map's preparation page; never joins the army, so copy-forward skips it.
+_Avoid_: Guest, temporary unit
 
 **Danger flag**:
 Something on the next map that threatens a unit: a weapon effective against it, Counter against a melee unit, a boss that doubles it, or a round that can kill it. On Lunatic+ it counts the worst of the pool until the player records the skills seen.
@@ -229,7 +237,7 @@ Stats projected from average growths (personal plus class), labelled as expected
 _Avoid_: Projected stats, averages (alone)
 
 **Copy-forward**:
-A new entry starts as a copy of the one before, with the map's recruits filled in from join data. Editing a past entry never changes later ones; they're flagged instead.
+A new entry starts as a copy of the one before, with the map's recruits filled in from join data (a map-only setup is skipped). Editing a past entry never changes later ones; they're flagged instead.
 _Avoid_: Inherit, carry over
 
 **Chapter guide**:
