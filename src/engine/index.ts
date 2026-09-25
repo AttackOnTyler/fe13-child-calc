@@ -98,6 +98,20 @@ export {
 export { DEFAULT_SPEED, RALLY_OPTIONS, TONIC_SPD } from './speed';
 export type { Citation } from '../game-data/citations';
 export {
+  FORGE,
+  ITEMS,
+  ITEM_DISAGREEMENTS,
+  forgeCost,
+  forgeProblem,
+  forgedStats,
+  itemByName,
+  type Effectiveness,
+  type ForgeLevels,
+  type GameItem,
+  type ItemDisagreement,
+  type ItemKind,
+} from '../game-data/items';
+export {
   CHAPTER_DIFFICULTIES,
   LUNATIC_PLUS,
   REINFORCEMENT_RULE,

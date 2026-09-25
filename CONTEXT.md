@@ -172,6 +172,14 @@ _Avoid_: Role (alone), natural role
 
 ### Planning
 
+**Forge**:
+Raising a weapon's Mt, Hit or Crit at an armory: up to 5 intervals a stat (+1 Mt, +5 Hit, +3 Crit each), 8 in all, Crit capped at 50, each interval priced as a multiple of the weapon's worth. Any weapon with a worth can be forged except Mire.
+_Avoid_: Upgrade, refine
+
+**Effectiveness**:
+A weapon's bonus damage against a unit type (flying, armored, beast, dragon, fell dragon, monster): bows against fliers, Beast Killer against beasts, Wyrmslayer against dragons.
+_Avoid_: Weakness, super-effective
+
 **Chapter data**:
 A map's cited facts on every difficulty: win and lose conditions, deploy count, forced units, recruits, bosses, enemy groups with their movement triggers, reinforcements, items and shops. From Fire Emblem Wiki at a fixed revision, cross-checked against Serenes Forest. Game data, not opinion.
 _Avoid_: Walkthrough, map guide
