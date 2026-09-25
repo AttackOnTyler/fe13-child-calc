@@ -1,10 +1,10 @@
 /**
- * The preparation page (#119): the next map's matchup table. Each lead from the latest entry, paired with its back (its
- * highest support by default), with its best weapon from its inventory, against one foe at a time on the run's
- * difficulty. Lunatic+ assumes the pool's worst case.
+ * The preparation page (#119): the next map's matchup table. Each lead from the latest entry, or joining on the map
+ * from its start (#131), paired with its back (its highest support by default), with its best weapon from its
+ * inventory, against one foe at a time on the run's difficulty. Lunatic+ assumes the pool's worst case.
  */
-import type { ChapterDifficulty, Engine, Fighter, Foe, Matchup, RosterUnit, Run, Snapshot, UnitSnapshot } from '../engine';
-import { REINFORCEMENT_RULE, bestWeapon, dangerFlags, deployMax, foeKey, foesOf, itemByName, latestEntry, openStock, promotionAdvice, sealAvailability, sealsHeld, suggestDeployment, suggestLoadout, supplyList, unitName, withSeenSkills, type DeployCandidate, type DeploymentRole } from '../engine';
+import type { ChapterDifficulty, Engine, Fighter, Foe, Matchup, PrepUnits, RosterUnit, Run, Snapshot, UnitSnapshot } from '../engine';
+import { EMPTY_SNAPSHOT, REINFORCEMENT_RULE, bestWeapon, dangerFlags, deployCount, foeKey, foesOf, forcedOn, itemByName, latestEntry, openStock, prepUnits, promotionAdvice, sealAvailability, sealsHeld, suggestDeployment, suggestLoadout, supplyList, unitName, withSeenSkills, type DeployCandidate, type DeploymentRole } from '../engine';
 import { CHILD_UNITS } from '../game-data/children';
 import { ROBIN_GROWTHS } from '../game-data/robin';
 import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
@@ -22,6 +22,8 @@ export type PrepContext = {
   /** The back chosen for each lead (view state); absent: its highest support. */
   readonly backs: Readonly<Partial<Record<RosterUnit, RosterUnit | 'none'>>>;
   readonly setBack: (lead: RosterUnit, back: RosterUnit | 'none') => void;
+  /** Makes a pair's back its lead, with the old lead as its back (#133). */
+  readonly swap: (lead: RosterUnit, back: RosterUnit) => void;
   readonly foe: number;
   readonly setFoe: (i: number) => void;
   /** Each unit's deployment role: army fit's for children, the roster's tag otherwise (#121). */
@@ -85,7 +87,7 @@ function threats(m: ReturnType<Engine['maps']>[number], foes: readonly Foe[], ta
 }
 
 /** Danger flags (#120): effective weapons, Counter, a boss that doubles, a round that kills. */
-function dangers(units: readonly [RosterUnit, UnitSnapshot][], foes: readonly Foe[], pool: readonly string[], seen: Readonly<Record<string, readonly string[]>>, gender: Run['roster']['run']['gender']): HTMLElement {
+function dangers(units: PrepUnits['units'], foes: readonly Foe[], pool: readonly string[], seen: Readonly<Record<string, readonly string[]>>, gender: Run['roster']['run']['gender']): HTMLElement {
   const army = units.flatMap(([u, s]) => {
     const f = fighterOf(unitName(u, gender), s);
     return f ? [f.fighter] : [];
@@ -146,21 +148,48 @@ function checklist(ctx: PrepContext, foes: readonly Foe[], pool: readonly string
   );
 }
 
-/** Deployment and pairs (#121): the solver's pick; a back picked or a unit dropped recomputes it. */
+/**
+ * Deployment and pairs (#121): the solver's pick; a back picked or a unit dropped recomputes it. Units on the map from
+ * its start are marked, and recruits who come later are listed with when (#131). A forced unit can't be dropped.
+ */
 function deploymentSection(
   ctx: PrepContext,
   d: ReturnType<typeof suggestDeployment>,
   byUnit: ReadonlyMap<RosterUnit, DeployCandidate>,
-  units: readonly [RosterUnit, UnitSnapshot][],
+  prep: PrepUnits,
   gender: Run['roster']['run']['gender'],
 ): HTMLElement {
   const name = (u: RosterUnit) => unitName(u, gender);
+  const { units } = prep;
+  const unitCell = (u: RosterUnit) =>
+    h(
+      'td',
+      {},
+      name(u),
+      prep.joining.includes(u) ? h('span', { class: 'chip small', title: 'Joins your army on this map, from its start' }, 'joins') : null,
+      prep.mapOnly.includes(u) ? h('span', { class: 'chip small', title: 'Fielded with a setup used only on this map: it never joins your army' }, 'this map only') : null,
+    );
+  const drop = (u: RosterUnit) =>
+    d.forced.includes(u) ? h('td', { class: 'muted small', title: 'The map fields it: it can’t be dropped' }, 'forced') : h('td', {}, h('button', { class: 'mini', title: 'Leave out of this map', onclick: () => ctx.setExcluded(u, true) }, '✕'));
   const benched = units.map(([u]) => u).filter((u) => !d.deployed.includes(u));
+  // A unit alone picks a back the same way a lead does, and leads with it (#133).
+  const backSelect = (lead: RosterUnit, back: RosterUnit | undefined) =>
+    h(
+      'select',
+      { 'aria-label': `${name(lead)}’s back`, onchange: (e) => ctx.setBack(lead, (e.target as HTMLSelectElement).value as RosterUnit | 'none') },
+      h('option', { value: 'none', selected: !back }, back ? '— no back' : '— alone'),
+      ...units.filter(([x]) => x !== lead).map(([x]) => h('option', { value: x, selected: x === back }, name(x))),
+    );
   return h(
     'details',
     { ...guide('prep-deployment'), open: true },
     h('summary', {}, `Deployment and pairs (${d.deployed.length} of ${d.max})`),
-    h('p', { class: 'muted small' }, 'Forced units first, then each lead with the back that covers the map best, then Staff/Rally and dancers. Pick a back or drop a unit: everything recomputes.'),
+    h(
+      'p',
+      { class: 'muted small' },
+      'Forced units first, then each lead with the back that covers the map best, then Staff/Rally and dancers, then whoever is left while there’s room. ' +
+        'Pick a back (a unit alone leads with the one you pick), swap a pair with ⇅, or drop a unit that isn’t forced: everything recomputes.',
+    ),
     h(
       'table',
       { class: 'grid small' },
@@ -172,24 +201,30 @@ function deploymentSection(
           h(
             'tr',
             {},
-            h('td', {}, name(p.lead)),
+            unitCell(p.lead),
             h('td', { class: 'muted' }, byUnit.get(p.lead)?.role ?? ''),
             h(
               'td',
               {},
-              h(
-                'select',
-                { 'aria-label': `${name(p.lead)}’s back`, onchange: (e) => ctx.setBack(p.lead, (e.target as HTMLSelectElement).value as RosterUnit | 'none') },
-                h('option', { value: 'none', selected: !p.back }, '— no back'),
-                ...units.filter(([x]) => x !== p.lead).map(([x]) => h('option', { value: x, selected: x === p.back }, name(x))),
-              ),
+              backSelect(p.lead, p.back),
+              p.back ? h('button', { class: 'mini', title: `Make ${name(p.back)} the lead`, onclick: () => ctx.swap(p.lead, p.back!) }, '⇅') : null,
             ),
             h('td', {}, p.support ?? '—'),
             h('td', { class: 'num' }, String(p.coverage)),
-            h('td', {}, h('button', { class: 'mini', title: 'Leave out of this map', onclick: () => ctx.setExcluded(p.lead, true) }, '✕')),
+            drop(p.lead),
           ),
         ),
-        ...d.solo.map((u) => h('tr', {}, h('td', {}, name(u)), h('td', { class: 'muted' }, byUnit.get(u)?.role ?? ''), h('td', { colspan: '3', class: 'muted' }, 'alone'), h('td', {}, h('button', { class: 'mini', onclick: () => ctx.setExcluded(u, true) }, '✕')))),
+        ...d.solo.map((u) =>
+          h(
+            'tr',
+            {},
+            unitCell(u),
+            h('td', { class: 'muted' }, byUnit.get(u)?.role ?? ''),
+            h('td', {}, backSelect(u, undefined)),
+            h('td', { colspan: '2' }),
+            drop(u),
+          ),
+        ),
       ),
     ),
     benched.length
@@ -202,6 +237,9 @@ function deploymentSection(
             ctx.excluded.has(u) ? h('button', { class: 'linkish', title: 'Let the solver deploy it again', onclick: () => ctx.setExcluded(u, false) }, `${name(u)} (dropped)`) : name(u),
           ]),
         )
+      : null,
+    prep.later.length
+      ? h('div', { class: 'small muted' }, 'Joining later, not in the opening lineup: ', prep.later.map((l) => `${name(l.unit)} (${l.how ?? 'when is unknown'})`).join('; '))
       : null,
   );
 }
@@ -274,14 +312,25 @@ function supply(ctx: PrepContext, d: ReturnType<typeof suggestDeployment>, byUni
 }
 
 /** Seals and promotions (#122): when seals can be bought, how many are held, and promote now or later. */
-function seals(ctx: PrepContext, d: ReturnType<typeof suggestDeployment>, byUnit: ReadonlyMap<RosterUnit, DeployCandidate>, snap: Snapshot | undefined, foes: readonly Foe[], pool: (f: Foe) => readonly string[], gender: Run['roster']['run']['gender']): HTMLElement {
+function seals(
+  ctx: PrepContext,
+  d: ReturnType<typeof suggestDeployment>,
+  byUnit: ReadonlyMap<RosterUnit, DeployCandidate>,
+  snap: Snapshot | undefined,
+  foes: readonly Foe[],
+  pool: (f: Foe) => readonly string[],
+  gender: Run['roster']['run']['gender'],
+  mapOnly: readonly RosterUnit[],
+): HTMLElement {
   const cleared = new Set(ctx.run.entries.map((e) => e.map));
   const avail = sealAvailability(cleared);
   const held = sealsHeld([...(snap?.convoy ?? []), ...Object.values(snap?.units ?? {}).flatMap((u) => u?.inventory ?? [])]);
   const growthsOf = (u: RosterUnit): Readonly<Record<Stat, number>> | undefined =>
     u === 'robin' ? ROBIN_GROWTHS : u in CHILD_UNITS ? CHILD_UNITS[u as keyof typeof CHILD_UNITS].growths : (FIRST_GEN_UNITS[u as UnitId]?.growths as Record<Stat, number> | undefined);
   const genderOf = (u: RosterUnit) => (u === 'robin' ? (gender ?? 'M') : u in CHILD_UNITS ? CHILD_UNITS[u as keyof typeof CHILD_UNITS].gender : FIRST_GEN_UNITS[u as UnitId].gender);
+  // A setup used only on this map (Premonition's) is never promoted.
   const advice = d.deployed.flatMap((u) => {
+    if (mapOnly.includes(u)) return [];
     const c = byUnit.get(u);
     const s = snap?.units[u];
     if (!c || !s) return [];
@@ -332,25 +381,25 @@ export function prepPage(ctx: PrepContext): HTMLElement[] {
   const foes = foesOf(m, table, lplus).map((f) => (seen[foeKey(f)] ? { ...f, skills: [...new Set([...f.skills, ...seen[foeKey(f)]!])] } : f));
   const poolFor = (f: Foe) => (seen[foeKey(f)] ? [] : pool);
   const foe = foes[Math.min(ctx.foe, foes.length - 1)];
-  const snap = latestEntry(run)?.snapshot;
   const gender = run.roster.run.gender;
-  const units = (Object.entries(snap?.units ?? {}) as [RosterUnit, UnitSnapshot][]).filter(([u]) => run.roster.states[u] !== 'dead' && snap?.states[u] !== 'dead');
+  // The army, plus the recruits on this map from its start (#131): every section reads this snapshot.
+  const prep = prepUnits(run, m.id);
+  const { units } = prep;
+  const latest = latestEntry(run)?.snapshot ?? EMPTY_SNAPSHOT;
+  const snap: Snapshot = { ...latest, units: { ...latest.units, ...Object.fromEntries(units) } };
+  // Units on the map from its start are always fielded; the slots a map adds for them count (#131).
+  const opening = [...prep.joining, ...prep.mapOnly];
   // Deployment (#121): the solver's pick within the deploy count, the player's backs and drops kept.
   const candidates: DeployCandidate[] = units.flatMap(([unit, u]) => {
     const f = fighterOf(unitName(unit, gender), u);
     return f ? [{ unit, role: ctx.roleOf(unit), fighter: f.fighter, weapons: f.weapons, supports: u.supports }] : [];
   });
   const byUnit = new Map(candidates.map((c) => [c.unit, c]));
-  const nameToUnit = new Map(units.map(([x]) => [unitName(x, gender), x]));
-  const forced = m.forced.flatMap((n) => {
-    const u = nameToUnit.get(n) ?? nameToUnit.get(`${n} (${gender ?? ''})`);
-    return u ? [u] : [];
-  });
   const pinned = (Object.entries(ctx.backs) as [RosterUnit, RosterUnit | 'none'][]).map(([lead, back]) => ({ lead, back: back === 'none' ? undefined : back }));
   const deployment = suggestDeployment({
     candidates,
-    forced,
-    max: deployMax(m.conditions[table]?.deploy ?? '') || candidates.length,
+    forced: [...forcedOn(m.id), ...opening],
+    max: deployCount(m.conditions[table]?.deploy ?? '', opening.map((u) => unitName(u))) || candidates.length,
     foes,
     pool: poolFor,
     pinned,
@@ -396,15 +445,15 @@ export function prepPage(ctx: PrepContext): HTMLElement[] {
         { class: 'unit-head' },
         h('div', {}, h('button', { class: 'ghost small', onclick: ctx.close }, '← Run')),
         h('h2', {}, `Prepare: ${m.label}${m.kind === 'story' ? `: ${m.title}` : ''}`),
-        h('div', { class: 'muted small' }, `${difficulty === 'lunatic-plus' ? 'Lunatic+' : table} · stats from your latest entry · no movement planning`),
+        h('div', { class: 'muted small' }, `${difficulty === 'lunatic-plus' ? 'Lunatic+' : table} · ${[`stats from your latest entry`, prep.joining.length ? 'join data for units joining here' : '', prep.mapOnly.length ? 'the map’s own setup for units fielded only here' : ''].filter(Boolean).join(', ')} · no movement planning`),
       ),
       threats(m, foes, table),
       dangers(units, foes, pool, seen, gender),
       lplus ? checklist(ctx, foes, pool, seen) : null,
-      deploymentSection(ctx, deployment, byUnit, units, gender),
+      deploymentSection(ctx, deployment, byUnit, prep, gender),
       loadouts(deployment, byUnit, snap, foes, poolFor, gender),
       supply(ctx, deployment, byUnit, snap, foes, poolFor),
-      seals(ctx, deployment, byUnit, snap, foes, poolFor, gender),
+      seals(ctx, deployment, byUnit, snap, foes, poolFor, gender, prep.mapOnly),
       howToRun(ctx.engine, m.id),
       h('h3', {}, 'Matchups'),
       h(

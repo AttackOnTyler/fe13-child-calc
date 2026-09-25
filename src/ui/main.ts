@@ -2413,6 +2413,11 @@ function renderParts(parts: readonly Part[]): void {
                 renderParts(['main']);
               },
               backs: prepBacks,
+              swap: (lead, back) => {
+                const { [lead]: _, ...rest } = prepBacks;
+                prepBacks = { ...rest, [back]: lead };
+                renderParts(['main']);
+              },
               setBack: (lead, back) => {
                 prepBacks = { ...prepBacks, [lead]: back };
                 renderParts(['main']);

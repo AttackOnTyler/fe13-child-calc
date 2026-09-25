@@ -2762,7 +2762,7 @@ export const XENOLOGUES: readonly ChapterData[] = [
     recruits: [
       {"unit": "Katarina", "class": "Grandmaster", "level": "20", "how": "Automatically at the end of the chapter if the player clears the normal route and accepts the given offer"},
     ],
-    forced: [],
+    forced: ["Chrom"],
     items: [
       {"item": "Supreme Emblem", "how": "Automatically at chapter's end if the secret route is cleared"},
     ],

@@ -10,6 +10,7 @@ import {
   importRun,
   latestEntry,
   nextMaps,
+  prepUnits,
   recordFallen,
   recordMarriage,
   rosterOf,
@@ -166,5 +167,66 @@ describe('review fixes (#108–#123 review)', () => {
     const run = addEntry(runFromRoster(facts), 'prologue', 1);
     // +Mag −Str: Mag 5 + 2, Str 6 − 1.
     expect(latestEntry(run)!.snapshot.units.robin!.stats).toMatchObject({ mag: 7, str: 5 });
+  });
+});
+
+describe('units joining on the map being prepared (#131)', () => {
+  const fresh = runFromRoster(facts);
+  const ids = (units: readonly (readonly [string, unknown])[]) => units.map(([u]) => u);
+
+  it('field the Prologue’s turn-1 recruits on a fresh run, built as Record results builds them', () => {
+    const p = prepUnits(fresh, 'prologue');
+    expect(ids(p.units)).toEqual(['chrom', 'robin', 'lissa', 'frederick']);
+    expect(p.joining).toEqual(['chrom', 'robin', 'lissa', 'frederick']);
+    const recorded = latestEntry(addEntry(fresh, 'prologue', 1))!.snapshot.units;
+    for (const [u, s] of p.units) expect(s).toEqual(recorded[u]);
+  });
+
+  it('field Chapter 2’s turn-1 recruits and list the later ones with when, apart from the army', () => {
+    const run = addEntry(addEntry(fresh, 'prologue', 1), 'chapter-1', 2);
+    const p = prepUnits(run, 'chapter-2');
+    expect(p.joining).toEqual(['stahl', 'vaike']);
+    expect(ids(p.units)).toEqual(expect.arrayContaining(['chrom', 'robin', 'lissa', 'frederick', 'sully', 'virion', 'stahl', 'vaike']));
+    expect(ids(p.units)).not.toContain('miriel');
+    expect(p.later).toEqual([{ unit: 'miriel', how: 'Automatically from turn 2' }]);
+    // Chapter 1's Sully and Virion arrive on turn 2 of their own map.
+    expect(prepUnits(addEntry(fresh, 'prologue', 1), 'chapter-1').later.map((l) => l.unit)).toEqual(['sully', 'virion']);
+  });
+
+  it('field Premonition’s Chrom and Robin with the map’s own setup, which never joins the army', () => {
+    const p = prepUnits(fresh, 'premonition');
+    expect(p.mapOnly).toEqual(['chrom', 'robin']);
+    const [, chrom] = p.units.find(([u]) => u === 'chrom')!;
+    expect(chrom).toMatchObject({ class: 'Lord', level: 20, stats: { hp: 41, str: 20 }, inventory: [{ item: 'Falchion' }, { item: 'Silver Sword' }] });
+    // Robin (+Mag −Str) reads the asset and flaw values FEW prints.
+    const [, robin] = p.units.find(([u]) => u === 'robin')!;
+    expect(robin.stats).toMatchObject({ hp: 38, mag: 16, str: 15 });
+    expect(latestEntry(addEntry(fresh, 'premonition', 1))!.snapshot.units).toEqual({});
+    const prologue = latestEntry(addEntry(addEntry(fresh, 'premonition', 1), 'prologue', 2))!.snapshot.units;
+    expect(prologue.chrom).toMatchObject({ level: 1, inventory: [{ item: 'Falchion' }, { item: 'Rapier' }] });
+  });
+
+  it('wait for Robin’s gender, as Record results does, and leave out a unit already in the army or dead', () => {
+    const open = runFromRoster(withRun(EMPTY_ROSTER, { difficulty: 'normal' }));
+    expect(prepUnits(open, 'prologue').joining).toEqual(['chrom', 'lissa', 'frederick']);
+    const recorded = addEntry(fresh, 'prologue', 1);
+    expect(prepUnits(recorded, 'prologue').joining).toEqual([]);
+    const dead = withRoster(recorded, withState(rosterOf(recorded), 'frederick', 'dead'));
+    expect(ids(prepUnits(dead, 'chapter-1').units)).not.toContain('frederick');
+  });
+
+  it('fill the recruits once when the map is recorded after preparing it', () => {
+    prepUnits(fresh, 'prologue');
+    const units = latestEntry(addEntry(fresh, 'prologue', 1))!.snapshot.units;
+    expect(Object.keys(units)).toEqual(['chrom', 'robin', 'lissa', 'frederick']);
+  });
+});
+
+describe('review fixes (#131–#133 review)', () => {
+  it('keep Premonition’s own setups apart from recruits who join the army', () => {
+    const p = prepUnits(runFromRoster(facts), 'premonition');
+    expect(p.joining).toEqual([]);
+    expect(p.mapOnly).toEqual(['chrom', 'robin']);
+    expect(prepUnits(runFromRoster(facts), 'prologue').mapOnly).toEqual([]);
   });
 });

@@ -70,8 +70,18 @@ export type ChapterData = {
   readonly title: string;
   readonly location?: string;
   readonly conditions: Readonly<Partial<Record<ChapterDifficulty, MapConditions>>>;
-  /** Recruits, with the items they join with (FEW's names). */
-  readonly recruits: readonly { readonly unit: string; readonly class: string; readonly level: string; readonly how: string | null; readonly inventory?: readonly string[] }[];
+  /**
+   * Recruits, with the items they join with (FEW's names). One with `stats` is fielded with a setup used only on this
+   * map (Premonition's Chrom and Robin, #131): it never joins the army.
+   */
+  readonly recruits: readonly {
+    readonly unit: string;
+    readonly class: string;
+    readonly level: string;
+    readonly how: string | null;
+    readonly inventory?: readonly string[];
+    readonly stats?: StatText;
+  }[];
   readonly forced: readonly string[];
   readonly items: readonly { readonly item: string; readonly how: string }[];
   readonly shop: {
@@ -138,7 +148,10 @@ export const SEAL_RULES = {
   prepShopOnHardUp: false,
 } as const;
 
-/** A chapter-data disagreement between FEW and SF (research/chapter-data §7): the value used, and whether it's settled. */
+/**
+ * A chapter-data disagreement between FEW and SF (research/chapter-data §7), or where a source is silent (#132): the
+ * value used, and whether it's settled.
+ */
 export type ChapterDisagreement = {
   readonly id: string;
   readonly map: string;
@@ -264,6 +277,69 @@ export const CHAPTER_DISAGREEMENTS: readonly ChapterDisagreement[] = [
     other: 'SF item locations: a chest',
     status: 'open',
     why: 'No third source was read. Check in game.',
+  },
+  {
+    id: 'C15',
+    map: 'chapter-23',
+    item: 'Robin forced to deploy',
+    used: 'FEW: here only (“the only chapter … with more than one forced deployment”); elsewhere Chrom alone',
+    other: 'Every map’s defeat condition names Robin: “Chrom or Robin dies”',
+    status: 'resolved',
+    why: 'Losing Robin only ends a map Robin is on. FEW’s Endgame page says Robin can be left out and its grind-map pages call Chrom “the sole mandatory deployment” the rule; With a Terrible Fate (2018) names Chapter 13 as a chapter where Robin is like any other unit (#132).',
+  },
+  {
+    id: 'C16',
+    map: 'apotheosis',
+    item: 'Forced units',
+    used: 'Chrom: the page’s strategy says “Chrom must be fielded as usual”',
+    other: 'FEW ChapChars: none listed',
+    status: 'resolved',
+    why: 'ChapChars leaves the field out; the same page names Chrom (#132).',
+  },
+  {
+    id: 'C17',
+    map: 'premonition',
+    item: 'Units and forced units',
+    used: 'Chrom and Robin, each with this map’s own Lv 20 setup (FEW Character data), both fielded',
+    other: 'FEW ChapChars: none (the page has no ChapChars)',
+    status: 'resolved',
+    why: 'The page lists both under Character data and says they take their usual setups from the Prologue on. Two deploy slots for two units: both are fielded (#131, #132).',
+  },
+  {
+    id: 'C18',
+    map: 'prologue',
+    item: 'Forced units',
+    used: 'None needed: Chrom, Robin, Lissa and Frederick, all from turn 1, fill its four deploy slots',
+    other: 'FEW ChapChars: no forced units listed',
+    status: 'resolved',
+    why: 'Four slots for four units: all four are fielded (#132).',
+  },
+  {
+    id: 'C19',
+    map: 'the-golden-gaffe',
+    item: 'Forced units',
+    used: 'None: FEW ChapChars lists no forced unit',
+    other: 'FEW trivia: one of four maps that don’t “adhere to the typical chapter deployment style of Chrom being the sole mandatory deployment”',
+    status: 'open',
+    why: 'The trivia doesn’t say whether no one or more than Chrom is forced; with Chapter 23 (Chrom and Robin) among the four, no one is the likelier reading. Check in game (#132).',
+  },
+  {
+    id: 'C20',
+    map: 'exponential-growth',
+    item: 'Forced units',
+    used: 'None: FEW ChapChars lists no forced unit',
+    other: 'FEW trivia: one of four maps that don’t “adhere to the typical chapter deployment style of Chrom being the sole mandatory deployment”',
+    status: 'open',
+    why: 'The trivia doesn’t say whether no one or more than Chrom is forced; with Chapter 23 (Chrom and Robin) among the four, no one is the likelier reading. Check in game (#132).',
+  },
+  {
+    id: 'C21',
+    map: 'infinite-regalia',
+    item: 'Forced units',
+    used: 'None: FEW ChapChars lists no forced unit',
+    other: 'FEW trivia: one of four maps that don’t “adhere to the typical chapter deployment style of Chrom being the sole mandatory deployment”',
+    status: 'open',
+    why: 'The trivia doesn’t say whether no one or more than Chrom is forced; with Chapter 23 (Chrom and Robin) among the four, no one is the likelier reading. Check in game (#132).',
   },
 ];
 

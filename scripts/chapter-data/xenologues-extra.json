@@ -152,6 +152,9 @@
   "kind": "xenologue",
   "order": 3024,
   "label": "Apotheosis",
-  "unlocks": []
+  "unlocks": [],
+  "forced": [
+   "Chrom"
+  ]
  }
 }
