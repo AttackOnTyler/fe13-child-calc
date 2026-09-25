@@ -1,5 +1,6 @@
 /**
- * The loadout suggester: curated build templates matched against one pairing's reachable skills (#10).
+ * The loadout suggester: curated build templates matched against a reachable skill set (#10): a pairing's, or a
+ * first-gen unit's own (#101).
  *
  * A slot is filled from a class the child can reach, a DLC skill book, or a parent's pick, and each parent passes one
  * skill only. The best filling maximises filled slots → quality (sum of ranks in the play context) → first
@@ -45,11 +46,11 @@ function optionsFor(skill: SkillId, preference: number, reach: SkillReach, conte
   const rank = ref(skill, context).rank;
   const sources = reach.sourcesOf(skill);
   const classes = sources.filter((s): s is ClassSource => s.kind === 'class').sort(byEffort);
-  const free = sources.some((s) => s.kind === 'book') || classes.some((c) => !c.reclass);
+  const free = sources.some((s) => s.kind === 'book' || s.kind === 'start') || classes.some((c) => !c.reclass);
   const options: Option[] = [];
   if (classes.length) options.push({ skill, preference, rank, via: { kind: 'class', classes } });
   for (const s of sources) {
-    if (s.kind === 'book') options.push({ skill, preference, rank, via: s });
+    if (s.kind === 'book' || s.kind === 'start') options.push({ skill, preference, rank, via: s });
     // A parent's pick only helps when learning it costs a reclass; a fixed skill comes whatever the build.
     else if (s.kind === 'parent' && (s.fixed || !free)) options.push({ skill, preference, rank, via: s });
   }

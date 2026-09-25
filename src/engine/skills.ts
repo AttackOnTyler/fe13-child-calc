@@ -120,13 +120,15 @@ export const ref = (id: SkillId, context: PlayContext): SkillRef => ({ id, name:
 
 /** Fixed inheritance first, then the starting class line or a skill book, other classes, a parent's pick, a DLC class. */
 const sourceWeight = (s: SkillSource) =>
-  s.kind === 'parent' ? (s.fixed ? 0 : 3) : s.kind === 'book' ? 1 : s.dlc ? 4 : s.reclass ? 2 : 1;
+  s.kind === 'start' ? 0 : s.kind === 'parent' ? (s.fixed ? 0 : 3) : s.kind === 'book' ? 1 : s.dlc ? 4 : s.reclass ? 2 : 1;
 
 export const describeSource = (s: SkillSource): string =>
   s.kind === 'class'
     ? `${s.className} Lv ${s.level}${s.reclass ? ' ⟳' : ''}`
     : s.kind === 'book'
       ? 'DLC skill book ◇'
+      : s.kind === 'start'
+        ? 'starting skill ★'
       : s.fixed
         ? `fixed from ${s.parent}`
         : `inherit from ${s.parent} (must be ${s.parent}’s last equipped)`;
@@ -149,13 +151,10 @@ const sidesOf = (input: SkillViewInput) =>
 
 const BOOKS: ReadonlySet<SkillId> = new Set(DLC_SKILL_BOOKS);
 
-export function skillReach(input: SkillViewInput, dlc: boolean): SkillReach {
-  const { gender } = input;
-  const startLine = new Set<ClassId>([input.startClass, ...promotionsOf(input.startClass)]);
-  const classes = input.reachable.filter((c) => dlc || !isDlcClass(c));
-
+/** Each skill the classes teach, with the classes that teach it; a class off the start line is a reclass. */
+function classSourcesOf(reachable: readonly ClassId[], startLine: ReadonlySet<ClassId>, gender: Gender, dlc: boolean): Map<SkillId, SkillSource[]> {
   const classSources = new Map<SkillId, SkillSource[]>();
-  for (const c of classes) {
+  for (const c of reachable.filter((c) => dlc || !isDlcClass(c))) {
     for (const { skill, level } of CLASS_SKILLS[c]) {
       const src: SkillSource = {
         kind: 'class',
@@ -168,6 +167,40 @@ export function skillReach(input: SkillViewInput, dlc: boolean): SkillReach {
       classSources.set(skill, [...(classSources.get(skill) ?? []), src]);
     }
   }
+  return classSources;
+}
+
+/** A first-gen unit or Robin seen on its own (#101): its reachable classes, join class line and starting skills. */
+export type UnitReachInput = {
+  readonly name: string;
+  readonly gender: Gender;
+  readonly reachable: readonly ClassId[];
+  /** The join class and its promotions: no reclass needed. */
+  readonly startLine: readonly ClassId[];
+  readonly startingSkills: readonly SkillId[];
+};
+
+/** How a unit reaches skills on its own: its classes, its starting skills and DLC skill books. */
+export function unitSkillReach(input: UnitReachInput, dlc: boolean): SkillReach {
+  const classSources = classSourcesOf(input.reachable, new Set(input.startLine), input.gender, dlc);
+  const sourcesOf = (id: SkillId): SkillSource[] =>
+    [
+      ...(input.startingSkills.includes(id) ? [{ kind: 'start' } as const] : []),
+      ...(classSources.get(id) ?? []),
+      ...(dlc && BOOKS.has(id) ? [{ kind: 'book' } as const] : []),
+    ].sort((x, y) => sourceWeight(x) - sourceWeight(y));
+  const whyNotUnit = (id: SkillId): string => {
+    const teachers = (Object.keys(CLASS_SKILLS) as ClassId[]).filter((c) => CLASS_SKILLS[c].some((s) => s.skill === id));
+    if (skillData(id).dlc && !dlc) return 'DLC: turn on DLC, or pick Apotheosis or Full route';
+    if (!teachers.length) return 'no class teaches it';
+    return `${teachers.map((c) => className(c, input.gender)).join(' / ')} isn’t reachable for ${input.name}`;
+  };
+  return { classSources, sourcesOf, whyNot: whyNotUnit };
+}
+
+export function skillReach(input: SkillViewInput, dlc: boolean): SkillReach {
+  const startLine = new Set<ClassId>([input.startClass, ...promotionsOf(input.startClass)]);
+  const classSources = classSourcesOf(input.reachable, startLine, input.gender, dlc);
   const sides = sidesOf(input);
   const sourcesOf = (id: SkillId): SkillSource[] =>
     [

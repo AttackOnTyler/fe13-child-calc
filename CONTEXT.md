@@ -67,6 +67,14 @@ _Avoid_: Hybrid run, DLC run
 A curated 5-slot skill loadout for one role, tagged with the play contexts it suits. Each slot is a fixed skill or an ordered preference group. Matched against a pairing's reachable skills to produce a coverage tier (5/5, 4/5, 3/5).
 _Avoid_: Build (alone, when the template is meant), preset (a preset weights stats)
 
+**Unit page**:
+A first-gen unit seen on its own: its join data, class tree, build coverage over everything it can reach, what it passes as a parent, and pair-up bonuses. Opened from Units in the rail.
+_Avoid_: Character page, profile
+
+**Class tree**:
+A unit's classes as base → promotion lines plus the DLC classes, each with the skills it teaches and their levels, starting skills marked.
+_Avoid_: Class list
+
 **Join data**:
 When and how a first-gen unit or Robin joins (chapter or paralogue, recruit condition), its join class and level, and its base stats per difficulty.
 _Avoid_: Recruitment info, bases (alone)

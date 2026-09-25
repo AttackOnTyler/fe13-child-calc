@@ -22,6 +22,8 @@ export const GUIDE_TARGETS = [
   'quota-bar',
   'quota-edit',
   'role-matrix',
+  'units-rail',
+  'unit-class-tree',
   'no-robin',
   'robin-first',
   'robin-gain',

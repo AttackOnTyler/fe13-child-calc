@@ -6,14 +6,14 @@ import { DEFAULT_PRIORITY, type ChildId } from '../engine';
 import type { GuideTarget } from './guide';
 import { BASIS_LABELS, LABELS, ROLE_UI } from './labels';
 
-export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption';
+export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree';
 
 /**
  * Where an entry's jump goes: the All children leaderboard, a child's table (the one `guideChild` picks, with its Robin
- * row open for `robinRow`), the Validation panel, or the Scoring sidebar on the current view. Then it highlights `target`.
+ * row open for `robinRow`), the Validation panel, the Scoring sidebar on the current view, or Lon'qu's unit page. Then it highlights `target`.
  */
 export type DeeperJump = {
-  readonly to: 'leaderboard' | 'child' | 'validation' | 'scoring';
+  readonly to: 'leaderboard' | 'child' | 'validation' | 'scoring' | 'unit';
   readonly target: GuideTarget;
   readonly robinRow?: true;
 };
@@ -129,6 +129,22 @@ export const DEEPER: readonly DeeperEntry[] = [
     answer: `A game rule the app couldn’t verify. ${validation} lists each one and lets you override it for your run.`,
     jump: { to: 'validation', target: 'validation' },
     terms: [],
+  },
+  {
+    id: 'unit-class-tree',
+    question: 'What can this unit become?',
+    answer: [
+      'Units in the rail opens a page for each first-gen unit.',
+      'Its class tree lists each class in its set and what a Master Seal promotes it to, with the skills each teaches and at which level; DLC classes are dimmed.',
+      '★ marks a starting skill: kept for good, even when no class it can reach teaches it (Walhart’s Conquest).',
+      'Build coverage matches the build templates against everything it can reach, in the play context.',
+    ],
+    jump: { to: 'unit', target: 'unit-class-tree' },
+    terms: [
+      { term: 'unit page', def: 'A first-gen unit seen on its own: its join data, class tree, build coverage, what it passes as a parent, and pair-up.' },
+      { term: 'class tree', def: 'A unit’s classes as base → promotion lines plus DLC classes, each with its skills and levels.' },
+      { term: 'starting skill', def: 'A skill a unit joins with. It keeps it whatever its class.' },
+    ],
   },
 ];
 

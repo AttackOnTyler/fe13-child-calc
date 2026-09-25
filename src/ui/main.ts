@@ -44,6 +44,7 @@ import {
   type ScoringRole,
   type SelfTestReport,
   type SkillCard,
+  type PageUnitId,
   type SkillCardEdge,
   type SkillId,
   type SkillRef,
@@ -86,6 +87,7 @@ import {
 } from './scoring-prefs';
 import { validationPanel, withOverride } from './validation';
 import { rosterPage } from './roster-page';
+import { unitsView, type UnitsContext } from './unit-page';
 import { clearRoster, loadRoster, saveRoster } from './roster-store';
 import { planPage, planSidebar, type ChildPlanControls, type PlanPageContext } from './plan-page';
 import {
@@ -132,7 +134,12 @@ let selected: ChildId | 'all' = 'lucina';
 /** The last child the visitor opened from the left rail, which the guide's table jumps show again. */
 let childOpened: ChildId | undefined;
 /** A new visitor starts on Roster, under the welcome box: setup comes first. */
-let view: 'table' | 'validation' | 'roster' | 'plan' = !selfTest.passed ? 'validation' : welcomeOpen ? 'roster' : 'table';
+type View = 'table' | 'validation' | 'roster' | 'plan' | 'units';
+let view: View = !selfTest.passed ? 'validation' : welcomeOpen ? 'roster' : 'table';
+/** The Units view's open unit page (#101); undefined shows the list. */
+let unitOpen: PageUnitId | undefined;
+/** Where a unit page's back link returns: the view (and unit page) it was opened from, and its scroll. */
+let unitBack: { view: View; unit: PageUnitId | undefined; scroll: number } | undefined;
 /** A Robin group row's identity across children: `child|group key`. */
 const groupId = (child: ChildId, group: PairingGroup) => `${child}|${group.key}`;
 /** Robin group rows (by group id) with their asset × flaw heatmap open. */
@@ -309,6 +316,38 @@ const planSettings = (): PlanSettings => ({
   roleOverrides: planPrefs.roleOverrides,
   quotas: quotasFor(prefs.context, planPrefs.quotas),
   noRobin: noRobinView,
+});
+
+/** The scroll position of the main view. */
+const mainScroll = (): number => regions.main?.querySelector('.scroll')?.scrollTop ?? regions.main?.scrollTop ?? 0;
+
+/** Opens a unit's page, remembering where its back link returns. */
+function openUnit(unit: PageUnitId): void {
+  unitBack = { view, unit: view === 'units' ? unitOpen : undefined, scroll: mainScroll() };
+  view = 'units';
+  unitOpen = unit;
+  renderParts(['rail', 'main', 'panel']);
+}
+
+const VIEW_LABELS: Readonly<Record<View, string>> = { table: 'Pairings', validation: 'Validation', roster: LABELS.roster, plan: LABELS.plan, units: 'Units' };
+
+const unitsContext = (): UnitsContext => ({
+  engine,
+  settings: skillSettings(),
+  unit: unitOpen,
+  open: openUnit,
+  back: () => {
+    const b: { view: View; unit: PageUnitId | undefined; scroll: number } = unitBack ?? { view: 'units', unit: undefined, scroll: 0 };
+    view = b.view;
+    unitOpen = b.unit;
+    unitBack = undefined;
+    renderParts(['rail', 'main', 'panel']);
+    const el = regions.main?.querySelector('.scroll') ?? regions.main;
+    if (el) el.scrollTop = b.scroll;
+  },
+  backLabel: unitBack ? (unitBack.view === 'units' && unitBack.unit ? engine.pageUnits().find((u) => u.id === unitBack!.unit)!.name : VIEW_LABELS[unitBack.view]) : 'Units',
+  skillChip,
+  buildCard,
 });
 
 /** The priority and plan-preset controls: the Plan sidebar and the Roster page's ledger edit the same values. */
@@ -526,6 +565,20 @@ function rail(): HTMLElement[] {
       },
       h('span', {}, LABELS.plan),
       h('b', { class: 'num muted', title: 'A saved plan' }, roster.savedPlan ? LABELS.inPlan : ''),
+    ),
+    h(
+      'button',
+      {
+        ...guide('units-rail'),
+        class: `rail-item roster-item${view === 'units' ? ' on' : ''}`,
+        title: 'Each unit on its own: classes, skills, builds and what it passes on',
+        onclick: () => {
+          view = 'units';
+          unitOpen = unitBack = undefined;
+          render();
+        },
+      },
+      h('span', {}, 'Units'),
     ),
     h('div', { class: 'muted small rail-head' }, `Best · ${presetLabel(presetOf(prefs))}`),
     item('all', LABELS.allChildren, 'Leaderboard of every child’s pairings', top.length ? Math.max(...top) : undefined),
@@ -861,7 +914,8 @@ function skillsButton(id: string): HTMLElement {
 const sourcesTitle = (sources: readonly SkillSource[]) => sources.map(describeSource).join('\n');
 
 /** ⟳ reclass, ↑ inherited, ◇ DLC skill book. */
-const sourceMark = (s: SkillSource): string => (s.kind === 'parent' ? ' ↑' : s.kind === 'book' ? ' ◇' : s.reclass ? ' ⟳' : '');
+const sourceMark = (s: SkillSource): string =>
+  s.kind === 'parent' ? ' ↑' : s.kind === 'book' ? ' ◇' : s.kind === 'start' ? ' ★' : s.reclass ? ' ⟳' : '';
 
 /** A build slot as a chip: the skill with its source marker, or its first choice dashed and struck through. */
 function slotChip(slot: BuildSlotMatch): HTMLElement {
@@ -975,7 +1029,7 @@ function skillChip(skill: SkillRef, marks: (HTMLElement | string)[], title: stri
  */
 function inspectable(el: HTMLElement, id: SkillId): HTMLElement {
   el.classList.add('pick');
-  if (inspected?.id === id && inspected.line === openSkills) el.classList.add('sel');
+  if (inspected?.id === id && inspected.line === cardLine()) el.classList.add('sel');
   el.setAttribute('role', 'button');
   el.tabIndex = 0;
   const go = (e: Event) => {
@@ -993,9 +1047,13 @@ function inspectable(el: HTMLElement, id: SkillId): HTMLElement {
   return el;
 }
 
+/** The Skill card's owner: the open unit page, else the open Skills drawer. */
+const cardLine = (): string | undefined => (view === 'units' && unitOpen ? `unit:${unitOpen}` : openSkills);
+
 function inspect(id: SkillId): void {
-  if (!openSkills) return;
-  inspected = { line: openSkills, id };
+  const line = cardLine();
+  if (!line) return;
+  inspected = { line, id };
   openScoring();
   renderParts(['main', 'panel']);
 }
@@ -1538,16 +1596,22 @@ function capsTitle(): string {
 // ---- Skill card ----
 
 /** The inspected skill and the open drawer's pairing, when the card belongs to that drawer. */
+/** The inspected skill on the open unit page (#101). */
+const unitCardTarget = () => (view === 'units' && unitOpen && inspected?.line === `unit:${unitOpen}` ? { id: inspected.id, unit: unitOpen } : undefined);
 const cardTarget = () => (inspected && drawerPairing?.line === inspected.line ? { id: inspected.id, ...drawerPairing } : undefined);
 
 /** The inspected skill's card, when its drawer is the open one. */
 function currentCard(): { card: SkillCard; title: string } | undefined {
+  const u = unitCardTarget();
+  if (u) return { card: engine.unitSkillCard(u.unit, u.id, skillSettings()), title: engine.pageUnits().find((x) => x.id === u.unit)!.name };
   const t = cardTarget();
   return t && { card: engine.skillCard(t.result, t.id, skillSettings()), title: t.title };
 }
 
 /** What the Skill card depends on, so the panel refreshes when it changes. */
 const cardKey = (): string => {
+  const u = unitCardTarget();
+  if (u) return `${u.id}|unit:${u.unit}|${skillSettings().context}|${skillSettings().dlc}`;
   const t = cardTarget();
   if (!t) return '';
   const { context, dlc } = skillSettings();
@@ -1564,7 +1628,7 @@ function edgeLine(e: SkillCardEdge): HTMLElement {
   return h(
     'li',
     {},
-    h('span', { class: e.reachable ? 'pos' : 'neg', title: e.reachable ? 'This pairing can reach it' : 'This pairing can’t reach it' }, e.reachable ? '✓ ' : '✕ '),
+    h('span', { class: e.reachable ? 'pos' : 'neg', title: `${unitCardTarget() ? 'This unit' : 'This pairing'} can${e.reachable ? '' : '’t'} reach it` }, e.reachable ? '✓ ' : '✕ '),
     partner,
     ` ${e.note}`,
     e.sources.length ? h('span', { class: 'muted small' }, ' (', ...sourceLinks(e.sources), ')') : null,
@@ -1602,7 +1666,7 @@ function skillCardEl(card: SkillCard, title: string): HTMLElement {
         ),
       ),
     ),
-    h('h4', {}, 'How this pairing gets it'),
+    h('h4', {}, unitCardTarget() ? `How ${title} gets it` : 'How this pairing gets it'),
     card.sources.length
       ? h('ul', { class: 'sources small' }, ...card.sources.map((src) => h('li', {}, describeSource(src))))
       : h('p', { class: 'small neg' }, `Unreachable: ${card.reason}.`),
@@ -2074,7 +2138,12 @@ const guideContext = (): GuideContext => ({
     let shown: string | undefined;
     if (jump.to === 'leaderboard') showTable('all');
     else if (jump.to === 'validation') view = 'validation';
-    else if (jump.to === 'child') {
+    else if (jump.to === 'unit') {
+      unitBack = { view, unit: undefined, scroll: mainScroll() };
+      view = 'units';
+      unitOpen = 'lonqu';
+      shown = 'Lon’qu';
+    } else if (jump.to === 'child') {
       const inRun = childrenInRun();
       const child = guideChild(childOpened, planPrefs.priorities, inRun.map((c) => c.id));
       showTable(child);
@@ -2131,6 +2200,8 @@ function renderParts(parts: readonly Part[]): void {
           ? rosterPage({ engine, roster, setRoster, setDeployment, clearAll: clearRosterState, plan: planControls() })
           : view === 'plan'
           ? planPage(planContext())
+          : view === 'units'
+          ? unitsView(unitsContext())
           : selected === 'all'
           ? leaderboard()
           : childTable(selected)),

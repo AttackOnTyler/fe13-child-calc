@@ -315,7 +315,9 @@ export type SkillSource =
     }
   | { readonly kind: 'parent'; readonly side: 'fixed' | 'variable'; readonly parent: string; readonly fixed: boolean }
   /** A DLC skill book (◇), when DLC is reachable. */
-  | { readonly kind: 'book' };
+  | { readonly kind: 'book' }
+  /** A skill the unit joins with (#101): kept for good, whatever its class. */
+  | { readonly kind: 'start' };
 
 export type RallyCoverage = {
   readonly skill: SkillRef;

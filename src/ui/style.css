@@ -457,3 +457,22 @@ button.gd-deeper-head:hover { background: var(--hover); }
 .rm tr.out td { color: var(--muted); }
 .chip.src.fit { color: var(--pos, #5fc48a); }
 .chip.src.pinned { color: var(--accent, #7fb4ff); }
+
+/* Units view and unit pages (#101) */
+.units, .unit-page { padding: 12px 16px; }
+.unit-grid { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 14px; }
+.unit-item { min-width: 110px; text-align: left; }
+.unit-head { margin-bottom: 8px; }
+.unit-head h2 { margin: 4px 0 2px; }
+.unit-head .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.unit-page .tree { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
+.unit-page .line { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+.unit-page .promos { display: flex; gap: 8px; flex-wrap: wrap; }
+.unit-page .arrow { color: var(--muted); padding-top: 8px; }
+.unit-page .cc { background: var(--panel, transparent); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; min-width: 150px; }
+.unit-page .cc.dlc { opacity: 0.6; }
+.unit-page .cc.join { border-color: var(--accent, #7fb4ff); }
+.unit-page .cc .sk { margin-top: 3px; }
+.unit-page .cc .sk.noinh .skill { opacity: 0.6; }
+.unit-page details { margin: 10px 0; }
+.unit-page summary { cursor: pointer; font-weight: 600; }

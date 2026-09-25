@@ -35,6 +35,8 @@ import { inheritGrowths, inheritModifiers, type ParentProfile } from './inherita
 import { buildSkillView, candidatesFor, firstGenSkills, secondGenSkills, skillRank, skillReach, type SkillViewInput, type SkillViewSettings } from './skills';
 import { BUILD_TEMPLATES } from '../curated/builds';
 import { skillCard } from './skill-card';
+import { unitPage, unitReach, type PageUnitId, type ParentedChild, type UnitPage } from './unit-page';
+import { SPOTPASS_UNITS } from '../game-data/join';
 import { matchBuilds, matchTemplate, shownMatch, templateSummary, templatesFor } from './builds';
 import type { SkillId } from '../game-data/skills';
 import { createScorer } from './scoring';
@@ -136,6 +138,7 @@ export { DEPLOYMENT_ROLES, type ChildDeploymentRole, type DeploymentRole, type D
 export { composition, deploymentRoleOf, quotaContext, quotasFor, type Composition, type QuotaStatus, type RoleCount } from './composition';
 export { ARMY_FIT_PASS_CAP, type RoleAssignment, type RoleSource } from './army-fit';
 export { CHILD_DEPLOYMENT_ROLES, type Derivation, type DerivedRole, type OutOfCast, type RobinGain, type RobinGainSide } from './derive';
+export type { ClassLine, ClassTree, PageUnitId, ParentedChild, PassedClasses, TreeClass, TreeSkill, UnitAsParent, UnitPage } from './unit-page';
 export { CANDIDATE_PRESETS } from '../curated/presets';
 export { STAFF_CLASSES } from '../game-data/classes';
 export {
@@ -228,6 +231,15 @@ export type Engine = {
    * whether it can ever be inherited, synergy and conflict partners with reachability, and the builds that use it.
    */
   skillCard(result: ChildResult, id: SkillId, settings: SkillViewSettings): SkillCard;
+  /** The units with a page (#101): Robin's page comes later; first-gen units in roster order, SpotPass last. */
+  pageUnits(): readonly { readonly id: PageUnitId; readonly name: string; readonly spotPass: boolean }[];
+  /**
+   * A first-gen unit's page (#101): join data, class tree, build coverage over its own reachable skills (the matcher
+   * generalised from a pairing), what it passes as a parent and pair-up bonuses, in the play context.
+   */
+  unitPage(unit: PageUnitId, settings: SkillViewSettings): UnitPage;
+  /** The Skill card for one skill seen from a unit on its own (#101). */
+  unitSkillCard(unit: PageUnitId, id: SkillId, settings: SkillViewSettings): SkillCard;
   /** Whether the roster blocks a pairing (hard: it can no longer happen; soft: it contradicts a pin or a bench), and why. */
   blocking(result: ChildResult, roster: Roster): Blocking;
   /**
@@ -757,6 +769,23 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     return out;
   };
 
+  /** The children a first-gen unit parents, as the fixed or the variable parent, with their pairing keys (#101). */
+  const parentedBy = (unit: PageUnitId): ParentedChild[] => {
+    const found = new Map<ChildId, { as: 'fixed' | 'variable'; keys: string[] }>();
+    for (const r of all) {
+      const { child, variableParent } = r.pairing;
+      const as = CHILD_UNITS[child].fixedParent === unit ? 'fixed' : variableParent.kind === 'unit' && variableParent.id === unit ? 'variable' : undefined;
+      if (!as) continue;
+      const entry = found.get(child) ?? { as, keys: [] };
+      entry.keys.push(r.key);
+      found.set(child, entry);
+    }
+    return CHILD_IDS.flatMap((child) => {
+      const e = found.get(child);
+      return e ? [{ child, name: CHILD_UNITS[child].name, ...e }] : [];
+    });
+  };
+
   /** Derived roles for a roster and settings (#95). */
   const derivationFor = (roster: Roster, settings: PlanSettings): Derivation => {
     const robinSet = roster.run.gender !== null && roster.run.asset !== null && roster.run.flaw !== null;
@@ -959,6 +988,16 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       return filteredCache.get(k);
     },
     skillCard: (r, id, settings) => skillCard(id, reachFor(r, settings), settings.context, builds(r, settings)),
+    pageUnits: () => {
+      const units = (Object.keys(FIRST_GEN_UNITS) as UnitId[]).filter((u): u is PageUnitId => u !== 'maiden');
+      const spot = new Set<string>(SPOTPASS_UNITS);
+      return [...units.filter((u) => !spot.has(u)), ...SPOTPASS_UNITS].map((id) => ({ id, name: FIRST_GEN_UNITS[id].name, spotPass: spot.has(id) }));
+    },
+    unitPage: (unit, settings) => unitPage(unit, settings.context, dlcOf(settings), parentedBy(unit)),
+    unitSkillCard: (unit, id, settings) => {
+      const reach = unitReach(unit, dlcOf(settings));
+      return skillCard(id, reach, settings.context, matchBuilds(reach, settings.context));
+    },
     blocking: (r, roster) => evaluateBlocking(r.pairing, roster, assumptions),
     plan: (roster, settings, options) => solvePlan(planContext(roster, settings), options?.free),
     deriveRoles: derivationFor,
