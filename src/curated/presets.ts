@@ -47,3 +47,14 @@ export const PRESETS = {
 } as const satisfies Record<string, PresetData>;
 
 export type PresetId = keyof typeof PRESETS;
+
+/**
+ * The candidate presets per deployment role (#69): the presets a child's role preset is derived from, in menu order.
+ * Every other preset is a niche preset — never derived, reached only by a preset override. Rallybot has no weights,
+ * so Staff/Rally stands at 0 for every child and is never a best role (#71).
+ */
+export const CANDIDATE_PRESETS = {
+  lead: ['physical-lead', 'magical-lead', 'mixed-lead', 'physical-hard-support', 'magical-hard-support'],
+  battery: ['battery'],
+  staff: ['rallybot'],
+} as const satisfies Record<'lead' | 'battery' | 'staff', readonly PresetId[]>;

@@ -107,6 +107,25 @@ _Avoid_: Buffer, overhead
 The class chosen per row as the one that scores highest under the current preset, role and basis, from the child's final-tier reachable classes.
 _Avoid_: Best class (alone), default class (the child's starting class)
 
+**Candidate preset**:
+A preset a child's role is derived from: Physical, Magical and Mixed lead and Physical and Magical hard support for Lead, Battery for Battery, Rallybot for Staff/Rally.
+_Avoid_: Core preset
+
+**Niche preset**:
+Any preset that isn't a candidate (V/V lead, Crisis/crit, Lancekiller, Armsthrift bruiser, Tank, Nostank, Staffbot). Never derived; a player reaches one only by choosing it.
+_Avoid_: Special preset
+
+**Standing**:
+A child's place in the cast's spread under a preset: its best pairing that can still happen, scored, placed between the weakest and the strongest child's best (0–1). Everyone stands at 0 when the spread is zero.
+_Avoid_: Rank (it keeps gap sizes), percentile
+
+**Role preset**:
+A child's highest-standing candidate preset within one deployment role, ties to menu order.
+
+**Best role**:
+The deployment role whose role preset gives a child its highest standing, ties to menu order. Always say Best role, never role alone.
+_Avoid_: Role (alone), natural role
+
 ### Planning
 
 **Run facts**:

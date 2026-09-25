@@ -41,13 +41,14 @@ import { createScorer } from './scoring';
 import { pairUpSpd } from './pair-up';
 import { contextReachesDlc, defaultTargetBreakpoint } from './speed';
 import { runSelfTest } from './self-test';
-import { EMPTY_ROSTER, evaluateBlocking, type Blocking, type Roster, type RunFacts } from './roster';
+import { EMPTY_ROSTER, evaluateBlocking, rosterUnits, stateOf, type Blocking, type Roster, type RunFacts } from './roster';
 import { PRESETS, type PresetId, type ScoringRole } from '../curated/presets';
 import { PLAN_PRESETS } from '../curated/plan-presets';
 import { DEFAULT_PRIORITY, childLedger, evaluatePlan, savedPairings, solvePlan, type LedgerEntry, type MarriagePlan, type PlanContext, type PlannedChild } from './plan';
 import type { SavedPlan } from './roster';
 import { deploymentRoleOf } from './composition';
 import { suggestRoles, type RoleSuggestion } from './suggest-roles';
+import { deriveRoles, type Derivation } from './derive';
 import type { Quotas } from '../curated/deployment';
 import { RALLY_SKILLS } from '../game-data/skills';
 import { STAFF_CLASSES } from '../game-data/classes';
@@ -134,6 +135,8 @@ export type { PresetId, ScoringRole, Weights } from '../curated/presets';
 export { DEPLOYMENT_ROLES, type DeploymentRole, type DeploymentTag, type QuotaRange, type Quotas } from '../curated/deployment';
 export { composition, deploymentRoleOf, quotaContext, quotasFor, type Composition, type QuotaStatus, type RoleCount } from './composition';
 export { SUGGEST_PASS_CAP, type RoleSuggestion } from './suggest-roles';
+export { CHILD_DEPLOYMENT_ROLES, type Derivation, type DerivedRole, type OutOfCast } from './derive';
+export { CANDIDATE_PRESETS } from '../curated/presets';
 export { STAFF_CLASSES } from '../game-data/classes';
 export {
   DEFAULT_PRIORITY,
@@ -236,6 +239,12 @@ export type Engine = {
    * fixed, broken and on-hold pins dropped and rule-outs never planned. `free` ignores the pins.
    */
   plan(roster: Roster, settings: PlanSettings, options?: { readonly free?: boolean }): MarriagePlan;
+  /**
+   * Derived roles (#95): each child's standing against the cast under every candidate preset, measured on its best
+   * pairing that can still happen, with its role preset per deployment role and its best role. Dead children and
+   * children with no pairing left are out of the cast, and so is Morgan until Robin is set in the run facts.
+   */
+  deriveRoles(roster: Roster, settings: PlanSettings): Derivation;
   /**
    * A saved plan as it was adopted, valued under today's settings: only the run facts apply, not the losses and
    * marriages since, so a diff against today's plan shows what they cost.
@@ -829,6 +838,37 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     planPreset,
     defaultPlanPreset,
     plan: (roster, settings, options) => solvePlan(planContext(roster, settings), options?.free),
+    deriveRoles: (roster, settings) => {
+      const ctx = planContext(roster, settings);
+      const robinSet = roster.run.gender !== null && roster.run.asset !== null && roster.run.flaw !== null;
+      const children = rosterUnits(roster.run).filter((u) => u.kind === 'child').map((u) => u.id as ChildId);
+      const pools = new Map<ChildId, string[]>();
+      const pool = (child: ChildId) => {
+        let found = pools.get(child);
+        if (!found)
+          pools.set(
+            child,
+            (found = ctx
+              .candidates(child)
+              .filter((p) => evaluateBlocking(p, roster, assumptions).status !== 'hard')
+              .map(pairingKey)
+              .filter((k) => byKey.has(k))),
+          );
+        return found;
+      };
+      const scores = new Map<PresetId, Map<string, PairingScore> | undefined>();
+      const scoresOf = (preset: PresetId) => {
+        if (!scores.has(preset)) scores.set(preset, presetScores(preset, settings));
+        return scores.get(preset);
+      };
+      return deriveRoles({
+        children,
+        leftOut: (child) =>
+          stateOf(roster, child) === 'dead' ? 'dead' : CHILD_UNITS[child].fixedParent === 'robin' && !robinSet ? 'needs-robin' : undefined,
+        pool,
+        raw: (preset, key) => scoresOf(preset)?.get(key)?.raw,
+      });
+    },
     evaluatePlan: (saved, run, settings) => evaluatePlan(planContext(savedRoster(run), settings), saved),
     planKeys: (roster) =>
       new Set(roster.savedPlan ? savedPairings(roster, roster.savedPlan).map(pairingKey).filter((k) => byKey.has(k)) : []),

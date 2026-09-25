@@ -335,6 +335,7 @@ button.chip.plan-preset.visit { color: #c59bff; border-color: #6a4f94; }
 .plan-side p { margin: 0 0 6px; }
 .prio { display: grid; grid-template-columns: 1fr auto; gap: 2px 6px; align-items: center; padding: 3px 0; border-bottom: 1px solid var(--line); }
 .prio .ppreset { grid-column: 1 / -1; }
+.prio .derived { grid-column: 1 / -1; }
 .ppreset { display: inline-flex; gap: 4px; align-items: center; }
 .ppreset select { font: inherit; font-size: 11px; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 2px; max-width: 170px; }
 .chip.set { color: var(--accent); border-color: #3a6394; }

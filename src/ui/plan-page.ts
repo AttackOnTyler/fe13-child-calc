@@ -15,6 +15,7 @@ import {
   withSpouse,
   type ChildId,
   type Composition,
+  type Derivation,
   type DeploymentRole,
   type Engine,
   type LeftOut,
@@ -109,6 +110,24 @@ export function compositionStrip(c: Composition): HTMLElement {
 export function roleChip(ctl: ChildPlanControls, id: ChildId): HTMLElement {
   const role = deploymentRoleOf(ctl.engine.planPreset(id, ctl.settings));
   return h('span', { class: `chip role role-${role}`, title: `Deployment role: ${ROLE_UI[role].label} (from its plan preset)` }, ROLE_UI[role].short);
+}
+
+const OUT_OF_CAST = { dead: 'dead', unborn: 'can’t be born', 'needs-robin': 'needs Robin set in Run facts' } as const;
+
+/** The child's derived best role and role preset (#95), read-only: where it stands against the cast. */
+function derivedLine(ctl: ChildPlanControls, d: Derivation, id: ChildId): HTMLElement {
+  const out = d.leftOut.get(id);
+  if (out) return h('span', { class: 'derived muted small' }, `Best role: — (${OUT_OF_CAST[out]})`);
+  const r = d.roles.find((x) => x.child === id)!;
+  const preset = r.rolePreset[r.bestRole];
+  return h(
+    'span',
+    {
+      class: 'derived muted small',
+      title: `Standing ${Math.round(r.roleStanding[r.bestRole] * 100)} of 100 against the cast, on its best pairing that can still happen`,
+    },
+    `Best role: ${ROLE_UI[r.bestRole].label} · ${ctl.presetLabel(preset)}`,
+  );
 }
 
 /** The composition quotas for the play context: min–max per role and the deploy cap. */
@@ -431,6 +450,7 @@ export function presetControl(ctl: ChildPlanControls, id: ChildId, name: string)
 export function planSidebar(ctx: PlanPageContext): HTMLElement {
   const children = rosterUnits(ctx.roster.run).filter((u) => u.kind === 'child');
   const comp = composition(ctx.roster, ctx.engine.plan(ctx.roster, ctx.settings, { free: ctx.free }), ctx.quotas);
+  const derived = ctx.engine.deriveRoles(ctx.roster, ctx.settings);
   return h(
     'section',
     { class: 'plan-side', 'aria-label': 'Child priorities and plan presets' },
@@ -478,6 +498,7 @@ export function planSidebar(ctx: PlanPageContext): HTMLElement {
         'div',
         { class: 'prio' },
         h('span', { class: 'pname' }, u.name, ' ', roleChip(ctx, id)),
+        derivedLine(ctx, derived, id),
         priorityControl(ctx, id, u.name),
         presetControl(ctx, id, u.name),
       );
