@@ -39,6 +39,8 @@ export const GUIDE_TARGETS = [
   'prep-threats',
   'danger-flags',
   'lplus-checklist',
+  'prep-deployment',
+  'prep-loadouts',
   'maps-list',
   'map-data',
   'unit-class-tree',

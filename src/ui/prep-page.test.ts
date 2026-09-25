@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultBack, fighterOf } from './prep-page';
+import { fighterOf } from './prep-page';
 
 const unit = {
   class: 'Great Knight',
@@ -28,8 +28,4 @@ describe('the preparation page’s fighters', () => {
     expect(fighterOf('Nobody', { ...unit, stats: null })).toBeUndefined();
   });
 
-  it('pair a lead with its highest support by default', () => {
-    expect(defaultBack(unit)).toBe('cordelia');
-    expect(defaultBack({ ...unit, supports: [] })).toBeUndefined();
-  });
 });

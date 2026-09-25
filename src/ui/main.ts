@@ -14,6 +14,7 @@ import {
   EMPTY_ROSTER,
   EMPTY_RUN,
   rosterOf,
+  deployRoleOf,
   withRoster,
   type AssumptionId,
   type Blocking,
@@ -165,6 +166,7 @@ let recording: { entry: string; step: number } | undefined;
 let preparing: string | undefined;
 let prepBacks: Partial<Record<RosterUnit, RosterUnit | 'none'>> = {};
 let prepFoe = 0;
+let prepExcluded: ReadonlySet<RosterUnit> = new Set();
 /** The Run view's open map (#109); undefined shows the Maps list. */
 let mapOpen: string | undefined;
 /** A difficulty picked on the Maps view (view state); otherwise it shows the run's, else Normal. */
@@ -2392,6 +2394,18 @@ function renderParts(parts: readonly Part[]): void {
                 prepFoe = i;
                 renderParts(['main']);
               },
+              roleOf: (() => {
+                const roles = engine.roles(roster, planSettings());
+                return (u: RosterUnit) => deployRoleOf(u, roster, roles);
+              })(),
+              excluded: prepExcluded,
+              setExcluded: (u, out) => {
+                const next = new Set(prepExcluded);
+                if (out) next.add(u);
+                else next.delete(u);
+                prepExcluded = next;
+                renderParts(['main']);
+              },
             })
           : view === 'run'
           ? runView({
@@ -2407,6 +2421,8 @@ function renderParts(parts: readonly Part[]): void {
               prepare: (map) => {
                 preparing = map;
                 prepFoe = 0;
+                prepBacks = {};
+                prepExcluded = new Set();
                 renderParts(['main']);
               },
               recording,

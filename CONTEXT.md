@@ -216,6 +216,10 @@ _Avoid_: Prep screen, battle prep
 Something on the next map that threatens a unit: a weapon effective against it, Counter against a melee unit, a boss that doubles it, or a round that can kill it. On Lunatic+ it counts the worst of the pool until the player records the skills seen.
 _Avoid_: Warning (too broad)
 
+**Loadout**:
+The weapons a deployed unit takes into the next map, chosen from its inventory and the convoy by its matchups, then its other items; at most five.
+_Avoid_: Equipment, kit
+
 **Copy-forward**:
 A new entry starts as a copy of the one before, with the map's recruits filled in from join data. Editing a past entry never changes later ones; they're flagged instead.
 _Avoid_: Inherit, carry over

@@ -6,7 +6,7 @@ import { DEFAULT_PRIORITY, type ChildId } from '../engine';
 import type { GuideTarget } from './guide';
 import { BASIS_LABELS, LABELS, ROLE_UI } from './labels';
 
-export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners' | 'robin-preview' | 'front-door-pairings' | 'unit-opinion' | 'map-data' | 'chapter-log' | 'record-results' | 'matchups' | 'threats';
+export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners' | 'robin-preview' | 'front-door-pairings' | 'unit-opinion' | 'map-data' | 'chapter-log' | 'record-results' | 'matchups' | 'threats' | 'deployment';
 
 /**
  * Where an entry's jump goes: the All children leaderboard, a child's table (the one `guideChild` picks, with its Robin
@@ -261,6 +261,20 @@ export const DEEPER: readonly DeeperEntry[] = [
     ],
     jump: { to: 'log', target: 'prepare' },
     terms: [{ term: 'danger flag', def: 'Something on the map that threatens one of your units: an effective weapon, Counter, a boss that doubles it, a round that can kill it.' }],
+  },
+  {
+    id: 'deployment',
+    question: 'Who should I deploy, paired with whom?',
+    answer: [
+      'Deployment and pairs, on the preparation page, fills the map’s deploy count: its forced units first, then each lead (by role: army fit’s for children, the roster’s tag for the rest) with the back that covers the map’s foes best, then Staff/Rally and dancers.',
+      'Coverage counts, for each foe, whether one round kills it and whether the lead survives its worst round, weighted by how many there are and more for the boss.',
+      'Pick another back or drop a unit and everything recomputes: pairs, matchups and loadouts. Loadouts list the weapons that win each unit’s matchups, from its inventory and convoy weapons of a kind it already uses.',
+    ],
+    jump: { to: 'log', target: 'prepare' },
+    terms: [
+      { term: 'loadout', def: 'The weapons a unit takes into the map, from its inventory and the convoy, and its other items.' },
+      { term: 'coverage', def: 'How well a lead and back handle a map’s foes: one-round kills and survived rounds, weighted by count.' },
+    ],
   },
 ];
 
