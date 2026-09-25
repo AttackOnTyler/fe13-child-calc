@@ -16,7 +16,7 @@ for r in data:
         **({'location': r['location']} if r.get('location') else {}),
         'conditions': r['conditions'],
         'recruits': r['recruits'],
-        'forced': r['forced'],
+        'forced': e.get('forced', r['forced']),
         'items': r['items'],
         'shop': r['shop'],
         'eventTiles': r['eventTiles'],

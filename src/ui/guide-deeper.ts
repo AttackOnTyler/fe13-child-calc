@@ -242,13 +242,14 @@ export const DEEPER: readonly DeeperEntry[] = [
     answer: [
       'Prepare, beside the next map, opens its preparation page. Pick a foe (the boss is starred) to see each of your units against it, paired with its back.',
       'Each row uses your latest entry’s stats, the unit’s best weapon from its inventory (forges count), and the back’s pair-up bonus and dual strikes: damage, whether one round kills (with dual strikes landing, too), doubling, the worst round it can take against its HP, and hit and crit both ways.',
+      'Units who join on the map from its start (the Prologue’s four, Chapter 3’s Sumia) are there too, marked “joins”, with their join data; Premonition’s Chrom and Robin use that map’s own setup, marked “this map only”. The map always fields them, in the slots it adds for them. Recruits who come later are listed with when, not placed in the opening lineup.',
       'Dual strikes get past plain Pavise and Aegis but not Pavise+ or Aegis+. On Lunatic+ the table assumes the worst of the map’s random-skill pool.',
       'Weapon ranks aren’t recorded, so no rank bonus is counted. There’s no movement planning: no source publishes terrain or enemy AI.',
     ],
     jump: { to: 'log', target: 'prepare' },
     terms: [
       { term: 'matchup', def: 'A lead and back, with a weapon, against one foe: damage, one-round, doubling, worst round and survival, hit and crit.' },
-      { term: 'preparation page', def: 'The next map’s page for getting ready: its matchups, and more to come.' },
+      { term: 'preparation page', def: 'A map’s page for getting ready: threats, deployment and pairs, loadouts, supplies and matchups, for your army and the units joining on it.' },
     ],
   },
   {
@@ -266,9 +267,9 @@ export const DEEPER: readonly DeeperEntry[] = [
     id: 'deployment',
     question: 'Who should I deploy, paired with whom?',
     answer: [
-      'Deployment and pairs, on the preparation page, fills the map’s deploy count: its forced units first, then each lead (by role: army fit’s for children, the roster’s tag for the rest) with the back that covers the map’s foes best, then Staff/Rally and dancers.',
+      'Deployment and pairs, on the preparation page, fills the map’s deploy count: its forced units first (Chrom, Robin on Chapter 23, and anyone the map fields from its start), then each lead (by role: army fit’s for children, the roster’s tag for the rest) with the back that covers the map’s foes best, then Staff/Rally and dancers. If room is left, whoever covers best of the rest leads, whatever its role, and takes a back.',
       'Coverage counts, for each foe, whether one round kills it and whether the lead survives its worst round, weighted by how many there are and more for the boss.',
-      'Pick another back or drop a unit and everything recomputes: pairs, matchups and loadouts. Loadouts list the weapons that win each unit’s matchups, from its inventory and convoy weapons of a kind it already uses.',
+      'Pick another back, give a unit alone a back to make it a lead, swap a pair with ⇅, or drop a unit that isn’t forced, and everything recomputes: pairs, matchups and loadouts. Loadouts list the weapons that win each unit’s matchups, from its inventory and convoy weapons of a kind it already uses.',
     ],
     jump: { to: 'log', target: 'prepare' },
     terms: [

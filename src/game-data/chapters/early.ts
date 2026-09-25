@@ -14,7 +14,10 @@ export const EARLY_MAPS: readonly ChapterData[] = [
     title: "Invisible Ties",
     location: "Dragon's Table",
     conditions: {"normal": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "2", "enemies": "1"}, "hard": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "2", "enemies": "1"}, "lunatic": {"victory": "Rout the enemy", "defeat": "Chrom or Robin dies", "deploy": "2", "enemies": "1"}},
-    recruits: [],
+    recruits: [
+      {"unit": "Chrom", "class": "Lord", "level": "20", "how": null, "inventory": ["Falchion", "Silver Sword"], "stats": {"hp": "41", "str": "20", "mag": "3", "skl": "17", "spd": "15", "lck": "18", "def": "20", "res": "14", "mov": "5"}},
+      {"unit": "Robin", "class": "Tactician", "level": "20", "how": null, "inventory": ["Thoron", "Steel Sword"], "stats": {"hp": "38 (35 if flaw, 43 if asset)", "str": "16 (15 if flaw, 18 if asset)", "mag": "14 (13 if flaw, 16 if asset)", "skl": "15 (14 if flaw, 17 if asset)", "spd": "13 (12 if flaw, 15 if asset)", "lck": "16 (14 if flaw, 20 if asset)", "def": "15 (14 if flaw, 17 if asset)", "res": "17 (16 if flaw, 19 if asset)", "mov": "5"}},
+    ],
     forced: [],
     items: [],
     shop: null,

@@ -5,14 +5,14 @@
  * entry; everything else on the roster (Run facts, rule-outs, the saved plan, deploy flags) stays on the run.
  */
 import { CHILD_UNITS } from '../game-data/children';
-import { MAPS } from '../game-data/chapters';
+import { MAPS, type ChapterData } from '../game-data/chapters';
 import { JOIN_DATA, basesOn } from '../game-data/join';
 import { STATS, type Gender, type Stat } from '../game-data/stats';
 import { className } from './classes';
 import { robinBases } from './unit-page';
 import { FORGE, forgeProblem, itemByName } from '../game-data/items';
 import { FIRST_GEN_UNITS, type UnitId } from '../game-data/units';
-import { EMPTY_ROSTER, parseRoster, withSpouse, withState, type Roster, type RosterUnit } from './roster';
+import { EMPTY_ROSTER, parseRoster, withSpouse, withState, type Roster, type RosterUnit, type RunFacts } from './roster';
 
 export type SupportLevel = 'C' | 'B' | 'A' | 'S';
 export const SUPPORT_LEVELS: readonly SupportLevel[] = ['C', 'B', 'A', 'S'];
@@ -109,8 +109,30 @@ const UNIT_BY_NAME = new Map<string, RosterUnit>([
   ...(Object.entries(CHILD_UNITS).map(([id, u]) => [u.name as string, id as RosterUnit]) as [string, RosterUnit][]),
 ]);
 
-/** A recruit's first snapshot (#116): a first-gen unit or Robin from its join data, a child from the map's record. */
-export function recruitSnapshot(unit: RosterUnit, run: Run, fromMap?: { readonly class: string; readonly level: string; readonly inventory?: readonly string[] }): UnitSnapshot {
+/** The roster unit chapter data names (`Robin`, `Lon'qu`, `Morgan`…). */
+export const unitNamed = (name: string): RosterUnit | undefined => UNIT_BY_NAME.get(name);
+
+type MapRecruit = ChapterData['recruits'][number];
+
+/** A setup used only on its map (Premonition's Chrom and Robin, #131): fielded there, never joining the army. */
+const mapOnly = (r: MapRecruit) => r.stats !== undefined;
+
+/** A stat of a setup used only on one map, as FEW prints it (`38 (35 if flaw, 43 if asset)`), for the run's Robin. */
+function setupStat(text: string, stat: Stat, run: RunFacts): number {
+  const m = text.match(/^(\d+)(?: \((\d+) if flaw, (\d+) if asset\))?/);
+  if (!m) return 0;
+  return Number(stat === run.asset && m[3] ? m[3] : stat === run.flaw && m[2] ? m[2] : m[1]);
+}
+
+/**
+ * A recruit's first snapshot (#116): a first-gen unit or Robin from its join data, a child from the map's record. A
+ * setup used only on one map (Premonition's Chrom and Robin, #131) is the map's record, stats and all.
+ */
+export function recruitSnapshot(unit: RosterUnit, run: Run, fromMap?: Pick<MapRecruit, 'class' | 'level' | 'inventory' | 'stats'>): UnitSnapshot {
+  if (fromMap?.stats) {
+    const stats = Object.fromEntries(STATS.map((s) => [s, setupStat(fromMap.stats![s], s, run.roster.run)])) as Record<Stat, number>;
+    return { class: fromMap.class, level: Number(fromMap.level) || 1, promoted: false, reclassed: false, exp: 0, stats, skills: [], inventory: startingItems(fromMap), supports: [] };
+  }
   const difficulty = run.roster.run.difficulty === 'normal' ? 'normal' : run.roster.run.difficulty === 'hard' ? 'hard' : run.roster.run.difficulty ? 'lunatic' : 'normal';
   if (unit !== 'robin' && unit in CHILD_UNITS) {
     // A child's stats depend on its parents: record them from the game.
@@ -164,20 +186,59 @@ export function heldProblems(h: HeldItem): string[] {
 
 /**
  * The next entry, for the map played: a copy of the latest snapshot, with the map's recruits the snapshot doesn't have
- * yet filled in (#116). The Robin recruit is skipped until Robin's gender is set.
+ * yet filled in (#116). The Robin recruit is skipped until Robin's gender is set, and a setup used only on the map
+ * (Premonition's, #131) never joins the army.
  */
 export function addEntry(run: Run, map: string, now: number, label?: string): Run {
   const prev = latestEntry(run)?.snapshot ?? EMPTY_SNAPSHOT;
   const units: Partial<Record<RosterUnit, UnitSnapshot>> = { ...prev.units };
-  const data = MAPS.find((m) => m.id === map);
-  for (const r of data?.recruits ?? []) {
-    const unit = UNIT_BY_NAME.get(r.unit);
-    if (!unit || units[unit] || (unit === 'robin' && !run.roster.run.gender)) continue;
-    units[unit] = recruitSnapshot(unit, run, r);
-  }
+  for (const [unit, r] of newRecruits(run, prev, map)) if (!mapOnly(r)) units[unit] = recruitSnapshot(unit, run, r);
   const n = run.entries.reduce((m, e) => Math.max(m, Number(e.id.slice(1)) || 0), 0) + 1;
   const entry: RunEntry = { id: `e${n}`, map, ...(label ? { label } : {}), snapshot: { ...prev, units }, createdAt: now };
   return { ...run, entries: [...run.entries, entry] };
+}
+
+/** A map's recruits the snapshot doesn't have yet, as roster units. The Robin recruit waits for Robin's gender. */
+function newRecruits(run: Run, snap: Snapshot, map: string): [RosterUnit, MapRecruit][] {
+  return (MAPS.find((m) => m.id === map)?.recruits ?? []).flatMap((r): [RosterUnit, MapRecruit][] => {
+    const unit = UNIT_BY_NAME.get(r.unit);
+    return unit && !snap.units[unit] && (unit !== 'robin' || run.roster.run.gender) ? [[unit, r]] : [];
+  });
+}
+
+/** A recruit who comes after the map starts (turn 2 on, a talk, the map's end): listed with when, never in the opening lineup. */
+export type LaterRecruit = { readonly unit: RosterUnit; readonly how: string | null };
+
+export type PrepUnits = {
+  /** The latest entry's living units, then the units on the map from its start. */
+  readonly units: readonly (readonly [RosterUnit, UnitSnapshot])[];
+  /** Recruits on the map from turn 1, who join the army. */
+  readonly joining: readonly RosterUnit[];
+  /** Units fielded with a setup used only on this map (Premonition's), who never join the army. */
+  readonly mapOnly: readonly RosterUnit[];
+  readonly later: readonly LaterRecruit[];
+};
+
+/**
+ * The units a map's preparation page can field (#131): the army from the latest entry, plus the recruits on the map
+ * from turn 1, built as Record results will build them, and any setup used only on this map. Later recruits are listed
+ * apart. Like Record results, the Robin recruit waits for Robin's gender; a unit already in the army or dead is left out.
+ */
+export function prepUnits(run: Run, map: string): PrepUnits {
+  const snap = latestEntry(run)?.snapshot ?? EMPTY_SNAPSHOT;
+  const alive = (u: RosterUnit) => run.roster.states[u] !== 'dead' && snap.states[u] !== 'dead';
+  const units = (Object.entries(snap.units) as [RosterUnit, UnitSnapshot][]).filter(([u]) => alive(u));
+  const joining: RosterUnit[] = [];
+  const onlyHere: RosterUnit[] = [];
+  const later: LaterRecruit[] = [];
+  for (const [unit, r] of newRecruits(run, snap, map)) {
+    if (!alive(unit)) continue;
+    if (mapOnly(r) || /^Automatically from turn 1\b/.test(r.how ?? '')) {
+      units.push([unit, recruitSnapshot(unit, run, r)]);
+      (mapOnly(r) ? onlyHere : joining).push(unit);
+    } else later.push({ unit, how: r.how });
+  }
+  return { units, joining, mapOnly: onlyHere, later };
 }
 
 /** Edits an entry's snapshot. A past entry's edit never reaches later entries: they're flagged instead. */

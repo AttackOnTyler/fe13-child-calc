@@ -1,11 +1,13 @@
 /**
  * Deployment, pairs and loadouts for the next map (#121). Starting from each unit's deployment role (army fit's for
  * children, the roster's tag for first-gen units and Robin), the solver fills the map's deploy count: forced units,
- * then lead + back pairs by how well they cover the map's foes, then Staff/Rally and dancer units. Each deployed unit
- * gets a loadout from its inventory and the convoy. Pure: the caller resolves roles, fighters and foes.
+ * then lead + back pairs by how well they cover the map's foes, then Staff/Rally and dancer units, then whoever is left
+ * while there is room (#133). Each deployed unit gets a loadout from its inventory and the convoy. Pure: the caller
+ * resolves roles, fighters and foes.
  */
 import type { DeploymentRole } from '../curated/deployment';
-import type { HeldItem } from './run';
+import { unitNamed, type HeldItem } from './run';
+import { MAPS } from '../game-data/chapters';
 import { bestWeapon, matchup, type Fighter, type Foe, type SupportLevel } from './solver';
 import { deploymentOf, type DeployableUnit, type Roster, type RosterUnit } from './roster';
 import type { RoleAssignment } from './army-fit';
@@ -29,6 +31,8 @@ export type Deployment = {
   readonly pairs: readonly Pair[];
   /** Deployed but not in a pair (Staff/Rally, dancer, a forced unit left over). */
   readonly solo: readonly RosterUnit[];
+  /** The forced units deployed: the player can't drop them. */
+  readonly forced: readonly RosterUnit[];
 };
 
 /** The deploy count at the map's start: the top of FEW's range (`1–13+1 (Upon …)` → 13, `4+2 (…)` → 4). */
@@ -36,6 +40,20 @@ export function deployMax(text: string): number {
   const m = (text ?? '').match(/(\d+)(?:\s*[–-]\s*(\d+))?/);
   return m ? Number(m[2] ?? m[1]) : 0;
 }
+
+/**
+ * The deploy count with the map's opening recruits (#131): the start count, plus each `+N (Upon X arriving)` that names
+ * a recruit on the map from turn 1 (Chapter 3's Sumia). Opening recruits it doesn't name fill the start count (the
+ * Prologue's four, Chapter 2's Stahl and Vaike).
+ */
+export function deployCount(text: string, opening: readonly string[]): number {
+  let n = deployMax(text);
+  for (const m of (text ?? '').matchAll(/\+(\d+) \(Upon ([^)]*) arriving\)/g)) if (opening.some((name) => m[2]!.includes(name))) n += Number(m[1]);
+  return n;
+}
+
+/** A map's forced units as roster units (#132): Chrom nearly everywhere, Robin on Chapter 23 alone. */
+export const forcedOn = (map: string): RosterUnit[] => (MAPS.find((m) => m.id === map)?.forced ?? []).flatMap((n) => unitNamed(n) ?? []);
 
 /**
  * How well a unit covers the foes, as lead with this back: for each foe, 2 when one round kills it, 1 more when the
@@ -53,8 +71,10 @@ export function coverage(c: DeployCandidate, back: DeployCandidate | undefined, 
 
 /**
  * The suggested deployment: forced units always; then pairs, each lead (lead role, best coverage first) with the
- * battery (or else any unit) that raises its coverage most; then Staff/Rally and dancers; within the deploy count.
- * `pinned` pairs (the player's edits) are kept as given.
+ * battery (or else any unit) that raises its coverage most; then Staff/Rally and dancers; then, while room remains,
+ * the best-covering unit left leads whatever its role (#133); within the deploy count. `pinned` pairs (the player's
+ * edits) are kept as given, but a back an earlier pin already took leaves the later lead alone. A forced unit can't be
+ * `excluded`.
  */
 export function suggestDeployment(input: {
   readonly candidates: readonly DeployCandidate[];
@@ -66,7 +86,7 @@ export function suggestDeployment(input: {
   readonly excluded?: ReadonlySet<RosterUnit>;
 }): Deployment {
   const { foes, pool } = input;
-  const byId = new Map(input.candidates.filter((c) => !input.excluded?.has(c.unit)).map((c) => [c.unit, c]));
+  const byId = new Map(input.candidates.filter((c) => !input.excluded?.has(c.unit) || input.forced.includes(c.unit)).map((c) => [c.unit, c]));
   const deployed: RosterUnit[] = [];
   const room = () => input.max - deployed.length;
   const take = (u: RosterUnit) => {
@@ -84,31 +104,49 @@ export function suggestDeployment(input: {
     take(lead.unit);
     if (back) take(back.unit);
   };
+  /** The slots deploying a unit costs: none once it's deployed. */
+  const slotCost = (c: DeployCandidate) => (deployed.includes(c.unit) ? 0 : 1);
   for (const p of input.pinned ?? []) {
     const lead = byId.get(p.lead);
-    if (lead && !paired.has(p.lead) && room() >= (p.back && !deployed.includes(p.back) ? 2 : 1) - (deployed.includes(p.lead) ? 1 : 0)) addPair(lead, p.back ? byId.get(p.back) : undefined);
+    const back = p.back && !paired.has(p.back) ? byId.get(p.back) : undefined;
+    if (lead && !paired.has(p.lead) && room() >= slotCost(lead) + (back ? slotCost(back) : 0)) addPair(lead, back);
   }
   const solo = (c: DeployCandidate) => coverage(c, undefined, null, foes, pool);
+  /**
+   * Deploys `lead` in a pair, with the battery (or else any unit but a dancer) that raises its coverage most among
+   * those the room allows: one already deployed alone costs no slot.
+   */
+  const pairUp = (lead: DeployCandidate) => {
+    const backs = [...byId.values()].filter((c) => c.unit !== lead.unit && !paired.has(c.unit) && c.role !== 'dancer');
+    const pool2 = backs.some((c) => c.role === 'battery') ? backs.filter((c) => c.role === 'battery') : backs;
+    let best: { back: DeployCandidate | undefined; score: number } = { back: undefined, score: solo(lead) };
+    for (const back of pool2) {
+      if (room() < slotCost(lead) + slotCost(back)) continue;
+      const score = coverage(lead, back, rankOf(lead, back.unit), foes, pool);
+      if (score > best.score || (!best.back && score === best.score)) best = { back, score };
+    }
+    addPair(lead, best.back);
+  };
   const leads = [...byId.values()].filter((c) => c.role === 'lead' && !paired.has(c.unit)).sort((a, b) => solo(b) - solo(a));
   // Forced units lead first, so Chrom (every story map) is paired rather than left alone.
   leads.sort((a, b) => Number(input.forced.includes(b.unit)) - Number(input.forced.includes(a.unit)));
   for (const lead of leads) {
-    const needs = (deployed.includes(lead.unit) ? 0 : 1) + 1;
-    if (room() < needs - 1) break;
-    const backs = [...byId.values()].filter((c) => c.unit !== lead.unit && !paired.has(c.unit) && c.role !== 'dancer');
-    const pool2 = backs.some((c) => c.role === 'battery') ? backs.filter((c) => c.role === 'battery') : backs;
-    let best: { back: DeployCandidate | undefined; score: number } = { back: undefined, score: solo(lead) };
-    if (room() >= needs) {
-      for (const back of pool2) {
-        const score = coverage(lead, back, rankOf(lead, back.unit), foes, pool);
-        if (score > best.score || (!best.back && score === best.score)) best = { back, score };
-      }
-    }
-    addPair(lead, best.back);
+    if (room() < slotCost(lead)) break;
+    // A lead another lead took as its back is already in a pair.
+    if (!paired.has(lead.unit)) pairUp(lead);
   }
   const extras = [...byId.values()].filter((c) => !deployed.includes(c.unit) && (c.role === 'staff' || c.role === 'dancer'));
   for (const c of extras) if (room() > 0) take(c.unit);
-  return { max: input.max, deployed: deployed.slice(0, Math.max(input.max, input.forced.length)), pairs, solo: deployed.filter((u) => !paired.has(u)) };
+  // Room left with too few leads (#133): the best-covering unit left leads, whatever its role, and takes a back if it can.
+  const waiting = [...byId.values()].filter((c) => !deployed.includes(c.unit)).sort((a, b) => solo(b) - solo(a));
+  for (const c of waiting) if (room() > 0 && !deployed.includes(c.unit)) pairUp(c);
+  return {
+    max: input.max,
+    deployed: deployed.slice(0, Math.max(input.max, input.forced.length)),
+    pairs,
+    solo: deployed.filter((u) => !paired.has(u)),
+    forced: input.forced.filter((u) => byId.has(u)),
+  };
 }
 
 export type Loadout = { readonly unit: RosterUnit; readonly items: readonly { readonly item: string; readonly from: 'inventory' | 'convoy'; readonly foes: number }[] };

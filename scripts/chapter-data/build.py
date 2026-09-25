@@ -24,6 +24,8 @@ ALL = {m['id']: m for m in json.load(open(os.path.join(HERE, 'all-maps.json'), e
 # Paralogue unlocks (SF gaiden chapters; research/chapter-data §2): after these chapters.
 PARALOGUE_AFTER = {1: 3, 2: 5, 3: 7, 4: 9, **{p: 13 for p in range(5, 17)}, 17: 18, **{p: 25 for p in range(18, 24)}}
 GRIND = {'the-golden-gaffe', 'exponential-growth', 'infinite-regalia'}
+# Forced units the page's ChapChars leaves out (#132): Apotheosis's own strategy says "Chrom must be fielded as usual".
+FORCED = {'apotheosis': ['Chrom']}
 
 
 def order(m):
@@ -72,7 +74,7 @@ for i in ids:
     m = ALL[i]
     f = fetch(f"https://fireemblemwiki.org/w/index.php?oldid={m['oldid']}&action=raw", os.path.join(cache, f"{i}.wiki"))
     maps.append({'id': i, 'file': f, 'page': m['page'], 'oldid': m['oldid']})
-    extra[i] = {'kind': m['kind'], 'order': order(m), 'label': m['label'], 'unlocks': unlocks(m), **({'grind': True} if i in GRIND else {})}
+    extra[i] = {'kind': m['kind'], 'order': order(m), 'label': m['label'], 'unlocks': unlocks(m), **({'grind': True} if i in GRIND else {}), **({'forced': FORCED[i]} if i in FORCED else {})}
 
 parsed = os.path.join(cache, f'{group}.json')
 subprocess.run([sys.executable, os.path.join(HERE, 'fewparse.py'), json.dumps(maps), parsed], check=True)
