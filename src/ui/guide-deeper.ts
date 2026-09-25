@@ -6,7 +6,7 @@ import { DEFAULT_PRIORITY, type ChildId } from '../engine';
 import type { GuideTarget } from './guide';
 import { BASIS_LABELS, LABELS, ROLE_UI } from './labels';
 
-export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners' | 'robin-preview' | 'front-door-pairings';
+export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners' | 'robin-preview' | 'front-door-pairings' | 'unit-opinion';
 
 /**
  * Where an entry's jump goes: the All children leaderboard, a child's table (the one `guideChild` picks, with its Robin
@@ -179,6 +179,21 @@ export const DEEPER: readonly DeeperEntry[] = [
     ],
     jump: { to: 'door', target: 'front-door-pairings' },
     terms: [{ term: 'front door', def: 'A child’s overview page: what stays the same across pairings, its best parents, and the Robin line.' }],
+  },
+  {
+    id: 'unit-opinion',
+    question: 'What do the experts say about this unit?',
+    answer: [
+      'A unit page and a front door show each named source’s opinion in its own block (“Ellery says…”), never merged: role, tier, classes, a 5-skill loadout, partners, a note and the video it comes from.',
+      'The loadout is matched against what the unit can reach, like a build template (“4/5”), so you can see whether you can follow it.',
+      '♥ and ⚠ mark the partners and parents a source recommends or warns against, on Partners and on the front door, even outside the top 5.',
+      'Ellery’s opinions come from AI summaries of his videos, checked against the game data first; wrong cells were left out and named in the note.',
+    ],
+    jump: { to: 'unit', target: 'unit-opinion' },
+    terms: [
+      { term: 'unit opinion', def: 'What a named source says about one unit in a play context. Shown beside the app’s scores, never scored.' },
+      { term: 'provenance', def: 'How a source reached the app and how far to trust it. Hover the source link.' },
+    ],
   },
 ];
 

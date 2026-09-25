@@ -27,6 +27,7 @@ export const GUIDE_TARGETS = [
   'unit-partners',
   'robin-preview',
   'front-door-pairings',
+  'unit-opinion',
   'no-robin',
   'robin-first',
   'robin-gain',

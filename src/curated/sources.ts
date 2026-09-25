@@ -1,7 +1,8 @@
 /**
  * The source registry (#99): every named source curated data cites. Build templates, synergies and conflicts cite
  * these IDs instead of free text. IDs and details are the builds research's (research/builds-and-synergies §Sources,
- * #6); S1, S2 and S8 are the mechanics references it cites alongside the opinion sources.
+ * #6); S1, S2 and S8 are the mechanics references it cites alongside the opinion sources. S10 (Ellery) joined for unit
+ * opinion (#105).
  */
 
 /** What kind of source it is. */
@@ -19,7 +20,7 @@ export type SourceEntry = {
   readonly provenance: string;
 };
 
-export const SOURCE_IDS = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9'] as const;
+export const SOURCE_IDS = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10'] as const;
 export type SourceId = (typeof SOURCE_IDS)[number];
 
 const RESEARCH = 'Read for the builds research (#6)';
@@ -96,6 +97,15 @@ export const SOURCES: Readonly<Record<SourceId, SourceEntry>> = {
     kind: 'blog',
     link: 'https://no-contest-creations.com/fire-emblem-awakening-resetless-lunatic-endgame/',
     provenance: `${RESEARCH}; blog playthrough.`,
+  },
+  S10: {
+    id: 'S10',
+    name: 'Ellery',
+    title: 'Ellery, Fire Emblem Awakening videos (Lunatic+ guides, unit spotlights and chapter streams)',
+    kind: 'video creator',
+    link: 'https://www.youtube.com/results?search_query=Ellery+Fire+Emblem+Awakening',
+    provenance:
+      'AI summaries of the videos (a NotebookLM notebook, research/ellery-roles), each claim checked against the game data before entry (research/ellery-claims, #78); cells found wrong are left out.',
   },
 };
 

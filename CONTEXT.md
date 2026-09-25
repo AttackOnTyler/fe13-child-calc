@@ -50,7 +50,7 @@ Cited facts about the game: units, classes, skills, and the inheritance rules th
 _Avoid_: Static data, constants
 
 **Curated data**:
-Opinions layered over game data: skill ranks, builds and synergies, which may differ by context. Game data never depends on it.
+Opinions layered over game data: skill ranks, builds, synergies and unit opinion, which may differ by context, each citing the source registry. Game data never depends on it.
 _Avoid_: Tier list, meta
 
 ### Builds
@@ -86,6 +86,10 @@ _Avoid_: Draft Robin, temporary Robin
 **Front door**:
 A child's overview page: what stays the same in every pairing (fixed parent, start class, default class set, personal growths, fixed passes), its best parents ranked as the pairing table ranks them, and whether it can marry Robin. It leads into the pairing table.
 _Avoid_: Child page, child summary
+
+**Unit opinion**:
+What a named source says about one unit (first-gen, child or Robin) in a play context: role and tier in its words, classes, a 5-skill loadout, partners recommended and warned, a note and a citation. Curated from the source registry; shown beside the app's scores, never scored or merged across sources.
+_Avoid_: Rating, review, expert score
 
 **Join data**:
 When and how a first-gen unit or Robin joins (chapter or paralogue, recruit condition), its join class and level, and its base stats per difficulty.

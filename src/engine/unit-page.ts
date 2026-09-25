@@ -112,10 +112,18 @@ export type PartnerRow = {
   readonly via?: { readonly label: string; readonly from: 'plan' | 'best' };
   /** A Robin row: the Robin its best child uses (the run's, else the best), so Robin's page can preview it. */
   readonly robin?: RobinRef;
+  /** What a source says about this marriage (#105). */
+  readonly opinion?: OpinionMark;
 };
 
 /** A top pairing on a child's front door: a parent group through its best pairing, as the pairing table ranks it. */
-export type FrontDoorTile = { readonly label: string; readonly key: string; readonly score: number | undefined };
+export type FrontDoorTile = {
+  readonly label: string;
+  readonly key: string;
+  readonly score: number | undefined;
+  /** What a source says about this parent (#105). */
+  readonly mark?: OpinionMark;
+};
 
 /**
  * A child's front door (#104): what stays the same across pairings, its top 5 parent groups by the current scoring
@@ -134,6 +142,8 @@ export type FrontDoor = {
   /** What the fixed parent passes in every pairing: its fixed skill (Chrom's Aether) and its classes. */
   readonly fixedPasses: { readonly skill: SkillRef | undefined; readonly classes: readonly string[] };
   readonly top: readonly FrontDoorTile[];
+  /** Parents a source recommends or warns against that aren't in the top 5 (#105). */
+  readonly marked: readonly FrontDoorTile[];
   /** Every parent group it has in this run. */
   readonly parentCount: number;
   /** Morgan until Robin is set: no pairings shown. */
@@ -143,6 +153,25 @@ export type FrontDoor = {
     | { readonly kind: 'robins-child' }
     | { readonly kind: 'no' }
     | { readonly kind: 'yes'; readonly morgan: FrontDoorTile | undefined; readonly robinSet: boolean };
+};
+
+/** A source's verdict on a partner or parent (#105). */
+export type OpinionMark = { readonly kind: 'recommended' | 'warned'; readonly reason: string | undefined; readonly source: string };
+
+/** One source's opinion of a unit in a play context, as a page shows it (#105). */
+export type OpinionBlock = {
+  readonly source: { readonly id: string; readonly name: string; readonly link: string; readonly provenance: string };
+  readonly context: 'main-story' | 'apotheosis' | 'all';
+  readonly role: string;
+  readonly tier: string | undefined;
+  readonly classes: readonly string[];
+  /** The loadout matched against the unit's own reach, like a build template (“4/5”); none for a child's front door. */
+  readonly loadout: { readonly slots: readonly BuildMatch['slots'][number][]; readonly filled: number } | undefined;
+  readonly recommended: readonly { readonly name: string; readonly reason: string | undefined }[];
+  readonly warned: readonly { readonly name: string; readonly reason: string | undefined }[];
+  readonly robinPick: string | undefined;
+  readonly note: string | undefined;
+  readonly citation: string;
 };
 
 export const chapterLabel = (c: JoinChapter): string =>

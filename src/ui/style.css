@@ -493,3 +493,10 @@ button.gd-deeper-head:hover { background: var(--hover); }
 .front-door .tile { min-width: 120px; text-align: left; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
 .front-door .tile.first { border-color: var(--accent, #7fb4ff); }
 .front-door .tile .big { font-size: 20px; font-weight: 600; }
+
+/* Unit opinion (#105) */
+.opinions .opinion { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; }
+.opinions h4 { margin: 0 0 4px; }
+.opinions .chip.small, .chip.op { margin-left: 4px; font-size: 11px; }
+.chip.op.recommended { color: var(--pos, #5fc48a); }
+.chip.op.warned { color: var(--neg, #f0a35e); }

@@ -2,7 +2,7 @@
  * The Units view (#101): the list of units, and a unit's page. A header with its identity chips, the class tree, then
  * build coverage (open), "As a parent" and pair-up folding away below it. It follows the global play context.
  */
-import type { BuildMatch, ChildId, FrontDoor, PresetId, Engine, PageSubject, PageUnitId, PartnerRow, PlanSettings, RobinRef, Roster, SkillRef, SkillViewSettings, TreeClass, UnitPage } from '../engine';
+import type { BuildMatch, ChildId, FrontDoor, OpinionBlock, OpinionMark, PresetId, Engine, PageSubject, PageUnitId, PartnerRow, PlanSettings, RobinRef, Roster, SkillRef, SkillViewSettings, TreeClass, UnitPage } from '../engine';
 import { MOD_STATS, STATS, STAT_LABELS, type Gender, type Stat } from '../game-data/stats';
 import { h } from './dom';
 import { guide } from './guide';
@@ -77,6 +77,7 @@ function frontDoorView(ctx: UnitsContext, d: FrontDoor): HTMLElement[] {
       { class: `tile${i === 0 ? ' first' : ''}`, title: `Open ${d.name}’s table on this pairing`, onclick: () => ctx.openPairing(d.child, t.key) },
       h('div', { class: 'big num' }, String(t.score ?? '—')),
       h('div', {}, t.label),
+      markChip(t.mark),
     );
   const robinLine = (): HTMLElement => {
     const r = d.robin;
@@ -132,15 +133,66 @@ function frontDoorView(ctx: UnitsContext, d: FrontDoor): HTMLElement[] {
             h('h3', {}, 'Best parents'),
             h('p', { class: 'muted small' }, 'By the Scoring sidebar’s preset, ranked as the pairing table ranks them.'),
             h('div', { class: 'tiles' }, ...d.top.map(tile)),
+            d.marked.length ? h('div', { class: 'small' }, h('b', {}, 'Also marked by a source: '), h('div', { class: 'tiles' }, ...d.marked.map((t) => tile(t, -1)))) : null,
             h('button', { class: 'ghost small', onclick: () => ctx.openTable(d.child) }, `All ${d.parentCount} parents in the pairing table →`),
           ),
       robinLine(),
+      opinions(ctx, ctx.engine.unitOpinions(d.child, ctx.settings)),
       h('details', { open: true }, h('summary', {}, 'The same in every pairing'), facts),
     ),
   ];
 }
 
 const chip = (text: string, title?: string, cls = '') => h('span', { class: `chip${cls ? ` ${cls}` : ''}`, title }, text);
+
+const CONTEXT_NAMES = { 'main-story': 'Main story', apotheosis: 'Apotheosis', all: 'Every context' } as const;
+
+/** A source's mark on a partner or parent: ♥ recommended, ⚠ warned, with the reason. */
+const markChip = (m: OpinionMark | undefined) =>
+  m ? h('span', { class: `chip small op ${m.kind}`, title: `${m.source} ${m.kind === 'recommended' ? 'recommends' : 'warns against'} this${m.reason ? `: ${m.reason}` : ''}` }, `${m.kind === 'recommended' ? '♥' : '⚠'} ${m.source}`) : null;
+
+/**
+ * Each source's opinion, side by side and never merged (#105): “Ellery says…” with role, tier, classes, the loadout
+ * matched against the unit (“4/5”), partners, note, citation and provenance.
+ */
+function opinions(ctx: UnitsContext, blocks: readonly OpinionBlock[]): HTMLElement | null {
+  if (!blocks.length) return null;
+  const names = (list: OpinionBlock['recommended']) => list.map((p) => (p.reason ? `${p.name} (${p.reason})` : p.name)).join(', ');
+  return h(
+    'section',
+    { ...guide('unit-opinion'), class: 'opinions' },
+    ...blocks.map((o) =>
+      h(
+        'div',
+        { class: 'opinion' },
+        h('h4', {}, `${o.source.name} says…`, h('span', { class: 'muted small' }, ` ${CONTEXT_NAMES[o.context]}`)),
+        h('div', { class: 'small' }, h('b', {}, o.role), o.tier ? h('span', { class: 'chip small' }, o.tier) : null),
+        o.classes.length ? h('div', { class: 'small' }, 'Classes: ', o.classes.join(', ')) : null,
+        o.robinPick ? h('div', { class: 'small' }, 'Robin: ', h('b', {}, o.robinPick)) : null,
+        o.loadout
+          ? h(
+              'div',
+              { class: 'small' },
+              `Loadout ${o.loadout.filled}/${o.loadout.slots.length}: `,
+              ...o.loadout.slots.flatMap((sl, i) => [
+                i ? ' ' : '',
+                sl.skill ? ctx.skillChip(sl.skill, [], sl.skill.name) : h('span', { class: 'chip small neg', title: sl.reason ?? '' }, `✕ ${sl.options.map((x) => x.name).join(' / ')}`),
+              ]),
+            )
+          : null,
+        o.recommended.length ? h('div', { class: 'small' }, '♥ ', names(o.recommended)) : null,
+        o.warned.length ? h('div', { class: 'small' }, '⚠ ', names(o.warned)) : null,
+        o.note ? h('div', { class: 'small muted' }, o.note) : null,
+        h(
+          'div',
+          { class: 'small muted' },
+          `“${o.citation}” · `,
+          h('a', { href: o.source.link, target: '_blank', rel: 'noopener', title: o.source.provenance }, `${o.source.id} ${o.source.name}`),
+        ),
+      ),
+    ),
+  );
+}
 
 function header(ctx: UnitsContext, p: UnitPage): HTMLElement {
   const j = p.join;
@@ -249,7 +301,7 @@ function partners(ctx: UnitsContext, p: UnitPage): HTMLElement {
       h(
         'div',
         { class: `partner${r.blocked && !r.married ? ' blocked' : ''}`, title: r.blocked && !r.married ? `Blocked: ${r.blocked}` : undefined },
-        h('div', {}, partnerName(r), ...PARTNER_MARKS(r).map((m) => h('span', { class: 'chip small' }, m)), ' ', h('button', { class: 'mini', title: 'Open the Plan', onclick: ctx.openPlan }, 'Plan →')),
+        h('div', {}, partnerName(r), markChip(r.opinion), ...PARTNER_MARKS(r).map((m) => h('span', { class: 'chip small' }, m)), ' ', h('button', { class: 'mini', title: 'Open the Plan', onclick: ctx.openPlan }, 'Plan →')),
         h(
           'div',
           { class: 'small' },
@@ -276,7 +328,12 @@ function unitPageView(ctx: UnitsContext, p: UnitPage): HTMLElement[] {
       { class: 'scroll unit-page' },
       header(ctx, p),
       p.robin ? robinPreview(ctx, p.robin) : null,
-      h('div', { class: 'unit-cols' }, h('div', { class: 'unit-main' }, ...mainColumn(ctx, p)), h('aside', { class: 'unit-side' }, partners(ctx, p))),
+      h(
+        'div',
+        { class: 'unit-cols' },
+        h('div', { class: 'unit-main' }, ...mainColumn(ctx, p)),
+        h('aside', { class: 'unit-side' }, opinions(ctx, ctx.engine.unitOpinions(p.robin ?? (p.unit as PageUnitId), ctx.settings)), partners(ctx, p)),
+      ),
     ),
   ];
 }

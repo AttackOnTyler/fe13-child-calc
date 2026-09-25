@@ -7,8 +7,8 @@ import { createEngine } from './index';
 const known = new Set<string>(Object.keys(SOURCES));
 
 describe('the source registry', () => {
-  it('holds S1–S9, each with a name, kind, link and provenance under its own ID', () => {
-    expect([...SOURCE_IDS]).toEqual(['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9']);
+  it('holds S1–S10, each with a name, kind, link and provenance under its own ID', () => {
+    expect([...SOURCE_IDS]).toEqual(['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10']);
     for (const id of SOURCE_IDS) {
       const s = SOURCES[id];
       expect(s.id).toBe(id);

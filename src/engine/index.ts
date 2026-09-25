@@ -34,8 +34,11 @@ import {
 import { inheritGrowths, inheritModifiers, type ParentProfile } from './inheritance';
 import { buildSkillView, candidatesFor, firstGenSkills, ref, secondGenSkills, skillRank, skillReach, type SkillViewInput, type SkillViewSettings } from './skills';
 import { BUILD_TEMPLATES } from '../curated/builds';
+import { UNIT_OPINIONS, type OpinionUnit } from '../curated/unit-opinion';
+import { SOURCES } from '../curated/sources';
+import type { BuildTemplate } from '../curated/builds';
 import { skillCard } from './skill-card';
-import { unitPage, unitReach, type FrontDoor, type FrontDoorTile, type PageSubject, type PageUnitId, type ParentedChild, type PartnerChild, type PartnerRow, type UnitPage } from './unit-page';
+import { unitPage, unitReach, type FrontDoor, type FrontDoorTile, type OpinionBlock, type OpinionMark, type PageSubject, type PageUnitId, type ParentedChild, type PartnerChild, type PartnerRow, type UnitPage } from './unit-page';
 import { SPOTPASS_UNITS } from '../game-data/join';
 import { matchBuilds, matchTemplate, shownMatch, templateSummary, templatesFor } from './builds';
 import type { SkillId } from '../game-data/skills';
@@ -138,7 +141,7 @@ export { DEPLOYMENT_ROLES, type ChildDeploymentRole, type DeploymentRole, type D
 export { composition, deploymentRoleOf, quotaContext, quotasFor, type Composition, type QuotaStatus, type RoleCount } from './composition';
 export { ARMY_FIT_PASS_CAP, type RoleAssignment, type RoleSource } from './army-fit';
 export { CHILD_DEPLOYMENT_ROLES, type Derivation, type DerivedRole, type OutOfCast, type RobinGain, type RobinGainSide } from './derive';
-export type { ClassLine, ClassTree, FrontDoor, FrontDoorTile, PageSubject, PageUnitId, ParentedChild, PartnerChild, PartnerRow, PassedClasses, TreeClass, TreeSkill, UnitAsParent, UnitPage } from './unit-page';
+export type { ClassLine, ClassTree, FrontDoor, FrontDoorTile, OpinionBlock, OpinionMark, PageSubject, PageUnitId, ParentedChild, PartnerChild, PartnerRow, PassedClasses, TreeClass, TreeSkill, UnitAsParent, UnitPage } from './unit-page';
 export { CANDIDATE_PRESETS } from '../curated/presets';
 export { STAFF_CLASSES } from '../game-data/classes';
 export {
@@ -251,6 +254,11 @@ export type Engine = {
    * ranking) and the Robin line. Morgan shows no pairings until Robin is set in the run facts.
    */
   frontDoor(child: ChildId, roster: Roster, settings: ScoreSettings, context: PlayContext): FrontDoor;
+  /**
+   * Each source's opinion of a unit, a child or Robin in the play context (#105), side by side: role, tier, classes,
+   * the loadout matched against the unit's own reach (not for a child), partners recommended and warned, note, citation.
+   */
+  unitOpinions(subject: PageSubject | ChildId, settings: SkillViewSettings): readonly OpinionBlock[];
   /** Whether the roster blocks a pairing (hard: it can no longer happen; soft: it contradicts a pin or a bench), and why. */
   blocking(result: ChildResult, roster: Roster): Blocking;
   /**
@@ -922,9 +930,55 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         blocked,
         ...(via ? { via } : {}),
         ...(robin ? { robin } : {}),
+        ...(() => {
+          const mark = markOf(typeof subject === 'string' ? subject : 'robin', partner, s.context);
+          return mark ? { opinion: mark } : {};
+        })(),
       };
     });
     return rows.sort((a, b) => (b.best ?? -1) - (a.best ?? -1));
+  };
+
+  /** The opinions of a unit in a play context: `all` shows every one; otherwise that context's and the unsplit ones. */
+  const opinionsOf = (unit: OpinionUnit, context: PlayContext) =>
+    UNIT_OPINIONS.filter((o) => o.unit === unit && (context === 'all' || o.context === 'all' || o.context === context));
+  const opinionUnitOf = (subject: PageSubject | ChildId): OpinionUnit => (typeof subject === 'string' ? subject : 'robin');
+  /** A source's mark on a partner of this unit, from its opinions in the context. */
+  const markOf = (unit: OpinionUnit, partner: string, context: PlayContext): OpinionMark | undefined => {
+    for (const o of opinionsOf(unit, context))
+      for (const [kind, list] of [['recommended', o.recommended], ['warned', o.warned]] as const) {
+        const p = list.find((x) => x.unit === partner);
+        if (p) return { kind, reason: p.reason, source: SOURCES[o.source].name };
+      }
+    return undefined;
+  };
+  const opinionBlocks = (subject: PageSubject | ChildId, settings: SkillViewSettings): OpinionBlock[] => {
+    const unit = opinionUnitOf(subject);
+    const isChild = typeof subject === 'string' && subject in CHILD_UNITS;
+    const gender: Gender = typeof subject !== 'string' ? subject.gender : isChild ? (CHILD_UNITS[subject as ChildId].gender as Gender) : (FIRST_GEN_UNITS[subject as UnitId].gender as Gender);
+    const nameOf = (u: OpinionUnit) => (u === 'robin' ? 'Robin' : unitName(u));
+    return opinionsOf(unit, settings.context).map((o): OpinionBlock => {
+      let loadout: OpinionBlock['loadout'];
+      if (!isChild && o.loadout.length) {
+        const template = { id: `${o.source}-${unit}`, name: `${SOURCES[o.source].name}’s loadout`, role: 'physical-lead', contexts: [], slots: o.loadout, sources: [o.source], confidence: 'Single' } as unknown as BuildTemplate;
+        const m = matchTemplate(template, unitReach(subject as PageSubject, dlcOf(settings)), settings.context);
+        loadout = { slots: m.slots, filled: m.tier };
+      }
+      const src = SOURCES[o.source];
+      return {
+        source: { id: src.id, name: src.name, link: src.link, provenance: src.provenance },
+        context: o.context,
+        role: o.role,
+        tier: o.tier,
+        classes: o.classes.map((c) => className(c, gender)),
+        loadout,
+        recommended: o.recommended.map((p) => ({ name: nameOf(p.unit), reason: p.reason })),
+        warned: o.warned.map((p) => ({ name: nameOf(p.unit), reason: p.reason })),
+        robinPick: o.robinPick && `+${STAT_LABELS[o.robinPick.asset]} −${STAT_LABELS[o.robinPick.flaw]}`,
+        note: o.note,
+        citation: o.citation.timestamp ? `${o.citation.title} (${o.citation.timestamp})` : o.citation.title,
+      };
+    });
   };
 
   /** A child's front door (#104). */
@@ -937,7 +991,8 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     const groups = narrowAll(groupsByChild.get(child) ?? [], { run: roster.run });
     const tiles = groups.map((g): FrontDoorTile & { raw: number } => {
       const best = g.results.reduce((a, r) => (rawOf(r.key) > rawOf(a.key) ? r : a));
-      return { label: g.label, key: best.key, score: scores.get(best.key)?.score, raw: rawOf(best.key) };
+      const mark = markOf(child, g.key, context);
+      return { label: g.label, key: best.key, score: scores.get(best.key)?.score, raw: rawOf(best.key), ...(mark ? { mark } : {}) };
     });
     tiles.sort((a, b) => b.raw - a.raw);
     const starts = new Set((byChild.get(child) ?? []).map((r) => r.startClass));
@@ -972,6 +1027,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         classes: (passes ?? []).map((id) => className(id, gender)),
       },
       top: waits ? [] : tiles.slice(0, 5).map(({ raw: _, ...t }) => t),
+      marked: waits ? [] : tiles.slice(5).filter((t) => t.mark).map(({ raw: _, ...t }) => t),
       parentCount: waits ? 0 : groups.length,
       waitsOnRobin: waits,
       robin: isMorgan ? { kind: 'robins-child' } : canMarryRobin ? { kind: 'yes', morgan, robinSet } : { kind: 'no' },
@@ -1188,6 +1244,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     unitPage: (unit, settings) => unitPage(unit, settings.context, dlcOf(settings), parentedBy(unit)),
     partners: partnersFor,
     frontDoor: frontDoorFor,
+    unitOpinions: opinionBlocks,
     unitSkillCard: (unit, id, settings) => {
       const reach = unitReach(unit, dlcOf(settings));
       return skillCard(id, reach, settings.context, matchBuilds(reach, settings.context));
