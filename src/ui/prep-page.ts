@@ -4,7 +4,11 @@
  * difficulty. Lunatic+ assumes the pool's worst case.
  */
 import type { ChapterDifficulty, Engine, Fighter, Foe, Matchup, RosterUnit, Run, Snapshot, UnitSnapshot } from '../engine';
-import { REINFORCEMENT_RULE, bestWeapon, dangerFlags, deployMax, foeKey, foesOf, itemByName, latestEntry, suggestDeployment, suggestLoadout, unitName, withSeenSkills, type DeployCandidate, type DeploymentRole } from '../engine';
+import { REINFORCEMENT_RULE, bestWeapon, dangerFlags, deployMax, foeKey, foesOf, itemByName, latestEntry, openStock, promotionAdvice, sealAvailability, sealsHeld, suggestDeployment, suggestLoadout, supplyList, unitName, withSeenSkills, type DeployCandidate, type DeploymentRole } from '../engine';
+import { CHILD_UNITS } from '../game-data/children';
+import { ROBIN_GROWTHS } from '../game-data/robin';
+import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
+import { FIRST_GEN_UNITS, type UnitId } from '../game-data/units';
 import { h } from './dom';
 import { guide } from './guide';
 
@@ -228,6 +232,93 @@ function loadouts(
   );
 }
 
+/** The supply list (#122): buys and forges that close gaps, within the gold held and what the open armories sell. */
+function supply(ctx: PrepContext, d: ReturnType<typeof suggestDeployment>, byUnit: ReadonlyMap<RosterUnit, DeployCandidate>, snap: Snapshot | undefined, foes: readonly Foe[], pool: (f: Foe) => readonly string[]): HTMLElement {
+  const cleared = new Set(ctx.run.entries.map((e) => e.map));
+  const stock = openStock(cleared);
+  const gold = snap?.gold ?? 0;
+  const leads = d.pairs.flatMap((p) => {
+    const c = byUnit.get(p.lead);
+    return c ? [{ c, back: p.back ? byUnit.get(p.back)?.fighter : undefined, support: p.support }] : [];
+  });
+  const list = supplyList({ leads, foes, pool, stock: stock.armory, forge: stock.forge, gold });
+  const spent = list.reduce((a, s) => a + s.cost, 0);
+  return h(
+    'details',
+    { ...guide('prep-supply') },
+    h('summary', {}, `Supply list (${spent}G of ${gold}G)`),
+    h('p', { class: 'muted small' }, snap?.gold === null || snap?.gold === undefined ? 'Record your gold in the chapter log to get a supply list.' : 'What to buy or forge so more foes fall in one round, cheapest per foe first, within your gold and what the open armories sell. Merchants are random, so their stock isn’t counted.'),
+    list.length
+      ? h(
+          'table',
+          { class: 'grid small' },
+          h('thead', {}, h('tr', {}, ...['For', 'Do', 'Cost', 'Foes it wins'].map((t) => h('th', {}, t)))),
+          h(
+            'tbody',
+            {},
+            ...list.map((s) =>
+              h(
+                'tr',
+                {},
+                h('td', {}, s.unit),
+                h('td', {}, s.action === 'buy' ? `Buy ${s.item}${s.where ? ` (${s.where})` : ''}` : `Forge ${s.item} to +${s.forge!.mt} Mt`),
+                h('td', { class: 'num' }, `${s.cost}G`),
+                h('td', { class: 'num' }, String(s.closes)),
+              ),
+            ),
+          ),
+        )
+      : h('p', { class: 'muted small' }, gold ? 'Nothing affordable here closes a gap.' : ''),
+  );
+}
+
+/** Seals and promotions (#122): when seals can be bought, how many are held, and promote now or later. */
+function seals(ctx: PrepContext, d: ReturnType<typeof suggestDeployment>, byUnit: ReadonlyMap<RosterUnit, DeployCandidate>, snap: Snapshot | undefined, foes: readonly Foe[], pool: (f: Foe) => readonly string[], gender: Run['roster']['run']['gender']): HTMLElement {
+  const cleared = new Set(ctx.run.entries.map((e) => e.map));
+  const avail = sealAvailability(cleared);
+  const held = sealsHeld([...(snap?.convoy ?? []), ...Object.values(snap?.units ?? {}).flatMap((u) => u?.inventory ?? [])]);
+  const growthsOf = (u: RosterUnit): Readonly<Record<Stat, number>> | undefined =>
+    u === 'robin' ? ROBIN_GROWTHS : u in CHILD_UNITS ? CHILD_UNITS[u as keyof typeof CHILD_UNITS].growths : (FIRST_GEN_UNITS[u as UnitId]?.growths as Record<Stat, number> | undefined);
+  const genderOf = (u: RosterUnit) => (u === 'robin' ? (gender ?? 'M') : u in CHILD_UNITS ? CHILD_UNITS[u as keyof typeof CHILD_UNITS].gender : FIRST_GEN_UNITS[u as UnitId].gender);
+  const advice = d.deployed.flatMap((u) => {
+    const c = byUnit.get(u);
+    const s = snap?.units[u];
+    if (!c || !s) return [];
+    const growths = growthsOf(u);
+    const a = promotionAdvice({ c, level: s.level, promoted: s.promoted, gender: genderOf(u) as 'M' | 'F', personalGrowths: growths && 'hp' in growths ? growths : undefined, foes, pool, seals: avail, held: held.master });
+    return a ? [a] : [];
+  });
+  return h(
+    'details',
+    { ...guide('prep-seals') },
+    h('summary', {}, 'Seals and promotions'),
+    h('p', { class: 'small' }, `${avail.note} Held: ${held.master} Master, ${held.second} Second.`),
+    advice.length
+      ? h(
+          'table',
+          { class: 'grid small' },
+          h('thead', {}, h('tr', {}, ...['Unit', 'Promote to', 'When', 'Why', 'Expected at 20, then promoted'].map((t) => h('th', {}, t)))),
+          h(
+            'tbody',
+            {},
+            ...advice.map((a) =>
+              h(
+                'tr',
+                {},
+                h('td', {}, a.unit),
+                h('td', {}, a.to),
+                h('td', { class: a.advice === 'now' ? 'pos' : '' }, a.advice === 'now' ? 'Now' : a.advice === 'later' ? 'Later' : 'Not yet'),
+                h('td', {}, a.why),
+                h('td', { class: 'muted', title: 'Expected: average growths, not the unit’s real stats' }, a.expected ? `expected: ${STATS.map((s) => `${STAT_LABELS[s]} ${a.expected![s]}`).join(' · ')}` : '—'),
+              ),
+            ),
+          ),
+        )
+      : h('p', { class: 'muted small' }, 'No deployed unit is in a base class.'),
+    h('p', { class: 'muted small' }, 'Expected stats use average growths (the unit’s personal growths plus its class’s): a guide to “now or later”, not its real stats.'),
+  );
+}
+
 export function prepPage(ctx: PrepContext): HTMLElement[] {
   const { engine, run } = ctx;
   const m = engine.maps().find((x) => x.id === ctx.map)!;
@@ -311,6 +402,8 @@ export function prepPage(ctx: PrepContext): HTMLElement[] {
       lplus ? checklist(ctx, foes, pool, seen) : null,
       deploymentSection(ctx, deployment, byUnit, units, gender),
       loadouts(deployment, byUnit, snap, foes, poolFor, gender),
+      supply(ctx, deployment, byUnit, snap, foes, poolFor),
+      seals(ctx, deployment, byUnit, snap, foes, poolFor, gender),
       h('h3', {}, 'Matchups'),
       h(
         'div',

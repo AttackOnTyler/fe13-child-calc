@@ -41,6 +41,8 @@ export const GUIDE_TARGETS = [
   'lplus-checklist',
   'prep-deployment',
   'prep-loadouts',
+  'prep-supply',
+  'prep-seals',
   'maps-list',
   'map-data',
   'unit-class-tree',

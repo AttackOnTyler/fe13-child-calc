@@ -6,7 +6,7 @@ import { DEFAULT_PRIORITY, type ChildId } from '../engine';
 import type { GuideTarget } from './guide';
 import { BASIS_LABELS, LABELS, ROLE_UI } from './labels';
 
-export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners' | 'robin-preview' | 'front-door-pairings' | 'unit-opinion' | 'map-data' | 'chapter-log' | 'record-results' | 'matchups' | 'threats' | 'deployment';
+export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners' | 'robin-preview' | 'front-door-pairings' | 'unit-opinion' | 'map-data' | 'chapter-log' | 'record-results' | 'matchups' | 'threats' | 'deployment' | 'supply';
 
 /**
  * Where an entry's jump goes: the All children leaderboard, a child's table (the one `guideChild` picks, with its Robin
@@ -274,6 +274,20 @@ export const DEEPER: readonly DeeperEntry[] = [
     terms: [
       { term: 'loadout', def: 'The weapons a unit takes into the map, from its inventory and the convoy, and its other items.' },
       { term: 'coverage', def: 'How well a lead and back handle a map’s foes: one-round kills and survived rounds, weighted by count.' },
+    ],
+  },
+  {
+    id: 'supply',
+    question: 'What should I buy, forge or promote before this map?',
+    answer: [
+      'The supply list suggests a buy or a forge for each deployed lead that turns foes it can’t one-round into one-round kills, cheapest per foe first, within the gold you recorded and only from armories you’ve opened. Merchants are random, so they aren’t counted.',
+      'Seals and promotions says where seals come from now (Master Seals in the Port Ferox armory after Chapter 12, Second Seals at the Mila Tree after Chapter 16; before that only random merchants), how many you hold, and for each base-class unit at level 10+ whether promoting now wins more of this map’s matchups.',
+      'The level-20 stats it shows are expected, from average growths: a guide to “now or later”, not your unit’s real stats.',
+    ],
+    jump: { to: 'log', target: 'prepare' },
+    terms: [
+      { term: 'supply list', def: 'Buys and forges that close the map’s gaps, priced against your gold and limited to open armories.' },
+      { term: 'expected stats', def: 'Stats projected from average growths; used only for “promote now or later”.' },
     ],
   },
 ];

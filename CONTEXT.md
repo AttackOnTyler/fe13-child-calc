@@ -220,6 +220,14 @@ _Avoid_: Warning (too broad)
 The weapons a deployed unit takes into the next map, chosen from its inventory and the convoy by its matchups, then its other items; at most five.
 _Avoid_: Equipment, kit
 
+**Supply list**:
+Buys and forges that turn foes a deployed lead can't one-round into one-round kills, cheapest per foe first, within the gold recorded and from armories the run has opened. Random merchants aren't counted.
+_Avoid_: Shopping list, shop advice
+
+**Expected stats**:
+Stats projected from average growths (personal plus class), labelled as expected and used only to judge promoting now or later. Everything else uses recorded stats.
+_Avoid_: Projected stats, averages (alone)
+
 **Copy-forward**:
 A new entry starts as a copy of the one before, with the map's recruits filled in from join data. Editing a past entry never changes later ones; they're flagged instead.
 _Avoid_: Inherit, carry over
