@@ -438,11 +438,9 @@ const OVERRIDE_ONLY: readonly PresetId[] = ['staffbot'];
  * A child's preset override: "derived (X)" — its role preset, where army fit may have moved it — or any preset the
  * user pins, candidates by role and niche presets last; ↺ returns it to derived.
  */
-export function presetControl(ctl: ChildPlanControls, id: ChildId, name: string): HTMLElement {
+export function presetControl(ctl: ChildPlanControls, id: ChildId, name: string, fallback: PresetId): HTMLElement {
   const { engine, settings } = ctl;
   const own = settings.overrides[id];
-  const derived = engine.roles(ctl.roster, { ...settings, overrides: {} }).get(id);
-  const fallback = derived?.preset ?? settings.preset;
   const candidates = new Set<PresetId>(CHILD_DEPLOYMENT_ROLES.flatMap((r) => CANDIDATE_PRESETS[r]));
   const opt = (p: PresetId) => h('option', { value: p, selected: p === own }, ctl.presetLabel(p));
   return h(
@@ -504,6 +502,9 @@ function roleMatrix(ctx: PlanPageContext): HTMLElement {
   const derivation = engine.deriveRoles(roster, settings);
   const derived = new Map(derivation.roles.map((r) => [r.child, r]));
   const roles = engine.roles(roster, settings);
+  // What each child would get without preset overrides: the "derived (X)" option. Asked once, not per row, as the
+  // engine caches one settings at a time.
+  const unpinned = engine.roles(roster, { ...settings, overrides: {} });
   const qualified = engine.staffQualified(roster, settings);
   const children = rosterUnits(roster.run).filter((u) => u.kind === 'child');
   const comp = composition(roster, engine.plan(roster, settings, { free: ctx.free }), ctx.quotas, settings.noRobin);
@@ -609,8 +610,8 @@ function roleMatrix(ctx: PlanPageContext): HTMLElement {
             {},
             h('td', {}, u.name),
             ...CHILD_DEPLOYMENT_ROLES.map((r) => cell(id, r)),
-            h('td', {}, h('b', {}, ctx.presetLabel(engine.planPreset(id, roster, settings))), ' ', sourceChip(a)),
-            h('td', {}, presetControl(ctx, id, u.name)),
+            h('td', {}, h('b', {}, ctx.presetLabel(a?.preset ?? settings.overrides[id] ?? settings.preset)), ' ', sourceChip(a)),
+            h('td', {}, presetControl(ctx, id, u.name, unpinned.get(id)?.preset ?? settings.preset)),
             gainCell(id),
           );
         }),

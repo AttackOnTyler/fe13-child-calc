@@ -14,7 +14,6 @@ import { CANDIDATE_PRESETS, type PresetId } from '../curated/presets';
 
 export const CHILD_DEPLOYMENT_ROLES: readonly ChildDeploymentRole[] = ['lead', 'battery', 'staff'];
 
-/** Why a child isn't in the cast. */
 /** One side of a Robin gain: a child's best pairing and its score. */
 export type RobinGainSide = { readonly key: string; readonly parent: string; readonly score: number };
 
@@ -28,6 +27,7 @@ export type RobinGain = {
   readonly gain: number;
 };
 
+/** Why a child isn't in the cast. */
 export type OutOfCast = 'dead' | 'unborn' | 'needs-robin' | 'no-robin';
 
 export type DerivedRole = {
