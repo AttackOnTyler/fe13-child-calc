@@ -868,7 +868,12 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       const lead = derivation.roles.find((d) => d.child === child)?.rolePreset.lead ?? s.preset;
       return presetScores(planned, s) ? planned : lead;
     };
-    const partners: RosterUnit[] = typeof subject === 'string' ? partnerIds(subject) : [...ROBIN_SUPPORTS[subject.gender]];
+    const unitGender = typeof subject === 'string' ? (FIRST_GEN_UNITS[subject].gender as Gender) : undefined;
+    // Once the run sets Robin's gender, a unit of that gender can't marry Robin.
+    const partners: RosterUnit[] =
+      typeof subject === 'string'
+        ? partnerIds(subject).filter((p) => p !== 'robin' || !roster.run.gender || roster.run.gender === opposite(unitGender!))
+        : [...ROBIN_SUPPORTS[subject.gender]];
     const rows = partners.map((partner): PartnerRow => {
       const children: PartnerChild[] = [];
       let blocked: string | undefined;
@@ -903,19 +908,34 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
           via = { label: `${CHILD_UNITS[c].name} ← ${parentName(brought.pairing.variableParent)}`, from: brought.from };
         }
       } else
-        for (const child of CHILD_IDS) {
+      {
+        const pools = CHILD_IDS.map((child) => {
           const pool =
             typeof subject === 'string'
               ? narrowAll(groupsByChild.get(child) ?? [], { run: roster.run }).flatMap((g) => g.results)
               : (groupsByChild.get(child) ?? []).flatMap((g) => g.results).filter((r) => sameRobin(r.pairing, subject));
-          add(
+          return [
             child,
             pool.filter((r) => {
               const [a, b] = parentsOf(r.pairing);
               return (a === self && b === partner) || (a === partner && b === self);
             }),
-          );
+          ] as const;
+        });
+        // A Robin row is one marriage, so one Robin: with Robin open, the one whose best child scores highest.
+        let chosen: RobinRef | undefined;
+        if (partner === 'robin') {
+          let top = -Infinity;
+          for (const [child, pool] of pools) {
+            const scores = presetScores(presetOf(child), s);
+            for (const r of pool) {
+              const score = scores?.get(r.key)?.score ?? -1;
+              if (score > top) [top, chosen] = [score, robinRefOf(r.pairing)];
+            }
+          }
         }
+        for (const [child, pool] of pools) add(child, chosen ? pool.filter((r) => sameRobin(r.pairing, chosen)) : pool);
+      }
       const spouse = roster.spouses[self];
       const defined = children.map((c) => c.score).filter((x): x is number => x !== undefined);
       const gender = typeof subject === 'string' ? (FIRST_GEN_UNITS[subject].gender as Gender) : subject.gender;

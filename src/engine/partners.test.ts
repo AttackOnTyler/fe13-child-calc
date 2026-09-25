@@ -58,7 +58,7 @@ describe('a unit’s Partners', () => {
   });
 
   it('gives a SpotPass unit Robin only', () => {
-    expect(engine.partners('walhart', roster, settings).map((r) => r.partner)).toEqual(['robin']);
+    expect(engine.partners('walhart', withRun(EMPTY_ROSTER, { gender: 'F' }), settings).map((r) => r.partner)).toEqual(['robin']);
   });
 });
 
@@ -93,5 +93,19 @@ describe('Robin’s page', () => {
     const row = engine.partners(mag, planned, settings).find((r) => r.partner === 'lucina')!;
     expect(row.via).toEqual({ label: 'Lucina ← Olivia', from: 'plan' });
     expect(row.children[0]!.key).toContain('lucina<olivia');
+  });
+});
+
+describe('review fixes (#107)', () => {
+  it('scores a Robin row on one Robin when Robin is open', () => {
+    const robin = engine.partners('sumia', EMPTY_ROSTER, settings).find((r) => r.partner === 'robin')!;
+    const afs = new Set(robin.children.map((c) => c.key.match(/robin:(\w+\/\w+)/)![1]));
+    expect(afs.size).toBe(1);
+    expect(`${robin.robin!.asset}/${robin.robin!.flaw}`).toBe([...afs][0]);
+  });
+
+  it('drops the Robin row once the run’s Robin is the unit’s own gender', () => {
+    expect(engine.partners('lonqu', withRun(EMPTY_ROSTER, { gender: 'M' }), settings).some((r) => r.partner === 'robin')).toBe(false);
+    expect(engine.partners('lonqu', withRun(EMPTY_ROSTER, { gender: 'F' }), settings).some((r) => r.partner === 'robin')).toBe(true);
   });
 });

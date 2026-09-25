@@ -343,12 +343,14 @@ function parentLink(pairing: Pairing, label: string): HTMLElement {
 
 /** Opens a unit's page, remembering where its back link returns. */
 /** The Robin Robin's page shows: the run facts, with anything they leave open taken from the preview. */
-const pageRobin = (): RobinRef => ({
-  kind: 'robin',
-  gender: roster.run.gender ?? robinPreview.gender,
-  asset: roster.run.asset ?? robinPreview.asset,
-  flaw: roster.run.flaw ?? (roster.run.asset && roster.run.asset === robinPreview.flaw ? robinPreview.asset : robinPreview.flaw),
-});
+const pageRobin = (): RobinRef => {
+  const other = (s: Stat): Stat => (s === 'hp' ? 'str' : 'hp');
+  let asset = roster.run.asset ?? robinPreview.asset;
+  if (asset === roster.run.flaw) asset = other(asset);
+  let flaw = roster.run.flaw ?? robinPreview.flaw;
+  if (flaw === asset) flaw = roster.run.flaw ? flaw : other(asset);
+  return { kind: 'robin', gender: roster.run.gender ?? robinPreview.gender, asset, flaw };
+};
 /** The open child, when the Units view shows a front door. */
 const doorOpen = (): ChildId | undefined => (unitOpen && unitOpen in CHILD_NAMES ? (unitOpen as ChildId) : undefined);
 const pageSubject = (): PageSubject | undefined => (unitOpen === 'robin' ? pageRobin() : doorOpen() ? undefined : (unitOpen as PageUnitId | undefined));
@@ -378,7 +380,7 @@ const unitsContext = (): UnitsContext => ({
   preview:
     unitOpen === 'robin' && !(roster.run.gender && roster.run.asset && roster.run.flaw)
       ? {
-          open: { gender: !roster.run.gender, asset: !roster.run.asset },
+          open: { gender: !roster.run.gender, asset: !roster.run.asset, flaw: !roster.run.flaw },
           set: (r) => {
             robinPreview = r;
             renderParts(['main', 'panel']);
@@ -1679,12 +1681,22 @@ function capsTitle(): string {
 /** The inspected skill and the open drawer's pairing, when the card belongs to that drawer. */
 /** The inspected skill on the open unit page (#101). */
 const unitCardTarget = () => (view === 'units' && pageSubject() && inspected?.line === `unit:${unitOpen}` ? { id: inspected.id, unit: pageSubject()! } : undefined);
+/** The inspected skill on a child's front door: seen from its best pairing. */
+const doorCardTarget = () => {
+  const child = view === 'units' ? doorOpen() : undefined;
+  if (!child || inspected?.line !== `unit:${child}`) return undefined;
+  const key = engine.frontDoor(child, roster, scoreSettings(prefs), prefs.context).top[0]?.key;
+  const result = engine.pairings(child).find((r) => r.key === key) ?? engine.pairings(child)[0]!;
+  return { id: inspected.id, result, title: `${CHILD_NAMES[child]}’s best pairing` };
+};
 const cardTarget = () => (inspected && drawerPairing?.line === inspected.line ? { id: inspected.id, ...drawerPairing } : undefined);
 
 /** The inspected skill's card, when its drawer is the open one. */
 function currentCard(): { card: SkillCard; title: string } | undefined {
   const u = unitCardTarget();
   if (u) return { card: engine.unitSkillCard(u.unit, u.id, skillSettings()), title: engine.unitPage(u.unit, skillSettings()).name };
+  const d = doorCardTarget();
+  if (d) return { card: engine.skillCard(d.result, d.id, skillSettings()), title: d.title };
   const t = cardTarget();
   return t && { card: engine.skillCard(t.result, t.id, skillSettings()), title: t.title };
 }
@@ -1693,6 +1705,8 @@ function currentCard(): { card: SkillCard; title: string } | undefined {
 const cardKey = (): string => {
   const u = unitCardTarget();
   if (u) return `${u.id}|unit:${JSON.stringify(u.unit)}|${skillSettings().context}|${skillSettings().dlc}`;
+  const d = doorCardTarget();
+  if (d) return `${d.id}|door:${d.result.key}|${skillSettings().context}|${skillSettings().dlc}`;
   const t = cardTarget();
   if (!t) return '';
   const { context, dlc } = skillSettings();

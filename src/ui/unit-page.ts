@@ -21,7 +21,7 @@ export type UnitsContext = {
   /** Opens a child's full pairing table. */
   readonly openTable: (child: ChildId) => void;
   /** Robin's preview (#103): what the run facts leave open, chosen here and never written to them. */
-  readonly preview: { readonly open: { readonly gender: boolean; readonly asset: boolean }; readonly set: (ref: RobinRef) => void } | undefined;
+  readonly preview: { readonly open: { readonly gender: boolean; readonly asset: boolean; readonly flaw: boolean }; readonly set: (ref: RobinRef) => void } | undefined;
   /** Back to the view the unit page was opened from, with its scroll. */
   readonly back: () => void;
   readonly backLabel: string;
@@ -367,7 +367,7 @@ function robinPreview(ctx: UnitsContext, r: RobinRef): HTMLElement {
       { class: 'row' },
       select('Gender', r.gender, [['M', 'Male'], ['F', 'Female']], (g) => pv.set({ ...r, gender: g as Gender }), pv.open.gender),
       select('Asset', r.asset, stats, (a) => pv.set({ ...r, asset: a as Stat, flaw: r.flaw === a ? (a === 'hp' ? 'str' : 'hp') : r.flaw }), pv.open.asset),
-      select('Flaw', r.flaw, stats.filter(([s]) => s !== r.asset), (f) => pv.set({ ...r, flaw: f as Stat }), pv.open.asset),
+      select('Flaw', r.flaw, stats.filter(([s]) => s !== r.asset), (f) => pv.set({ ...r, flaw: f as Stat }), pv.open.flaw),
     ),
   );
 }
