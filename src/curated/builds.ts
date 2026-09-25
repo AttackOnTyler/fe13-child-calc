@@ -3,9 +3,8 @@
  * game data; edited in code only (#10). Each slot is one skill, or an ordered preference group (first = preferred).
  *
  * Seeded from the builds research catalog B01–B23 (research/builds-and-synergies, #6). Its context tags map as
- * A = Apotheosis, L = Main story, G = Apotheosis + Main story (#10). Source IDs are the research's:
- * S3 soly's Apotheosis guide, S4 guedesbrawl's Skill FAQ, S5 TV Tropes, S6 Thenewguy34, S7 GameFAQs Q&A,
- * S9 No Contest Creations.
+ * A = Apotheosis, L = Main story, G = Apotheosis + Main story (#10). Sources cite the source registry
+ * (sources.ts, #99).
  *
  * Full route is seeded with every A, L and G template, pending the user's curation from their own play (#10 seeds it
  * with the templates whose DLC skills come from non-grind xenologues; which xenologue gives which DLC skill is unchecked).
@@ -18,6 +17,7 @@
  */
 import type { SkillId } from '../game-data/skills';
 import type { PresetId } from './presets';
+import type { SourceId } from './sources';
 
 /** The play contexts a template suits; All shows every template. */
 export type BuildContext = 'apotheosis' | 'main-story' | 'full-route';
@@ -35,7 +35,8 @@ export type BuildTemplate = {
   readonly role: PresetId;
   readonly contexts: readonly BuildContext[];
   readonly slots: readonly [BuildSlot, BuildSlot, BuildSlot, BuildSlot, BuildSlot];
-  readonly source: string;
+  /** The source registry entries it rests on (#99). */
+  readonly sources: readonly SourceId[];
   readonly confidence: Confidence;
 };
 
@@ -52,7 +53,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'physical-lead',
     contexts: G,
     slots: [['galeforce'], ['bowfaire'], ['luna'], ['aether', 'astra'], ['speed-plus-2', 'defender', 'anathema']],
-    source: 'S3, S4',
+    sources: ['S3', 'S4'],
     confidence: 'Multi',
   },
   {
@@ -61,7 +62,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'magical-lead',
     contexts: G,
     slots: [['galeforce'], ['tomefaire'], ['luna'], ['astra', 'aether'], ['magic-plus-2', 'defender']],
-    source: 'S3',
+    sources: ['S3'],
     confidence: 'Single',
   },
   {
@@ -70,7 +71,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'physical-lead',
     contexts: A,
     slots: [['galeforce'], ['bowfaire'], ['vengeance'], ['anathema'], ['speed-plus-2']],
-    source: 'S3',
+    sources: ['S3'],
     confidence: 'Single',
   },
   {
@@ -79,7 +80,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'physical-lead',
     contexts: A,
     slots: [['galeforce'], FAIRES, ['luna', 'vengeance'], ['aggressor'], ['limit-breaker']],
-    source: 'S3',
+    sources: ['S3'],
     confidence: 'Single',
   },
   {
@@ -88,7 +89,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'physical-lead',
     contexts: A,
     slots: [['galeforce'], ['aether'], ['luna'], ['dual-strike-plus'], ['limit-breaker']],
-    source: 'S3',
+    sources: ['S3'],
     confidence: 'Single',
   },
   {
@@ -97,7 +98,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'physical-hard-support',
     contexts: A,
     slots: [['axefaire'], ['strength-plus-2'], ['hit-rate-plus-20'], ['prescience'], ['even-rhythm', 'tomebreaker', 'axebreaker', 'swordbreaker', 'lancebreaker']],
-    source: 'S3',
+    sources: ['S3'],
     confidence: 'Single',
   },
   {
@@ -106,7 +107,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'physical-hard-support',
     contexts: A,
     slots: [['axefaire'], ['aggressor'], ['limit-breaker'], ['hit-rate-plus-20'], ['prescience']],
-    source: 'S3',
+    sources: ['S3'],
     confidence: 'Single',
   },
   {
@@ -115,7 +116,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'magical-hard-support',
     contexts: A,
     slots: [['tomefaire'], ['magic-plus-2'], ['anathema'], ['dual-support-plus'], ['tomebreaker']],
-    source: 'S3',
+    sources: ['S3'],
     confidence: 'Single',
   },
   {
@@ -130,7 +131,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
       ['dual-support-plus'],
       ['lancebreaker', 'swordbreaker', 'axebreaker', 'bowbreaker', 'tomebreaker', 'anathema', 'hex', 'solidarity', 'charm'],
     ],
-    source: 'S4',
+    sources: ['S4'],
     confidence: 'Single',
   },
   {
@@ -139,7 +140,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'vv-lead',
     contexts: G,
     slots: [['vantage'], ['vengeance'], ['tomefaire'], ['galeforce'], ['hit-rate-plus-20']],
-    source: 'S3, S4, S5, S7',
+    sources: ['S3', 'S4', 'S5', 'S7'],
     confidence: 'Wide',
   },
   {
@@ -148,7 +149,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'crisis-crit',
     contexts: G,
     slots: [['vantage'], ['vengeance', 'astra'], ['wrath'], ['focus', 'gamble', 'anathema'], ['galeforce', 'miracle', 'limit-breaker']],
-    source: 'S3, S4, S5',
+    sources: ['S3', 'S4', 'S5'],
     confidence: 'Wide',
   },
   {
@@ -157,7 +158,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'nostank',
     contexts: L,
     slots: [['vengeance'], ['armsthrift'], ['lifetaker'], ['galeforce'], ['limit-breaker']],
-    source: 'S4, S5',
+    sources: ['S4', 'S5'],
     confidence: 'Multi',
   },
   {
@@ -166,7 +167,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'tank',
     contexts: G,
     slots: [['pavise'], ['aegis'], ['renewal', 'lifetaker'], ['luna', 'lancebreaker', 'swordbreaker', 'axebreaker'], ['limit-breaker']],
-    source: 'S4, S5, S6, S7',
+    sources: ['S4', 'S5', 'S6', 'S7'],
     confidence: 'Wide',
   },
   {
@@ -175,7 +176,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'armsthrift-bruiser',
     contexts: G,
     slots: [['galeforce'], ['armsthrift'], ['sol'], ['bowfaire', 'swordfaire', 'axefaire', 'lancefaire', 'axebreaker'], ['limit-breaker', 'patience']],
-    source: 'S7, S9',
+    sources: ['S7', 'S9'],
     confidence: 'Multi',
   },
   {
@@ -184,7 +185,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'vv-lead',
     contexts: L,
     slots: [['galeforce'], ['counter'], ['vantage'], ['vengeance'], ['limit-breaker']],
-    source: 'S5, S7',
+    sources: ['S5', 'S7'],
     confidence: 'Multi',
   },
   {
@@ -193,7 +194,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'lancekiller',
     contexts: A,
     slots: [['lancebreaker'], ['avoid-plus-10'], ['galeforce'], ['vengeance'], ['anathema']],
-    source: 'S3',
+    sources: ['S3'],
     confidence: 'Single',
   },
   {
@@ -202,7 +203,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'physical-lead',
     contexts: G,
     slots: [['galeforce'], ['bowfaire'], ['luna'], ['astra'], ['rightful-king']],
-    source: 'S3, S5, S6',
+    sources: ['S3', 'S5', 'S6'],
     confidence: 'Multi',
   },
   {
@@ -211,7 +212,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'physical-lead',
     contexts: A,
     slots: [['bowfaire'], ['aether'], ['luna'], ['rightful-king'], ['dual-strike-plus']],
-    source: 'S3',
+    sources: ['S3'],
     confidence: 'Single',
   },
   {
@@ -220,7 +221,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'physical-lead',
     contexts: A,
     slots: [['limit-breaker'], ['galeforce'], ['bowfaire'], ['vengeance'], ['all-stats-plus-2']],
-    source: 'S3',
+    sources: ['S3'],
     confidence: 'Single',
   },
   {
@@ -229,7 +230,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'rallybot',
     contexts: G,
     slots: [['rally-strength'], ['rally-skill'], ['rally-luck'], ['rally-defence'], ['rally-resistance']],
-    source: 'S3, S4',
+    sources: ['S3', 'S4'],
     confidence: 'Multi',
   },
   {
@@ -238,7 +239,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'rallybot',
     contexts: G,
     slots: [['rally-magic'], ['rally-speed'], ['rally-movement'], ['rally-spectrum'], ['rally-heart']],
-    source: 'S3, S4',
+    sources: ['S3', 'S4'],
     confidence: 'Multi',
   },
   {
@@ -247,7 +248,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'rallybot',
     contexts: A,
     slots: [['rally-spectrum'], ['rally-heart'], ['rally-speed'], ['rally-skill'], ['rally-magic', 'rally-strength']],
-    source: 'S3',
+    sources: ['S3'],
     confidence: 'Single',
   },
   {
@@ -256,7 +257,7 @@ export const BUILD_TEMPLATES: readonly BuildTemplate[] = [
     role: 'staffbot',
     contexts: A,
     slots: [['tomefaire', 'lancefaire'], ['acrobat', 'healtouch'], ['movement-plus-1'], ['magic-plus-2'], ['all-stats-plus-2', 'hex', 'charm', 'anathema']],
-    source: 'S3',
+    sources: ['S3'],
     confidence: 'Single',
   },
 ];

@@ -4,6 +4,7 @@ import type { Gender, Growths, Modifiers, Stat } from '../game-data/stats';
 import type { UnitId } from '../game-data/units';
 import type { SkillId } from '../game-data/skills';
 import type { Citation } from '../game-data/citations';
+import type { SourceRef } from '../curated/sources';
 import type { AssumptionId } from './assumptions';
 import type { PresetData, PresetId, ScoringRole, Weights } from '../curated/presets';
 import type { BuildContext, Confidence } from '../curated/builds';
@@ -366,8 +367,8 @@ export type BuildTemplateSummary = {
   /** That preset's name, e.g. `Physical lead`. */
   readonly presetName: string;
   readonly contexts: readonly BuildContext[];
-  /** The research sources it rests on, e.g. `S3, S4`. */
-  readonly source: string;
+  /** The source registry entries it rests on (#99). */
+  readonly sources: readonly SourceRef[];
   readonly confidence: Confidence;
 };
 
@@ -408,6 +409,8 @@ export type SkillCardEdge = {
   readonly reachable: boolean;
   /** The edge's one-line reason. */
   readonly note: string;
+  /** The source registry entries it rests on (#99). */
+  readonly sources: readonly SourceRef[];
   /** Why the partner is out of reach. */
   readonly reason: string | undefined;
   /** Both skills hang on one parent's single pick (e.g. `Sumia`), so the pairing can't have both. */

@@ -98,7 +98,7 @@ describe('the template lint', () => {
     role: 'physical-lead',
     contexts: ['apotheosis'],
     slots,
-    source: 'test',
+    sources: ['S3'],
     confidence: 'Single',
   });
 

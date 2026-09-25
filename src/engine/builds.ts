@@ -8,6 +8,7 @@
 import { BUILD_TEMPLATES, type BuildTemplate } from '../curated/builds';
 import { PRESETS } from '../curated/presets';
 import { CONFLICTS, SYNERGIES, type SkillEdge } from '../curated/synergies';
+import { sourceRefs } from '../curated/sources';
 import type { ClassId } from '../game-data/classes';
 import type { SkillId } from '../game-data/skills';
 import { ref, skillData, type SkillReach } from './skills';
@@ -29,7 +30,7 @@ export const templateSummary = (t: BuildTemplate): BuildTemplateSummary => ({
   preset: t.role,
   presetName: PRESETS[t.role].name,
   contexts: t.contexts,
-  source: t.source,
+  sources: sourceRefs(t.sources),
   confidence: t.confidence,
 });
 

@@ -91,6 +91,7 @@ export {
 } from './assumptions';
 export { DEFAULT_SPEED, RALLY_OPTIONS, TONIC_SPD } from './speed';
 export type { Citation } from '../game-data/citations';
+export { SOURCES, SOURCE_IDS, type SourceEntry, type SourceId, type SourceKind, type SourceRef } from '../curated/sources';
 export type { ResolvedDisagreement } from '../game-data/disagreements';
 // Stat vocabulary, re-exported so the UI only talks to the engine.
 export { MOD_STATS, STATS, STAT_LABELS, type Gender, type Growths, type ModStat, type Modifiers, type Stat } from '../game-data/stats';

@@ -67,6 +67,14 @@ _Avoid_: Hybrid run, DLC run
 A curated 5-slot skill loadout for one role, tagged with the play contexts it suits. Each slot is a fixed skill or an ordered preference group. Matched against a pairing's reachable skills to produce a coverage tier (5/5, 4/5, 3/5).
 _Avoid_: Build (alone, when the template is meant), preset (a preset weights stats)
 
+**Source registry**:
+The list of named sources curated data cites, each with an ID (S1, S2…), a name, a kind (reference, guide, FAQ, blog, crowd-sourced, video creator), a link and its provenance. Build templates, synergies and conflicts cite it by ID; the app shows the name.
+_Avoid_: References, bibliography
+
+**Provenance**:
+How a source reached the curated data and how far to trust it, e.g. read for the builds research, or AI summaries of videos checked against game data.
+_Avoid_: Reliability, trust score
+
 **Reclass cost**:
 The number of distinct classes a unit must pass through, beyond its starting class line, to learn every class skill in a build.
 

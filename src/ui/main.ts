@@ -15,6 +15,7 @@ import {
   type AssumptionId,
   type Blocking,
   type BuildMatch,
+  type SourceRef,
   type BuildSlotMatch,
   type Assumptions,
   type ChildId,
@@ -881,13 +882,27 @@ function slotLine(slot: BuildSlotMatch): HTMLElement {
 }
 
 /** The expanded build: role, contexts, confidence, reclass cost, where each slot comes from, synergies, its preset. */
+/** Registry sources as links, by name (#99). */
+function sourceLinks(refs: readonly SourceRef[]): (string | HTMLElement)[] {
+  return refs.flatMap((r, i) => [
+    ...(i ? [', '] : []),
+    h('a', { href: r.link, target: '_blank', rel: 'noopener', title: `${r.id}: ${r.name}` }, r.name),
+  ]);
+}
+
 function buildCard(m: BuildMatch): HTMLElement {
   const t = m.template;
   const current = viewPrefs().preset === t.preset;
   return h(
     'div',
     { class: 'build-card' },
-    h('div', { class: 'muted small' }, `${t.presetName} · ${t.contexts.map((c) => CONTEXT_LABELS[c]).join(', ')} · ${t.confidence} (${t.source})`),
+    h(
+      'div',
+      { class: 'muted small' },
+      `${t.presetName} · ${t.contexts.map((c) => CONTEXT_LABELS[c]).join(', ')} · ${t.confidence} (`,
+      ...sourceLinks(t.sources),
+      ')',
+    ),
     h(
       'div',
       { class: 'small' },
@@ -1552,6 +1567,7 @@ function edgeLine(e: SkillCardEdge): HTMLElement {
     h('span', { class: e.reachable ? 'pos' : 'neg', title: e.reachable ? 'This pairing can reach it' : 'This pairing can’t reach it' }, e.reachable ? '✓ ' : '✕ '),
     partner,
     ` ${e.note}`,
+    e.sources.length ? h('span', { class: 'muted small' }, ' (', ...sourceLinks(e.sources), ')') : null,
     e.reason ? h('div', { class: 'muted small' }, `Out of reach: ${e.reason}.`) : null,
     e.oneParent ? h('div', { class: 'warn small' }, `⚠ Both come only from ${e.oneParent}, who passes one skill: not together.`) : null,
   );

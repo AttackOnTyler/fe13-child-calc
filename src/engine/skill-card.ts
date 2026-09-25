@@ -4,6 +4,7 @@
  * pairing's builds that use it. Synergies and conflicts explain, they never score (#10).
  */
 import { CONFLICTS, SYNERGIES, type SkillEdge } from '../curated/synergies';
+import { sourceRefs } from '../curated/sources';
 import { FIXED_INHERITANCE, type SkillId } from '../game-data/skills';
 import { FIRST_GEN_UNITS, type UnitId } from '../game-data/units';
 import { RANK_LETTERS, ref, skillData, skillRank, type SkillReach } from './skills';
@@ -49,6 +50,7 @@ export function skillCard(id: SkillId, reach: SkillReach, context: PlayContext, 
           skill: ref(partner, context),
           reachable: theirs.length > 0,
           note: e.note,
+          sources: sourceRefs(e.sources),
           reason: theirs.length ? undefined : reach.whyNot(partner),
           oneParent: mine && other?.side === mine.side ? mine.parent : undefined,
         },
