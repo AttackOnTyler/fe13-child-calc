@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "typecheck": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "proto:units": "vite --open /src/prototype/unit-pages/index.html"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
