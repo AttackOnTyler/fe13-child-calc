@@ -731,6 +731,16 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     if (lastPlan?.roster !== roster || lastPlan.settings !== k) lastPlan = { roster, settings: k, ctx: newPlanContext(roster, s, rolesFor(roster, s)) };
     return lastPlan.ctx;
   };
+  // A saved plan's pairings on a roster with only the run facts, but each child in the roster's own plan preset: army
+  // fit reads the whole roster (benches, deployment), so the run facts alone would put the children in other presets.
+  // Its values don't depend on the saved plan, so every saved plan under one roster and settings shares them.
+  let lastSaved: { roster: Roster; settings: string; ctx: PlanContext } | undefined;
+  const savedPlanContext = (roster: Roster, s: PlanSettings): PlanContext => {
+    const k = JSON.stringify(s);
+    if (lastSaved?.roster !== roster || lastSaved.settings !== k)
+      lastSaved = { roster, settings: k, ctx: newPlanContext({ ...EMPTY_ROSTER, run: roster.run }, s, rolesFor(roster, s)) };
+    return lastSaved.ctx;
+  };
   /** A plan preset's scores, in its own role, Auto class and the global rest (undefined: no score). */
   const presetScores = (preset: PresetId, s: PlanSettings): Map<string, PairingScore> | undefined => {
     const data = PRESETS[preset];
@@ -1367,10 +1377,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       return out;
     },
     planPreset: (child, roster, settings) => rolesFor(roster, settings).get(child)?.preset ?? settings.overrides[child] ?? settings.preset,
-    // Its pairings on a roster with only the run facts, but each child in the roster's own plan preset: army fit reads
-    // the whole roster (benches, deployment), so the run facts alone would put the children in other presets.
-    evaluatePlan: (saved, roster, settings) =>
-      evaluatePlan(newPlanContext({ ...EMPTY_ROSTER, run: roster.run }, settings, rolesFor(roster, settings)), saved),
+    evaluatePlan: (saved, roster, settings) => evaluatePlan(savedPlanContext(roster, settings), saved),
     planKeys: (roster) =>
       new Set(roster.savedPlan ? savedPairings(roster, roster.savedPlan).map(pairingKey).filter((k) => byKey.has(k)) : []),
     ledger: (roster, settings) => {
