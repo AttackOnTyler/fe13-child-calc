@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "typecheck": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "proto:prep": "vite --open /src/prototype/prep-roadmap/index.html"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
