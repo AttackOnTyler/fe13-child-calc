@@ -100,8 +100,12 @@ Something the adopted roadmap needs true before an event on its map order: a map
 _Avoid_: Goal, checkpoint, level-by-map target
 
 **Reserve**:
-A wishlist unit beyond the endpoint's deploy count, ordered by who steps in first when a wishlist unit is lost or falls behind.
+A wishlist unit beyond the endpoint's deploy count, ordered by who steps in first when a wishlist unit is lost or falls behind. Chosen after the solve, by how much flawless chance each candidate restores across the likely losses; each names the loss it mainly covers. The roadmap spends no EXP on a reserve unless a span pin asks for it.
 _Avoid_: Bench (Benched is a unit state), backup
+
+**Likely loss**:
+A wishlist unit weighted by how often it dies in the simulation's failed runs. What reserves are ranked against.
+_Avoid_: Weak link, risk (alone)
 
 **Build template**:
 A curated 5-slot skill loadout for one role, tagged with the play contexts it suits. Each slot is a fixed skill or an ordered preference group. Matched against a pairing's reachable skills to produce a coverage tier (5/5, 4/5, 3/5).
@@ -167,6 +171,10 @@ _Avoid_: Score (alone), Σ, success rate, win rate
 **Ceiling**:
 The endpoint's flawless chance with every wishlist unit at its effective caps: the most a comp can do. Shown beside the flawless chance; no plan for that comp can beat it.
 _Avoid_: Max score, potential
+
+**Endpoint coverage**:
+The seed's cheap value for a pairing: the share of the endpoint's foes its child (and Morgan) beats in a matchup, at effective caps with its best endpoint build, as Lead or Back, weighted by the share of the route the child is present for. Only a place to start; the search corrects it.
+_Avoid_: Coverage (alone — the deployment's coverage is per map), pairing score
 
 **Unit worth**:
 How many points of flawless chance a plan loses without one unit: removed from every lineup it's in, its wishlist slot refilled and what the removal forces re-chosen (a parent's children, the spouse's marriage), the rest of the wishlist kept and the roadmap re-solved. Every unit in any lineup has one, and a parent's includes its children.
@@ -361,7 +369,7 @@ A marriage the player has forbidden. Soft: the marriage plan works around it unt
 _Avoid_: Ban, block (a blocked pairing is the roster's doing, not the player's)
 
 **Marriage plan**:
-One spouse per unit for the whole roster, chosen by the solver to maximise the sum of each child's priority × score (each child scored with its own preset), with marriages and pins fixed. Re-solved around losses and compared with the saved plan; among plans of equal value it keeps the saved plan's children.
+One spouse per unit for the whole roster, chosen by the solver to maximise the sum of each child's priority × score (each child scored with its own preset), with marriages and pins fixed. Re-solved around losses and compared with the saved plan; among plans of equal value it keeps the saved plan's children. Endpoint-first planning replaces its solver: marriages are edits of one joint solve on the flawless chance.
 _Avoid_: Backup (alone), optimal pairing
 
 **Plan preset**:
@@ -381,7 +389,7 @@ The job a deployed unit does in the army: Lead, Battery, Staff/Rally or Dancer. 
 _Avoid_: Role (alone — ambiguous with scoring role and build template role), job, position
 
 **Composition quotas**:
-Per play context, a min–max range of deployed units for each deployment role plus a deploy cap, curated and editable. Counted over deployed first-gen units and every child the marriage plan produces, leaving out benched, missed and dead units; All uses Main story's. Out-of-range is a warning, never a block.
+Per play context, a min–max range of deployed units for each deployment role plus a deploy cap, curated and editable. Counted over deployed first-gen units and every child the marriage plan produces, leaving out benched, missed and dead units; All uses Main story's. Out-of-range is a warning, never a block. Endpoint-first planning deletes them: sustain, rally buffs and actions hold each job's place, each map's deploy count from the chapter data is the only limit, and a wanted second healer is a span pin.
 _Avoid_: Slots, army limits
 
 **Role matrix**:
@@ -397,7 +405,7 @@ The cast in a world without Robin: Robin is no one's parent, Morgan leaves the c
 _Avoid_: Hide Robin
 
 **Army fit**:
-The last step of deriving roles, run on every re-plan: every child starts in its best role, and a composition quota moves a child only when it forces one — the child whose move costs the least standing. Staff/Rally is filled only from children whose planned pairing reaches a staff class or rally skill. Overrides and first-gen units count but never move; army fit never benches a child, and says which quota moved each child it moved.
+The last step of deriving roles, run on every re-plan: every child starts in its best role, and a composition quota moves a child only when it forces one — the child whose move costs the least standing. Staff/Rally is filled only from children whose planned pairing reaches a staff class or rally skill. Overrides and first-gen units count but never move; army fit never benches a child, and says which quota moved each child it moved. Endpoint-first planning deletes it: positions come from the solve.
 _Avoid_: Suggest roles (replaced), auto-roles, role solver
 
 **Role override**:
@@ -411,6 +419,22 @@ _Avoid_: Custom preset, user preset
 **Blocked pairing**:
 A pairing that contradicts the roster: hard when it can no longer happen (a unit is dead or missed, or married to someone else), soft when it only contradicts a pin or a bench.
 _Avoid_: Invalid, disabled
+
+**Seed**:
+The solve's first plan: marriages and Robin matched on endpoint coverage, builds from their play-context templates, then a greedy roadmap. The local search improves it.
+_Avoid_: Initial plan, default plan
+
+**Edit**:
+One change to a plan: a marriage, Robin's gender, asset or flaw, an endpoint class, one build skill, a passed skill, a lineup, a pair, a paralogue's place or a seal. The solve keeps an edit when it raises the flawless chance by more than twice the paired standard error. The player's edits cost the same way.
+_Avoid_: Move, step, tweak
+
+**Anytime solve**:
+The solve as it runs: in the background, keeping the best plan found so far, until no single edit helps or its time budget ends (about 30 s from scratch, 5 s after an edit). An edit's own cost shows in about 1 s, provisional. What it finds beyond that arrives as a proposal, never replacing the adopted roadmap on its own. Shown as found ≤ best ≤ ceiling, with a margin of error.
+_Avoid_: Optimizer, background job
+
+**Pin cost**:
+The flawless chance the player's pins and span pins give up together: the best plan found with them lifted, less the best found with them. One pin's own cost comes on request. Recorded facts are never pins and have no cost.
+_Avoid_: Penalty, pin loss (a lost pin is broken or on hold)
 
 ### Verification
 
