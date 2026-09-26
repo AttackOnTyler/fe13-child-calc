@@ -12,6 +12,6 @@ Endpoint-first planning needs one objective that ranks whole armies, treats chil
 ## Consequences
 
 - The score is a simulation, not a formula: the lineup per map, the EXP forecast and support growth feed it and depend on each other, so the solve likely needs Monte Carlo with a stated margin of error. The **ceiling** (the endpoint at effective caps) bounds it and prunes the search.
-- Stated assumptions stand in for movement until a map editor supplies positions: an equal share of actions per wave, one enemy-phase attack per pair from the worst foe left, Rally reaching every pair.
+- Stated assumptions stand in for movement until a map editor supplies positions: an equal share of actions per turn, one enemy-phase attack per pair from the worst foe left, Rally reaching every pair.
 - Presets, standing, army fit, priorities and Σ stop ranking plans; how they migrate is open.
 - Decided on [What makes one wishlist better than another?](https://github.com/AttackOnTyler/fe13-child-calc/issues/137).
