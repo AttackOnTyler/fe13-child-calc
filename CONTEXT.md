@@ -68,12 +68,28 @@ The map a run is building its army for, with that map's deploy count; it default
 _Avoid_: Goal, end state, final chapter, endgame (Endgame is a map's name)
 
 **Wishlist**:
-The army a run aims to field at its endpoint: the endpoint's deploy count of units, arranged as they'll fight (each Lead with its Battery, healers, a Dancer), each with its endpoint class and 5-skill build, and each child with its parents and the skill each parent passes when the child is recruited. It ends with the reserves.
+The army a run aims to field at its endpoint: the endpoint's deploy count of units, arranged as they'll fight (each Lead with its Back, healers, a Dancer), each with its endpoint class and 5-skill build, and each child with its parents and the skill each parent passes when the child is recruited. It ends with the reserves.
 _Avoid_: Team, target army, roster (the Roster is the page of run facts and unit states)
 
 **Lineup**:
 The army a plan fields on one map: who deploys, in which pairs and classes. The roadmap is a lineup for every map to the endpoint; the wishlist is the endpoint's lineup with its builds and reserves.
 _Avoid_: Wishlist (for any map but the endpoint), deployment (the recorded one)
+
+**Position**:
+Where a unit stands in one map's lineup: Lead, Back, Solo (fielded unpaired) or Not fielded (reserve, not yet joined, or benched), with its partner if it has one. The solve picks it map by map; it is never a setting on the unit. It is the lineup's starting arrangement, and the stance can change it wave by wave.
+_Avoid_: Role (alone), deployment role (the tag it replaces), Battery (say Back), slot
+
+**Job**:
+What a fielded unit does on one map: fights, heals, dances, rallies, takes kills. A readout of the actions the simulation spends on it, never pinned.
+_Avoid_: Deployment role, role (alone)
+
+**Role timeline**:
+A unit's positions and jobs across the roadmap's map order, e.g. Lead Prologue–Ch 4, Back Ch 5–12, Not fielded (reserve) from Ch 13. A readout of the roadmap's lineups, never an input.
+_Avoid_: Role schedule, role (alone)
+
+**Span pin**:
+A position or pair the player keeps over a span of the map order: one map, a range, or from a map on (Robin leads Prologue–Ch 9; Chrom backs Robin from Ch 5). The solve respects it inside the span and is free outside; its flawless-chance cost shows when it's set.
+_Avoid_: Pin (alone — a pin is a kept marriage), role override (a child's deployment role pin), lock
 
 **Map order**:
 The ordered maps a roadmap plays to its endpoint. Its template comes from the route: the story chapters, with each non-child paralogue in reveal order before the next chapter (and, on a Full route, the xenologues and SpotPass paralogues at the user's positions). The plan places each child paralogue, and whether its child is recruited there; any other change is an edit with a visible cost.
@@ -173,7 +189,7 @@ _Avoid_: Mode
 
 **Scoring role**:
 Whether a unit is scored as the Lead (its own stats) or the Support (the pair-up bonus it gives a lead). Visitors see it as Lead / Battery, the deployment role a Support preset gives.
-_Avoid_: Position, front/back
+_Avoid_: Position (a unit's place in a lineup), front/back
 
 **Pair-up bonus**:
 The stats a support unit adds to its lead: a tier from the support's raw stat, plus its class's pair-up bonus, plus a support-rank bonus where the class bonus is non-zero.
@@ -255,6 +271,10 @@ _Avoid_: Kill (a kill can come with a death), one-round (a matchup verdict)
 **Action**:
 One unit's move in a turn; a pair acts through its Lead. A Dance grants another, and Galeforce grants one after a kill.
 _Avoid_: Turn (a turn is every unit's phase), move
+
+**Stance**:
+How a pair plays one wave of foes, chosen by the simulation: apart, apart but adjacent (Attack Stance, assumed at the rate the army spread allows), together with one in front, or together with the other in front. Separating, pairing up and switching cost the actions the game charges. Apart trades Guard, pair-up stats and support growth for actions and EXP; only waves together grow supports.
+_Avoid_: Formation, pair state
 
 **Sustain**:
 HP restored at the cost of an action: a heal (the healer's action), a potion (the unit's own) or Rescue.
@@ -345,7 +365,7 @@ A child that can still be born but the marriage plan doesn't produce, because it
 _Avoid_: Lost (ambiguous between left out and can't be born), dropped
 
 **Deployment role**:
-The job a deployed unit does in the army: Lead, Battery, Staff/Rally or Dancer. A child's comes from its plan preset, which army fit may have moved; a first-gen unit's is a tag the user sets, defaulted from a curated table. A preset's deployment role is usually its scoring role (Lead → Lead, Support → Battery, none → Staff/Rally), but Staffbot scores as Lead and deploys as Staff/Rally. No child can be a Dancer.
+The job a deployed unit does in the army: Lead, Battery, Staff/Rally or Dancer. A child's comes from its plan preset, which army fit may have moved; a first-gen unit's is a tag the user sets, defaulted from a curated table. A preset's deployment role is usually its scoring role (Lead → Lead, Support → Battery, none → Staff/Rally), but Staffbot scores as Lead and deploys as Staff/Rally. No child can be a Dancer. Endpoint-first planning replaces it with a position and a job per map, picked by the solve and steered by span pins; Battery survives only as a preset's name, and planning says Back.
 _Avoid_: Role (alone — ambiguous with scoring role and build template role), job, position
 
 **Composition quotas**:
