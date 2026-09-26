@@ -76,7 +76,7 @@ The army a plan fields on one map: who deploys, in which pairs and classes. The 
 _Avoid_: Wishlist (for any map but the endpoint), deployment (the recorded one)
 
 **Position**:
-Where a unit stands in one map's lineup: Lead, Back, Solo (fielded unpaired) or Not fielded (reserve, not yet joined, or benched), with its partner if it has one. The solve picks it map by map; it is never a setting on the unit. It is the lineup's starting arrangement, and the stance can change it wave by wave.
+Where a unit stands in one map's lineup: Lead, Back, Solo (fielded unpaired) or Not fielded (reserve, not yet joined, or benched), with its partner if it has one. The solve picks it map by map; it is never a setting on the unit. It is the lineup's starting arrangement, and the stance can change it turn by turn.
 _Avoid_: Role (alone), deployment role (the tag it replaces), Battery (say Back), slot
 
 **Job**:
@@ -161,7 +161,7 @@ A child's maximum for a stat in a given class: the class's max stat plus the chi
 _Avoid_: Max stat (ambiguous between class max and the child's cap), cap (alone)
 
 **Flawless chance**:
-The chance a plan reaches and clears its endpoint with no unit dying, from the next map on; Chrom's or Robin's death is the same failure. Every map on the way counts, each played by the army the plan and the recruitment gates allow there. A wishlist's flawless chance is that of the best roadmap found for it.
+The chance a plan reaches and clears its endpoint with no unit dying, from the next map on; Chrom's or Robin's death is the same failure, and so is an NPC's the ally phase counts. Every map on the way counts, each played by the army the plan and the recruitment gates allow there. A wishlist's flawless chance is that of the best roadmap found for it.
 _Avoid_: Score (alone), Σ, success rate, win rate
 
 **Ceiling**:
@@ -268,12 +268,24 @@ _Avoid_: Forecast (the game's single-attack preview)
 A foe killed with the killer surviving: by the Lead in a player-phase exchange, or by the pair's counter in enemy phase.
 _Avoid_: Kill (a kill can come with a death), one-round (a matchup verdict)
 
+**Turn**:
+Player phase, then an ally phase if a third party is on the field, then enemy phase. The simulation plays a map turn by turn until its victory condition is met: a rout, or the boss's defeat on the turn the solve chooses. Each turn the army fights the foes that could reasonably improve its position, as the solve judges; forced units always deploy, a mid-map arrival joins on its arrival turn, and a talk recruit joins on the turn the solve sends a talker.
+_Avoid_: Wave (a wave is reinforcements), round (one combat's exchange)
+
+**Ally phase**:
+Where NPC allies (green units) act, between player and enemy phase. The simulation counts an NPC only if it would join the army (a paralogue child, a talk recruit) or the map's defeat condition names it (Emmeryn in Ch 6), and its death is then a failure like a unit's; any other NPC is scenery, its kills and death ignored.
+_Avoid_: Other phase, green phase
+
+**Wave**:
+A batch of enemy reinforcements, joining on the turn the chapter data lists for the difficulty (on Hard and up at the start of enemy phase, free to act at once). Apotheosis's waves are its reinforcements.
+_Avoid_: A turn's foes, enemy group (a set of like foes in the chapter data)
+
 **Action**:
 One unit's move in a turn; a pair acts through its Lead. A Dance grants another, and Galeforce grants one after a kill.
 _Avoid_: Turn (a turn is every unit's phase), move
 
 **Stance**:
-How a pair plays one wave of foes, chosen by the simulation: apart, apart but adjacent (Attack Stance, assumed at the rate the army spread allows), together with one in front, or together with the other in front. Separating, pairing up and switching cost the actions the game charges. Apart trades Guard, pair-up stats and support growth for actions and EXP; only waves together grow supports.
+How a pair plays one turn, chosen by the simulation: apart, apart but adjacent (Attack Stance, assumed at the rate the army spread allows), together with one in front, or together with the other in front. Separating, pairing up and switching cost the actions the game charges. Apart trades Guard, pair-up stats and support growth for actions and EXP; only turns together grow supports.
 _Avoid_: Formation, pair state
 
 **Sustain**:
