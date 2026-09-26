@@ -1,0 +1,27 @@
+name: Test
+
+# Pull requests get the same checks as a push to main (pages.yml), before they're merged.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      # Typechecks (tsc) and bundles, as the deploy does.
+      - run: npm run build

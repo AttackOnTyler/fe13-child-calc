@@ -48,7 +48,7 @@ npm ci
 npm run dev
 ```
 
-Other scripts: `npm test` (Vitest), `npm run typecheck`, `npm run build`. Pushes to `main` are tested and deployed to GitHub Pages by [`.github/workflows/pages.yml`](.github/workflows/pages.yml).
+Other scripts: `npm test` (Vitest), `npm run typecheck`, `npm run build`. Pull requests are tested by [`.github/workflows/test.yml`](.github/workflows/test.yml), and pushes to `main` are tested and deployed to GitHub Pages by [`.github/workflows/pages.yml`](.github/workflows/pages.yml).
 
 ## For contributors
 
