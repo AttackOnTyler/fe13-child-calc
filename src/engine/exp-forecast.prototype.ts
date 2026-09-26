@@ -23,6 +23,7 @@ import { CLASSES, type ClassId } from '../game-data/classes';
 import { itemByName, type GameItem } from '../game-data/items';
 import { JOIN_DATA, basesOn } from '../game-data/join';
 import { ROBIN_GROWTHS } from '../game-data/robin';
+import { CLASS_SKILLS, SKILLS, type SkillId } from '../game-data/skills';
 import { STATS, type Stat } from '../game-data/stats';
 import { FIRST_GEN_UNITS } from '../game-data/units';
 import { className } from './classes';
@@ -84,7 +85,7 @@ export type UnitDef = {
   readonly growths: Readonly<Record<Stat, number>>;
   readonly weapons: readonly GameItem[];
   readonly staff: GameItem | undefined;
-  readonly skills: readonly string[];
+  readonly skills: readonly SkillId[];
 };
 
 const WEAPON_KINDS = new Set(['sword', 'lance', 'axe', 'bow', 'tome', 'stone', 'beaststone']);
@@ -96,7 +97,9 @@ export function unitDefs(maps: readonly ChapterData[]): UnitDef[] {
     for (const r of map.recruits) {
       const id = r.unit.toLowerCase().replace(/[^a-z]/g, '') as UnitId;
       const j = JOIN_DATA[id];
-      if (!j || out.some((u) => u.id === id)) continue;
+      if (!j || j.chapter !== map.id || out.some((u) => u.id === id)) continue;
+      // Joining at the chapter's end (Lon'qu): fielded from the next story map.
+      const joins = /end of the chapter/i.test(r.how ?? '') ? (map.unlocks.find((u) => u.startsWith('chapter')) ?? map.id) : map.id;
       const personal = id === 'robin' ? ROBIN_GROWTHS : (FIRST_GEN_UNITS as unknown as Record<string, { growths: Record<Stat, number> }>)[id]!.growths;
       const g = CLASSES[j.joinClass].growths as unknown as Record<string, number> & { male?: Record<string, number> };
       const cls = (g.male ?? g) as Partial<Record<Stat, number>>;
@@ -106,14 +109,14 @@ export function unitDefs(maps: readonly ChapterData[]): UnitDef[] {
       out.push({
         id,
         name: id === 'robin' ? 'Robin' : (FIRST_GEN_UNITS as unknown as Record<string, { name: string }>)[id]!.name,
-        joins: map.id,
+        joins,
         classId: j.joinClass,
         joinLevel: j.level,
         bases: { ...basesOn(j, 'lunatic'), mov: 0 } as Record<Stat, number>,
         growths: Object.fromEntries(STATS.map((s) => [s, (personal[s as keyof typeof personal] ?? 0) + (cls[s] ?? 0)])) as Record<Stat, number>,
         weapons: items.filter((i) => WEAPON_KINDS.has(i.kind)),
         staff: items.find((i) => i.kind === 'staff'),
-        skills: j.startingSkills.map((s) => (s === 'veteran' ? 'Veteran' : s === 'dual-strike-plus' ? 'Dual Strike+' : s)),
+        skills: j.startingSkills,
       });
     }
   }
@@ -124,6 +127,8 @@ export function unitDefs(maps: readonly ChapterData[]): UnitDef[] {
 
 export type Priority = 0 | 1 | 2; // low, normal, high
 export type Policy = 'even' | 'priority';
+/** The assumed army spread: how often an unpaired unit fights next to a given ally (for Solidarity). */
+export const ADJACENT = 0.5;
 
 export type MapPlan = {
   readonly map: string;
@@ -134,6 +139,8 @@ export type MapPlan = {
 
 export type Plan = {
   readonly policy: Policy;
+  /** Research C4: Veteran ×1.5 only when Robin leads (FEW, JP), or whenever paired, as back too (SF). */
+  readonly veteranAsBack: boolean;
   readonly priority: Readonly<Partial<Record<UnitId, Priority>>>;
   readonly maps: readonly MapPlan[];
   /** What the player recorded at a map's end: level and EXP. */
@@ -145,7 +152,7 @@ export type Plan = {
 type Progress = { level: number; exp: number };
 type UnitState = Progress & { def: UnitDef };
 
-export type MapTally = { exp: number; kills: number; combats: number; heals: number; killsByGroup: Record<string, number> };
+export type MapTally = { exp: number; kills: number; combats: number; heals: number; waits: number; crits: number; killsByGroup: Record<string, number> };
 export type MapSample = {
   readonly start: Readonly<Partial<Record<UnitId, Progress>>>;
   readonly end: Readonly<Partial<Record<UnitId, Progress>>>;
@@ -157,10 +164,15 @@ export type MapSample = {
 const levelCap = (d: UnitDef) => (CLASSES[d.classId].tier === 'special' ? 30 : 20);
 const il = (u: UnitState) => u.level + (CLASSES[u.def.classId].tier === 'advanced' ? 20 : 0);
 
+/** Starting skills plus what the class has taught by the unit's level (Robin: Solidarity at Tactician Lv 10). */
+const knownSkills = (u: UnitState): string[] => [
+  ...new Set([...u.def.skills, ...(CLASS_SKILLS[u.def.classId as keyof typeof CLASS_SKILLS] ?? []).filter((c) => c.level <= u.level).map((c) => c.skill)]),
+].map((id) => SKILLS[id as SkillId]?.name ?? id);
+
 function fighterOf(u: UnitState): Fighter {
   const gained = u.level - u.def.joinLevel;
   const stats = Object.fromEntries(STATS.map((s) => [s, Math.floor(u.def.bases[s] + (u.def.growths[s] / 100) * gained)])) as Record<Stat, number>;
-  return { name: u.def.name, className: className(u.def.classId, u.def.id === 'robin' ? 'M' : undefined), stats, skills: u.def.skills, weapon: u.def.weapons[0] ? { item: u.def.weapons[0] } : undefined };
+  return { name: u.def.name, className: className(u.def.classId, u.def.id === 'robin' ? 'M' : undefined), stats, skills: knownSkills(u), weapon: u.def.weapons[0] ? { item: u.def.weapons[0] } : undefined };
 }
 
 function best(lead: Fighter, weapons: readonly GameItem[], back: Fighter | undefined, foe: Foe): Matchup | undefined {
@@ -191,7 +203,7 @@ function simulateMap(plan: Plan, mp: MapPlan, map: ChapterData, units: Map<UnitI
   const fielded = mp.fielded.filter((id) => units.has(id));
   const backs = new Set(Object.values(mp.pairs));
   const actors = fielded.filter((id) => !backs.has(id));
-  const tally: Partial<Record<UnitId, MapTally>> = Object.fromEntries(fielded.map((id) => [id, { exp: 0, kills: 0, combats: 0, heals: 0, killsByGroup: {} }]));
+  const tally: Partial<Record<UnitId, MapTally>> = Object.fromEntries(fielded.map((id) => [id, { exp: 0, kills: 0, combats: 0, heals: 0, waits: 0, crits: 0, killsByGroup: {} }]));
   const prio = (id: UnitId) => plan.priority[id] ?? 1;
   let hurt = 0;
   let waves = 0;
@@ -207,6 +219,8 @@ function simulateMap(plan: Plan, mp: MapPlan, map: ChapterData, units: Map<UnitI
     }
     return cache.get(key);
   };
+  // Solidarity: +10 Crit to an ally fighting next to its holder. A back's aura is assumed not to reach its own lead.
+  const auras = actors.filter((id) => fighters.get(id)!.skills.includes('Solidarity'));
   const backMu = (back: UnitId, f: (typeof foes)[number]) => best(fighters.get(back)!, units.get(back)!.def.weapons, undefined, f.foe);
   const killChance = (id: UnitId, f: (typeof foes)[number]) => {
     const m = mu(id, f);
@@ -231,10 +245,15 @@ function simulateMap(plan: Plan, mp: MapPlan, map: ChapterData, units: Map<UnitI
     f.engaged += 1;
     tally[id]!.combats += 1;
     let leadDealt = false, backDealt = false, killer: 'lead' | 'back' | null = null;
+    const aura = auras.some((a) => a !== id && rng() < ADJACENT) ? 10 : 0;
     for (let s = 0; s < (m?.hits ?? 0) && f.hp > 0; s++) {
-      if (rng() * 100 < m!.hit && m!.damage > 0) { f.hp -= m!.damage; leadDealt = true; if (f.hp <= 0) killer = 'lead'; }
+      if (rng() * 100 < m!.hit && m!.damage > 0) {
+        const crit = rng() * 100 < m!.crit + aura;
+        if (crit) tally[id]!.crits += 1;
+        f.hp -= m!.damage * (crit ? 3 : 1); leadDealt = true; if (f.hp <= 0) killer = 'lead';
+      }
       if (f.hp > 0 && bm && rng() * 100 < m!.dualStrikeRate && rng() * 100 < bm.hit && bm.damage > 0) {
-        f.hp -= bm.damage; backDealt = true; if (f.hp <= 0) killer = 'back';
+        f.hp -= bm.damage * (rng() * 100 < bm.crit ? 3 : 1); backDealt = true; if (f.hp <= 0) killer = 'back';
       }
     }
     const bonus = (CLASS_BONUS[f.foe.className] ?? 0) + (f.foe.boss ? 20 : 0);
@@ -244,12 +263,13 @@ function simulateMap(plan: Plan, mp: MapPlan, map: ChapterData, units: Map<UnitI
       const ld = foeLevel - il(lead);
       // Gap G2: when the back lands the kill, the lead is assumed to get damage EXP only.
       let e = killer === 'lead' ? Math.min(damageExp(ld, f.engaged) + killExp(ld, bonus), 100) : leadDealt ? damageExp(ld, f.engaged) : 0;
-      if (back && lead.def.skills.includes('Veteran')) e *= 1.5;
+      if (back && lead.def.skills.includes('veteran')) e *= 1.5;
       give(lead, id, e);
     }
     if (back && backDealt) {
       const ld = foeLevel - il(back);
-      give(back, backId!, killer === 'back' ? damageExp(ld, f.engaged) : damageExp(ld, f.engaged) * 0.5);
+      const vet = plan.veteranAsBack && back.def.skills.includes('veteran') ? 1.5 : 1;
+      give(back, backId!, (killer === 'back' ? damageExp(ld, f.engaged) : damageExp(ld, f.engaged) * 0.5) * vet);
     }
     if (killer) {
       const who = killer === 'lead' ? id : backId!;
@@ -276,8 +296,10 @@ function simulateMap(plan: Plan, mp: MapPlan, map: ChapterData, units: Map<UnitI
           .filter((f) => killChance(id, f) < 0.5 && above.some((o) => { const d = roundDamage(id, f); return d > 0 && killChance(o, { ...f, hp: Math.max(1, f.hp - d) }) >= 0.5; }))
           .sort((a, b) => roundDamage(id, b) - roundDamage(id, a))[0];
         // A priority unit won't take a foe a higher unit can kill; it chips or takes what nobody above it can.
+        // Nothing to chip and nothing left that nobody above can take: wait, leaving the kill for a later wave.
         const leftOver = live.filter((f) => !above.some((o) => killChance(o, f) >= 0.5));
-        target = setUp ?? pickBest(id, leftOver.length ? leftOver : live);
+        if (!setUp && !leftOver.length) { tally[id]!.waits += 1; continue; }
+        target = setUp ?? pickBest(id, leftOver);
       } else target = pickBest(id, live);
       combat(id, target, true);
     }
@@ -314,6 +336,10 @@ export type UnitForecast = {
   readonly kills: number;
   readonly combats: number;
   readonly heals: number;
+  readonly waits: number;
+  readonly crits: number;
+  /** Skills known at the map's start (median run). */
+  readonly skills: readonly string[];
   readonly killsByGroup: Readonly<Record<string, number>>;
   /** Every sample's end level (decimal), for the percentile of a recorded result. */
   readonly samples: readonly number[];
@@ -351,6 +377,9 @@ export function forecast(plan: Plan, defs: readonly UnitDef[], runs = 300, seed 
         kills: mean(ts.map((t) => t.kills)),
         combats: mean(ts.map((t) => t.combats)),
         heals: mean(ts.map((t) => t.heals)),
+        waits: mean(ts.map((t) => t.waits)),
+        crits: mean(ts.map((t) => t.crits)),
+        skills: skillsAt(defs.find((d) => d.id === id)!, Math.floor(band(samples.map((s) => s.start[id]?.level ?? 0)).p50)),
         killsByGroup: groups,
         samples: endSamples,
       };
@@ -378,6 +407,8 @@ export function calibration(plan: Plan, fc: readonly MapForecast[]): { points: n
   });
   return { points: ps.length, inside, meanPercentile: ps.length ? Math.round(mean(ps)) : NaN };
 }
+
+const skillsAt = (def: UnitDef, level: number) => knownSkills({ def, level, exp: 0 });
 
 // ---------- small helpers ----------
 

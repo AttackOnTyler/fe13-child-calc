@@ -4,13 +4,13 @@
  */
 import { createInterface } from 'node:readline';
 import { MAPS } from '../src/game-data/chapters';
-import { calibration, deployCount, forecast, mapFoes, percentileOf, unitDefs, type MapPlan, type Plan, type Priority, type UnitId } from '../src/engine/exp-forecast.prototype';
+import { ADJACENT, calibration, deployCount, forecast, mapFoes, percentileOf, unitDefs, type MapPlan, type Plan, type Priority, type UnitId } from '../src/engine/exp-forecast.prototype';
 
 const B = (s: string) => `\x1b[1m${s}\x1b[0m`;
 const D = (s: string) => `\x1b[2m${s}\x1b[0m`;
 const pad = (s: string, n: number) => (s.length >= n ? s.slice(0, n) : s + ' '.repeat(n - s.length));
 
-const MAP_IDS = ['prologue', 'chapter-1', 'chapter-2', 'chapter-3', 'chapter-4'];
+const MAP_IDS = ['prologue', 'chapter-1', 'chapter-2', 'chapter-3', 'chapter-4', 'chapter-5', 'chapter-6', 'chapter-7'];
 const maps = MAP_IDS.map((id) => MAPS.find((m) => m.id === id)!);
 const defs = unitDefs(maps);
 
@@ -21,7 +21,7 @@ const initialMaps: MapPlan[] = maps.map((m, i) => {
   return { map: m.id, fielded, pairs: {} };
 });
 
-let plan: Plan = { policy: 'priority', priority: {}, maps: initialMaps, recorded: {} };
+let plan: Plan = { policy: 'priority', veteranAsBack: false, priority: {}, maps: initialMaps, recorded: {} };
 let at = 0;
 let runs = 300;
 let message = '';
@@ -38,10 +38,10 @@ function render() {
   const f = fc[at]!;
   const foes = mapFoes(m);
   const out: string[] = [];
-  out.push(`${B('EXP FORECAST — PROTOTYPE')}  ${D(`Lunatic · ${runs} runs · policy`)} ${B(plan.policy)}`);
+  out.push(`${B('EXP FORECAST — PROTOTYPE')}  ${D(`Lunatic · ${runs} runs · policy`)} ${B(plan.policy)} ${D('· Veteran')} ${B(plan.veteranAsBack ? 'lead or back (SF)' : 'lead only (FEW)')}`);
   out.push(`${B(`${m.label}: ${m.title}`)}  ${D(`[${at + 1}/${maps.length}] deploy ${deployCount(m)} · ${foes.length} foes (no reinforcements) · waves p10/p50/p90 ${f.waves.p10}/${f.waves.p50}/${f.waves.p90}`)}`);
   out.push('');
-  out.push(B(`${pad('unit', 10)}${pad('position', 16)}${pad('prio', 5)}${pad('start Lv', 9)}${pad('kills', 6)}${pad('combats', 8)}${pad('heals', 6)}${pad('EXP p10/p50/p90', 17)}${pad('end Lv p10 – p50 – p90', 24)}recorded`));
+  out.push(B(`${pad('unit', 10)}${pad('position', 16)}${pad('prio', 5)}${pad('start Lv', 9)}${pad('kills', 6)}${pad('combats', 8)}${pad('heals', 6)}${pad('waits', 6)}${pad('crits', 6)}${pad('EXP p10/p50/p90', 17)}${pad('end Lv p10 – p50 – p90', 24)}recorded`));
   const backs = Object.fromEntries(Object.entries(mp.pairs).map(([l, b]) => [b, l]));
   for (const id of mp.fielded) {
     const u = f.units[id];
@@ -50,10 +50,12 @@ function render() {
     const rec = plan.recorded[mp.map]?.[id];
     const recText = rec ? `Lv ${rec.level} ${rec.exp} → p${percentileOf(u.samples, rec.level + rec.exp / 100)}` : D('—');
     out.push(
-      `${pad(unitName(id), 10)}${pad(pos, 16)}${pad(PRIO[plan.priority[id] ?? 1]!, 5)}${pad(lv(u.startLevel.p50), 9)}${pad(u.kills.toFixed(1), 6)}${pad(u.combats.toFixed(1), 8)}${pad(u.heals ? u.heals.toFixed(1) : '', 6)}` +
+      `${pad(unitName(id), 10)}${pad(pos, 16)}${pad(PRIO[plan.priority[id] ?? 1]!, 5)}${pad(lv(u.startLevel.p50), 9)}${pad(u.kills.toFixed(1), 6)}${pad(u.combats.toFixed(1), 8)}${pad(u.heals ? u.heals.toFixed(1) : '', 6)}${pad(u.waits ? u.waits.toFixed(1) : '', 6)}${pad(u.crits ? u.crits.toFixed(1) : '', 6)}` +
         `${pad(`${Math.round(u.exp.p10)}/${Math.round(u.exp.p50)}/${Math.round(u.exp.p90)}`, 17)}${pad(`${lv(u.endLevel.p10)} – ${lv(u.endLevel.p50)} – ${lv(u.endLevel.p90)}`, 24)}${recText}`,
     );
   }
+  const aura = mp.fielded.filter((id) => f.units[id]?.skills.includes('Solidarity')).map(unitName);
+  out.push(D(aura.length ? `Solidarity: ${aura.join(', ')} gives +10 Crit to an ally fighting beside them (${Math.round(ADJACENT * 100)}% of combats, the assumed spread; not to its own lead when backing)` : 'Solidarity: nobody fielded knows it (Robin learns it at Tactician Lv 10)'));
   const benched = defs.filter((d) => MAP_IDS.indexOf(d.joins) <= at && !mp.fielded.includes(d.id)).map((d) => d.name);
   if (benched.length) out.push(D(`not fielded: ${benched.join(', ')}`));
   out.push('');
@@ -72,10 +74,10 @@ function render() {
   out.push('');
   out.push(`${B('Calibration')} ${cal.points ? `${cal.inside}/${cal.points} recorded results inside p10–p90 (≈80% if calibrated) · mean percentile ${cal.meanPercentile} (50 if unbiased)` : D('record a map end with `rec` to test the forecast against play')}`);
   out.push(D('Assumes: fair share of actions (one per acting unit per wave); pairs stay together all map; stats fixed within a map, expected growth between;'));
-  out.push(D('one enemy-phase attack per acting unit; the lead gets damage EXP only when its back lands the kill; heals only follow a hit taken; reinforcements left out.'));
+  out.push(D('one enemy-phase attack per acting unit; under priority a unit never takes a kill a higher unit could, it chips or waits; the lead gets damage EXP only when its back lands the kill; heals only follow a hit taken; reinforcements left out.'));
   if (message) out.push('', message);
   out.push('');
-  out.push(`${B('n')}/${B('b')} ${D('next/prev map')}  ${B('pol')} ${D('toggle policy')}  ${B('hi|norm|lo <unit>')} ${D('priority')}  ${B('field <unit>')} ${D('toggle')} ${D('(field/pair: from this map on)')}  ${B('pair <lead> <back>')}  ${B('unpair <lead>')}`);
+  out.push(`${B('n')}/${B('b')} ${D('next/prev map')}  ${B('pol')} ${D('toggle policy')}  ${B('vet')} ${D('Veteran reading')}  ${B('hi|norm|lo <unit>')} ${D('priority')}  ${B('field <unit>')} ${D('toggle')} ${D('(field/pair: from this map on)')}  ${B('pair <lead> <back>')}  ${B('unpair <lead>')}`);
   out.push(`${B('rec <unit> <level> <exp>')} ${D('record this map’s end')}  ${B('unrec <unit>')}  ${B('runs <n>')}  ${B('q')} ${D('quit')}`);
   console.clear();
   console.log(out.join('\n'));
@@ -94,6 +96,7 @@ function handle(line: string): boolean {
     case 'q': return false;
     case 'n': at = Math.min(maps.length - 1, at + 1); break;
     case 'b': at = Math.max(0, at - 1); break;
+    case 'vet': plan = { ...plan, veteranAsBack: !plan.veteranAsBack }; break;
     case 'pol': plan = { ...plan, policy: plan.policy === 'even' ? 'priority' : 'even' }; break;
     case 'hi': case 'norm': case 'lo':
       if (!u) { message = 'which unit?'; break; }
