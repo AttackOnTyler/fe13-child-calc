@@ -422,6 +422,10 @@ _Avoid_: Guess, setting, config
 The user's replacement for an assumption's default. It recomputes every pairing, and it is saved in the browser until reset.
 _Avoid_: Setting, preference (preferences are a wider set that includes overrides)
 
+**In-play check**:
+An observation from the run itself that settles an assumption. The preparation page asks for it when the next map sets up the situation (Robin fielded as a Back, a unit's first kill after an early promotion), and Record results takes the reading, which confirms the default or replaces it. Until then, planning runs on the default.
+_Avoid_: Test, experiment, checklist (the list of open checks)
+
 **Resolved disagreement**:
 A value where the sources conflicted and the research picked a winner. It is listed with the winning and losing values and their sources. It is not an assumption, because it can't be overridden.
 _Avoid_: Conflict, discrepancy
