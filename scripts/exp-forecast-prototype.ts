@@ -4,7 +4,7 @@
  */
 import { createInterface } from 'node:readline';
 import { MAPS } from '../src/game-data/chapters';
-import { ADJACENT, calibration, deployCount, forecast, mapFoes, percentileOf, unitDefs, type MapPlan, type Plan, type Priority, type UnitId } from '../src/engine/exp-forecast.prototype';
+import { ADJACENT, calibration, goalChance, type Goal, deployCount, forecast, mapFoes, percentileOf, unitDefs, type MapPlan, type Plan, type Priority, type UnitId } from '../src/engine/exp-forecast.prototype';
 
 const B = (s: string) => `\x1b[1m${s}\x1b[0m`;
 const D = (s: string) => `\x1b[2m${s}\x1b[0m`;
@@ -23,6 +23,7 @@ const initialMaps: MapPlan[] = maps.map((m, i) => {
 
 let plan: Plan = { policy: 'priority', veteranAsBack: false, priority: {}, maps: initialMaps, recorded: {} };
 let at = 0;
+let goals: Goal[] = [{ unit: 'robin', level: 10, map: 'chapter-5' }];
 let runs = 300;
 let message = '';
 
@@ -70,6 +71,17 @@ function render() {
       .map(([id, k]) => `${unitName(id)} ${k.toFixed(1)}`);
     out.push(`  ${pad(`${n}× ${g}`, 26)}${takers.join(' · ') || D('nobody reliably')}`);
   }
+  out.push('');
+  out.push(B('Milestones') + D('  (level reached before the map starts, share of runs)'));
+  if (!goals.length) out.push(D('  none — add one with `goal <unit> <level> <map>`'));
+  goals.forEach((g, i) => {
+    const r = goalChance(g, fc);
+    const m = maps.find((x) => x.id === g.map)!;
+    const bar = '█'.repeat(Math.round(r.chance * 20)).padEnd(20, '░');
+    out.push(r.joined
+      ? `  ${i + 1}. ${pad(`${unitName(g.unit)} Lv ${g.level} by ${m.label}`, 30)}${bar} ${B(`${Math.round(r.chance * 100)}%`.padStart(4))}  ${D(`median Lv ${lv(r.median)} at the deadline`)}${plan.maps.slice(0, MAP_IDS.indexOf(g.map)).some((mp) => mp.fielded.includes(g.unit)) ? '' : D(' · never fielded before then: `field` them earlier')}`
+      : `  ${i + 1}. ${pad(`${unitName(g.unit)} Lv ${g.level} by ${m.label}`, 30)}${D('not joined by then')}`);
+  });
   const cal = calibration(plan, fc);
   out.push('');
   out.push(`${B('Calibration')} ${cal.points ? `${cal.inside}/${cal.points} recorded results inside p10–p90 (≈80% if calibrated) · mean percentile ${cal.meanPercentile} (50 if unbiased)` : D('record a map end with `rec` to test the forecast against play')}`);
@@ -78,7 +90,7 @@ function render() {
   if (message) out.push('', message);
   out.push('');
   out.push(`${B('n')}/${B('b')} ${D('next/prev map')}  ${B('pol')} ${D('toggle policy')}  ${B('vet')} ${D('Veteran reading')}  ${B('hi|norm|lo <unit>')} ${D('priority')}  ${B('field <unit>')} ${D('toggle')} ${D('(field/pair: from this map on)')}  ${B('pair <lead> <back>')}  ${B('unpair <lead>')}`);
-  out.push(`${B('rec <unit> <level> <exp>')} ${D('record this map’s end')}  ${B('unrec <unit>')}  ${B('runs <n>')}  ${B('q')} ${D('quit')}`);
+  out.push(`${B('rec <unit> <level> <exp>')} ${D('record this map’s end')}  ${B('unrec <unit>')}  ${B('goal <unit> <lvl> <map>')} ${D('e.g. goal robin 10 5')}  ${B('ungoal <n>')}  ${B('runs <n>')}  ${B('q')} ${D('quit')}`);
   console.clear();
   console.log(out.join('\n'));
 }
@@ -96,6 +108,15 @@ function handle(line: string): boolean {
     case 'q': return false;
     case 'n': at = Math.min(maps.length - 1, at + 1); break;
     case 'b': at = Math.max(0, at - 1); break;
+    case 'goal': {
+      const level = Number(args[1]);
+      const mapArg = (args[2] ?? '').toLowerCase();
+      const map = maps.find((m) => m.id === mapArg || m.id === `chapter-${mapArg.replace(/^ch(apter)?-?/, '')}` || (mapArg === 'prologue' && m.id === 'prologue'));
+      if (!u || !Number.isFinite(level) || !map) { message = 'goal <unit> <level> <map: prologue|1..7>'; break; }
+      goals = [...goals, { unit: u, level, map: map.id }];
+      break;
+    }
+    case 'ungoal': goals = goals.filter((_, i) => i !== Number(args[0]) - 1); break;
     case 'vet': plan = { ...plan, veteranAsBack: !plan.veteranAsBack }; break;
     case 'pol': plan = { ...plan, policy: plan.policy === 'even' ? 'priority' : 'even' }; break;
     case 'hi': case 'norm': case 'lo':

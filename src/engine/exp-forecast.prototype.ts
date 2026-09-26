@@ -344,7 +344,23 @@ export type UnitForecast = {
   /** Every sample's end level (decimal), for the percentile of a recorded result. */
   readonly samples: readonly number[];
 };
-export type MapForecast = { readonly map: string; readonly waves: Band; readonly units: Readonly<Partial<Record<UnitId, UnitForecast>>> };
+export type MapForecast = {
+  readonly map: string;
+  readonly waves: Band;
+  readonly units: Readonly<Partial<Record<UnitId, UnitForecast>>>;
+  /** Every run's level (decimal) at the map's start, for every unit who has joined, fielded or not. */
+  readonly startLevels: Readonly<Partial<Record<UnitId, readonly number[]>>>;
+};
+
+/** A milestone target: the unit at this level before the map starts (a deadline before an event, #144). */
+export type Goal = { readonly unit: UnitId; readonly level: number; readonly map: string };
+export type GoalResult = { readonly goal: Goal; readonly chance: number; readonly median: number; readonly joined: boolean };
+
+export function goalChance(goal: Goal, fc: readonly MapForecast[]): GoalResult {
+  const xs = fc.find((m) => m.map === goal.map)?.startLevels[goal.unit];
+  if (!xs?.length) return { goal, chance: 0, median: 0, joined: false };
+  return { goal, chance: xs.filter((x) => x >= goal.level).length / xs.length, median: band(xs).p50, joined: true };
+}
 
 export function forecast(plan: Plan, defs: readonly UnitDef[], runs = 300, seed = 1): MapForecast[] {
   const rng = mulberry32(seed);
@@ -384,7 +400,9 @@ export function forecast(plan: Plan, defs: readonly UnitDef[], runs = 300, seed 
         samples: endSamples,
       };
     }
-    return { map: mp.map, waves: band(samples.map((s) => s.waves)), units: out };
+    const startLevels: Partial<Record<UnitId, number[]>> = {};
+    for (const s of samples) for (const [id, p] of Object.entries(s.start)) if (p) (startLevels[id as UnitId] ??= []).push(p.level + p.exp / 100);
+    return { map: mp.map, waves: band(samples.map((s) => s.waves)), units: out, startLevels };
   });
 }
 
