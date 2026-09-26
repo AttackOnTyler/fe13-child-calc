@@ -8,10 +8,11 @@ import {
   BASE_CHANCE, CEILING, EDITS, ENDPOINT, NOISE, PROPOSALS, ROADMAP, ROBIN_OPTIONS, baseWishlist, solveRobin,
   type Edit, type RobinOption, type Wishlist,
 } from './model';
+import { LOSS, STOPS, type InboxItem, type Reading } from './run';
 
 const app = document.getElementById('app')!;
 const bar = document.getElementById('switcher')!;
-const VARIANTS = { A: 'Decision steps', B: 'Wishlist sheet', C: 'Proposal inbox' } as const;
+const VARIANTS = { A: 'Decision steps', B: 'Wishlist sheet', C: 'Proposal inbox', D: 'Inbox → Run handoff' } as const;
 type V = keyof typeof VARIANTS;
 let variant = (new URLSearchParams(location.search).get('variant') ?? 'A') as V;
 if (!(variant in VARIANTS)) variant = 'A';
@@ -38,6 +39,13 @@ const S = {
   cell: undefined as string | undefined,
   // C
   query: '',
+  // D: the run after the Lock
+  tab: 'run' as 'run' | 'wishlist' | 'prep',
+  stop: 0,
+  recording: false,
+  lost: false,
+  changed: undefined as { map: string; lines: string[] } | undefined,
+  log: [] as string[],
 };
 const T0 = Date.now();
 
@@ -88,7 +96,8 @@ function apply(e: Edit, pinned: boolean) {
 }
 const undo = (id: string) => (S.applied = S.applied.filter((a) => a.edit.id !== id));
 const editsFor = (unit: string) => EDITS.filter((e) => e.units[0] === unit || e.units.includes(unit));
-const edit = (id: string) => [...EDITS, ...PROPOSALS.map((p) => p[1])].find((e) => e.id === id)!;
+const edit = (id: string) =>
+  [...EDITS, ...PROPOSALS.map((p) => p[1]), ...[...STOPS.flatMap((x) => x.inbox), ...LOSS.inbox].flatMap((i) => (i.fix ? [i.fix] : []))].find((e) => e.id === id)!;
 
 // The anytime search: proposals trickle in after load.
 for (const [ms, e] of PROPOSALS) setTimeout(() => (S.proposals.push(e), render()), ms);
@@ -108,7 +117,7 @@ function search(): string {
 }
 
 function headline(big = false): string {
-  const c = chance();
+  const c = chanceNow();
   const pc = pinCost();
   return `<div class="head ${big ? 'big' : ''}">
     <div><b class="chance">${c.toFixed(1)}%</b> flawless chance <small>— reaches ${ENDPOINT.map} with no unit dying</small></div>
@@ -123,7 +132,8 @@ function unitCard(w: Wishlist, id: string, pos: string, clickable = false): stri
   const touched = S.applied.some((a) => a.edit.units.includes(id));
   return `<div class="unit ${clickable ? 'click' : ''} ${S.cell === id ? 'sel' : ''} ${touched ? 'touched' : ''}" ${clickable ? `data-cell="${id}"` : ''}>
     <div><span class="pos">${pos}</span> <b>${esc(u.name)}</b> <small>${u.cls}${u.job !== 'fights' ? ` · ${u.job}` : ''}</small>
-    <span class="worth" title="Unit worth: flawless points lost without this unit">${u.forced ? 'forced' : `worth ${u.worth.toFixed(1)}`}</span></div>
+    <span class="worth" title="Unit worth: flawless points lost without this unit">${u.forced ? 'forced' : `worth ${u.worth.toFixed(1)}`}</span>
+    ${variant === 'D' && S.locked ? readingChip(id) : ''}</div>
     <div class="skills">${u.skills.map((s) => `<span>${esc(s)}</span>`).join('')}</div>
     ${u.parents ? `<div class="par"><small>${esc(u.parents[0])} × ${esc(u.parents[1])} · passes ${u.passes!.map(esc).join(' / ')}</small></div>` : ''}
   </div>`;
@@ -297,11 +307,89 @@ function variantC(): string {
   </div>`;
 }
 
+// ---- D: inbox → run handoff -----------------------------------------------------------------------------------------
+// Before the Lock: C's inbox is the whole setup. The Lock lands on a stubbed Run view whose top is the same inbox
+// ("Before <map>"), above Next map (Prepare / Record results). B's sheet becomes the Wishlist tab, with readings.
+function chanceNow(): number {
+  if (variant !== 'D' || !S.locked) return chance();
+  return STOPS[S.stop]!.chance - BASE_CHANCE + chance() + (S.lost ? LOSS.chanceHit : 0);
+}
+const stop = () => STOPS[S.stop]!;
+const resolved = (i: InboxItem) => !!i.fix && (isApplied(i.fix) || S.opened.has('dismiss:' + i.fix.id));
+function readings(): Record<string, [Reading, string]> {
+  const r: Record<string, [Reading, string]> = { ...stop().readings, ...(S.lost ? LOSS.readings : {}) };
+  for (const i of inbox()) if (i.unit && resolved(i)) delete r[i.unit];
+  return r;
+}
+const inbox = (): InboxItem[] => [...(S.lost ? LOSS.inbox : []), ...stop().inbox];
+function readingChip(id: string): string {
+  const w = wishlist();
+  if (w.reserves.some((r) => r.id === id)) return '';
+  const r = readings()[id];
+  const [cls, label] = !r ? ['ok', 'on track'] : r[0] === 'at risk' ? ['warn', 'at risk'] : ['bad', 'behind'];
+  return `<span class="chip ${cls}" title="${r ? esc(r[1]) : 'Every open milestone ≥ 80%'}">${label}</span>`;
+}
+
+function inboxItem(i: InboxItem): string {
+  const done = resolved(i);
+  if (i.kind === 'milestone' || i.kind === 'check')
+    return `<div class="ib"><span class="chip ${i.kind === 'check' ? 'ov' : 'dim'}">${i.kind === 'check' ? 'in-play check' : 'this map'}</span> ${esc(i.text)}</div>`;
+  const tag = i.kind === 'at-risk' ? '<span class="chip warn">at risk</span>' : i.kind === 'behind' ? '<span class="chip bad">behind</span>' : '<span class="chip ok">re-solve</span>';
+  const f = i.fix!;
+  return `<div class="ib ${done ? 'done' : ''}">${tag} <b>${esc(i.text)}</b>${i.chance ? ` <small>milestone chance ${i.chance[0]}% → ${i.chance[1]}% with:</small>` : ''}
+    <div class="edit"><span>${esc(f.label)}</span>${cost(f.delta, T0 - 5000, f.split)}
+    ${done ? (isApplied(f) ? `<span class="chip ok">done</span> <button data-undo="${f.id}">undo</button>` : '<small>dismissed</small>')
+      : `<button class="primary" data-${i.kind === 'at-risk' ? 'pin' : 'accept'}="${f.id}">${i.kind === 'at-risk' ? 'pin it' : 'accept'}</button>${i.kind === 'proposal' ? `<button data-dismiss="${f.id}">dismiss</button>` : ''}`}</div></div>`;
+}
+
+function runTab(): string {
+  const s = stop();
+  const items = inbox();
+  const open = items.filter((i) => i.fix && !resolved(i));
+  const next = S.stop + 1 < STOPS.length;
+  const record = S.recording
+    ? `<div class="card rec"><h3>Record results: ${s.map}</h3><p class="note">(Today’s Record results steps — deployed, recruits, deaths, marriages, gold, class changes, items — collapsed to one choice for the prototype.)</p>
+        ${next ? `<button class="primary" data-record="clean">Cleared, no deaths</button> ${S.stop >= 2 && !S.lost ? `<button data-record="loss">Cleared, but ${LOSS.unit} died</button>` : ''}` : '<p>End of the scripted run.</p>'}
+        <button data-record="cancel">cancel</button></div>`
+    : `<div class="card nextmap"><b>Next map</b> <span class="map">${s.map}</span>
+        <button data-tab="prep">Prepare</button><button class="primary" data-record="start">Record results</button>
+        ${open.length ? `<small class="warnline">${open.length} item${open.length > 1 ? 's' : ''} above still need${open.length > 1 ? '' : 's'} you (you can play anyway)</small>` : ''}</div>`;
+  return `${headline()}
+    ${S.changed ? `<div class="card changed"><h3>What changed on ${S.changed.map}</h3><ul>${S.changed.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul><button data-seen>got it</button></div>` : ''}
+    <div class="card"><h3>Before ${s.map}: what needs you</h3>
+      ${items.length ? items.map(inboxItem).join('') : ''}
+      ${!open.length ? '<p class="note">Nothing to decide. Play it.</p>' : ''}</div>
+    ${record}
+    <details class="card"><summary>Chapter log (${S.log.length} recorded)</summary>${S.log.map((l) => `<div class="line">${esc(l)}</div>`).join('') || '<small>Nothing recorded yet.</small>'}</details>`;
+}
+
+function prepTab(): string {
+  const s = stop();
+  const pins = S.applied.filter((a) => a.pinned && a.edit.id.startsWith('sp-'));
+  return `${headline()}<div class="card"><h2>Prepare: ${s.map}</h2>
+    <p class="note">Today’s preparation page (matchups, deployment and pairs, loadouts, supply list, seals and promotions, chapter guide) stays. What the roadmap adds, stubbed:</p>
+    <ul>
+      <li><b>Lineup from the roadmap:</b> Robin leads${pins.length ? ', Frederick backs (your span pin)' : ', Chrom backs'}. Positions come from the solve, not a role setting.</li>
+      <li><b>EXP priority:</b> Robin high, Frederick low (chips or waits). Expected: Robin +180–240 EXP.</li>
+      <li><b>Milestone actions before this map:</b> ${s.inbox.filter((i) => i.kind === 'milestone').map((i) => esc(i.text)).join(' ') || 'none'}</li>
+      <li><b>Items before this map:</b> nothing planned.</li>
+    </ul><button data-tab="run">← back to Run</button></div>`;
+}
+
+function variantD(): string {
+  if (!S.locked)
+    return `<div class="dbar"><span class="on">1. Before the run</span><span>2. Lock Robin</span><span>3. Run</span></div>${variantC()}`;
+  const tabs = `<div class="dbar tabs"><button class="${S.tab !== 'wishlist' ? 'on' : ''}" data-tab="run">Run</button><button class="${S.tab === 'wishlist' ? 'on' : ''}" data-tab="wishlist">Wishlist ${
+    Object.keys(readings()).length ? `<span class="chip warn">${Object.keys(readings()).length}</span>` : ''}</button></div>`;
+  if (S.tab === 'wishlist') return tabs + variantB();
+  return `${tabs}<div class="c">${S.tab === 'prep' ? prepTab() : runTab()}</div>`;
+}
+
 // ---- Render + events ------------------------------------------------------------------------------------------------
 function render() {
   const active = document.activeElement as HTMLInputElement | null;
   const caret = active?.dataset && 'q' in active.dataset ? active.selectionStart : null;
-  app.innerHTML = variant === 'A' ? variantA() : variant === 'B' ? variantB() : variantC();
+  app.innerHTML = variant === 'A' ? variantA() : variant === 'B' ? variantB() : variant === 'C' ? variantC() : variantD();
   bar.innerHTML = `<button data-v="${prev()}">‹</button><span>${variant} — ${VARIANTS[variant]}</span><button data-v="${next()}">›</button>`;
   if (caret !== null) {
     const i = app.querySelector<HTMLInputElement>('[data-q]');
@@ -317,7 +405,7 @@ const prev = () => keys[(keys.indexOf(variant) + keys.length - 1) % keys.length]
 const next = () => keys[(keys.indexOf(variant) + 1) % keys.length]!;
 
 document.addEventListener('click', (e) => {
-  const t = (e.target as HTMLElement).closest('[data-v],[data-step],[data-robin],[data-solve],[data-pin],[data-undo],[data-accept],[data-dismiss],[data-lock],[data-unlock],[data-cell],[data-pincost],[data-moreb],summary') as HTMLElement | null;
+  const t = (e.target as HTMLElement).closest('[data-v],[data-step],[data-robin],[data-solve],[data-pin],[data-undo],[data-accept],[data-dismiss],[data-lock],[data-unlock],[data-cell],[data-pincost],[data-moreb],[data-tab],[data-record],[data-seen],summary') as HTMLElement | null;
   if (!t || t.tagName === 'INPUT') return;
   const d = t.dataset;
   if (t.tagName === 'SUMMARY') {
@@ -348,6 +436,19 @@ document.addEventListener('click', (e) => {
   if (d.cell) S.cell = S.cell === d.cell ? undefined : d.cell;
   if (d.pincost) S.showPinCost.add(d.pincost);
   if ('moreb' in d) S.moreRobins = !S.moreRobins;
+  if ('lock' in d) S.tab = 'run';
+  if (d.tab) S.tab = d.tab as typeof S.tab;
+  if ('seen' in d) S.changed = undefined;
+  if (d.record === 'start') S.recording = true;
+  if (d.record === 'cancel') S.recording = false;
+  if (d.record === 'clean' || d.record === 'loss') {
+    const played = stop().map;
+    S.log.push(`${played}: cleared${d.record === 'loss' ? `, ${LOSS.unit} died` : ', no deaths'}`);
+    S.stop++;
+    if (d.record === 'loss') S.lost = true;
+    S.changed = { map: played, lines: d.record === 'loss' ? [...LOSS.changed, ...stop().changed.slice(1)] : stop().changed };
+    S.recording = false;
+  }
   render();
 });
 document.addEventListener('change', (e) => {

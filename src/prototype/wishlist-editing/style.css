@@ -51,3 +51,11 @@ small, .note { color: var(--dim); } .note { font-size: 12.5px; }
 .c { max-width: 760px; margin: 0 auto; padding: 8px 16px; } .c input[data-q] { width: 100%; padding: 6px 10px; margin: 4px 0 8px; } .line { padding: 2px 0; }
 #switcher { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; align-items: center; background: #fff; color: #000; border-radius: 20px; padding: 6px 12px; box-shadow: 0 4px 16px #0008; font-weight: 600; z-index: 9; }
 #switcher button { background: #000; color: #fff; border: 0; border-radius: 12px; }
+/* D */
+.chip.warn { background: #3a2a18; color: var(--warn); } .chip.bad { background: #3a1c1c; color: var(--bad); } .chip.dim { background: #232833; color: var(--dim); } .chip.ov { background: #2c2140; color: var(--ov); }
+.dbar { display: flex; gap: 6px; justify-content: center; padding: 8px; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--dim); }
+.dbar span.on, .dbar button.on { color: #000; background: var(--acc); border-radius: 6px; padding: 2px 10px; } .dbar span { padding: 2px 10px; }
+.ib { padding: 6px 0; border-bottom: 1px solid var(--line); } .ib.done { opacity: .6; } .ib .edit { border: 0; }
+.changed { border-color: var(--acc); } .changed ul { margin: 4px 0 8px; padding-left: 18px; }
+.nextmap { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; border-color: var(--acc); } .nextmap .map { flex: 1; font-weight: 600; }
+.warnline { color: var(--warn); width: 100%; }
