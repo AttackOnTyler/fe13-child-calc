@@ -4,7 +4,7 @@
  */
 import { createInterface } from 'node:readline';
 import { MAPS } from '../src/game-data/chapters';
-import { ADJACENT, calibration, goalChance, suggest, type Suggestion, type Goal, deployCount, forecast, mapFoes, percentileOf, unitDefs, type MapPlan, type Plan, type Priority, type UnitId } from '../src/engine/exp-forecast.prototype';
+import { ADJACENT, calibration, goalChance, learnCorrections, suggest, type Suggestion, type Goal, deployCount, forecast, mapFoes, percentileOf, unitDefs, type MapPlan, type Plan, type Priority, type UnitId } from '../src/engine/exp-forecast.prototype';
 
 const B = (s: string) => `\x1b[1m${s}\x1b[0m`;
 const D = (s: string) => `\x1b[2m${s}\x1b[0m`;
@@ -23,6 +23,7 @@ const initialMaps: MapPlan[] = maps.map((m, i) => {
 
 let plan: Plan = { policy: 'priority', veteranAsBack: false, priority: {}, maps: initialMaps, recorded: {} };
 let at = 0;
+let correct = true;
 let suggestions: { goal: number; list: Suggestion[] } | null = null;
 let goals: Goal[] = [{ unit: 'robin', level: 10, map: 'chapter-5' }];
 let runs = 300;
@@ -33,8 +34,16 @@ const findUnit = (text: string | undefined): UnitId | undefined => defs.find((d)
 const lv = (x: number) => `${Math.floor(x)}.${String(Math.round((x % 1) * 100)).padStart(2, '0')}`;
 const PRIO = ['low', 'norm', 'HIGH'];
 
+/** The plan with its learned corrections, and what was learned (from the uncorrected forecast). */
+function corrected() {
+  const learned = learnCorrections(plan, forecast({ ...plan, corrections: {} }, defs, runs));
+  const corrections = correct ? Object.fromEntries(Object.entries(learned).map(([id, c]) => [id, c!.factor])) : {};
+  return { learned, plan: { ...plan, corrections } };
+}
+
 function render() {
-  const fc = forecast(plan, defs, runs);
+  const { learned, plan: live } = corrected();
+  const fc = forecast(live, defs, runs);
   const mp = plan.maps[at]!;
   const m = maps[at]!;
   const f = fc[at]!;
@@ -96,11 +105,14 @@ function render() {
   const cal = calibration(plan, fc);
   out.push('');
   out.push(`${B('Calibration')} ${cal.points ? `${cal.inside}/${cal.points} recorded results inside p10–p90 (≈80% if calibrated) · mean percentile ${cal.meanPercentile} (50 if unbiased)` : D('record a map end with `rec` to test the forecast against play')}`);
+  const lastRec = plan.maps.reduce((a, m, i) => (Object.keys(plan.recorded[m.map] ?? {}).length ? i : a), -1);
+  const learnedText = Object.entries(learned).map(([id, c]) => `${unitName(id)} EXP ×${c!.factor.toFixed(2)} (${c!.maps} map${c!.maps > 1 ? 's' : ''}: gained ${c!.actual} vs ${c!.forecast} forecast)`);
+  if (learnedText.length) out.push(`${B('Learned correction')} ${correct ? '' : D('(off) ')}${learnedText.join(' · ')}${correct && maps[lastRec + 1] ? D(` — assumed from ${maps[lastRec + 1]!.label} on`) : ''}`);
   out.push(D('Assumes: fair share of actions (one per acting unit per wave); pairs stay together all map; stats fixed within a map, expected growth between;'));
   out.push(D('one enemy-phase attack per acting unit; under priority a unit never takes a kill a higher unit could, it chips or waits; the lead gets damage EXP only when its back lands the kill; heals only follow a hit taken; reinforcements left out.'));
   if (message) out.push('', message);
   out.push('');
-  out.push(`${B('n')}/${B('b')} ${D('next/prev map')}  ${B('pol')} ${D('toggle policy')}  ${B('vet')} ${D('Veteran reading')}  ${B('hi|norm|lo <unit>')} ${D('priority')}  ${B('field <unit>')} ${D('toggle')} ${D('(field/pair: from this map on)')}  ${B('pair <lead> <back>')}  ${B('unpair <lead>')}`);
+  out.push(`${B('n')}/${B('b')} ${D('next/prev map')}  ${B('pol')} ${D('toggle policy')}  ${B('vet')} ${D('Veteran reading')}  ${B('corr')} ${D('learned correction on/off')}  ${B('hi|norm|lo <unit>')} ${D('priority')}  ${B('field <unit>')} ${D('toggle')} ${D('(field/pair: from this map on)')}  ${B('pair <lead> <back>')}  ${B('unpair <lead>')}`);
   out.push(`${B('rec <unit> <level> <exp>')} ${D('record this map’s end')}  ${B('unrec <unit>')}  ${B('goal <unit> <lvl> <map>')} ${D('e.g. goal robin 10 5')}  ${B('ungoal <n>')}  ${B('suggest <n>')}  ${B('take <n>')}  ${B('runs <n>')}  ${B('q')} ${D('quit')}`);
   console.clear();
   console.log(out.join('\n'));
@@ -131,7 +143,7 @@ function handle(line: string): boolean {
     case 'suggest': {
       const i = Number(args[0] ?? 1) - 1;
       if (!goals[i]) { message = 'suggest <goal number>'; break; }
-      suggestions = { goal: i, list: suggest(plan, defs, goals, i) };
+      suggestions = { goal: i, list: suggest(corrected().plan, defs, goals, i) };
       break;
     }
     case 'take': {
@@ -142,6 +154,7 @@ function handle(line: string): boolean {
       suggestions = null;
       break;
     }
+    case 'corr': correct = !correct; break;
     case 'vet': plan = { ...plan, veteranAsBack: !plan.veteranAsBack }; break;
     case 'pol': plan = { ...plan, policy: plan.policy === 'even' ? 'priority' : 'even' }; break;
     case 'hi': case 'norm': case 'lo':

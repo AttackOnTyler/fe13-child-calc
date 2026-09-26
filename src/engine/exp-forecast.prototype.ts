@@ -99,7 +99,7 @@ export function unitDefs(maps: readonly ChapterData[]): UnitDef[] {
       const j = JOIN_DATA[id];
       if (!j || j.chapter !== map.id || out.some((u) => u.id === id)) continue;
       // Joining at the chapter's end (Lon'qu): fielded from the next story map.
-      const joins = /end of the chapter/i.test(r.how ?? '') ? (map.unlocks.find((u) => u.startsWith('chapter')) ?? map.id) : map.id;
+      const joins = /^automatically at the end of the chapter/i.test(r.how ?? '') ? (map.unlocks.find((u) => u.startsWith('chapter')) ?? map.id) : map.id;
       const personal = id === 'robin' ? ROBIN_GROWTHS : (FIRST_GEN_UNITS as unknown as Record<string, { growths: Record<Stat, number> }>)[id]!.growths;
       const g = CLASSES[j.joinClass].growths as unknown as Record<string, number> & { male?: Record<string, number> };
       const cls = (g.male ?? g) as Partial<Record<Stat, number>>;
@@ -145,6 +145,8 @@ export type Plan = {
   readonly maps: readonly MapPlan[];
   /** What the player recorded at a map's end: level and EXP. */
   readonly recorded: Readonly<Record<string, Readonly<Partial<Record<UnitId, { level: number; exp: number }>>>>>;
+  /** Learned from recorded maps: each unit's EXP scaled by this, on maps after the last recorded one. */
+  readonly corrections?: Readonly<Partial<Record<UnitId, number>>>;
 };
 
 // ---------- One simulated run ----------
@@ -197,7 +199,7 @@ function gain(u: UnitState, amount: number) {
 type Rng = () => number;
 
 /** One map, one roll of the dice. */
-function simulateMap(plan: Plan, mp: MapPlan, map: ChapterData, units: Map<UnitId, UnitState>, rng: Rng): MapSample {
+function simulateMap(plan: Plan, mp: MapPlan, map: ChapterData, units: Map<UnitId, UnitState>, rng: Rng, corrected: boolean): MapSample {
   const start = Object.fromEntries([...units].map(([id, u]) => [id, { level: u.level, exp: u.exp }]));
   const foes = mapFoes(map).map((f) => ({ ...f, hp: f.foe.stats.hp, engaged: 0 }));
   const fielded = mp.fielded.filter((id) => units.has(id));
@@ -258,7 +260,7 @@ function simulateMap(plan: Plan, mp: MapPlan, map: ChapterData, units: Map<UnitI
     }
     const bonus = (CLASS_BONUS[f.foe.className] ?? 0) + (f.foe.boss ? 20 : 0);
     const foeLevel = f.level + (advanced(f.foe.className) ? 20 : 0);
-    const give = (u: UnitState, uid: UnitId, amount: number) => { const a = Math.floor(amount); gain(u, a); tally[uid]!.exp += a; };
+    const give = (u: UnitState, uid: UnitId, amount: number) => { const a = Math.floor(amount * (corrected ? (plan.corrections?.[uid] ?? 1) : 1)); gain(u, a); tally[uid]!.exp += a; };
     if (leadDealt || killer === 'back') {
       const ld = foeLevel - il(lead);
       // Gap G2: when the back lands the kill, the lead is assumed to get damage EXP only.
@@ -365,6 +367,7 @@ export function goalChance(goal: Goal, fc: readonly MapForecast[]): GoalResult {
 export function forecast(plan: Plan, defs: readonly UnitDef[], runs = 300, seed = 1): MapForecast[] {
   const rng = mulberry32(seed);
   const perMap = plan.maps.map(() => [] as MapSample[]);
+  const lastRecorded = Math.max(-1, ...plan.maps.map((m, i) => (Object.keys(plan.recorded[m.map] ?? {}).length ? i : -1)));
   for (let r = 0; r < runs; r++) {
     const units = new Map<UnitId, UnitState>();
     plan.maps.forEach((mp, i) => {
@@ -373,7 +376,7 @@ export function forecast(plan: Plan, defs: readonly UnitDef[], runs = 300, seed 
       // A map already recorded re-anchors every run on what really happened.
       const before = i > 0 ? plan.recorded[plan.maps[i - 1]!.map] : undefined;
       for (const [id, p] of Object.entries(before ?? {})) { const u = units.get(id as UnitId); if (u && p) { u.level = p.level; u.exp = p.exp; } }
-      perMap[i]!.push(simulateMap(plan, mp, map, units, rng));
+      perMap[i]!.push(simulateMap(plan, mp, map, units, rng, i > lastRecorded));
     });
   }
   return plan.maps.map((mp, i) => {
@@ -526,4 +529,36 @@ export function suggest(plan: Plan, defs: readonly UnitDef[], goals: readonly Go
     })
     .filter((s) => s.chance > base.chances[index]!)
     .sort((a, b) => a.breaks - b.breaks || Number(b.chance >= TARGET) - Number(a.chance >= TARGET) || (a.chance >= TARGET ? a.waves - b.waves : 0) || b.chance - a.chance);
+}
+
+// ---------- Learning a correction from recorded maps ----------
+
+export type Correction = { readonly factor: number; readonly maps: number; readonly actual: number; readonly forecast: number };
+
+/**
+ * Per unit: the EXP it really gained on each recorded map against the uncorrected forecast's median for that map, from
+ * the same start (the previous map's record, else the forecast's median start). The factor is shrunk toward ×1 by one
+ * map's worth of forecast, so one lucky map can't swing it far, and clamped to ×0.5–×2.
+ */
+export function learnCorrections(plan: Plan, fc: readonly MapForecast[]): Partial<Record<UnitId, Correction>> {
+  const sums: Partial<Record<UnitId, { a: number; f: number; n: number }>> = {};
+  plan.maps.forEach((mp, i) => {
+    for (const [id, rec] of Object.entries(plan.recorded[mp.map] ?? {})) {
+      const u = fc[i]?.units[id as UnitId];
+      if (!u || !rec) continue;
+      const prev = i > 0 ? plan.recorded[plan.maps[i - 1]!.map]?.[id as UnitId] : undefined;
+      const start = prev ? prev.level * 100 + prev.exp : u.startLevel.p50 * 100;
+      const s = (sums[id as UnitId] ??= { a: 0, f: 0, n: 0 });
+      s.a += rec.level * 100 + rec.exp - start;
+      s.f += u.exp.p50;
+      s.n += 1;
+    }
+  });
+  const out: Partial<Record<UnitId, Correction>> = {};
+  for (const [id, s] of Object.entries(sums)) {
+    if (!s || s.f <= 0) continue;
+    const prior = s.f / s.n;
+    out[id as UnitId] = { factor: Math.min(2, Math.max(0.5, (s.a + prior) / (s.f + prior))), maps: s.n, actual: Math.round(s.a), forecast: Math.round(s.f) };
+  }
+  return out;
 }
