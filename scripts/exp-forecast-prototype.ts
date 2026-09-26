@@ -1,0 +1,139 @@
+/**
+ * PROTOTYPE — throwaway TUI over src/engine/exp-forecast.prototype.ts. Run: `npm run proto:exp`.
+ * Lunatic, Prologue → Chapter 4, real foes and join stats. Type a command and press Enter.
+ */
+import { createInterface } from 'node:readline';
+import { MAPS } from '../src/game-data/chapters';
+import { calibration, deployCount, forecast, mapFoes, percentileOf, unitDefs, type MapPlan, type Plan, type Priority, type UnitId } from '../src/engine/exp-forecast.prototype';
+
+const B = (s: string) => `\x1b[1m${s}\x1b[0m`;
+const D = (s: string) => `\x1b[2m${s}\x1b[0m`;
+const pad = (s: string, n: number) => (s.length >= n ? s.slice(0, n) : s + ' '.repeat(n - s.length));
+
+const MAP_IDS = ['prologue', 'chapter-1', 'chapter-2', 'chapter-3', 'chapter-4'];
+const maps = MAP_IDS.map((id) => MAPS.find((m) => m.id === id)!);
+const defs = unitDefs(maps);
+
+const initialMaps: MapPlan[] = maps.map((m, i) => {
+  const joined = defs.filter((d) => MAP_IDS.indexOf(d.joins) <= i).map((d) => d.id);
+  const forced = new Set(['chrom', 'robin', ...m.forced.map((f) => f.toLowerCase())]);
+  const fielded = [...joined.filter((u) => forced.has(u)), ...joined.filter((u) => !forced.has(u))].slice(0, deployCount(m));
+  return { map: m.id, fielded, pairs: {} };
+});
+
+let plan: Plan = { policy: 'priority', priority: {}, maps: initialMaps, recorded: {} };
+let at = 0;
+let runs = 300;
+let message = '';
+
+const unitName = (id: string) => defs.find((d) => d.id === id)?.name ?? id;
+const findUnit = (text: string | undefined): UnitId | undefined => defs.find((d) => d.id.startsWith((text ?? '').toLowerCase()))?.id;
+const lv = (x: number) => `${Math.floor(x)}.${String(Math.round((x % 1) * 100)).padStart(2, '0')}`;
+const PRIO = ['low', 'norm', 'HIGH'];
+
+function render() {
+  const fc = forecast(plan, defs, runs);
+  const mp = plan.maps[at]!;
+  const m = maps[at]!;
+  const f = fc[at]!;
+  const foes = mapFoes(m);
+  const out: string[] = [];
+  out.push(`${B('EXP FORECAST — PROTOTYPE')}  ${D(`Lunatic · ${runs} runs · policy`)} ${B(plan.policy)}`);
+  out.push(`${B(`${m.label}: ${m.title}`)}  ${D(`[${at + 1}/${maps.length}] deploy ${deployCount(m)} · ${foes.length} foes (no reinforcements) · waves p10/p50/p90 ${f.waves.p10}/${f.waves.p50}/${f.waves.p90}`)}`);
+  out.push('');
+  out.push(B(`${pad('unit', 10)}${pad('position', 16)}${pad('prio', 5)}${pad('start Lv', 9)}${pad('kills', 6)}${pad('combats', 8)}${pad('heals', 6)}${pad('EXP p10/p50/p90', 17)}${pad('end Lv p10 – p50 – p90', 24)}recorded`));
+  const backs = Object.fromEntries(Object.entries(mp.pairs).map(([l, b]) => [b, l]));
+  for (const id of mp.fielded) {
+    const u = f.units[id];
+    if (!u) continue;
+    const pos = mp.pairs[id] ? `Lead +${unitName(mp.pairs[id]!)}` : backs[id] ? `Back of ${unitName(backs[id]!)}` : 'Solo';
+    const rec = plan.recorded[mp.map]?.[id];
+    const recText = rec ? `Lv ${rec.level} ${rec.exp} → p${percentileOf(u.samples, rec.level + rec.exp / 100)}` : D('—');
+    out.push(
+      `${pad(unitName(id), 10)}${pad(pos, 16)}${pad(PRIO[plan.priority[id] ?? 1]!, 5)}${pad(lv(u.startLevel.p50), 9)}${pad(u.kills.toFixed(1), 6)}${pad(u.combats.toFixed(1), 8)}${pad(u.heals ? u.heals.toFixed(1) : '', 6)}` +
+        `${pad(`${Math.round(u.exp.p10)}/${Math.round(u.exp.p50)}/${Math.round(u.exp.p90)}`, 17)}${pad(`${lv(u.endLevel.p10)} – ${lv(u.endLevel.p50)} – ${lv(u.endLevel.p90)}`, 24)}${recText}`,
+    );
+  }
+  const benched = defs.filter((d) => MAP_IDS.indexOf(d.joins) <= at && !mp.fielded.includes(d.id)).map((d) => d.name);
+  if (benched.length) out.push(D(`not fielded: ${benched.join(', ')}`));
+  out.push('');
+  out.push(B('Who takes which foe groups') + D('  (mean kills per run)'));
+  const groups = [...new Set(foes.map((x) => x.group))];
+  for (const g of groups) {
+    const n = foes.filter((x) => x.group === g).length;
+    const takers = mp.fielded
+      .map((id) => [id, f.units[id]?.killsByGroup[g] ?? 0] as const)
+      .filter(([, k]) => k >= 0.05)
+      .sort((a, b) => b[1] - a[1])
+      .map(([id, k]) => `${unitName(id)} ${k.toFixed(1)}`);
+    out.push(`  ${pad(`${n}× ${g}`, 26)}${takers.join(' · ') || D('nobody reliably')}`);
+  }
+  const cal = calibration(plan, fc);
+  out.push('');
+  out.push(`${B('Calibration')} ${cal.points ? `${cal.inside}/${cal.points} recorded results inside p10–p90 (≈80% if calibrated) · mean percentile ${cal.meanPercentile} (50 if unbiased)` : D('record a map end with `rec` to test the forecast against play')}`);
+  out.push(D('Assumes: fair share of actions (one per acting unit per wave); pairs stay together all map; stats fixed within a map, expected growth between;'));
+  out.push(D('one enemy-phase attack per acting unit; the lead gets damage EXP only when its back lands the kill; heals only follow a hit taken; reinforcements left out.'));
+  if (message) out.push('', message);
+  out.push('');
+  out.push(`${B('n')}/${B('b')} ${D('next/prev map')}  ${B('pol')} ${D('toggle policy')}  ${B('hi|norm|lo <unit>')} ${D('priority')}  ${B('field <unit>')} ${D('toggle')} ${D('(field/pair: from this map on)')}  ${B('pair <lead> <back>')}  ${B('unpair <lead>')}`);
+  out.push(`${B('rec <unit> <level> <exp>')} ${D('record this map’s end')}  ${B('unrec <unit>')}  ${B('runs <n>')}  ${B('q')} ${D('quit')}`);
+  console.clear();
+  console.log(out.join('\n'));
+}
+
+/** Edits are span pins "from here on": this map and every later one. */
+function setMap(edit: (m: MapPlan) => MapPlan) {
+  plan = { ...plan, maps: plan.maps.map((m, i) => (i >= at ? edit(m) : m)) };
+}
+
+function handle(line: string): boolean {
+  const [cmd, ...args] = line.trim().split(/\s+/);
+  message = '';
+  const u = findUnit(args[0]);
+  switch (cmd) {
+    case 'q': return false;
+    case 'n': at = Math.min(maps.length - 1, at + 1); break;
+    case 'b': at = Math.max(0, at - 1); break;
+    case 'pol': plan = { ...plan, policy: plan.policy === 'even' ? 'priority' : 'even' }; break;
+    case 'hi': case 'norm': case 'lo':
+      if (!u) { message = 'which unit?'; break; }
+      plan = { ...plan, priority: { ...plan.priority, [u]: ({ hi: 2, norm: 1, lo: 0 } as const)[cmd] as Priority } };
+      break;
+    case 'field':
+      if (!u) { message = 'which unit?'; break; }
+      { const on = !plan.maps[at]!.fielded.includes(u); setMap((m) => ({ ...m, fielded: on ? (m.fielded.includes(u) ? m.fielded : [...m.fielded, u]) : m.fielded.filter((x) => x !== u) })); }
+      break;
+    case 'pair': {
+      const back = findUnit(args[1]);
+      if (!u || !back) { message = 'pair <lead> <back>'; break; }
+      setMap((m) => ({ ...m, pairs: Object.fromEntries([...Object.entries(m.pairs).filter(([l, b]) => l !== u && b !== back && l !== back && b !== u), [u, back]]) }));
+      break;
+    }
+    case 'unpair': if (u) setMap((m) => ({ ...m, pairs: Object.fromEntries(Object.entries(m.pairs).filter(([l]) => l !== u)) })); break;
+    case 'rec': {
+      const level = Number(args[1]), exp = Number(args[2] ?? 0);
+      if (!u || !Number.isFinite(level)) { message = 'rec <unit> <level> <exp>'; break; }
+      const id = plan.maps[at]!.map;
+      plan = { ...plan, recorded: { ...plan.recorded, [id]: { ...plan.recorded[id], [u]: { level, exp } } } };
+      break;
+    }
+    case 'unrec': {
+      const id = plan.maps[at]!.map;
+      if (u) plan = { ...plan, recorded: { ...plan.recorded, [id]: Object.fromEntries(Object.entries(plan.recorded[id] ?? {}).filter(([k]) => k !== u)) } };
+      break;
+    }
+    case 'runs': runs = Math.max(20, Number(args[0]) || 300); break;
+    case '': break;
+    default: message = `unknown: ${cmd}`;
+  }
+  return true;
+}
+
+render();
+const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: '> ' });
+rl.prompt();
+rl.on('line', (line) => {
+  if (!handle(line)) { rl.close(); return; }
+  render();
+  rl.prompt();
+});

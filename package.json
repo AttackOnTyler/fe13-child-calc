@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "typecheck": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "proto:exp": "vite-node scripts/exp-forecast-prototype.ts"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
