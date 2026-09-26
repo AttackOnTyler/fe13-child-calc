@@ -63,6 +63,18 @@ _Avoid_: Mode, difficulty
 A single playthrough that weaves the non-grind DLC xenologues into the main campaign and paralogues, with Apotheosis as the capstone. No grind maps; DLC skills are reachable. Its build templates are curated from the user's own play, not community sources.
 _Avoid_: Hybrid run, DLC run
 
+**Endpoint**:
+The map a run is building its army for, with that map's deploy count; it defaults from the route (Full route → Apotheosis, Main story → Endgame). Unlike the play context, which picks the build templates, it is a single map with facts to plan against.
+_Avoid_: Goal, end state, final chapter, endgame (Endgame is a map's name)
+
+**Wishlist**:
+The army a run aims to field at its endpoint: the endpoint's deploy count of units, arranged as they'll fight (each Lead with its Battery, healers, a Dancer), each with its endpoint class and 5-skill build, and each child with its parents and the skill each parent passes when the child is recruited. It ends with the reserves.
+_Avoid_: Team, target army, roster (the Roster is the page of run facts and unit states)
+
+**Reserve**:
+A wishlist unit beyond the endpoint's deploy count, ordered by who steps in first when a wishlist unit is lost or falls behind.
+_Avoid_: Bench (Benched is a unit state), backup
+
 **Build template**:
 A curated 5-slot skill loadout for one role, tagged with the play contexts it suits. Each slot is a fixed skill or an ordered preference group. Matched against a pairing's reachable skills to produce a coverage tier (5/5, 4/5, 3/5).
 _Avoid_: Build (alone, when the template is meant), preset (a preset weights stats)
@@ -227,6 +239,14 @@ _Avoid_: Shopping list, shop advice
 **Expected stats**:
 Stats projected from average growths (personal plus class), labelled as expected and used only to judge promoting now or later. Everything else uses recorded stats.
 _Avoid_: Projected stats, averages (alone)
+
+**EXP priority**:
+The units deployed on the next map, ranked by how much EXP each needs there to stay on track for the wishlist. Guidance on who should take which foes, never a turn-by-turn kill plan.
+_Avoid_: Kill plan, feed list, XP budget
+
+**EXP forecast**:
+The expected EXP, and so the expected level range, each deployed unit ends a map with: the map's foes, the lineup's matchups and the EXP priority, with the kills shared among the units able to take them. Recalibrated from each recorded entry.
+_Avoid_: EXP plan, projection (alone)
 
 **Copy-forward**:
 A new entry starts as a copy of the one before, with the map's recruits filled in from join data. Editing a past entry never changes later ones; they're flagged instead.
