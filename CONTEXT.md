@@ -132,6 +132,14 @@ The number of distinct classes a unit must pass through, beyond its starting cla
 A child's maximum for a stat in a given class: the class's max stat plus the child's max-stat modifier, plus 10 (not HP) if Limit Breaker is assumed.
 _Avoid_: Max stat (ambiguous between class max and the child's cap), cap (alone)
 
+**Flawless chance**:
+The chance a plan reaches and clears its endpoint with no unit dying, from the next map on; Chrom's or Robin's death is the same failure. Every map on the way counts, each played by the army the plan and the recruitment gates allow there. A wishlist's flawless chance is that of the best roadmap found for it.
+_Avoid_: Score (alone), Σ, success rate, win rate
+
+**Ceiling**:
+The endpoint's flawless chance with every wishlist unit at its effective caps: the most a comp can do. Shown beside the flawless chance; no plan for that comp can beat it.
+_Avoid_: Max score, potential
+
 **Preset**:
 A named set of per-stat weights used to score pairings, optionally flagged Mixed. Each build template role maps to one.
 _Avoid_: Profile, build (a build is skills)
@@ -220,6 +228,18 @@ _Avoid_: Simulator, AI
 One lead and back against one foe: damage, whether one round kills (with and without dual strikes), doubling, the worst round the lead can take and whether it survives, hit and crit both ways.
 _Avoid_: Forecast (the game's single-attack preview)
 
+**Clear**:
+A foe killed with the killer surviving: by the Lead in a player-phase exchange, or by the pair's counter in enemy phase.
+_Avoid_: Kill (a kill can come with a death), one-round (a matchup verdict)
+
+**Action**:
+One unit's move in a turn; a pair acts through its Lead. A Dance grants another, and Galeforce grants one after a kill.
+_Avoid_: Turn (a turn is every unit's phase), move
+
+**Sustain**:
+HP restored at the cost of an action: a heal (the healer's action), a potion (the unit's own) or Rescue.
+_Avoid_: Healing (alone), recovery
+
 **Preparation page**:
 The page for getting ready for the next map, reached from Next map: its matchups first.
 _Avoid_: Prep screen, battle prep
@@ -230,14 +250,18 @@ _Avoid_: Warning (too broad)
 
 **Loadout**:
 The weapons a deployed unit takes into the next map, chosen from its inventory and the convoy by its matchups, then its other items; at most five.
-_Avoid_: Equipment, kit
+_Avoid_: Equipment, kit (the endpoint kit is a plan's assumption)
 
 **Supply list**:
 Buys and forges that turn foes a deployed lead can't one-round into one-round kills, cheapest per foe first, within the gold recorded and from armories the run has opened. Random merchants aren't counted.
 _Avoid_: Shopping list, shop advice
 
+**Endpoint kit**:
+The weapons, forges and potions a plan assumes each unit carries at the endpoint: what it already owns first, then the best the open armories sell, paid from the gold left after the run's upkeep, seals and promotions, and trimmed where that costs the fewest points of flawless chance.
+_Avoid_: Loadout (the next map's), gear
+
 **Expected stats**:
-Stats projected from average growths (personal plus class), labelled as expected and used only to judge promoting now or later. Everything else uses recorded stats.
+Stats projected from growths (personal plus class) along a unit's planned path, as a spread of likely values rather than a single line, and labelled as expected. They judge promoting now or later and are the projection behind the flawless chance; the next map's matchups use recorded stats.
 _Avoid_: Projected stats, averages (alone)
 
 **EXP priority**:
