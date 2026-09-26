@@ -138,3 +138,26 @@ describe('the xenologues and Apotheosis (#114)', () => {
     expect(byId.get('the-future-past-3')!.bosses['lunatic-plus']).toHaveLength(1);
   });
 });
+
+describe('forced units, checked against the sources (#132)', () => {
+  it('force Chrom wherever there is a preparations phase but the grind maps, and Robin on Chapter 23 alone (C15, C16)', () => {
+    const none = ['premonition', 'prologue', 'the-golden-gaffe', 'exponential-growth', 'infinite-regalia'];
+    for (const m of maps) expect(m.forced, m.id).toEqual(none.includes(m.id) ? [] : m.id === 'chapter-23' ? ['Chrom', 'Robin'] : ['Chrom']);
+    expect(byId.get('apotheosis')!.forced).toEqual(['Chrom']);
+  });
+
+  it('field Premonition’s Chrom and Robin with the map’s own setup (C17)', () => {
+    const p = byId.get('premonition')!;
+    expect(p.recruits.map((r) => [r.unit, r.class, r.level])).toEqual([
+      ['Chrom', 'Lord', '20'],
+      ['Robin', 'Tactician', '20'],
+    ]);
+    expect(p.recruits.every((r) => r.stats)).toBe(true);
+    expect(p.recruits[1]!.stats!.hp).toBe('38 (35 if flaw, 43 if asset)');
+  });
+
+  it('record where a source is silent or disagrees about who is fielded', () => {
+    const ids = engine.chapterDisagreements().map((d) => [d.id, d.map]);
+    expect(ids).toEqual(expect.arrayContaining([['C15', 'chapter-23'], ['C16', 'apotheosis'], ['C17', 'premonition'], ['C18', 'prologue'], ['C19', 'the-golden-gaffe'], ['C20', 'exponential-growth'], ['C21', 'infinite-regalia']]));
+  });
+});

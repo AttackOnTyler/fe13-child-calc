@@ -193,6 +193,14 @@ def enemy_group(p):
     return g
 
 
+def boss_stats(p, hover=False):
+    """A BossStats template's stats; with `hover`, {{hover|shown|note}} is kept as `shown (note)` (Premonition's Robin)."""
+    raw = {'hp': p.get('HP', p.get('hp')), 'str': p.get('str'), 'mag': p.get('magic', p.get('mag')), 'skl': p.get('skill'), 'spd': p.get('spd'), 'lck': p.get('luck', p.get('lck')), 'def': p.get('def'), 'res': p.get('res'), 'mov': p.get('move', p.get('mov'))}
+    if hover:
+        raw = {k: re.sub(r'\{\{hover\|([^{}|]*)\|([^{}]*)\}\}', r'\1 (\2)', x or '') for k, x in raw.items()}
+    return {k: clean(x or '') for k, x in raw.items()}
+
+
 def bullets(block):
     """A bulleted section as lines, nesting kept as '→' prefixes."""
     out = []
@@ -225,6 +233,13 @@ def parse(path, meta):
         while f'forced{i}' in cp:
             forced.append(clean(cp.get(f'forced{i}article') or cp[f'forced{i}']))
             i += 1
+    else:
+        # No ChapChars (Premonition, #131): the units are the Character data tabs, each fielded with a setup used only on
+        # this map (its stats kept, so it never joins the army).
+        for label, content in tabs(section(text, 'Character data', 3)):
+            for p, _ in templates(content, 'BossStats FE13'):
+                inv, _, _ = items_of(re.sub(r'<br\s*/?>', ' • ', p.get('inventory', '') or ''))
+                recruits.append({'unit': clean(label), 'class': clean(p.get('class')), 'level': clean(p.get('lv')), 'how': None, 'inventory': [i['name'] for i in inv], 'stats': boss_stats(p, hover=True)})
     rec['recruits'] = recruits
     rec['forced'] = [re.sub(r'\s+[lmf]$', '', f).strip().title() if f.islower() else f.strip() for f in forced]
     items = []
@@ -285,8 +300,7 @@ def parse(path, meta):
             # A boss lists one item per line: every line is inventory.
             items_, _, _ = items_of(re.sub(r'<br\s*/?>', ' • ', p.get('inventory', '') or ''))
             _, sk2, _ = items_of('<br>' + p.get('skills', ''))
-            bstat = {'hp': p.get('HP', p.get('hp')), 'str': p.get('str'), 'mag': p.get('magic', p.get('mag')), 'skl': p.get('skill'), 'spd': p.get('spd'), 'lck': p.get('luck', p.get('lck')), 'def': p.get('def'), 'res': p.get('res'), 'mov': p.get('move', p.get('mov'))}
-            rows.append({'class': clean(p.get('class')), 'level': clean(p.get('lv') or p.get('level')), 'stats': {k: clean(x or '') for k, x in bstat.items()}, 'items': items_, 'skills': sk2, **({'wave': p['__wave']} if p.get('__wave') else {})})
+            rows.append({'class': clean(p.get('class')), 'level': clean(p.get('lv') or p.get('level')), 'stats': boss_stats(p), 'items': items_, 'skills': sk2, **({'wave': p['__wave']} if p.get('__wave') else {})})
         bosses[d] = rows
     rec['bosses'] = bosses
     return rec
