@@ -78,3 +78,4 @@ details.inline { display: inline; } details.inline summary { display: inline; }
 .thr { padding: 3px 0; } .thr .bar { display: inline-block; width: 60px; height: 6px; background: #262b36; border-radius: 3px; margin-right: 6px; vertical-align: middle; } .thr .bar i { display: block; height: 100%; background: var(--bad); border-radius: 3px; }
 #switcher .sep { opacity: .4; } #switcher button.on { background: var(--acc); color: #000; }
 @media (max-width: 800px) { .cc { grid-template-columns: 1fr; } .cc aside { border: 0; padding: 0; } }
+.dd { grid-template-columns: 1fr 440px; } .t.tight td, .t.tight th { padding: 3px 6px; vertical-align: top; }

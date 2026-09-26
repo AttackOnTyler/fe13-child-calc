@@ -3,7 +3,7 @@
 // Ch 13: Lucina's paralogue entry, mid-map seal, tonics). State lives in memory.
 import { STEP_LABEL, STOPS, pct, units, type Action, type Member, type Pair, type Stop, type Step } from './model';
 
-const VARIANTS = { A: 'Today’s page + sections', B: 'The game’s prep menu, in order', C: 'Pair cards + map column' } as const;
+const VARIANTS = { A: 'Today’s page + sections', B: 'The game’s prep menu, in order', C: 'Pair cards + map column', D: 'Merge: C’s cards, A’s sections' } as const;
 type V = keyof typeof VARIANTS;
 const q = new URLSearchParams(location.search);
 let variant = (q.get('variant') ?? 'A') as V;
@@ -108,12 +108,36 @@ function variantC(s: Stop): string {
       <details><summary><small>Matchups, loadouts, chapter guide</small></summary><p class="note">Today’s reference sections, stub.</p></details></aside></div>`;
 }
 
+// ---- D: the user's merge — C's pair cards, A's sections in the column ------------------------------------------------
+function variantD(s: Stop): string {
+  const cards = [...s.pairs.map((p) => pairCard(s, p, p.back ? [p.lead, p.back] : [p.lead], `${p.lead.unit} + ${p.back?.unit ?? ''}`)), ...s.solos.map((x) => pairCard(s, undefined, [x], x.unit))];
+  const pre = s.actions.filter((a) => a.step !== 'map');
+  const onMap = s.actions.filter((a) => a.step === 'map');
+  const done = s.actions.filter((a) => ticked.has(a.id)).length;
+  return `<div class="cc dd"><main><button class="ghost">← Run</button><h2>Prepare: ${esc(s.map)}</h2>${forced(s)}
+      <div class="cards">${cards.join('')}</div>
+      ${s.notFielded.length ? `<p class="note">Not fielded: ${s.notFielded.map(esc).join(', ')}</p>` : ''}</main>
+    <aside>${head(s)}
+      <details class="card" open><summary><b>${s.noPrep ? 'On the map' : 'Before this map'}</b> (${done} of ${s.actions.length} done)</summary>
+        ${s.noPrep ? '' : ([...new Set(pre.map((a) => a.step))] as Step[]).map((st) => `<h3>${STEP_LABEL[st]}</h3>${pre.filter((a) => a.step === st).map(tick).join('')}`).join('')}
+        ${onMap.length ? `${s.noPrep ? '' : '<h3>On the map</h3>'}${onMap.map(tick).join('')}` : ''}</details>
+      <details class="card" open><summary><b>Threats</b></summary>
+        <table class="t tight"><tr><th>Enemy</th><th>Worst case</th><th>Kills someone</th></tr>
+        ${s.threats.map((t) => `<tr><td>${esc(t.name)} ×${t.count}<br/><small>${esc(t.who)}</small></td><td class="${t.worstKills ? 'neg' : ''}"><small>${esc(t.worst)}</small></td><td class="num">${pct(t.death)}</td></tr>`).join('')}</table></details>
+      ${s.noPrep ? '' : `<details class="card"><summary><b>Shopping list</b> (${s.gold[0]}G of ${s.gold[1]}G)</summary>${s.actions.filter((a) => a.step === 'armory').map(tick).join('')}</details>
+      <details class="card"><summary><b>Seals and promotions</b></summary>${s.actions.filter((a) => a.kind === 'seal').map(tick).join('') || '<p class="note">No class change planned on this map.</p>'}</details>
+      <details class="card"><summary><b>Loadouts</b></summary><p class="note">Today’s table, with the item plan’s carriers applied (stub).</p></details>`}
+      <details class="card"><summary><b>Checks and assumptions</b></summary><ul class="note">${[...s.checks, ...s.assumptions].map((x) => `<li>${esc(x)}</li>`).join('')}</ul></details>
+      <details class="card"><summary><b>Matchups</b></summary><p class="note">Today’s matchup table (stub).</p></details>
+      <details class="card"><summary><b>Chapter guide</b></summary><p class="note">Today’s how-to-run text (stub).</p></details></aside></div>`;
+}
+
 // ---- wiring ---------------------------------------------------------------------------------------------------------
 const app = document.getElementById('app')!;
 const bar = document.getElementById('switcher')!;
 function render() {
   const s = STOPS[stopIx]!;
-  app.innerHTML = variant === 'A' ? variantA(s) : variant === 'B' ? variantB(s) : variantC(s);
+  app.innerHTML = variant === 'A' ? variantA(s) : variant === 'B' ? variantB(s) : variant === 'C' ? variantC(s) : variantD(s);
   bar.innerHTML = `<button data-v="-1">←</button><span>${variant} — ${VARIANTS[variant]}</span><button data-v="1">→</button>
     <span class="sep">|</span>${STOPS.map((x, i) => `<button class="${i === stopIx ? 'on' : ''}" data-stop="${i}">${x.short}</button>`).join('')}`;
   const u = new URL(location.href);
