@@ -60,11 +60,11 @@ What the player is building for: Apotheosis, Main story (Lunatic/Lunatic+), Full
 _Avoid_: Mode, difficulty
 
 **Full route**:
-A single playthrough that weaves the non-grind DLC xenologues into the main campaign and paralogues, with Apotheosis as the capstone. No grind maps; DLC skills are reachable. Its build templates are curated from the user's own play, not community sources.
+A single playthrough that weaves the non-grind DLC xenologues and the SpotPass paralogues into the main campaign and paralogues, in the user's own map order, with Apotheosis as the capstone. No grind maps, except Infinite Regalia played once when its rewards earn their risk; DLC skills are reachable. Its build templates are curated from the user's own play, not community sources.
 _Avoid_: Hybrid run, DLC run
 
 **Endpoint**:
-The map a run is building its army for, with that map's deploy count; it defaults from the route (Full route → Apotheosis, Main story → Endgame). Unlike the play context, which picks the build templates, it is a single map with facts to plan against.
+The map a run is building its army for, with that map's deploy count; it defaults from the route (Full route → Apotheosis on its secret route, played after its normal route; Main story → Endgame). Unlike the play context, which picks the build templates, it is a single map with facts to plan against.
 _Avoid_: Goal, end state, final chapter, endgame (Endgame is a map's name)
 
 **Wishlist**:
@@ -74,6 +74,14 @@ _Avoid_: Team, target army, roster (the Roster is the page of run facts and unit
 **Lineup**:
 The army a plan fields on one map: who deploys, in which pairs and classes. The roadmap is a lineup for every map to the endpoint; the wishlist is the endpoint's lineup with its builds and reserves.
 _Avoid_: Wishlist (for any map but the endpoint), deployment (the recorded one)
+
+**Map order**:
+The ordered maps a roadmap plays to its endpoint. Its template comes from the route: the story chapters, with each non-child paralogue in reveal order before the next chapter (and, on a Full route, the xenologues and SpotPass paralogues at the user's positions). The plan places each child paralogue, and whether its child is recruited there; any other change is an edit with a visible cost.
+_Avoid_: Route (the Route is Main story or Full route), schedule
+
+**Milestone**:
+Something the adopted roadmap needs true before an event on its map order: a map, a point inside a map, a child's paralogue entry, or the endpoint. One of four kinds: a pair's support rank, a skill learned (for a build, or passed at paralogue entry from the last active slot), a child recruited, or a class reached (naming the seal it uses). Derived from the roadmap, never written by the player; ordered by where its event falls, preconditions first. A support milestone is a window counted in maps: earliest start, latest start, deadline.
+_Avoid_: Goal, checkpoint, level-by-map target
 
 **Reserve**:
 A wishlist unit beyond the endpoint's deploy count, ordered by who steps in first when a wishlist unit is lost or falls behind.
