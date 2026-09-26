@@ -71,6 +71,10 @@ _Avoid_: Goal, end state, final chapter, endgame (Endgame is a map's name)
 The army a run aims to field at its endpoint: the endpoint's deploy count of units, arranged as they'll fight (each Lead with its Battery, healers, a Dancer), each with its endpoint class and 5-skill build, and each child with its parents and the skill each parent passes when the child is recruited. It ends with the reserves.
 _Avoid_: Team, target army, roster (the Roster is the page of run facts and unit states)
 
+**Lineup**:
+The army a plan fields on one map: who deploys, in which pairs and classes. The roadmap is a lineup for every map to the endpoint; the wishlist is the endpoint's lineup with its builds and reserves.
+_Avoid_: Wishlist (for any map but the endpoint), deployment (the recorded one)
+
 **Reserve**:
 A wishlist unit beyond the endpoint's deploy count, ordered by who steps in first when a wishlist unit is lost or falls behind.
 _Avoid_: Bench (Benched is a unit state), backup
@@ -100,7 +104,7 @@ A child's overview page: what stays the same in every pairing (fixed parent, sta
 _Avoid_: Child page, child summary
 
 **Unit opinion**:
-What a named source says about one unit (first-gen, child or Robin) in a play context: role and tier in its words, classes, a 5-skill loadout, partners recommended and warned, a note and a citation. Curated from the source registry; shown beside the app's scores, never scored or merged across sources.
+What a named source says about one unit (first-gen, child or Robin) in a play context: role and tier in its words, classes, a 5-skill loadout, partners recommended and warned, a note and a citation. Curated from the source registry and shown on unit pages, never scored or merged across sources. Planning never reads it; where a source's tier and a unit's worth disagree, that is a check on the model, not an input to it.
 _Avoid_: Rating, review, expert score
 
 **Join data**:
@@ -139,6 +143,14 @@ _Avoid_: Score (alone), Σ, success rate, win rate
 **Ceiling**:
 The endpoint's flawless chance with every wishlist unit at its effective caps: the most a comp can do. Shown beside the flawless chance; no plan for that comp can beat it.
 _Avoid_: Max score, potential
+
+**Unit worth**:
+How many points of flawless chance a plan loses without one unit: removed from every lineup it's in, its wishlist slot refilled and what the removal forces re-chosen (a parent's children, the spouse's marriage), the rest of the wishlist kept and the roadmap re-solved. Every unit in any lineup has one, and a parent's includes its children.
+_Avoid_: Value, rating, standing (the preset score)
+
+**Utility**:
+The part of a unit's worth that doesn't come from its own combat: the points a plan loses when the unit still fights but takes none of its sustain, Dance, Rally or Rescue actions.
+_Avoid_: Support value, S utility (a source's words)
 
 **Preset**:
 A named set of per-stat weights used to score pairings, optionally flagged Mixed. Each build template role maps to one.
