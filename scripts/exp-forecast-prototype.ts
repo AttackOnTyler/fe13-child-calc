@@ -4,7 +4,7 @@
  */
 import { createInterface } from 'node:readline';
 import { MAPS } from '../src/game-data/chapters';
-import { ADJACENT, calibration, goalChance, type Goal, deployCount, forecast, mapFoes, percentileOf, unitDefs, type MapPlan, type Plan, type Priority, type UnitId } from '../src/engine/exp-forecast.prototype';
+import { ADJACENT, calibration, goalChance, suggest, type Suggestion, type Goal, deployCount, forecast, mapFoes, percentileOf, unitDefs, type MapPlan, type Plan, type Priority, type UnitId } from '../src/engine/exp-forecast.prototype';
 
 const B = (s: string) => `\x1b[1m${s}\x1b[0m`;
 const D = (s: string) => `\x1b[2m${s}\x1b[0m`;
@@ -23,6 +23,7 @@ const initialMaps: MapPlan[] = maps.map((m, i) => {
 
 let plan: Plan = { policy: 'priority', veteranAsBack: false, priority: {}, maps: initialMaps, recorded: {} };
 let at = 0;
+let suggestions: { goal: number; list: Suggestion[] } | null = null;
 let goals: Goal[] = [{ unit: 'robin', level: 10, map: 'chapter-5' }];
 let runs = 300;
 let message = '';
@@ -82,6 +83,16 @@ function render() {
       ? `  ${i + 1}. ${pad(`${unitName(g.unit)} Lv ${g.level} by ${m.label}`, 30)}${bar} ${B(`${Math.round(r.chance * 100)}%`.padStart(4))}  ${D(`median Lv ${lv(r.median)} at the deadline`)}${plan.maps.slice(0, MAP_IDS.indexOf(g.map)).some((mp) => mp.fielded.includes(g.unit)) ? '' : D(' · never fielded before then: `field` them earlier')}`
       : `  ${i + 1}. ${pad(`${unitName(g.unit)} Lv ${g.level} by ${m.label}`, 30)}${D('not joined by then')}`);
   });
+  if (suggestions) {
+    const g = goals[suggestions.goal]!;
+    out.push('');
+    out.push(B(`Smallest changes that lift ${unitName(g.unit)} Lv ${g.level} by ${maps.find((m) => m.id === g.map)!.label}`) + D('  (one edit each, 120 runs; `take <n>` to apply)'));
+    if (!suggestions.list.length) out.push(D('  no single edit lifts it: it may need two edits, or the goal is out of reach'));
+    suggestions.list.slice(0, 5).forEach((s, i) => {
+      const others = s.others.map((d, j) => (Math.abs(d) >= 0.05 ? `#${j + 1} ${d > 0 ? '+' : ''}${Math.round(d * 100)}%` : '')).filter(Boolean).join(' ');
+      out.push(`  ${B(String(i + 1))}. ${pad(s.label, 62)} → ${B(`${Math.round(s.chance * 100)}%`)}  ${D(`waves ${s.waves >= 0 ? '+' : ''}${s.waves}`)}${others ? `  ${D('others:')} ${others}` : ''}${s.breaks ? `  ${B(`breaks ${s.breaks} met goal${s.breaks > 1 ? 's' : ''}`)}` : ''}`);
+    });
+  }
   const cal = calibration(plan, fc);
   out.push('');
   out.push(`${B('Calibration')} ${cal.points ? `${cal.inside}/${cal.points} recorded results inside p10–p90 (≈80% if calibrated) · mean percentile ${cal.meanPercentile} (50 if unbiased)` : D('record a map end with `rec` to test the forecast against play')}`);
@@ -90,7 +101,7 @@ function render() {
   if (message) out.push('', message);
   out.push('');
   out.push(`${B('n')}/${B('b')} ${D('next/prev map')}  ${B('pol')} ${D('toggle policy')}  ${B('vet')} ${D('Veteran reading')}  ${B('hi|norm|lo <unit>')} ${D('priority')}  ${B('field <unit>')} ${D('toggle')} ${D('(field/pair: from this map on)')}  ${B('pair <lead> <back>')}  ${B('unpair <lead>')}`);
-  out.push(`${B('rec <unit> <level> <exp>')} ${D('record this map’s end')}  ${B('unrec <unit>')}  ${B('goal <unit> <lvl> <map>')} ${D('e.g. goal robin 10 5')}  ${B('ungoal <n>')}  ${B('runs <n>')}  ${B('q')} ${D('quit')}`);
+  out.push(`${B('rec <unit> <level> <exp>')} ${D('record this map’s end')}  ${B('unrec <unit>')}  ${B('goal <unit> <lvl> <map>')} ${D('e.g. goal robin 10 5')}  ${B('ungoal <n>')}  ${B('suggest <n>')}  ${B('take <n>')}  ${B('runs <n>')}  ${B('q')} ${D('quit')}`);
   console.clear();
   console.log(out.join('\n'));
 }
@@ -117,6 +128,20 @@ function handle(line: string): boolean {
       break;
     }
     case 'ungoal': goals = goals.filter((_, i) => i !== Number(args[0]) - 1); break;
+    case 'suggest': {
+      const i = Number(args[0] ?? 1) - 1;
+      if (!goals[i]) { message = 'suggest <goal number>'; break; }
+      suggestions = { goal: i, list: suggest(plan, defs, goals, i) };
+      break;
+    }
+    case 'take': {
+      const s = suggestions?.list[Number(args[0]) - 1];
+      if (!s) { message = 'take <suggestion number>'; break; }
+      plan = s.plan;
+      message = `applied: ${s.label}`;
+      suggestions = null;
+      break;
+    }
     case 'vet': plan = { ...plan, veteranAsBack: !plan.veteranAsBack }; break;
     case 'pol': plan = { ...plan, policy: plan.policy === 'even' ? 'priority' : 'even' }; break;
     case 'hi': case 'norm': case 'lo':

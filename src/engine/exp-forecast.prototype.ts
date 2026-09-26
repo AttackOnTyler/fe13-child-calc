@@ -439,3 +439,91 @@ function band(xs: readonly number[]): Band {
 function binom(n: number, k: number) { let r = 1; for (let i = 1; i <= k; i++) r = (r * (n - k + i)) / i; return r; }
 function shuffle<T>(xs: T[], rng: Rng): T[] { for (let i = xs.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [xs[i], xs[j]] = [xs[j]!, xs[i]!]; } return xs; }
 function mulberry32(a: number): Rng { return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+// ---------- Suggesting the smallest change that lifts a milestone ----------
+
+/** A milestone reads as met when this share of runs meets it. */
+export const TARGET = 0.8;
+
+export type Suggestion = {
+  readonly label: string;
+  readonly plan: Plan;
+  readonly chance: number;
+  /** The other goals' chance changes, same order as the goals (the target's own slot is 0). */
+  readonly others: readonly number[];
+  /** Extra waves over the charted maps (median sum): each is another enemy phase the flawless chance must survive. */
+  readonly waves: number;
+  /** Other goals met before this edit that it pushes below the target. */
+  readonly breaks: number;
+};
+
+const FORCED = (map: ChapterData) => new Set(['chrom', 'robin', ...map.forced.map((f) => f.toLowerCase())]);
+const totalWaves = (fc: readonly MapForecast[]) => fc.reduce((a, m) => a + m.waves.p50, 0);
+
+/**
+ * One-edit changes to the plan, each re-forecast, best lift first. An edit is a span pin from the unit's join map
+ * up to the goal's deadline: raise the unit's priority, lower another's, pair it as lead with a back, or field it
+ * in place of the last unforced unit. Smallest first: edits that reach the target (80%) without breaking another met
+ * goal, by fewest extra waves; then those that break one; then the rest by chance.
+ */
+export function suggest(plan: Plan, defs: readonly UnitDef[], goals: readonly Goal[], index: number, runs = 120): Suggestion[] {
+  const goal = goals[index]!;
+  const def = defs.find((d) => d.id === goal.unit)!;
+  const ids = plan.maps.map((m) => m.map);
+  const from = Math.max(0, ids.indexOf(def.joins));
+  const to = ids.indexOf(goal.map); // exclusive: the deadline is the map's start
+  const span = (i: number) => i >= from && i < to;
+  const score = (p: Plan) => {
+    const fc = forecast(p, defs, runs, 7);
+    return { chances: goals.map((g) => goalChance(g, fc).chance), waves: totalWaves(fc) };
+  };
+  const base = score(plan);
+  const edits: { label: string; plan: Plan }[] = [];
+  const label = (id: string) => MAPS.find((m) => m.id === id)!.label.replace('Chapter ', 'Ch ');
+  const name = (id: UnitId) => defs.find((d) => d.id === id)?.name ?? id;
+
+  if ((plan.priority[goal.unit] ?? 1) < 2) edits.push({ label: `Set ${def.name} to high priority`, plan: { ...plan, priority: { ...plan.priority, [goal.unit]: 2 } } });
+  const fieldedSomewhere = new Set(plan.maps.filter((_, i) => span(i)).flatMap((m) => m.fielded));
+  for (const other of fieldedSomewhere) {
+    if (other === goal.unit || (plan.priority[other] ?? 1) === 0) continue;
+    edits.push({ label: `Set ${name(other)} to low priority`, plan: { ...plan, priority: { ...plan.priority, [other]: 0 } } });
+  }
+  for (const back of fieldedSomewhere) {
+    if (back === goal.unit || plan.maps.some((m, i) => span(i) && m.pairs[goal.unit] === back)) continue;
+    edits.push({
+      label: `Pair ${def.name} as lead with ${name(back)} behind, ${label(plan.maps[from]!.map)}–${label(plan.maps[to - 1]!.map)}`,
+      plan: {
+        ...plan,
+        maps: plan.maps.map((m, i) => {
+          if (!span(i) || !m.fielded.includes(back)) return m;
+          const pairs = Object.fromEntries(Object.entries(m.pairs).filter(([l, b]) => l !== goal.unit && b !== goal.unit && l !== back && b !== back));
+          return { ...m, fielded: m.fielded.includes(goal.unit) ? m.fielded : [...m.fielded, goal.unit], pairs: { ...pairs, [goal.unit]: back } };
+        }),
+      },
+    });
+  }
+  if (plan.maps.some((m, i) => span(i) && !m.fielded.includes(goal.unit))) {
+    const out: string[] = [];
+    const next = {
+      ...plan,
+      maps: plan.maps.map((m, i) => {
+        if (!span(i) || m.fielded.includes(goal.unit)) return m;
+        const map = MAPS.find((x) => x.id === m.map)!;
+        const benchable = [...m.fielded].reverse().find((u) => !FORCED(map).has(u) && !Object.entries(m.pairs).some(([l, b]) => l === u || b === u));
+        const fielded = m.fielded.length >= deployCount(map) && benchable ? m.fielded.filter((u) => u !== benchable) : m.fielded;
+        if (benchable && fielded !== m.fielded) out.push(name(benchable));
+        return { ...m, fielded: [...fielded, goal.unit] };
+      }),
+    };
+    edits.push({ label: `Field ${def.name} before ${label(goal.map)}${out.length ? `, benching ${[...new Set(out)].join(', ')}` : ''}`, plan: next });
+  }
+
+  return edits
+    .map((e) => {
+      const s = score(e.plan);
+      const breaks = s.chances.filter((c, i) => i !== index && base.chances[i]! >= TARGET && c < TARGET).length;
+      return { label: e.label, plan: e.plan, chance: s.chances[index]!, breaks, others: s.chances.map((c, i) => (i === index ? 0 : c - base.chances[i]!)), waves: s.waves - base.waves };
+    })
+    .filter((s) => s.chance > base.chances[index]!)
+    .sort((a, b) => a.breaks - b.breaks || Number(b.chance >= TARGET) - Number(a.chance >= TARGET) || (a.chance >= TARGET ? a.waves - b.waves : 0) || b.chance - a.chance);
+}
