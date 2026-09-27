@@ -23,5 +23,8 @@ hit"), per difficulty where a note splits it. Item templates are matched case-in
 
 Paralogues 3, 8 and 10 list their items as `ChapItemsCell FE13` templates, one per item, rather than one `ChapItems` (#180).
 
+An enemy table lists its reinforcements after a `{{ChapUnitReinf}}` divider: those rows get `reinforcement: true`
+(they come on their waves' turns, never with the starting foes). NPC data rows are kept per difficulty as `npcs` (#184).
+
 A page without ChapChars (Premonition) takes its units from the Character data tabs, with their stats: a setup used
 only on that map, which never joins the army (#131).

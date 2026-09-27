@@ -49,6 +49,11 @@ export type EnemyGroup = {
   /** The side it fights for, on a map with more than one (Paralogue 13's Stonewall Knights, Riders of Dawn). */
   readonly faction?: string;  /** Apotheosis: the wave it comes in (no difficulties there: the same on each). */
   readonly wave?: string;
+  /**
+   * A reinforcement (#184): FEW lists the reinforcements' rows in the same table, after its `ChapUnitReinf` divider.
+   * They come on the turns the reinforcement lines give, never with the starting foes.
+   */
+  readonly reinforcement?: boolean;
 };
 
 export type BossRow = {
@@ -127,6 +132,11 @@ export type ChapterData = {
   } | null;
   readonly eventTiles: number;
   readonly enemies: Readonly<Partial<Record<ChapterDifficulty, readonly EnemyGroup[]>>>;
+  /**
+   * The third party (#184): FEW's NPC data, each difficulty's rows (a recruit before it joins, Chapter 6's Emmeryn,
+   * villagers). Absent on maps with none.
+   */
+  readonly npcs?: Readonly<Partial<Record<ChapterDifficulty, readonly EnemyGroup[]>>>;
   /** FEW's reinforcement list, one line per turn or group (nested lines indented), difficulty notes kept. */
   readonly reinforcements: readonly string[];
   /** The Lunatic+ skill pool the page prints (none on Premonition). */

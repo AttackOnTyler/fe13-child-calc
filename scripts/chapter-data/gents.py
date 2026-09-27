@@ -47,6 +47,7 @@ for r in data:
         'shop': r['shop'],
         'eventTiles': r['eventTiles'],
         'enemies': r['enemies'],
+        **({'npcs': r['npcs']} if r.get('npcs') else {}),
         'reinforcements': r['reinforcements'],
         'lunaticPlusPool': r['lunaticPlusPool'],
         'bosses': r['bosses'],
