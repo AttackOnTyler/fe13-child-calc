@@ -3,7 +3,7 @@
  * holds a snapshot: every unit's class, level, EXP, stats, skills, inventory and supports, plus the convoy and gold.
  * A new entry copies the one before; editing a past entry never reaches later ones, which are flagged instead.
  */
-import type { Assumptions, ChildId, CloseCall, Gender, Reading, Readings, SuggestedPin, Engine, FlawlessChance, FlawlessOptions, GoldSpread, HeldItem, ItemPin, ItemPlanRow, ItemUsed, MapOrderStep, Milestone, MilestonePoint, PinCost, Plan, PlanPin, PlanProposal, PlanRobin, PrunedComp, RobinCursor, RobinStep, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
+import type { Assumptions, Ceiling, ChildId, CloseCall, Gender, Reading, Readings, SuggestedPin, Engine, FlawlessChance, FlawlessOptions, GoldSpread, HeldItem, ItemPin, ItemPlanRow, ItemUsed, MapOrderStep, Milestone, MilestonePoint, PinCost, Plan, PlanPin, PlanProposal, PlanRobin, PrunedComp, RobinCursor, RobinStep, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
 import { chanceText, differenceText, stressText } from './chance';
 import { startSolve } from './solve-client';
 import { SOLVE_SECONDS, STEP_BUDGET, rescoreSeed, rosterUnits, type RunSim, type StressCase } from '../engine';
@@ -318,6 +318,8 @@ export type SolveProgress = {
   /** The plan the search started from (#204): the adopted plan, or the seed when none is. */
   readonly start?: Plan;
   readonly chance: FlawlessChance;
+  /** The best plan's ceiling (#189) on the chance's runs, worked out in the worker with the chance; absent: none (yet). */
+  readonly ceiling?: Ceiling;
   readonly proposals: readonly PlanProposal[];
   readonly closeCalls: readonly CloseCall[];
   readonly pruned: readonly PrunedComp[];
@@ -401,7 +403,7 @@ export function flawlessReadout(engine: Engine, run: Run, options: FlawlessReado
   // The EXP forecast is the flawless chance's own simulation with the milestones checked: the readings' first pass (#197).
   const forecast = engine.expForecast(run, plan, sim);
   const readings = forecast.maps.length ? engine.readings(run, plan, { ...sim, forecast }) : undefined;
-  return readoutOf(engine, run, plan, forecast, pins, undefined, readings);
+  return readoutOf(engine, run, plan, forecast, forecast.maps.length ? engine.ceiling(run, { runs: forecast.runs, plan }) : undefined, pins, undefined, readings);
 }
 
 /**
@@ -410,7 +412,9 @@ export function flawlessReadout(engine: Engine, run: Run, options: FlawlessReado
  * applied), close calls ("no measurable difference (−0.2 ±0.3)") and marriages pruned by their ceiling.
  */
 export function solvedReadout(engine: Engine, run: Run, progress: SolveProgress, pins?: readonly PlanPin[]): FlawlessReadout {
-  return readoutOf(engine, run, progress.best, progress.chance, pins, progress, progress.readings);
+  // The ceiling is the worker's, posted with the step: never worked out here, where every reply would pay for it (a few
+  // hundred ms of simulation on Lunatic+, per reply, blocked the page for minutes).
+  return readoutOf(engine, run, progress.best, progress.chance, progress.ceiling, pins, progress, progress.readings);
 }
 
 function readoutOf(
@@ -418,12 +422,12 @@ function readoutOf(
   run: Run,
   plan: Plan,
   r: FlawlessChance,
+  ceiling: Ceiling | undefined,
   pins: readonly PlanPin[] | undefined,
   progress: SolveProgress | undefined,
   readings?: Readings,
 ): FlawlessReadout {
   if (!r.maps.length) return { text: 'Flawless chance: the endpoint is recorded, nothing left to simulate.', detail: '', rows: [], found: [], notes: [], stress: [] };
-  const ceiling = engine.ceiling(run, { runs: r.runs, plan });
   const gender = run.roster.run.gender;
   const names = (us: readonly RosterUnit[]) => listOf(us.map((u) => unitName(u, gender)));
   const first = r.maps[0]!.label;
@@ -1005,7 +1009,7 @@ export function flawlessSection(ctx: HeadlineContext, inInbox = false): HTMLElem
         chance = s.chance ?? chance;
         if (!chance) return;
         const start = s.cursor.search?.start ?? last?.start;
-        last = { ...(last?.readings && last.best === s.best ? { readings: last.readings } : {}), ...(last?.loss ? { loss: last.loss } : {}), ...(last?.cost ? { cost: last.cost } : {}), best: s.best, ...(start ? { start } : {}), chance, proposals: s.proposals, closeCalls: s.closeCalls, pruned: s.pruned, done: reply.searched, converged: s.converged };
+        last = { ...(last?.readings && last.best === s.best ? { readings: last.readings } : {}), ...(last?.loss ? { loss: last.loss } : {}), ...(last?.cost ? { cost: last.cost } : {}), best: s.best, ...(start ? { start } : {}), chance, ...(reply.ceiling ? { ceiling: reply.ceiling } : {}), proposals: s.proposals, closeCalls: s.closeCalls, pruned: s.pruned, done: reply.searched, converged: s.converged };
         PROGRESS.set(run, last);
         inboxProgress(run, last);
         show(solvedReadout(ctx.engine, run, last, pins));

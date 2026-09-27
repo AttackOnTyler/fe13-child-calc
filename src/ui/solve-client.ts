@@ -6,7 +6,7 @@
  * edit never stops the search.
  * Where there's no Worker (tests), `startSolve` returns undefined and the page works the chance out itself.
  */
-import type { Assumptions, CheckedRules, EditCost, RuleStake, SetupCheck, PinCost, Plan, PlanPin, Readings, ReservesCursor, ReservesStep, RobinCursor, RobinStep, RosterUnit, Run, RunSim, SolveCursor, SolveStep, StressCase, UnitEdit, WhatItCost, WorthCursor, WorthStep } from '../engine';
+import type { Assumptions, Ceiling, CheckedRules, EditCost, ExpForecast, RuleStake, SetupCheck, PinCost, Plan, PlanPin, Readings, ReservesCursor, ReservesStep, RobinCursor, RobinStep, RosterUnit, Run, RunSim, SolveCursor, SolveStep, StressCase, UnitEdit, WhatItCost, WorthCursor, WorthStep } from '../engine';
 
 /** A unit's edit as the worker posts it (#203): its plan is built and costed in the worker. */
 export type UnitEditView = Pick<UnitEdit, 'kind' | 'key' | 'label' | 'pins'>;
@@ -130,6 +130,16 @@ export type SolveRequest =
     })
   | (Common & {
       /**
+       * The preparation page's EXP forecast (#207), in the `prep` slot: the plan's runs with its milestones checked (a
+       * full run of simulations: seconds on the Main story, too long for the page). `plan`: the adopted plan the page
+       * holds; absent, the one the run adopts with `pins` (its seed takes most of a second).
+       */
+      readonly kind: 'forecast';
+      readonly plan?: Plan;
+      readonly pins?: readonly PlanPin[];
+    })
+  | (Common & {
+      /**
        * The in-play checks (#209), in the `checks` slot: each open rule's stakes on the adopted plan (one re-run under its
        * other reading), then the setup checks those stakes call for, each edit costed at each of `budgets` in turn.
        */
@@ -146,7 +156,16 @@ export type SolveRequest =
  * What it cost (#208).
  */
 export type SolveReply =
-  | { readonly id: number; readonly kind: 'step'; readonly step: SolveStep; readonly searched: boolean; readonly done: boolean }
+  | {
+      readonly id: number;
+      readonly kind: 'step';
+      /** The step, its chance carried from the last step that worked one out (steps are paced: those between aren't posted). */
+      readonly step: SolveStep;
+      /** The best plan's ceiling on the chance's runs, worked out here once per best plan (the page never works it out). */
+      readonly ceiling?: Ceiling;
+      readonly searched: boolean;
+      readonly done: boolean;
+    }
   | { readonly id: number; readonly kind: 'pin-cost'; readonly cost: PinCost; readonly done: boolean }
   | { readonly id: number; readonly kind: 'readings'; readonly readings: Readings | undefined; readonly done: boolean }
   | { readonly id: number; readonly kind: 'loss'; readonly plan: Plan; readonly chance: number; readonly margin: number; readonly done: boolean }
@@ -156,6 +175,7 @@ export type SolveReply =
   | { readonly id: number; readonly kind: 'robin'; readonly step: RobinStep; readonly done: boolean }
   | { readonly id: number; readonly kind: 'edits'; readonly edits: readonly UnitEditView[]; readonly done: boolean }
   | { readonly id: number; readonly kind: 'edit-cost'; readonly key: string; readonly cost: EditCost; readonly done: boolean; /** The edited plan (#204's "anything else": a plan edit adopts it). */ readonly edited?: Plan }
+  | { readonly id: number; readonly kind: 'forecast'; readonly plan: Plan; readonly forecast: ExpForecast; readonly done: boolean }
   | { readonly id: number; readonly kind: 'stake'; readonly stake: RuleStake; readonly done: boolean }
   | { readonly id: number; readonly kind: 'setup'; readonly checks: readonly SetupCheck[]; readonly done: boolean }
   | { readonly id: number; readonly kind: 'setup-cost'; readonly rule: string; readonly cost: EditCost; readonly done: boolean }
@@ -164,9 +184,9 @@ export type SolveReply =
 
 /**
  * Where a request runs: the solve and its idle work, a unit's edits beside it, the Why panel's drill-down (#210), the
- * checks' stakes (#209), or the stress tests (#211).
+ * checks' stakes (#209), the stress tests (#211), or the preparation page's forecast.
  */
-export type SolveSlot = 'main' | 'edits' | 'why' | 'checks' | 'stress';
+export type SolveSlot = 'main' | 'edits' | 'why' | 'checks' | 'stress' | 'prep';
 
 /** A request as the page makes it: the client numbers it. */
 export type NewSolveRequest = SolveRequest extends infer R ? (R extends SolveRequest ? Omit<R, 'id'> : never) : never;

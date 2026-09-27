@@ -37,6 +37,7 @@ import {
   type UnitWorth,
   type WorthStep,
 } from '../engine';
+import { adoptedOf } from '../engine';
 import { CHILD_UNITS, type ChildId } from '../game-data/children';
 import { SKILLS } from '../game-data/skills';
 import { differenceText } from './chance';
@@ -465,7 +466,12 @@ export function wishlistPage(ctx: WishlistContext): HTMLElement[] {
   const headline = flawlessSection(ctx);
   const state = solveState(ctx.run);
   const head = h('div', { class: 'main-head' }, h('h2', {}, 'Wishlist'));
-  if (!state) return [head, h('div', { class: 'scroll wishlist' }, headline, h('p', { class: 'muted' }, 'Working out the plan…'), ledgerSection(ctx, ctx.engine.seedPlan(ctx.run)))];
+  if (!state) {
+    // Until the solve's first reply: the ledger of the plan adopted, if any. The seed plan is the worker's to work out
+    // (most of a second on Lunatic+), never the page's.
+    const adopted = adoptedOf(ctx.run);
+    return [head, h('div', { class: 'scroll wishlist' }, headline, h('p', { class: 'muted' }, 'Working out the plan…'), adopted ? ledgerSection(ctx, adopted) : null)];
+  }
   const { plan, progress, working } = state;
   const idle = idleFor(ctx, plan, working);
   // What the Why panel explains here (#210): each unit's worth, and what each reserve restores.
