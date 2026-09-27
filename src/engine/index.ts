@@ -52,7 +52,8 @@ import { itemByName } from '../game-data/items';
 import { simMapById, type SimMapOptions } from './sim/sim-map';
 import { runSeed } from './sim/random';
 import { simulateRuns, type RunSim, type RunSimInput } from './sim/run-sim';
-import { flawlessChance, type FlawlessChance, type FlawlessOptions } from './flawless';
+import { flawlessCeiling, flawlessChance, type FlawlessChance, type FlawlessOptions } from './flawless';
+import { simulateCeiling, type Ceiling } from './sim/ceiling';
 import { BLIND_SPOTS, type BlindSpot } from './assumptions';
 import { matchBuilds, matchTemplate, shownMatch, templateSummary, templatesFor } from './builds';
 import type { SkillId } from '../game-data/skills';
@@ -126,6 +127,7 @@ export { MAX_TURNS, type MapPlay, type MapPlayInput, type SimAct, type SimFight,
 export { simLineup, type SimMapOptions } from './sim/sim-map';
 export { PROMOTION_RULE, levelCap, type ArmyUnit, type RunSim, type RunSimInput, type RunSimMap, type RunSimMapResult, type StatSpread, type UnitForecast } from './sim/run-sim';
 export { FLAWLESS_RUNS, FLAWLESS_SEED, fighterOf, type FlawlessChance, type FlawlessOptions, type NotSimulated } from './flawless';
+export { effectiveCaps, type Ceiling, type CeilingUnit } from './sim/ceiling';
 export { BLIND_SPOTS, type BlindSpot, type BlindSpotId, type RunBlindSpotId } from './assumptions';
 export { bestWeapon, classTypes, dangerFlags, foeKey, foeOf, foesOf, matchup, pairUpBonus, statValue, type DangerFlag, type Fighter, type Foe, type Matchup } from './solver';
 export {
@@ -511,6 +513,15 @@ export type Engine = {
   flawlessChance(run: Run, options?: FlawlessOptions): FlawlessChance;
   /** The same simulation over a hand-built army and maps (tests, and the solve's edits on the same runs). */
   simulateRuns(input: RunSimInput, seed: number, runs: number): RunSim;
+  /**
+   * The ceiling (#189): the endpoint's flawless chance with every unit of today's plan (the army and every recruit on
+   * the way) at its effective caps in its full class, no spread; it brackets the flawless chance from above. Its chance
+   * is undefined when the endpoint's foes carry no weapons in the chapter data (Apotheosis); the result is undefined
+   * once the endpoint is recorded. Same options as `flawlessChance` (Lunatic+ plays `runs` skill draws).
+   */
+  ceiling(run: Run, options?: FlawlessOptions): Ceiling | undefined;
+  /** The ceiling of a hand-built army and maps: the last map is the endpoint. */
+  simulateCeiling(input: RunSimInput, seed: number, runs: number): Ceiling | undefined;
 };
 
 /** One combat for `Engine.combatExp`. */
@@ -1573,5 +1584,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     classChangeProposals: (run) => classChangeProposals(run),
     flawlessChance: (run, options) => flawlessChance(run, assumptions, options),
     simulateRuns: (input, seed, runs) => simulateRuns(input, seed, runs, assumptions),
+    ceiling: (run, options) => flawlessCeiling(run, assumptions, options),
+    simulateCeiling,
   };
 }

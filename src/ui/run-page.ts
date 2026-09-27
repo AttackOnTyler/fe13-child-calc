@@ -107,13 +107,15 @@ const points = (p: number) => (p * 100).toFixed(1);
 const listOf = (xs: readonly string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
 /**
- * The headline flawless chance (#186), as the Run view writes it: the chance with its simulation error (±, 95%), what it
- * covers and rests on (units whose seal history is read as 0, units it can't simulate, the blind spots), and each map's
- * no-death chance for the runs that reach it with nobody lost.
+ * The headline flawless chance (#186), as the Run view writes it: the chance with its simulation error (±, 95%) and
+ * the ceiling beside it (#189), what it covers and rests on (units whose seal history is read as 0, units it can't
+ * simulate, maps whose foes carry no weapons, the blind spots), and each map's no-death chance for the runs that reach
+ * it with nobody lost.
  */
 export function flawlessReadout(engine: Engine, run: Run, options?: FlawlessOptions): { readonly text: string; readonly detail: string; readonly rows: readonly string[] } {
   const r = engine.flawlessChance(run, options);
   if (!r.maps.length) return { text: 'Flawless chance: the endpoint is recorded, nothing left to simulate.', detail: '', rows: [] };
+  const ceiling = engine.ceiling(run, options);
   const gender = run.roster.run.gender;
   const names = (us: readonly RosterUnit[]) => listOf(us.map((u) => unitName(u, gender)));
   const first = r.maps[0]!.label;
@@ -124,6 +126,12 @@ export function flawlessReadout(engine: Engine, run: Run, options?: FlawlessOpti
   const spots = engine.blindSpots().filter((b) => r.blindSpots.includes(b.id));
   const detail = [
     `The chance no unit dies from ${first}${r.maps.length > 1 ? ` to ${last}` : ''} (${r.maps.length} map${r.maps.length === 1 ? '' : 's'}), each played by its suggested deployment while EXP and level-ups are rolled, over ${r.runs} simulated run${r.runs === 1 ? '' : 's'}; the ± is the simulation error (95%).`,
+    ceiling?.chance !== undefined
+      ? `The ceiling is the chance no unit dies on ${ceiling.label} with every unit at its effective caps (a base class promoted) and its recorded skills and weapons: the most any plan for this army could reach there.`
+      : '',
+    ceiling?.unarmed.length
+      ? `${listOf(ceiling.unarmed)} ${ceiling.unarmed.length === 1 ? 'isn’t' : 'aren’t'} simulated yet: ${ceiling.unarmed.length === 1 ? 'its' : 'their'} foes carry no weapons in the chapter data, so the chance counts no risk there${ceiling.chance === undefined ? ' and there’s no ceiling' : ''}.`
+      : '',
     r.unknownHistory.length
       ? `${names(r.unknownHistory)} ${r.unknownHistory.length === 1 ? 'was' : 'were'} first logged in a class ${r.unknownHistory.length === 1 ? 'it' : 'they'} can’t join in: the Second Seal count before the log is read as 0 (set it on the chapter log if it isn’t).`
       : '',
@@ -132,7 +140,7 @@ export function flawlessReadout(engine: Engine, run: Run, options?: FlawlessOpti
     `Rests on: ${spots.map((b) => `${b.label[0]!.toLowerCase()}${b.label.slice(1)} (${LEAN[b.lean]})`).join(', ')}.`,
   ].filter(Boolean);
   return {
-    text: `Flawless chance: ${chanceText(r.chance)} ±${points(r.margin)}`,
+    text: `Flawless chance: ${chanceText(r.chance)} ±${points(r.margin)} · ${ceiling?.chance !== undefined ? `ceiling ${chanceText(ceiling.chance)}` : 'no ceiling yet'}`,
     detail: detail.join(' '),
     rows: r.maps.map((m) => `${m.label}: ${m.noDeath === undefined ? 'no run gets here with nobody lost' : chanceText(m.noDeath)}`),
   };

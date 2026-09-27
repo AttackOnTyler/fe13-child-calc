@@ -25,6 +25,7 @@ import type { SimItem } from './sim/sustain';
 import { classIdByName, sealAvailability, sealsHeld } from './supply';
 import { simMapById } from './sim/sim-map';
 import { simulateRuns, type ArmyUnit, type RunSim, type RunSimInput, type RunSimMap } from './sim/run-sim';
+import { simulateCeiling, type Ceiling } from './sim/ceiling';
 
 const WEAPON_KINDS = new Set(['sword', 'lance', 'axe', 'bow', 'tome', 'stone', 'beaststone']);
 
@@ -217,5 +218,14 @@ export function flawlessChance(run: Run, assumptions: Assumptions, options: Flaw
   const { input, notSimulated, unknownHistory, endpoint } = flawlessInput(run, assumptions, options.roleOf);
   const sim = simulateRuns(input, options.seed ?? FLAWLESS_SEED, options.runs ?? FLAWLESS_RUNS, assumptions);
   return { ...sim, notSimulated, unknownHistory, endpoint };
+}
+
+/**
+ * The ceiling of a run (#189, see `simulateCeiling`): the endpoint's flawless chance with every unit of today's plan at
+ * its effective caps; undefined once the endpoint is recorded. Lunatic+ plays it on the flawless chance's seeds.
+ */
+export function flawlessCeiling(run: Run, assumptions: Assumptions, options: FlawlessOptions = {}): Ceiling | undefined {
+  const { input } = flawlessInput(run, assumptions, options.roleOf);
+  return simulateCeiling(input, options.seed ?? FLAWLESS_SEED, options.runs ?? FLAWLESS_RUNS);
 }
 
