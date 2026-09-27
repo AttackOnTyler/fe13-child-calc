@@ -96,7 +96,10 @@ describe('the flawless chance after a death (#208)', () => {
   it('stays forward-only: no further deaths from here, with the army that’s left', () => {
     const plan = engine.lossPlan(dead, seed);
     const after = engine.flawlessChance(dead, { plan, runs: 2 });
-    expect(after.chance).toBeGreaterThan(0);
+    // The fixture's Lv 10 army with its join weapons can't win the Endgame in 50 turns once a unit is gone, which counts
+    // as lost (the realism pass): the chance is read forward from the next map, which the runs still play.
+    expect(after.maps[0]!.reach).toBe(1);
+    expect(after.maps[0]!.noDeath!).toBeGreaterThan(0);
     expect(after.chance).toBe(engine.flawlessChance(never, { plan, runs: 2 }).chance);
     expect(after.maps.flatMap((m) => m.lineup?.deployed ?? [])).not.toContain(victim);
   });
