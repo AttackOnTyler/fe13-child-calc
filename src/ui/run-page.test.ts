@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_ROSTER, addEntry, createEngine, dismissMigrationNote, editEntry, exportRun, latestEntry, migrateRun, recordMarriage, runFromRoster, withPin, withRenown, withRun, withShopLine, withSideGoalPin, withSideGoalSecured, withSpouse, withItemPin, withItemsUsed, unitName, readUnits, withRobinLock, type Ceiling, type Engine, type Plan, type PlanRobin, type RobinStep, type Route, type RosterUnit, type Run, type Snapshot, type UnitSnapshot } from '../engine';
-import { childStatsNote, flawlessReadout, robinReadout, heldText, itemPlanReadout, itemsUsedReadout, mapOrderReadout, migrationNoteReadout, solvedReadout, parseHeldText, parseSupportsText, roadmapReadout, shoppingReadout, sideGoalPlanReadout, sideGoalsReadout, supportsText } from './run-page';
+import { childStatsNote, flawlessReadout, robinButton, robinReadout, heldText, itemPlanReadout, itemsUsedReadout, mapOrderReadout, migrationNoteReadout, solvedReadout, parseHeldText, parseSupportsText, roadmapReadout, shoppingReadout, sideGoalPlanReadout, sideGoalsReadout, supportsText, whenIdle } from './run-page';
 import { chanceText } from './chance';
 
 describe('the map order readout (#179)', () => {
@@ -490,5 +490,22 @@ describe('the Robin alternatives on the Run view (#201)', () => {
     expect(r.solved.map((x) => x.lock)).toEqual([false, false]);
     expect(r.solved[1]!.text).toMatch(/^Female, \+Spd −Lck, marrying Lon'qu: 70\.0% ±2\.0 · \+10\.0 ±1\.0 against the locked Robin · /);
     expect(robinReadout(engine, locked, { ...after, lockCost: undefined }, false).lock).toBe('What this lock cost: nothing measurable, among the Robins solved');
+  });
+
+  it('waits for the headline’s search once: after the comparison the button offers to carry on, not to wait', () => {
+    let started = 0;
+    const start = () => void started++;
+    expect(robinButton({ running: false, waiting: false })).toEqual({ text: 'Compare Robins', disabled: false });
+    whenIdle.wait(start);
+    expect(robinButton({ running: false, waiting: whenIdle.waiting(start) })).toEqual({ text: 'Waiting for the search…', disabled: true });
+    // The search is done: the worker is handed over once.
+    whenIdle.free();
+    expect(started).toBe(1);
+    expect(robinButton({ running: true, waiting: whenIdle.waiting(start), step })).toEqual({ text: 'Comparing…', disabled: true });
+    // The comparison's step is done, short of converging.
+    expect(robinButton({ running: false, waiting: whenIdle.waiting(start), step })).toEqual({ text: 'Carry on', disabled: false });
+    expect(robinButton({ running: false, waiting: false, step: { converged: true } }).disabled).toBe(true);
+    whenIdle.free();
+    expect(started).toBe(1);
   });
 });
