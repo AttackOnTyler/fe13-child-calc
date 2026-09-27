@@ -45,6 +45,7 @@ import {
   SF_SUPPORT_BASICS,
   FEW_CHROM,
   FEW_MAIDEN,
+  CHECK_IN_PLAY,
   type Assumed,
   type Citation,
 } from '../game-data/citations';
@@ -103,6 +104,10 @@ type AssumptionValues = {
   'tonic-stacking': 'no-stack' | 'stacks';
   /** Using an item in preparations: free, or it can't be done (a tonic would cost an action on the map, and is left out). */
   'item-in-preparations': 'free' | 'not-in-preparations';
+  /** Veteran's ×1.5 (Robin's Tactician skill): only while its holder leads a pair (FEW, JP), or whenever it's paired (SF). */
+  'veteran-as-back': 'lead-only' | 'paired';
+  /** A Master or Second Seal and the EXP bar: reset to 0 with the level, or kept. */
+  'seal-exp-bar': 'reset' | 'kept';
 };
 
 export type AssumptionId = keyof AssumptionValues;
@@ -517,6 +522,37 @@ export const ASSUMPTION_REGISTRY: { readonly [K in AssumptionId]: AssumptionDef<
     format: (v) => (v === 'free' ? 'Free, in preparations' : 'Not in preparations (tonics left out)'),
     parse: (raw) => (raw === 'free' || raw === 'not-in-preparations' ? raw : undefined),
     affects: 'tonics in the simulated runs',
+  }),
+  'veteran-as-back': entry({
+    id: 'veteran-as-back',
+    label: 'Veteran on the back',
+    why:
+      'Veteran (Robin’s Tactician skill) gives ×1.5 EXP. FEW’s Veteran page and 天馬騎士団’s skill page apply it only while its holder ' +
+      'leads a pair; SF’s skill list says “when paired up”, which would count Robin as the back too (research C4, medium confidence ' +
+      'for lead only). An open rule until Robin backs a pair and lands a Dual Strike: 5 EXP (lead only) or 7 (paired) against a foe ' +
+      'of Robin’s level.',
+    sources: [RESEARCH_EXP, CHECK_IN_PLAY],
+    default: 'lead-only',
+    alternatives: [{ label: 'Whenever paired, the back included (SF)', value: 'paired' }],
+    input: 'choice',
+    format: (v) => (v === 'lead-only' ? 'Only while leading a pair (FEW, JP)' : 'Whenever paired, as the back too (SF)'),
+    parse: (raw) => (raw === 'lead-only' || raw === 'paired' ? raw : undefined),
+    affects: 'Robin’s EXP as the back in the simulated runs',
+  }),
+  'seal-exp-bar': entry({
+    id: 'seal-exp-bar',
+    label: 'The EXP bar through a seal',
+    why:
+      'A Master or Second Seal resets the displayed level to 1; SF says the internal level is adjusted and nothing about the EXP bar ' +
+      '(research G4). The runs reset it with the level. It moves at most 99 EXP per seal. An open rule until a seal is used with ' +
+      'the bar noted before and after.',
+    sources: [RESEARCH_EXP, CHECK_IN_PLAY],
+    default: 'reset',
+    alternatives: [{ label: 'Kept: the bar carries into the new class', value: 'kept' }],
+    input: 'choice',
+    format: (v) => (v === 'reset' ? 'Reset to 0 with the level' : 'Kept through the seal'),
+    parse: (raw) => (raw === 'reset' || raw === 'kept' ? raw : undefined),
+    affects: 'EXP after a class change in the simulated runs',
   }),
 };
 

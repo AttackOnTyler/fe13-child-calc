@@ -24,7 +24,7 @@
  * `inboxReadout` and `afterLockReadout` are what the page draws, from the solve's progress and the costs the worker has
  * read (tested); `inboxView` draws them and wires the worker's `edits` slot.
  */
-import type { Comparison, CostRow, EditCost, Engine, LossItem, Milestone, MilestoneMoves, MilestonePoint, MovedProposal, NewEdit, PinCost, Plan, PlanBreak, PlanPin, PlanProposal, PlanRobin, Reading, RosterUnit, Run, RunLoss, CloseCall } from '../engine';
+import type { Comparison, CostRow, Deployment, EditCost, Engine, LossItem, Milestone, MilestoneMoves, MilestonePoint, MovedProposal, NewEdit, PinCost, Plan, PlanBreak, PlanLineup, PlanPin, PlanProposal, PlanRobin, Reading, RosterUnit, Run, RunLoss, CloseCall } from '../engine';
 import { EDIT_COST_BUDGET, FLAWLESS_SEED, STEP_BUDGET, adoptedOf, behindFixes, pinKey, proposalId, robinLock, rosterUnits, unitName, whatChanged, withDismissedChange, withDismissedProposal, withEdit, withLossesSettled, withRobinLock, withoutEdit } from '../engine';
 import { SKILLS } from '../game-data/skills';
 import { STAT_LABELS } from '../game-data/stats';
@@ -33,6 +33,8 @@ import { h } from './dom';
 import { startSolve, type UnitEditView } from './solve-client';
 import { milestoneShort, pinText, type RunContext, type SolveProgress } from './run-page';
 import { setComparison, whyNumber, whyText, type WhyMark } from './why';
+import { currentRules } from './checked-rules';
+import { askChecks, checkRow, checksProgress, lineupOf, onChecksProgress, setupRows } from './checks-view';
 
 /** A Robin option as the page writes it: "Female, +Spd −Lck". */
 export const robinName = (r: PlanRobin) => `${r.gender === 'M' ? 'Male' : 'Female'}, +${STAT_LABELS[r.asset]} −${STAT_LABELS[r.flaw]}`;
@@ -255,6 +257,8 @@ export type AfterLockItem =
   | { readonly kind: 'resolve'; readonly title: string; readonly required: boolean; readonly reasons: readonly string[]; readonly rows: readonly FixRow[]; readonly note: string; readonly fresh: boolean }
   | { readonly kind: 'actions'; readonly title: string; readonly rows: readonly InboxRow[] }
   | { readonly kind: 'checks'; readonly title: string; readonly rows: readonly InboxRow[] }
+  /** Checks worth setting up (#209): a rule with stakes over about 1 point that no map left sets up, each with the edit that does. */
+  | { readonly kind: 'setup-checks'; readonly title: string; readonly rows: readonly FixRow[] }
   | Extract<InboxItem, { kind: 'anything-else' | 'your-edits' }>;
 
 export type AfterLockInbox = {
@@ -266,11 +270,17 @@ export type AfterLockInbox = {
 };
 
 /**
- * The checks the map offers (#209 fills it; spec: "this map's actions and checks"): each a situation that settles an
- * open rule. None yet.
+ * The checks the map offers (#209; spec: "this map's actions and checks"): each open rule whose situation the plan's
+ * roadmap sets up on the map, what to do and note, with its stakes as the worker has them, highest first. `lineup`: the
+ * map's lineup where the page has it (a forecast's); else the plan's own for the map, if it names one.
  */
-export function mapChecks(_engine: Engine, _run: Run, _key: string): readonly InboxRow[] {
-  return [];
+export function mapChecks(engine: Engine, run: Run, key: string, plan?: Plan, lineup?: PlanLineup | Deployment): readonly InboxRow[] {
+  if (!plan) return [];
+  const rules = currentRules();
+  const stakes = checksProgress(run, plan, rules)?.stakes;
+  const l = lineup && !('key' in lineup) ? lineupOf(key, lineup) : lineup;
+  const where = l ? { lineup: l } : { lineups: plan.roadmap.lineups };
+  return engine.mapChecks(run, plan, key, { rules, ...(stakes ? { stakes } : {}), ...where }).map(checkRow);
 }
 
 /** Each map key on the map order with its short label ("Chapter 5", "Apotheosis (secret route)"). */
@@ -533,9 +543,13 @@ export function afterLockReadout(engine: Engine, run: Run, state: InboxState): A
   if (next && plan) {
     const actions = mapActions(ms, name);
     if (actions.length) items.push({ kind: 'actions', title: `On ${labels.get(next.key)}`, rows: actions });
-    const checks = mapChecks(engine, run, next.key);
+    // The next map's lineup as the headline's runs play it, when they're the adopted plan's.
+    const lineup = progress && (progress.start ?? progress.best) === progress.best ? progress.chance.maps.find((m) => m.key === next.key)?.lineup : undefined;
+    const checks = mapChecks(engine, run, next.key, plan, lineup);
     if (checks.length) items.push({ kind: 'checks', title: `Checks ${labels.get(next.key)} offers`, rows: checks });
   }
+  const setup = plan ? setupRows(checksProgress(run, plan, currentRules())) : [];
+  if (setup.length) items.push({ kind: 'setup-checks', title: 'Checks worth setting up', rows: setup.map((r) => ({ key: r.key, text: r.text, ...(r.edit ? { edit: { label: r.edit.label, plan: r.edit.plan, ...(r.edit.cost ? { cost: { gain: r.edit.cost.gain, margin: r.edit.cost.margin, verdict: r.edit.cost.verdict } } : {}) } } : {}) })) });
 
   items.push(anythingElseItem(state), yourEditsItem(run, state));
   const open = (loss ? 1 : 0) + atRisk.length + behind.length + proposals.length;
@@ -703,9 +717,19 @@ export function inboxProgress(run: Run, progress: SolveProgress): void {
   progressOf.set(run, progress);
   if (live?.run === run) {
     listEdits(live.ctx, progress);
+    askChecksFor(live.ctx, progress);
     redraw();
   }
 }
+
+/** The checks' stakes and setup checks (#209), asked once the search is done after the Lock: the worker is free then. */
+function askChecksFor(ctx: RunContext, progress: SolveProgress | undefined): void {
+  const plan = heldPlan(ctx.run, progress);
+  if (progress?.done && plan && !beforeTheLock(ctx.run)) askChecks(ctx, plan, currentRules());
+}
+
+// The stakes land: the inbox's checks re-order, and the setup checks appear.
+onChecksProgress(() => redraw());
 
 /**
  * Lists every edit on the worker's `edits` slot once the solve has read the plan (its riskiest maps name the lineup and
@@ -809,7 +833,7 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
       r.proposal
         ? null
         : r.edit
-          ? h('button', { class: 'mini', title: r.edit.pins?.length ? 'Pin it: a span pin every plan keeps (undo it in Your edits)' : 'Make it: your plan with this EXP priority (undo it in Your edits)', onclick: () => set(withEdit(run, r.edit!)) }, r.edit.pins?.length ? 'Pin it' : 'Make it')
+          ? h('button', { class: 'mini', title: r.edit.pins?.length ? 'Pin it: a span pin every plan keeps (undo it in Your edits)' : r.key.startsWith('setup:') ? 'Make it: your plan sets up this check (undo it in Your edits)' : 'Make it: your plan with this EXP priority (undo it in Your edits)', onclick: () => set(withEdit(run, r.edit!)) }, r.edit.pins?.length ? 'Pin it' : 'Make it')
           : null,
     );
 
@@ -821,6 +845,7 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
     const resolve = item('resolve');
     const actions = item('actions');
     const checks = item('checks');
+    const setup = item('setup-checks');
     const list = (i: { readonly title: string; readonly rows: readonly InboxRow[] } | undefined, cls: string) =>
       i ? h('div', { class: `banner ${cls}` }, h('b', {}, i.title), h('ul', { class: 'small' }, ...i.rows.map((r) => h('li', {}, ...whyText(r.text, r.marks ?? []))))) : null;
     return h(
@@ -876,6 +901,9 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
         : null,
       list(actions, 'map-actions'),
       list(checks, 'map-checks'),
+      setup
+        ? h('div', { class: 'banner setup-checks' }, h('b', {}, setup.title), ...setup.rows.map((r) => fixRow(r)), h('span', { class: 'muted small' }, 'A rule’s stakes pass about 1 point and no map left sets up its check: the edit sets it up, at its cost. Nothing changes until you make it.'))
+        : null,
     );
   };
 
@@ -1072,6 +1100,7 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
   parts.push(title);
   live = { run, ctx, parts };
   listEdits(ctx, progressOf.get(run));
+  askChecksFor(ctx, progressOf.get(run));
   return h('section', { class: 'inbox' }, card?.el ?? null, title.el, headline, robin, top.el, search, end.el);
 }
 

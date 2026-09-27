@@ -37,6 +37,16 @@ describe('checked rules (#205)', () => {
     });
   });
 
+  it('keep the unexpected observations and each mismatch’s value (#209)', () => {
+    const seen: CheckedRules = {
+      ...rules,
+      mismatches: [{ ...rules.mismatches[0]!, value: 22 }],
+      unexpected: [{ rule: 'tome-miss-use', value: 2, evidence: { map: 'chapter-6' }, at: 3 }, { rule: 'booster-at-cap', value: true }],
+    };
+    expect(parseCheckedRules(JSON.parse(JSON.stringify(seen)))).toEqual(seen);
+    expect(parseCheckedRules({ answers: {}, mismatches: [], unexpected: [{ rule: 'x' }, { value: 1 }, 'junk'] })).toEqual({ answers: {}, mismatches: [] });
+  });
+
   it('give the model its overrides, and keep an unchanged answer’s evidence when the overrides change', () => {
     expect(overridesOf(rules)).toEqual({ 'tome-miss-use': 'no-use', 'army-spread': [1, 2, 3] });
     const evidence = { run: 'Hard Casual, Full route', map: 'chapter-9' };

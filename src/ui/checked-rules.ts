@@ -1,39 +1,15 @@
-import { latestEntry, type Overrides, type Run } from '../engine';
+import { EMPTY_CHECKED_RULES, latestEntry, type CheckedRules, type ModelMismatch, type Overrides, type RuleAnswer, type RuleEvidence, type Run, type UnexpectedObservation } from '../engine';
 
 /**
  * Checked rules (#205; spec #175, Pages, storage and migration): global, not the run's. Each rule's answer (a hand
- * answer, or a checked rule an in-play check settled, #209) with its evidence (run and map), and the model mismatches.
- * They outlive the run: Clear all never touches them. The model reads their values as assumption overrides
- * (`overridesOf`). The first read migrates `assumption-overrides:v1` (each override a hand answer, without evidence:
- * none was kept then), which stays untouched; a missing, blocked or corrupt store just means none.
+ * answer, or a checked rule an in-play check settled, #209) with its evidence (run and map), the observations that
+ * matched neither reading (#209: the rule stays open, marked unexpected) and the model mismatches. They outlive the
+ * run: Clear all never touches them. The model reads their values as assumption overrides (`overridesOf`). The first
+ * read migrates `assumption-overrides:v1` (each override a hand answer, without evidence: none was kept then), which
+ * stays untouched; a missing, blocked or corrupt store just means none. The shapes are the engine's (`checks.ts`),
+ * which settles checks.
  */
-export type RuleEvidence = {
-  /** The run it came from, in words (its Run facts). */
-  readonly run?: string;
-  /** The map it was seen on, or the latest recorded map when answered by hand. */
-  readonly map?: string;
-};
-
-export type RuleAnswer = {
-  /** The reading the model uses: the assumption's value. */
-  readonly value: unknown;
-  /** Answered by hand, or settled by an in-play check (#209). */
-  readonly how: 'hand' | 'check';
-  readonly evidence?: RuleEvidence;
-  /** When (epoch ms). */
-  readonly at?: number;
-};
-
-/** A rule play contradicted twice, matching neither reading (#209). */
-export type ModelMismatch = { readonly rule: string; readonly evidence: readonly RuleEvidence[]; readonly at?: number };
-
-export type CheckedRules = {
-  /** By assumption id. */
-  readonly answers: Readonly<Record<string, RuleAnswer>>;
-  readonly mismatches: readonly ModelMismatch[];
-};
-
-export const EMPTY_CHECKED_RULES: CheckedRules = { answers: {}, mismatches: [] };
+export { EMPTY_CHECKED_RULES, type CheckedRules, type ModelMismatch, type RuleAnswer, type RuleEvidence };
 
 const KEY = 'fe13-child-calc:checked-rules:v1';
 const OLD_KEY = 'fe13-child-calc:assumption-overrides:v1';
@@ -57,12 +33,18 @@ export function parseCheckedRules(raw: unknown): CheckedRules {
     const evidence = parseEvidence(a.evidence);
     answers[id] = { value: a.value, how: a.how, ...(evidence ? { evidence } : {}), ...(isTime(a.at) ? { at: a.at } : {}) };
   }
+  const seen = (v: unknown): v is number | boolean => typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v));
   const mismatches = (Array.isArray(raw.mismatches) ? raw.mismatches : []).flatMap((m): ModelMismatch[] => {
     if (!isObject(m) || !isText(m.rule)) return [];
     const evidence = (Array.isArray(m.evidence) ? m.evidence : []).map(parseEvidence).filter((e): e is RuleEvidence => e !== undefined);
-    return [{ rule: m.rule, evidence, ...(isTime(m.at) ? { at: m.at } : {}) }];
+    return [{ rule: m.rule, evidence, ...(isTime(m.at) ? { at: m.at } : {}), ...(seen(m.value) ? { value: m.value } : {}) }];
   });
-  return { answers, mismatches };
+  const unexpected = (Array.isArray(raw.unexpected) ? raw.unexpected : []).flatMap((u): UnexpectedObservation[] => {
+    if (!isObject(u) || !isText(u.rule) || !seen(u.value)) return [];
+    const evidence = parseEvidence(u.evidence);
+    return [{ rule: u.rule, value: u.value, ...(evidence ? { evidence } : {}), ...(isTime(u.at) ? { at: u.at } : {}) }];
+  });
+  return { answers, mismatches, ...(unexpected.length ? { unexpected } : {}) };
 }
 
 const DIFFICULTY_NAMES = { normal: 'Normal', hard: 'Hard', lunatic: 'Lunatic', 'lunatic-plus': 'Lunatic+' } as const;
@@ -96,7 +78,16 @@ export function withOverrides(rules: CheckedRules, next: Overrides, evidence: Ru
   return { ...rules, answers };
 }
 
+/** The checked rules as last loaded or saved this session: the pages read them (#209), main.ts changes them. */
+let current: CheckedRules = EMPTY_CHECKED_RULES;
+export const currentRules = (): CheckedRules => current;
+
 export function loadCheckedRules(): CheckedRules {
+  current = readCheckedRules();
+  return current;
+}
+
+function readCheckedRules(): CheckedRules {
   try {
     const raw = localStorage.getItem(KEY);
     if (raw !== null) return parseCheckedRules(JSON.parse(raw));
@@ -115,6 +106,7 @@ export function loadCheckedRules(): CheckedRules {
 }
 
 export function saveCheckedRules(rules: CheckedRules): void {
+  current = rules;
   try {
     localStorage.setItem(KEY, JSON.stringify(rules));
   } catch {

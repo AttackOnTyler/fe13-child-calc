@@ -1,5 +1,6 @@
 import './style.css';
 import {
+  withLearned,
   MOD_STATS,
   RALLY_OPTIONS,
   STATS,
@@ -292,6 +293,30 @@ function applyOverrides(next: Overrides): void {
   assumptions = resolveAssumptions(overrides);
   engine = createEngine(assumptions);
   selfTest = engine.selfTest();
+  // A rule changed (#209): the corrections are relearned from the log, and the new run re-solves.
+  run = withLearned(run);
+  roster = rosterOf(run);
+  saveRun(run);
+  render();
+}
+
+/**
+ * Changes the checked rules (#209: a check settled, a rule answered by hand or reopened): saved (global), the model
+ * rebuilt when it reads them differently, and the corrections relearned from the chapter log; a model change re-solves.
+ */
+function setRules(next: CheckedRules): void {
+  const before = JSON.stringify(assumptions);
+  checkedRules = next;
+  saveCheckedRules(checkedRules);
+  overrides = overridesOf(checkedRules);
+  assumptions = resolveAssumptions(overrides);
+  const relearned = withLearned(run);
+  if (JSON.stringify(assumptions) === before) return JSON.stringify(relearned) === JSON.stringify(run) ? render() : setRun(relearned);
+  engine = createEngine(assumptions);
+  selfTest = engine.selfTest();
+  run = relearned;
+  roster = rosterOf(run);
+  saveRun(run);
   render();
 }
 
@@ -2290,7 +2315,7 @@ function renderParts(parts: readonly Part[]): void {
     drawerPairing = undefined;
     replaceRegion('main', main, [
       ...(view === 'validation'
-        ? [validationPanel({ engine, assumptions, selfTest, setOverride, resetAll: () => applyOverrides({}), render })]
+        ? [validationPanel({ engine, assumptions, selfTest, setOverride, resetAll: () => applyOverrides({}), render, rules: { engine, run, rules: checkedRules, setRules, evidence: ruleEvidence(run), now: () => Date.now() } })]
         : view === 'roster'
           ? rosterPage({ engine, roster, setRoster, clearAll: clearRosterState })
           : view === 'units'
@@ -2352,6 +2377,7 @@ function renderParts(parts: readonly Part[]): void {
               // The run's pins (marriage, span, keep, item): the seed plan keeps them (#198, #193, #200).
               pins: () => run.pins ?? [],
               onProgress: solveProgressed,
+              setRules,
               recording,
               setRecording: (r) => {
                 recording = r;

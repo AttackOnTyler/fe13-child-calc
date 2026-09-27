@@ -23,6 +23,9 @@ import { beforeTheLock, inboxNudge, inboxProgress, inboxView, robinName, robinTo
 import { GAME_OVER_UNITS, forecastBefore, openLosses, proposalId, recordMissed, unrecordLoss, withEntryForecast, type Comparison, type WhatItCost } from '../engine';
 import { setComparison, whyText, type WhyMark } from './why';
 import { calibration, learnCorrections, withCorrectionsOff, withLearned } from '../engine';
+import { withEntryChecks, type CheckedRules } from '../engine';
+import { currentRules, ruleEvidence } from './checked-rules';
+import { checksProgress, checksStep, lineupOf } from './checks-view';
 
 export type RunContext = {
   readonly engine: Engine;
@@ -47,12 +50,17 @@ export type RunContext = {
   readonly pins?: () => readonly PlanPin[];
   /** Called when the solve's progress for the run changes (#203: the Wishlist tab and its count follow it). */
   readonly onProgress?: () => void;
+  /**
+   * Changes the checked rules (#209: a check settled in Record results): main.ts saves them, rebuilds the model and
+   * relearns the corrections. Absent: the Checks step shows the checks without taking answers.
+   */
+  readonly setRules?: (rules: CheckedRules) => void;
 };
 
 /** What the headline reads: the Wishlist tab draws it too (#203), so opening it first starts the solve. */
 export type HeadlineContext = Pick<RunContext, 'engine' | 'assumptions' | 'run' | 'setRun' | 'pins' | 'onProgress'>;
 
-const RECORD_STEPS = ['Deployed units', 'Recruits', 'Deaths and marriages', 'Convoy and gold', 'Shopping', 'Side goals and renown', 'Items used'] as const;
+const RECORD_STEPS = ['Deployed units', 'Recruits', 'Deaths and marriages', 'Convoy and gold', 'Shopping', 'Side goals and renown', 'Items used', 'Checks'] as const;
 
 export function runView(ctx: RunContext): HTMLElement[] {
   if (ctx.showingMaps || ctx.maps.map) {
@@ -73,7 +81,22 @@ function withMapRecorded(ctx: RunContext, map: string, label?: string): Run {
   const s = solveState(ctx.run);
   const before = s?.chance && forecastBefore(ctx.run, s.chance, s.readings);
   const next = addEntry(ctx.run, map, ctx.now(), label, ctx.assumptions);
-  return before ? withEntryForecast(next, latestEntry(next)!.id, before) : next;
+  const id = latestEntry(next)!.id;
+  const kept = before ? withEntryForecast(next, id, before) : next;
+  // The checks the map offered (#209), as the plan stood before it: Record results' Checks step lists only these.
+  const offered = s ? offeredChecks(ctx, s.plan, s.chance, map) : [];
+  return offered.length ? withEntryChecks(kept, id, offered) : kept;
+}
+
+/** The free checks a map offers on the plan before it's recorded (#209), with the stakes worked out so far. */
+function offeredChecks(ctx: RunContext, plan: Plan, chance: FlawlessChance | undefined, map: string): { readonly rule: string; readonly text: string }[] {
+  const key = ctx.engine.mapOrder(ctx.run).steps.find((x) => x.map === map)?.key;
+  if (!key) return [];
+  const rules = currentRules();
+  const stakes = checksProgress(ctx.run, plan, rules)?.stakes;
+  const d = chance?.maps.find((m) => m.key === key)?.lineup;
+  const where = d ? { lineup: lineupOf(key, d) } : { lineups: plan.roadmap.lineups };
+  return ctx.engine.mapChecks(ctx.run, plan, key, { rules, ...(stakes ? { stakes } : {}), ...where }).map((c) => ({ rule: c.rule, text: c.text }));
 }
 
 /**
@@ -624,7 +647,7 @@ export type ForecastLearningReadout = {
  * forecast it was learned from and its recorded results' percentiles; the share of recorded results inside the
  * forecast's 10th–90th percentile and their mean percentile; and the falls against the no-death forecast.
  */
-export function forecastLearningReadout(run: Run): ForecastLearningReadout {
+export function forecastLearningReadout(run: Run, touched: readonly { readonly unit: RosterUnit; readonly rules: readonly { readonly label: string }[] }[] = []): ForecastLearningReadout {
   const gender = run.roster.run.gender;
   const off = !!run.corrections?.off;
   const factors = run.corrections?.units ?? {};
@@ -634,7 +657,10 @@ export function forecastLearningReadout(run: Run): ForecastLearningReadout {
     const factor = factors[c.unit];
     if (factor === undefined) return [];
     const ps = rows.filter((r) => r.unit === c.unit).map((r) => p(r.percentile));
-    return [`${unitName(c.unit, gender)} ×${factor.toFixed(2)} (${c.maps} map${c.maps === 1 ? '' : 's'}: ${c.earned} EXP against ${c.forecast} forecast${ps.length ? `; recorded at ${ps.join(', ')}` : ''})`];
+    // Beyond about ×1.3 or ×0.77 where an open check touches the unit's situation (#209): the check could explain it.
+    const checks = touched.find((t) => t.unit === c.unit)?.rules ?? [];
+    const named = checks.length ? `; an open check touches this: ${checks.map((r) => r.label).join(', ')}` : '';
+    return [`${unitName(c.unit, gender)} ×${factor.toFixed(2)} (${c.maps} map${c.maps === 1 ? '' : 's'}: ${c.earned} EXP against ${c.forecast} forecast${ps.length ? `; recorded at ${ps.join(', ')}` : ''}${named})`];
   });
   const c = calibration(run);
   return {
@@ -650,7 +676,7 @@ export function forecastLearningReadout(run: Run): ForecastLearningReadout {
 
 /** The forecast learning section (#196): corrections as a stated assumption with its switch, and the calibration line. */
 function forecastLearningSection(ctx: RunContext): HTMLElement {
-  const r = forecastLearningReadout(ctx.run);
+  const r = forecastLearningReadout(ctx.run, ctx.engine.correctionChecks(ctx.run, solveState(ctx.run)?.plan, currentRules()));
   return h(
     'details',
     { class: 'banner forecast-learning' },
@@ -1297,8 +1323,10 @@ function recordResults(ctx: RunContext, e: RunEntry, step: number): HTMLElement 
         return [shoppingSection(ctx, e)];
       case 5:
         return sideGoalsStep(ctx, e);
-      default:
+      case 6:
         return itemsUsedStep(ctx, e);
+      default:
+        return checksStep({ engine: ctx.engine, run: ctx.run, rules: currentRules(), setRules: ctx.setRules ?? (() => undefined), setRun: ctx.setRun, evidence: { ...ruleEvidence(ctx.run), map: e.map }, now: ctx.now }, e);
     }
   })();
   const last = step === RECORD_STEPS.length - 1;
