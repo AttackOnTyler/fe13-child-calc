@@ -6,6 +6,7 @@ import {
   createEngine,
   exportRun,
   importRun,
+  latestEntry,
   mapSpanPin,
   runFromRoster,
   sideGoalById,
@@ -97,7 +98,7 @@ describe('pins in the lineups (#200)', () => {
     expect(plan.wishlist.units.map((w) => w.unit)).not.toContain(a);
     for (const l of engine.roadmapLineups(out, plan)) expect(fielded(l)).not.toContain(a);
     // In: a unit the seed leaves out of the endpoint.
-    const army = engine.flawlessChance(late, { plan: seed, runs: 1, seed: 1 }).units.map((u) => u.id);
+    const army = Object.keys(latestEntry(late)!.snapshot.units) as RosterUnit[];
     const benched = army.find((u) => !seed.wishlist.units.some((w) => w.unit === u))!;
     expect(benched).toBeTruthy();
     const kept = engine.seedPlan(withPin(late, { kind: 'keep', unit: benched, keep: 'in' }));
