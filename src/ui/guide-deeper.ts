@@ -130,7 +130,7 @@ export const DEEPER: readonly DeeperEntry[] = [
     jump: { to: 'wishlist', target: 'wishlist-army' },
     terms: [
       { term: 'wishlist', def: 'The endpoint army your plan works towards: who fields, paired with whom, in which class and build, and the marriages that make its children.' },
-      { term: 'worth', def: 'How many points of flawless chance the plan loses without the unit, its slot refilled and the roadmap re-solved. A parent’s includes its children.' },
+      { term: 'worth', def: 'How many points of flawless chance the plan loses without the unit, its place in the wishlist refilled and the roadmap re-solved. A parent’s includes its children.' },
       { term: 'reserve', def: 'A wishlist unit beyond the endpoint’s deploy count, in the order they step in when a wishlist unit is lost or falls behind.' },
     ],
   },

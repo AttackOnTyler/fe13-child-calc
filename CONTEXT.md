@@ -213,7 +213,7 @@ The seed's cheap value for a pairing: the share of the endpoint's foes its child
 _Avoid_: Coverage (alone — the deployment's coverage is per map), pairing score
 
 **Unit worth**:
-How many points of flawless chance a plan loses without one unit: removed from every lineup it's in, its wishlist slot refilled and what the removal forces re-chosen (a parent's children, the spouse's marriage), the rest of the wishlist kept and the roadmap re-solved. Every unit in any lineup has one, and a parent's includes its children.
+How many points of flawless chance a plan loses without one unit: removed from every lineup it's in, its place in the wishlist refilled and what the removal forces re-chosen (a parent's children, the spouse's marriage), the rest of the wishlist kept and the roadmap re-solved. Every unit in any lineup has one, and a parent's includes its children.
 _Avoid_: Value, rating, standing (the preset score)
 
 **Utility**:
@@ -232,7 +232,7 @@ What a score measures per stat: effective caps with Limit Breaker, effective cap
 _Avoid_: Mode
 
 **Scoring role**:
-Whether a unit is scored as the Lead (its own stats) or the Support (the pair-up bonus it gives a lead). Visitors see it as Lead / Battery, the deployment role a Support preset gives.
+Whether a unit is scored as the Lead (its own stats) or the Support (the pair-up bonus it gives a lead). Visitors see it as Lead / Support; the Battery preset scores in Support.
 _Avoid_: Position (a unit's place in a lineup), front/back
 
 **Pair-up bonus**:
