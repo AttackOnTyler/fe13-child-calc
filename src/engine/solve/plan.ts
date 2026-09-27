@@ -148,6 +148,8 @@ export type SearchTrial = {
   readonly samples: number[];
   /** The runs it's compared on this time. */
   target: number;
+  /** Its non-starter couples (#194). */
+  readonly stuck?: string[][];
 };
 
 /** The local search's whole state between steps (#199): plain JSON. */
@@ -174,6 +176,8 @@ export type SearchState = {
   scored: boolean;
   /** The maps the best plan loses the most on, riskiest first (its re-score's). */
   riskiest: string[];
+  /** The best plan's non-starter couples (#194); null until read. */
+  stuck: string[][] | null;
   converged: boolean;
 };
 

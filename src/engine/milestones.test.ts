@@ -48,8 +48,12 @@ describe('support milestones (#194)', () => {
     expect(byId(all, 'support:stahl+sully')).toMatchObject({ fixed: false, nonStarter: false, at: { key: 'paralogue-8', when: 'start' }, children: ['kjelle'] });
     // Played through Chapter 12 with no support between them: Paralogue 8 comes too soon for the pair's curve.
     const late = playedThrough('chapter-12', { sully: unit('Cavalier', 15), stahl: unit('Cavalier', 15) });
-    const m = byId(engine.milestones(late, engine.seedPlan(late, { pins: [pins[1]] })), 'support:stahl+sully');
+    // On the route's template order (the seed moves Paralogue 8 later to fix it, #199).
+    const seeded = engine.seedPlan(late, { pins: [pins[1]] });
+    const template = { ...seeded, roadmap: { ...seeded.roadmap, order: engine.mapOrder(late).steps.map((s) => s.key) } };
+    const m = byId(engine.milestones(late, template), 'support:stahl+sully');
     expect(m).toMatchObject({ nonStarter: true, at: { key: 'paralogue-8' } });
+    expect(byId(engine.milestones(late, seeded), 'support:stahl+sully')).toMatchObject({ nonStarter: false, at: { key: 'paralogue-8' } });
     if (m?.kind !== 'support') throw new Error('no support milestone');
     expect(m.window.earliest?.key).toBe('chapter-13');
     expect(m.window.latest).toBeUndefined();

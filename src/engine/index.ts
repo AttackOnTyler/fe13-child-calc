@@ -56,7 +56,7 @@ import { planLineups, simulateRuns, type RunSim, type RunSimInput } from './sim/
 import { mapUpkeep, type MapUpkeep } from './sim/upkeep';
 import { FLAWLESS_RUNS, FLAWLESS_SEED, flawlessCeiling, flawlessChance, flawlessInput, sureIncome, type FlawlessChance, type FlawlessOptions } from './flawless';
 import { simulateCeiling, type Ceiling } from './sim/ceiling';
-import { endpointCoverage, seedPlan, type EndpointCoverage, type SeedContext, type SeedOptions } from './solve/seed';
+import { coupleKey, endpointCoverage, nonStarters, seedPlan, type EndpointCoverage, type SeedContext, type SeedOptions } from './solve/seed';
 import { milestones, type Milestone } from './milestones';
 import { editCost, solveStep, type EditCost, type EditCostInput, type SolveStep, type SolveStepInput } from './solve/step';
 import { planEdits } from './solve/edits';
@@ -998,6 +998,21 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     return input.maps.map((m, i) => ({ key: m.key, pairs: lineups[i]!.pairs.map((p) => ({ lead: p.lead, ...(p.back ? { back: p.back } : {}) })), solo: [...lineups[i]!.solo] }));
   };
 
+  /**
+   * The seed for a run, kept while the run lives (a run is replaced, never edited): it takes 0.3–1.2 s since #199 fixes
+   * its non-starters. Without roles only (the roles are a function).
+   */
+  const seeds = new WeakMap<Run, Map<string, Plan>>();
+  const seedFor = (run: Run, options: SeedOptions): Plan => {
+    if (options.roleOf) return seedPlan(run, seedContext(run), options);
+    let held = seeds.get(run);
+    if (!held) seeds.set(run, (held = new Map()));
+    const k = JSON.stringify(options.pins ?? []);
+    let plan = held.get(k);
+    if (!plan) held.set(k, (plan = seedPlan(run, seedContext(run), options)));
+    return plan;
+  };
+
   const seedContext = (run: Run): SeedContext => {
     const context: PlayContext = run.roster.run.route ?? 'main-story';
     const settings: SkillViewSettings = { context, dlc: false };
@@ -1740,22 +1755,27 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     simulateRuns: (input, seed, runs) => simulateRuns(input, seed, runs, assumptions),
     ceiling: (run, options) => flawlessCeiling(run, assumptions, options),
     simulateCeiling: (input, seed, runs) => simulateCeiling(input, seed, runs, assumptions),
-    seedPlan: (run, options) => seedPlan(run, seedContext(run), options),
+    seedPlan: (run, options) => seedFor(run, options ?? {}),
     endpointCoverage: (run, child, parents, robin) => endpointCoverage(run, seedContext(run), child, parents, robin),
     solveStep: (input) => {
       const { run, roleOf, pins } = input;
       const ctx = seedContext(run);
       const options = { ...(pins ? { pins } : {}), ...(roleOf ? { roleOf } : {}) };
       const lunaticPlus = run.roster.run.difficulty === 'lunatic-plus';
+      const pinnedKeys = new Set((pins ?? []).map((p) => coupleKey(p.couple)));
       return solveStep(
         input,
         {
-          seed: () => seedPlan(run, ctx, options),
+          seed: () => seedFor(run, options),
           edits: (plan, hints) => planEdits(run, ctx, options, plan, hints, (p) => lineupsOf(run, p, input.seed, roleOf)),
           samples: (plan, first, count) => simulateRuns(planInput(run, plan, roleOf), input.seed, count, assumptions, first).samples,
           rescore: (plan, seed, runs) => flawlessChance(run, assumptions, { plan, seed, runs, ...(roleOf ? { roleOf } : {}) }),
           // Lunatic+ plays the ceiling over a few skill draws; otherwise one play is the ceiling.
           ceiling: (plan) => flawlessCeiling(run, assumptions, { plan, seed: input.seed, runs: lunaticPlus ? CEILING_DRAWS : 1, ...(roleOf ? { roleOf } : {}) })?.chance,
+          // A pinned couple's non-starter is the player's to lift: only the others count against a plan.
+          nonStarters: (plan) => nonStarters(run, assumptions, plan).filter((c) => !pinnedKeys.has(coupleKey(c))),
+          // What the simulation reads of a plan: its Robin, marriages, children's passes and its roadmap (not the builds).
+          simKey: (plan) => JSON.stringify([plan.robin, plan.wishlist.marriages, plan.wishlist.children, plan.roadmap]),
         },
         input.display ?? FLAWLESS_RUNS,
       );
