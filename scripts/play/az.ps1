@@ -1,4 +1,4 @@
-# Drive Azahar: az.ps1 launch | focus | shot <png> | press <btn[+btn]> [...] [-Hold ms] [-Gap ms] | save | load
+# Drive Azahar: az.ps1 launch | focus | shot <png> | press <btn[+btn]> [...] [-Hold ms] [-Gap ms] | tap <x> <y> | save | load
 # Buttons follow qt-config.ini profile 1: a b x y up down left right l r start select, cup/cdown/cleft/cright = circle pad.
 param([Parameter(Position=0)][string]$Cmd, [Parameter(Position=1, ValueFromRemainingArguments)][string[]]$Rest, [int]$Hold = 90, [int]$Gap = 120)
 $ErrorActionPreference = 'Stop'
@@ -30,6 +30,7 @@ switch ($Cmd) {
     }
     'ok'
   }
+  'tap'    { if (-not [AzCtl]::Focus()) { throw 'could not focus Azahar' }; [AzCtl]::Tap([int]$Rest[0], [int]$Rest[1], $Hold); 'tapped' }
   'save'   { [void][AzCtl]::Focus(); [AzCtl]::Press([uint16[]](0x11,0x43), 120); 'saved' }
   'load'   { [void][AzCtl]::Focus(); [AzCtl]::Press([uint16[]](0x11,0x56), 120); 'loaded' }
   default  { throw "usage: launch|focus|shot <png>|press <btn>...|save|load" }

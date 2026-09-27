@@ -1,0 +1,1141 @@
+{
+ "source": "https://raw.githubusercontent.com/Dani88alv/fire-editor-awakening/master/src/main/resources/com/danius/fireeditor/database/",
+ "units": {
+  "0": {
+   "name": "Avatar (M)",
+   "additions": [
+    3,
+    2,
+    2,
+    0,
+    1,
+    4,
+    1,
+    1
+   ]
+  },
+  "1": {
+   "name": "Avatar (F)",
+   "additions": [
+    3,
+    2,
+    2,
+    0,
+    1,
+    4,
+    1,
+    1
+   ]
+  },
+  "2": {
+   "name": "Logbook Unit",
+   "additions": [
+    3,
+    2,
+    2,
+    0,
+    1,
+    4,
+    1,
+    1
+   ]
+  },
+  "3": {
+   "name": "Chrom",
+   "additions": [
+    2,
+    1,
+    1,
+    3,
+    1,
+    5,
+    0,
+    1
+   ]
+  },
+  "4": {
+   "name": "Lissa",
+   "additions": [
+    1,
+    1,
+    2,
+    2,
+    0,
+    8,
+    2,
+    -2
+   ]
+  },
+  "5": {
+   "name": "Frederick",
+   "additions": [
+    2,
+    2,
+    2,
+    6,
+    5,
+    6,
+    0,
+    2
+   ]
+  },
+  "6": {
+   "name": "Virion",
+   "additions": [
+    3,
+    1,
+    0,
+    1,
+    -1,
+    7,
+    1,
+    1
+   ]
+  },
+  "7": {
+   "name": "Sully",
+   "additions": [
+    2,
+    1,
+    1,
+    3,
+    2,
+    6,
+    0,
+    2
+   ]
+  },
+  "8": {
+   "name": "Vaike",
+   "additions": [
+    4,
+    1,
+    0,
+    3,
+    1,
+    4,
+    1,
+    0
+   ]
+  },
+  "9": {
+   "name": "Stahl",
+   "additions": [
+    4,
+    2,
+    0,
+    2,
+    0,
+    5,
+    1,
+    1
+   ]
+  },
+  "10": {
+   "name": "Miriel",
+   "additions": [
+    2,
+    0,
+    2,
+    2,
+    3,
+    6,
+    1,
+    1
+   ]
+  },
+  "11": {
+   "name": "Kellam",
+   "additions": [
+    3,
+    2,
+    0,
+    3,
+    3,
+    3,
+    1,
+    2
+   ]
+  },
+  "12": {
+   "name": "Sumia",
+   "additions": [
+    2,
+    2,
+    1,
+    4,
+    3,
+    8,
+    1,
+    1
+   ]
+  },
+  "13": {
+   "name": "Lon'qu",
+   "additions": [
+    4,
+    2,
+    0,
+    3,
+    3,
+    7,
+    3,
+    1
+   ]
+  },
+  "14": {
+   "name": "Ricken",
+   "additions": [
+    4,
+    3,
+    4,
+    3,
+    1,
+    10,
+    4,
+    0
+   ]
+  },
+  "15": {
+   "name": "Maribelle",
+   "additions": [
+    2,
+    0,
+    2,
+    2,
+    1,
+    5,
+    2,
+    1
+   ]
+  },
+  "16": {
+   "name": "Panne",
+   "additions": [
+    10,
+    6,
+    1,
+    5,
+    5,
+    8,
+    4,
+    1
+   ]
+  },
+  "17": {
+   "name": "Gaius",
+   "additions": [
+    6,
+    4,
+    0,
+    7,
+    7,
+    6,
+    3,
+    2
+   ]
+  },
+  "18": {
+   "name": "Cordelia",
+   "additions": [
+    9,
+    5,
+    1,
+    6,
+    4,
+    9,
+    4,
+    2
+   ]
+  },
+  "19": {
+   "name": "Gregor",
+   "additions": [
+    12,
+    7,
+    0,
+    5,
+    4,
+    8,
+    5,
+    2
+   ]
+  },
+  "20": {
+   "name": "Nowi",
+   "additions": [
+    0,
+    2,
+    0,
+    1,
+    2,
+    8,
+    0,
+    0
+   ]
+  },
+  "21": {
+   "name": "Libra",
+   "additions": [
+    14,
+    9,
+    10,
+    8,
+    7,
+    10,
+    5,
+    10
+   ]
+  },
+  "22": {
+   "name": "Tharja",
+   "additions": [
+    7,
+    3,
+    8,
+    3,
+    9,
+    3,
+    6,
+    3
+   ]
+  },
+  "23": {
+   "name": "Olivia",
+   "additions": [
+    2,
+    2,
+    0,
+    3,
+    1,
+    5,
+    0,
+    1
+   ]
+  },
+  "24": {
+   "name": "Cherche",
+   "additions": [
+    11,
+    7,
+    1,
+    6,
+    6,
+    8,
+    7,
+    2
+   ]
+  },
+  "25": {
+   "name": "Henry",
+   "additions": [
+    10,
+    5,
+    10,
+    12,
+    5,
+    10,
+    8,
+    1
+   ]
+  },
+  "26": {
+   "name": "Lucina",
+   "additions": [
+    12,
+    5,
+    1,
+    8,
+    4,
+    13,
+    3,
+    3
+   ]
+  },
+  "27": {
+   "name": "Say'ri",
+   "additions": [
+    19,
+    10,
+    5,
+    12,
+    13,
+    20,
+    6,
+    6
+   ]
+  },
+  "28": {
+   "name": "Basilio",
+   "additions": [
+    28,
+    18,
+    3,
+    17,
+    14,
+    18,
+    13,
+    5
+   ]
+  },
+  "29": {
+   "name": "Flavia",
+   "additions": [
+    26,
+    17,
+    4,
+    17,
+    16,
+    21,
+    15,
+    8
+   ]
+  },
+  "30": {
+   "name": "Donnel",
+   "additions": [
+    0,
+    3,
+    0,
+    1,
+    2,
+    11,
+    2,
+    0
+   ]
+  },
+  "31": {
+   "name": "Anna",
+   "additions": [
+    16,
+    8,
+    13,
+    12,
+    10,
+    25,
+    5,
+    5
+   ]
+  },
+  "32": {
+   "name": "Owain",
+   "additions": [
+    10,
+    4,
+    4,
+    5,
+    6,
+    9,
+    6,
+    5
+   ]
+  },
+  "33": {
+   "name": "Inigo",
+   "additions": [
+    11,
+    5,
+    2,
+    4,
+    9,
+    12,
+    4,
+    4
+   ]
+  },
+  "34": {
+   "name": "Brady",
+   "additions": [
+    9,
+    6,
+    5,
+    3,
+    2,
+    10,
+    7,
+    4
+   ]
+  },
+  "35": {
+   "name": "Kjelle",
+   "additions": [
+    10,
+    6,
+    2,
+    6,
+    5,
+    11,
+    3,
+    3
+   ]
+  },
+  "36": {
+   "name": "Cynthia",
+   "additions": [
+    7,
+    5,
+    2,
+    4,
+    10,
+    17,
+    6,
+    6
+   ]
+  },
+  "37": {
+   "name": "Severa",
+   "additions": [
+    8,
+    6,
+    1,
+    7,
+    6,
+    6,
+    6,
+    5
+   ]
+  },
+  "38": {
+   "name": "Gerome",
+   "additions": [
+    13,
+    8,
+    0,
+    4,
+    8,
+    5,
+    5,
+    1
+   ]
+  },
+  "39": {
+   "name": "Morgan (M)",
+   "additions": [
+    9,
+    6,
+    8,
+    7,
+    6,
+    7,
+    3,
+    7
+   ]
+  },
+  "40": {
+   "name": "Morgan (F)",
+   "additions": [
+    9,
+    6,
+    8,
+    7,
+    6,
+    7,
+    3,
+    7
+   ]
+  },
+  "41": {
+   "name": "Yarne",
+   "additions": [
+    16,
+    9,
+    1,
+    4,
+    4,
+    13,
+    6,
+    1
+   ]
+  },
+  "42": {
+   "name": "Laurent",
+   "additions": [
+    10,
+    3,
+    7,
+    7,
+    4,
+    11,
+    4,
+    5
+   ]
+  },
+  "43": {
+   "name": "Noire",
+   "additions": [
+    8,
+    5,
+    3,
+    4,
+    7,
+    10,
+    4,
+    6
+   ]
+  },
+  "44": {
+   "name": "Nah",
+   "additions": [
+    5,
+    3,
+    3,
+    5,
+    6,
+    8,
+    3,
+    3
+   ]
+  },
+  "45": {
+   "name": "Tiki",
+   "additions": [
+    21,
+    16,
+    10,
+    13,
+    15,
+    18,
+    13,
+    10
+   ]
+  },
+  "46": {
+   "name": "Gangrel",
+   "additions": [
+    30,
+    17,
+    16,
+    19,
+    22,
+    15,
+    15,
+    12
+   ]
+  },
+  "47": {
+   "name": "Walhart",
+   "additions": [
+    47,
+    29,
+    13,
+    24,
+    24,
+    30,
+    23,
+    14
+   ]
+  },
+  "48": {
+   "name": "Emmeryn",
+   "additions": [
+    22,
+    4,
+    19,
+    18,
+    18,
+    13,
+    8,
+    15
+   ]
+  },
+  "49": {
+   "name": "Yen'fay",
+   "additions": [
+    40,
+    23,
+    3,
+    28,
+    27,
+    28,
+    15,
+    14
+   ]
+  },
+  "50": {
+   "name": "Aversa",
+   "additions": [
+    36,
+    19,
+    25,
+    21,
+    22,
+    26,
+    16,
+    19
+   ]
+  },
+  "51": {
+   "name": "Priam",
+   "additions": [
+    52,
+    32,
+    2,
+    33,
+    28,
+    35,
+    31,
+    22
+   ]
+  },
+  "52": {
+   "name": "Marth",
+   "additions": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "53": {
+   "name": "Dummy/Maiden",
+   "additions": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  "54": {
+   "name": "Risen",
+   "additions": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    -2,
+    0
+   ]
+  },
+  "55": {
+   "name": "Risen (+)",
+   "additions": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    -1,
+    0
+   ]
+  },
+  "56": {
+   "name": "Merchant",
+   "additions": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    2,
+    0,
+    0
+   ]
+  }
+ },
+ "classes": {
+  "0": "Lord (M)",
+  "1": "Lord (F)",
+  "2": "Great Lord (M)",
+  "3": "Great Lord (F)",
+  "4": "Tactician (M)",
+  "5": "Tactician (F)",
+  "6": "Grandmaster (M)",
+  "7": "Grandmaster (F)",
+  "8": "Cavalier (M)",
+  "9": "Cavalier (F)",
+  "10": "Knight (M)",
+  "11": "Knight (F)",
+  "12": "Paladin (M)",
+  "13": "Paladin (F)",
+  "14": "Great Knight (M)",
+  "15": "Great Knight (F)",
+  "16": "General (M)",
+  "17": "General (F)",
+  "18": "Barbarian",
+  "19": "Fighter",
+  "20": "Mercenary (M)",
+  "21": "Mercenary (F)",
+  "22": "Archer (M)",
+  "23": "Archer (F)",
+  "24": "Berserker",
+  "25": "Warrior",
+  "26": "Hero (M)",
+  "27": "Hero (F)",
+  "28": "Bow Knight (M)",
+  "29": "Bow Knight (F)",
+  "30": "Sniper (M)",
+  "31": "Sniper (F)",
+  "32": "Myrmidon (M)",
+  "33": "Myrmidon (F)",
+  "34": "Thief (M)",
+  "35": "Thief (F)",
+  "36": "Swordmaster (M)",
+  "37": "Swordmaster (F)",
+  "38": "Assassin (M)",
+  "39": "Assassin (F)",
+  "40": "Trickster (M)",
+  "41": "Trickster (F)",
+  "42": "Pegasus Knight",
+  "43": "Falcon Knight",
+  "44": "Dark Flier",
+  "45": "Wyvern Rider (M)",
+  "46": "Wyvern Rider (F)",
+  "47": "Wyvern Lord (M)",
+  "48": "Wyvern Lord (F)",
+  "49": "Griffon Rider (M)",
+  "50": "Griffon Rider (F)",
+  "51": "Troubadour",
+  "52": "Priest",
+  "53": "Cleric",
+  "54": "Mage (M)",
+  "55": "Mage (F)",
+  "56": "Dark Mage (M)",
+  "57": "Dark Mage (F)",
+  "58": "Valkyrie",
+  "59": "War Monk",
+  "60": "War Cleric",
+  "61": "Sage (M)",
+  "62": "Sage (F)",
+  "63": "Dark Knight (M)",
+  "64": "Dark Knight (F)",
+  "65": "Sorcerer (M)",
+  "66": "Sorcerer (F)",
+  "67": "Dancer",
+  "68": "Manakete",
+  "69": "Taguel (M)",
+  "70": "Taguel (F)",
+  "71": "Soldier",
+  "72": "Villager",
+  "73": "Merchant",
+  "74": "Reverant",
+  "75": "Entombed",
+  "76": "Conqueror",
+  "77": "Lodestar",
+  "78": "Grima",
+  "79": "Mirage",
+  "80": "Dread Fighter",
+  "81": "Bride",
+  "82": "Dummy"
+ },
+ "items": {
+  "0": "None",
+  "1": "Bronze Sword",
+  "2": "Iron Sword",
+  "3": "Steel Sword",
+  "4": "Silver Sword",
+  "5": "Brave Sword",
+  "6": "Armorslayer",
+  "7": "Wyrmslayer",
+  "8": "Killing Edge",
+  "9": "Levin Sword",
+  "10": "Rapier",
+  "11": "Noble Rapier",
+  "12": "Missiletainn",
+  "13": "Sol",
+  "14": "Amatsu",
+  "15": "Falchion",
+  "16": "Exalted Falchion",
+  "17": "Parallel Falchion",
+  "18": "Mercurius",
+  "19": "Tyrfing",
+  "20": "Mystletainn",
+  "21": "Balmung",
+  "22": "Sol Katti",
+  "23": "Ragnell",
+  "24": "Ragnell (Inf. Uses)",
+  "25": "Tree Branch",
+  "26": "Soothing Sword",
+  "27": "Glass Sword",
+  "28": "Superior Edge",
+  "29": "Eliwood's Blade",
+  "30": "Roy's Blade",
+  "31": "Alm's Blade",
+  "32": "Leif's Blade",
+  "33": "Eirika's Blade",
+  "34": "Seliph's Blade",
+  "35": "Bronze Lance",
+  "36": "Iron Lance",
+  "37": "Steel Lance",
+  "38": "Silver Lance",
+  "39": "Brave Lance",
+  "40": "Javelin",
+  "41": "Short Spear",
+  "42": "Spear",
+  "43": "Beast Killer",
+  "44": "Blessed Lance",
+  "45": "Killer Lance",
+  "46": "Luna",
+  "47": "Gradivus",
+  "48": "Gungnir",
+  "49": "Gae Bolg",
+  "50": "Log",
+  "51": "Miniature Lance",
+  "52": "Shockstick",
+  "53": "Glass Lance",
+  "54": "Superior Lance",
+  "55": "Sigurd's Lance",
+  "56": "Ephraim's Lance",
+  "57": "Finn's Lance",
+  "58": "Bronze Axe",
+  "59": "Iron Axe",
+  "60": "Steel Axe",
+  "61": "Silver Axe",
+  "62": "Brave Axe",
+  "63": "Hand Axe",
+  "64": "Short Axe",
+  "65": "Tomahawk",
+  "66": "Hammer",
+  "67": "Bolt Axe",
+  "68": "Killer Axe",
+  "69": "Vengeance",
+  "70": "Wolf Berg",
+  "71": "Hauteclere",
+  "72": "Helswath",
+  "73": "Armads",
+  "74": "Ladle",
+  "75": "Imposing Axe",
+  "76": "Volant Axe",
+  "77": "Glass Axe",
+  "78": "Superior Axe",
+  "79": "Titania's Axe",
+  "80": "Orsin's Hatchet",
+  "81": "Hector's Axe",
+  "82": "Bronze Bow",
+  "83": "Iron Bow",
+  "84": "Steel Bow",
+  "85": "Silver Bow",
+  "86": "Brave Bow",
+  "87": "Blessed Bow",
+  "88": "Killer Bow",
+  "89": "Long Bow",
+  "90": "Astra",
+  "91": "Parthia",
+  "92": "Yewfelle",
+  "93": "Nidhogg",
+  "94": "Double Bow",
+  "95": "Slack Bow",
+  "96": "Towering Bow",
+  "97": "Underdog Bow",
+  "98": "Glass Bow",
+  "99": "Superior Bow",
+  "100": "Wolt's Bow",
+  "101": "Innes' Bow",
+  "102": "Fire",
+  "103": "Elfire",
+  "104": "Arcfire",
+  "105": "Bolganone",
+  "106": "Valflame",
+  "107": "Thunder",
+  "108": "Elthunder",
+  "109": "Arcthunder",
+  "110": "Thoron",
+  "111": "Mjollnir",
+  "112": "Wind",
+  "113": "Elwind",
+  "114": "Arcwind",
+  "115": "Rexcalibur",
+  "116": "Forseti",
+  "117": "Excalibur",
+  "118": "Book of Naga",
+  "119": "Flux",
+  "120": "Nosferatu",
+  "121": "Ruin",
+  "122": "Waste",
+  "123": "Goetia",
+  "124": "Grima's Truth",
+  "125": "Mire",
+  "126": "Dying Blaze",
+  "127": "Micaiah's Pyre",
+  "128": "Superior Jolt",
+  "129": "Katarina's Bolt",
+  "130": "Wilderwind",
+  "131": "Celica's Gale",
+  "132": "Aversa's Night",
+  "133": "Heal",
+  "134": "Mend",
+  "135": "Physic",
+  "136": "Recover",
+  "137": "Fortify",
+  "138": "Goddess Staff",
+  "139": "Rescue",
+  "140": "Ward",
+  "141": "Hammerne",
+  "142": "Kneader",
+  "143": "Balmwood Staff",
+  "144": "Catharsis",
+  "145": "Dragonstone",
+  "146": "Dragonstone+",
+  "147": "Beaststone",
+  "148": "Beaststone+",
+  "149": "Blighted Claws",
+  "150": "Blighted Talons",
+  "151": "Expiration",
+  "152": "Vulnerary",
+  "153": "Concoction",
+  "154": "Elixer",
+  "155": "Pure Water",
+  "156": "HP Tonic",
+  "157": "Strength Tonic",
+  "158": "Magic Tonic",
+  "159": "Skill Tonic",
+  "160": "Speed Tonic",
+  "161": "Luck Tonic",
+  "162": "Defense Tonic",
+  "163": "Resistance Tonic",
+  "164": "Door Key",
+  "165": "Chest Key",
+  "166": "Master Key",
+  "167": "Seraph Robe",
+  "168": "Energy Drop",
+  "169": "Spirit Dust",
+  "170": "Secret Book",
+  "171": "Speedwing",
+  "172": "Goddess Icon",
+  "173": "Dracoshield",
+  "174": "Talisman",
+  "175": "Naga's Tear",
+  "176": "Boots",
+  "177": "Arms Scroll",
+  "178": "Master Seal",
+  "179": "Second Seal",
+  "180": "Bullion (S)",
+  "181": "Bullion (M)",
+  "182": "Bullion (L)",
+  "183": "Sweet Tincture",
+  "184": "Gaius' Confect",
+  "185": "Kris' Confect",
+  "186": "Tiki's Tear",
+  "187": "Seed of Trust",
+  "188": "Reeking Box",
+  "189": "Rift Door",
+  "190": "Supreme Emblem",
+  "191": "All Stats +2",
+  "192": "Paragon",
+  "193": "Iote's Shield",
+  "194": "Limit Breaker",
+  "195": "Silver Card",
+  "196": "Dread Scroll",
+  "197": "Wedding Bouquet",
+  "198": "1,000 Gold",
+  "199": "3,000 Gold",
+  "200": "5,000 Gold",
+  "201": "7,000 Gold"
+ },
+ "skills": {
+  "0": "No Active Skill",
+  "1": "HP +5",
+  "2": "Strength +2",
+  "3": "Magic +2",
+  "4": "Skill +2",
+  "5": "Speed +2",
+  "6": "Defense +2",
+  "7": "Resistance +2",
+  "8": "Hit rate +10",
+  "9": "Hit rate +20",
+  "10": "Avoid +10",
+  "11": "Movement +1",
+  "12": "Locktouch",
+  "13": "Veteran",
+  "14": "Aptitude",
+  "15": "Discipline",
+  "16": "Armsthrift",
+  "17": "Dual Support+",
+  "18": "Dual Strike+",
+  "19": "Dual Guard+",
+  "20": "Rightful King",
+  "21": "Odd Rhythm",
+  "22": "Even Rhythm",
+  "23": "Quick Burn",
+  "24": "Slow Burn",
+  "25": "Lucky Seven",
+  "26": "Gamble",
+  "27": "Outdoor Fighter",
+  "28": "Indoor Fighter",
+  "29": "Tantivy",
+  "30": "Focus",
+  "31": "Zeal",
+  "32": "Wrath",
+  "33": "Prescience",
+  "34": "Patience",
+  "35": "Underdog",
+  "36": "Charm",
+  "37": "Solidarity",
+  "38": "Demoiselle",
+  "39": "Hex",
+  "40": "Anathema",
+  "41": "Healtouch",
+  "42": "Relief",
+  "43": "Renewal",
+  "44": "Deliverer",
+  "45": "Defender",
+  "46": "Acrobat",
+  "47": "Pass",
+  "48": "Swordfaire",
+  "49": "Lancefaire",
+  "50": "Axefaire",
+  "51": "Bowfaire",
+  "52": "Tomefaire",
+  "53": "Luck +4",
+  "54": "Special Dance",
+  "55": "Rally Strength",
+  "56": "Rally Magic",
+  "57": "Rally Skill",
+  "58": "Rally Speed",
+  "59": "Rally Luck",
+  "60": "Rally Defense",
+  "61": "Rally Resistance",
+  "62": "Rally Movement",
+  "63": "Rally Spectrum",
+  "64": "Swordbreaker",
+  "65": "Lancebreaker",
+  "66": "Axebreaker",
+  "67": "Bowbreaker",
+  "68": "Tomebreaker",
+  "69": "Wyrmsbane",
+  "70": "Beastbane",
+  "71": "Lethality",
+  "72": "Aether",
+  "73": "Astra",
+  "74": "Sol",
+  "75": "Luna",
+  "76": "Ignis",
+  "77": "Vengeance",
+  "78": "Vantage",
+  "79": "Pavise",
+  "80": "Aegis",
+  "81": "Counter",
+  "82": "Miracle",
+  "83": "Despoil",
+  "84": "Galeforce",
+  "85": "Lifetaker",
+  "86": "Conquest",
+  "87": "Shadowgift",
+  "88": "All Stats +2",
+  "89": "Paragon",
+  "90": "Iote's Shield",
+  "91": "Limit Breaker",
+  "92": "Dragonskin",
+  "93": "Rightful God",
+  "94": "Hawkeye",
+  "95": "Luna+",
+  "96": "Vantage+",
+  "97": "Pavise+",
+  "98": "Aegis+",
+  "99": "Resistance +10",
+  "100": "Aggressor",
+  "101": "Rally Heart",
+  "102": "Bond",
+  "103": "Unused Skill Slot"
+ }
+}

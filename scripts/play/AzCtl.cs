@@ -60,6 +60,18 @@ public static class AzCtl {
   }
   static bool IsExt(ushort v) { return v >= 0x21 && v <= 0x2E; }
 
+  [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] static extern void mouse_event(uint f, int dx, int dy, uint d, UIntPtr e);
+
+  // Touch: a left click at client coordinates (the same frame as Shot's PNG) on the bottom screen.
+  public static void Tap(int x, int y, int holdMs) {
+    var h = Window();
+    var p = new POINT { X = x, Y = y }; ClientToScreen(h, ref p);
+    SetCursorPos(p.X, p.Y); Thread.Sleep(30);
+    mouse_event(0x2, 0, 0, 0, UIntPtr.Zero); Thread.Sleep(holdMs);
+    mouse_event(0x4, 0, 0, 0, UIntPtr.Zero);
+  }
+
   public static string Shot(string path) {
     var h = Window(); if (h == IntPtr.Zero) return "no window";
     RECT r; GetClientRect(h, out r);
