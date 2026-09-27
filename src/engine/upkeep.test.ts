@@ -1,0 +1,214 @@
+import { describe, expect, it } from 'vitest';
+import { EMPTY_ROSTER, STARTING_GOLD, STATS, bestWeapon, createEngine, itemByName, resolveAssumptions, runFromRoster, withRun, type ArmyUnit, type Foe, type MapPlayInput, type RunSimMap, type SimFoeGroup, type SimMap, type SimUnit, type Stat } from './index';
+
+/**
+ * Gold, upkeep and the shopping list in the simulated runs (#190): hand-built armies and maps whose uses and gold can be
+ * worked by hand.
+ */
+const engine = createEngine();
+const stats = (hp: number, str: number, mag: number, skl: number, spd: number, lck: number, def: number, res: number) => ({ hp, str, mag, skl, spd, lck, def, res });
+const myrmidon = engine.classGrowths('myrmidon', 'M');
+/** No level-ups: every growth (personal + class) 0. */
+const flat = Object.fromEntries(STATS.map((s) => [s, -myrmidon[s]])) as Record<Stat, number>;
+const item = (name: string) => itemByName(name)!;
+
+// Kills a dummy with one hit (Str 15 + Iron Sword 5 = 20 = its HP) and never misses it.
+const hero = (more: Partial<ArmyUnit> = {}): ArmyUnit => ({
+  id: 'lonqu',
+  name: 'Hero',
+  gender: 'M',
+  classId: 'myrmidon',
+  level: 5,
+  exp: 0,
+  count: 0,
+  bonus: 0,
+  stats: stats(20, 15, 0, 27, 28, 0, 0, 0),
+  growths: flat,
+  modifiers: { str: 0, mag: 0, skl: 0, spd: 0, lck: 0, def: 0, res: 0 },
+  skills: [],
+  weapons: [{ item: item('Iron Sword') }],
+  supports: [],
+  role: 'lead',
+  ...more,
+});
+
+/** A Fighter that never fights back (no weapon) and never dodges. */
+const dummy = (count: number, hp = 20): Foe => ({ name: `Dummy ${hp}`, className: 'Fighter', count, stats: stats(hp, 0, 0, 0, 0, 0, 0, 0), weapon: undefined, skills: [], boss: false, level: 5 });
+const group = (foe: Foe): SimFoeGroup => ({ key: foe.name, foe });
+const rout = (id: string, foes: Foe[]): SimMap => ({ id, victory: 'rout', foes: foes.map(group), waves: [], skipped: [] });
+const step = (map: SimMap, more: Partial<RunSimMap> = {}): RunSimMap => ({ key: map.id, label: map.id, map, deploy: 1, forced: [], joining: [], mapOnly: [], later: [], masterSeals: false, ...more });
+const sells = (...rows: [string, number][]) => rows.map(([name, cost]) => ({ item: name, cost, where: 'Somewhere' }));
+
+const simUnit = (a: ArmyUnit): SimUnit => ({ id: a.id, fighter: { name: a.name, className: 'Myrmidon', stats: a.stats, skills: a.skills, weapon: a.weapons[0] }, weapons: a.weapons, ...(a.items ? { items: a.items } : {}) });
+const upkeep = (input: MapPlayInput, e = engine) => e.mapUpkeep(input, e.playMap(input, 1));
+const uses = (u: ReturnType<typeof upkeep>, unit: string, name: string) => u.get(unit)?.get(name) ?? 0;
+
+describe('upkeep: uses spent per hit (#190)', () => {
+  it('spends one use of the weapon that hit, for each hit', () => {
+    const u = upkeep({ map: rout('a', [dummy(4)]), lineup: [{ lead: simUnit(hero()), support: null }] });
+    expect(uses(u, 'lonqu', 'Iron Sword')).toBe(4);
+    // A foe that takes two hits to fall: two uses each.
+    const two = upkeep({ map: rout('a', [dummy(3, 40)]), lineup: [{ lead: simUnit(hero()), support: null }] });
+    expect(uses(two, 'lonqu', 'Iron Sword')).toBe(6);
+  });
+
+  it('saves each use at Luck × 2% with Armsthrift', () => {
+    const thrifty = hero({ skills: ['Armsthrift'], stats: stats(20, 15, 0, 27, 28, 25, 0, 0) });
+    expect(uses(upkeep({ map: rout('a', [dummy(4)]), lineup: [{ lead: simUnit(thrifty), support: null }] }), 'lonqu', 'Iron Sword')).toBeCloseTo(2, 9);
+    const certain = hero({ skills: ['Armsthrift'], stats: stats(20, 15, 0, 27, 28, 50, 0, 0) });
+    expect(uses(upkeep({ map: rout('a', [dummy(4)]), lineup: [{ lead: simUnit(certain), support: null }] }), 'lonqu', 'Iron Sword')).toBe(0);
+  });
+
+  it('makes the back pay for its Dual Strikes with its own weapon', () => {
+    const back = hero({ id: 'vaike', name: 'Back', weapons: [{ item: item('Steel Sword') }] });
+    const lead = hero();
+    const pair = { lead: simUnit(lead), back: simUnit(back), support: 'A' as const };
+    const u = upkeep({ map: rout('a', [dummy(10, 40)]), lineup: [pair] });
+    const m = bestWeapon(pair.lead.fighter, pair.lead.weapons, pair.back.fighter, 'A', dummy(1, 40), [])!.result;
+    expect(m.dualStrikeRate).toBeGreaterThan(0);
+    // Each foe falls in the lead's two hits; each may bring a Dual Strike, which lands at the back's hit chance.
+    expect(uses(u, 'vaike', 'Steel Sword')).toBeCloseTo(10 * 2 * (m.dualStrikeRate / 100) * (m.backHit / 100), 9);
+    expect(uses(u, 'lonqu', 'Iron Sword')).toBe(20);
+  });
+
+  it('spends a use on a tome’s miss by default, an open rule', () => {
+    const mage = hero({ stats: stats(20, 0, 20, 0, 28, 0, 0, 0), weapons: [{ item: item('Fire') }] });
+    // Hit 70%, doubling, and one hit fells each: it strikes again only after a miss, 1.3 strikes a foe.
+    const dodgy = { ...dummy(4), stats: stats(20, 0, 0, 0, 10, 10, 0, 0) };
+    const input = { map: rout('a', [dodgy]), lineup: [{ lead: simUnit(mage), support: null }] };
+    expect(bestWeapon(input.lineup[0]!.lead.fighter, input.lineup[0]!.lead.weapons, undefined, null, dodgy, [])!.result).toMatchObject({ hit: 70, hits: 2 });
+    expect(uses(upkeep(input), 'lonqu', 'Fire')).toBeCloseTo(4 * 1.3, 9);
+    // Free misses: only the 70% that land.
+    const free = createEngine(resolveAssumptions({ 'tome-miss-use': 'free' }));
+    expect(uses(upkeep(input, free), 'lonqu', 'Fire')).toBeCloseTo(4 * 1.3 * 0.7, 9);
+    expect(engine.assumptions().find((a) => a.id === 'tome-miss-use')).toMatchObject({ isDefault: true, current: 'Spends a use (the series rule)' });
+  });
+
+  it('spends one use of a staff or potion each time it’s used', () => {
+    const wall: Foe = { name: 'Wall', className: 'Fighter', count: 1, stats: stats(200, 13, 0, 0, 0, 60, 15, 0), weapon: item('Iron Axe'), skills: [], boss: false, level: 1 };
+    const tank = simUnit(hero({ stats: stats(30, 15, 0, 60, 30, 0, 10, 0), items: [{ item: item('Vulnerary'), uses: 3 }] }));
+    const input = { map: rout('a', [wall]), lineup: [{ lead: tank, support: null }] };
+    const drunk = engine.playMap(input, 1).units['lonqu']!.used['Vulnerary'] ?? 0;
+    expect(drunk).toBeGreaterThan(0);
+    expect(uses(upkeep(input), 'lonqu', 'Vulnerary')).toBe(drunk);
+  });
+});
+
+describe('gold and the shopping list in the simulated runs (#190)', () => {
+  const sim = (army: ArmyUnit[], maps: RunSimMap[], gold: number, more: object = {}, runs = 1) => engine.simulateRuns({ army, maps, difficulty: 'normal', gold, ...more }, 1, runs);
+
+  it('adds each map’s sure income at its end, and shows gold per map as a range', () => {
+    const r = sim([hero()], [step(rout('a', [dummy(1)]), { income: 3000 }), step(rout('b', [dummy(1)]))], 1000, {}, 4);
+    expect(r.maps[0]!.gold).toEqual({ low: 4000, median: 4000, high: 4000 });
+    expect(r.maps[1]!.gold).toEqual({ low: 4000, median: 4000, high: 4000 });
+  });
+
+  it('starts a run with nothing logged at the game’s 5,000G', () => {
+    const run = runFromRoster(withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal', gender: 'M', asset: 'mag', flaw: 'hp' }));
+    const r = engine.flawlessChance(run, { runs: 1 });
+    expect(r.goldUnrecorded).toBe(false);
+    expect(r.maps[0]!.gold!.median).toBe(STARTING_GOLD + engine.mapIncome(r.maps[0]!.key));
+  });
+
+  it('counts only Bullion (and Paralogue 13’s gold) as income, and only what no play can lose', () => {
+    // Paralogue 8's Bullion (M) chest sells for 5,000G; its Dracoshield and Short Spear are held, not sold.
+    expect(engine.mapIncome('paralogue-8')).toBe(5000);
+    // Chapter 10's Bullion rides with an escaping Thief: not counted until side goals are chased (#191).
+    expect(engine.mapGold('chapter-10').some((g) => g.kind === 'bullion')).toBe(true);
+    expect(engine.mapIncome('chapter-10')).toBe(engine.mapGold('chapter-10').filter((g) => !g.play).reduce((a, g) => a + g.gold, 0));
+    expect(engine.mapIncome('chapter-11')).toBe(0);
+  });
+
+  it('rebuys at the last armory stop before a weapon would run dry, where it’s sold', () => {
+    // Five uses: map a spends four; map b would spend four more.
+    const worn = hero({ weaponUses: [5] });
+    const maps = (armoryB = sells(['Iron Sword', 520])) => [step(rout('a', [dummy(4)]), { armory: sells(['Iron Sword', 520]) }), step(rout('b', [dummy(4)]), { armory: armoryB }), step(rout('c', []))];
+    const r = sim([worn], maps(), 1000);
+    expect(r.shopping.map((s) => s.key)).toEqual(['a', 'b']);
+    // Not at a: five uses cover map a. At b: one use left, four to spend.
+    expect(r.shopping[0]!.lines).toEqual([]);
+    expect(r.shopping[1]!.lines).toEqual([{ kind: 'rebuy', action: 'buy', item: 'Iron Sword', unit: 'lonqu', name: 'Hero', cost: 520, share: 1 }]);
+    expect(r.shopping[1]!.gold.median).toBe(1000);
+    expect(r.maps[1]!.gold!.median).toBe(480);
+    // Not sold at b: nothing bought, and the sword breaks on map b (map c's lineup still fields the Hero, unarmed).
+    const unsold = sim([worn], maps(sells(['Iron Lance', 560])), 1000);
+    expect(unsold.shopping[1]!.lines).toEqual([]);
+    expect(unsold.maps[1]!.gold!.median).toBe(1000);
+    // Short of gold: skipped.
+    expect(sim([worn], maps(), 500).shopping[1]!.lines).toEqual([]);
+  });
+
+  it('buys a Master Seal at its price only when the run holds none, where an armory sells it, with gold enough', () => {
+    const capped = hero({ level: 20 });
+    const maps = (armory = sells(['Master Seal', 2500])) => [step(rout('a', []), { armory }), step(rout('end', []))];
+    const bought = sim([capped], maps(), 3000);
+    expect(bought.shopping[0]!.lines).toEqual([{ kind: 'seal', action: 'buy', item: 'Master Seal', unit: 'lonqu', name: 'Hero', cost: 2500, share: 1 }]);
+    expect(bought.units[0]!.className).toMatch(/Swordmaster|Assassin/);
+    expect(bought.maps[0]!.gold!.median).toBe(500);
+    // One held: used, none bought.
+    const held = sim([capped], maps(), 3000, { masterSealsHeld: 1 });
+    expect(held.shopping[0]!.lines).toEqual([]);
+    expect(held.units[0]!.className).toMatch(/Swordmaster|Assassin/);
+    // Too little gold, or no armory selling one: it waits in its base class.
+    for (const r of [sim([capped], maps(), 2000), sim([capped], maps(sells(['Iron Sword', 520])), 9000)]) {
+      expect(r.shopping[0]!.lines).toEqual([]);
+      expect(r.units[0]!.className).toBe('Myrmidon');
+    }
+  });
+
+  it('finds seals only in the armories that sell them: Port Ferox or P8, P12, P13 (Master), the Mila Tree or P6, P10, P16 (Second)', () => {
+    const where = (seal: string) => engine.maps().filter((m) => m.shop?.armory.some((a) => a.item === seal && a.cost === 2500)).map((m) => m.id).sort();
+    expect(where('Master Seal')).toEqual(['chapter-12', 'paralogue-8', 'paralogue-12', 'paralogue-13'].sort());
+    expect(where('Second Seal')).toEqual(['chapter-16', 'paralogue-6', 'paralogue-10', 'paralogue-16'].sort());
+  });
+
+  it('buys the endpoint kit at the endpoint’s stop: the best weapon sold, its +5 Mt forge and a Vulnerary', () => {
+    // The Iron Sword can’t one-round a 60 HP foe; a Silver Sword forged +5 (13 + 5 Mt, doubled) does.
+    const tough = dummy(2, 60);
+    const armory = sells(['Iron Sword', 520], ['Silver Sword', 1410], ['Vulnerary', 300]);
+    const maps = [step(rout('a', [dummy(1)])), step(rout('end', [tough]), { armory })];
+    const rich = sim([hero()], maps, 50000);
+    const kit = rich.shopping.find((s) => s.key === 'end')!.lines;
+    expect(kit.map((l) => [l.kind, l.action, l.item])).toEqual(
+      expect.arrayContaining([
+        ['kit', 'buy', 'Silver Sword'],
+        ['kit', 'forge', 'Silver Sword'],
+        ['kit', 'buy', 'Vulnerary'],
+      ]),
+    );
+    expect(kit.find((l) => l.action === 'forge')!.cost).toBe(Math.round(7.5 * 1410));
+    // The kit fights: the endpoint falls in fewer turns than with the Iron Sword alone.
+    const poor = sim([hero()], maps, 0);
+    expect(poor.shopping.find((s) => s.key === 'end')!.lines).toEqual([]);
+    expect(rich.maps[1]!.turns!).toBeLessThan(poor.maps[1]!.turns!);
+  });
+
+  it('drops what wins the fewest matchups per gold when a run is short', () => {
+    // An unforged Silver Sword one-rounds these (26 a hit, doubled); the Iron Sword doesn’t.
+    const tough = dummy(2, 50);
+    const armory = sells(['Silver Sword', 1410], ['Vulnerary', 300]);
+    const maps = [step(rout('end', [tough]), { armory })];
+    // 1,500G: the Vulnerary (1 matchup for 300G) comes before the sword; the sword then doesn't fit.
+    const short = sim([hero()], maps, 1500).shopping[0]!.lines;
+    expect(short.map((l) => l.item)).toEqual(['Vulnerary']);
+    // 1,710G: both, the forge left out.
+    expect(sim([hero()], maps, 1710).shopping[0]!.lines.map((l) => `${l.action} ${l.item}`)).toEqual(['buy Vulnerary', 'buy Silver Sword']);
+  });
+
+  it('draws hits in each run, so gold after rebuys is a spread over the runs', () => {
+    // Six foes a map, each felled by the first of two strikes that lands (70%): about 5.5 uses a map with free misses.
+    // Eleven uses: those left after map a fall short of map b's in some runs, not in others.
+    const dodgy = { ...dummy(6), stats: stats(20, 0, 0, 0, 10, 10, 0, 0) };
+    const mage = hero({ stats: stats(20, 0, 20, 0, 28, 0, 0, 0), weapons: [{ item: item('Fire') }], weaponUses: [11] });
+    const free = createEngine(resolveAssumptions({ 'tome-miss-use': 'free' }));
+    const maps = [step(rout('a', [dodgy])), step(rout('b', [dodgy]), { armory: sells(['Fire', 540]) }), step(rout('c', []))];
+    const r = free.simulateRuns({ army: [mage], maps, difficulty: 'normal', gold: 1000 }, 1, 16);
+    expect(r).toEqual(free.simulateRuns({ army: [mage], maps, difficulty: 'normal', gold: 1000 }, 1, 16));
+    const line = r.shopping[0]!.lines[0]!;
+    expect(line).toMatchObject({ kind: 'rebuy', item: 'Fire' });
+    expect(line.share).toBeGreaterThan(0);
+    expect(line.share).toBeLessThan(1);
+    expect(r.maps[1]!.gold!.low).toBe(460);
+    expect(r.maps[1]!.gold!.high).toBe(1000);
+  });
+});

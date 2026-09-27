@@ -1,6 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, addEntry, createEngine, deployCount, deployRoleOf, foesOf, forcedOn, itemByName, prepUnits, runFromRoster, simLineup, suggestDeployment, unitName, withRun, type Difficulty, type SimGroup } from '../engine';
-import { fighterOf, noDeathReadout } from './prep-page';
+import { EMPTY_ROSTER, addEntry, createEngine, deployCount, deployRoleOf, editEntry, foesOf, forcedOn, itemByName, latestEntry, prepUnits, runFromRoster, simLineup, suggestDeployment, unitName, withRun, type Difficulty, type Run, type SimGroup, type Snapshot } from '../engine';
+import { fighterOf, noDeathReadout, shoppingReadout } from './prep-page';
+
+describe('the shopping list (#190)', () => {
+  const engine = createEngine();
+  const facts = withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal', gender: 'M', asset: 'mag', flaw: 'hp' });
+  const played = (maps: readonly string[]) => maps.reduce((r, m, i) => addEntry(r, m, i + 1), runFromRoster(facts));
+  const all = engine.mapOrder(played([])).steps.map((s) => s.map);
+  const atLatest = (run: Run, edit: (s: Snapshot) => Snapshot) => editEntry(run, latestEntry(run)!.id, edit, 1);
+  const chrom = { class: 'Great Lord', level: 15, promoted: true, reclassed: false, exp: 0, stats: { hp: 60, str: 35, mag: 5, skl: 35, spd: 35, lck: 35, def: 30, res: 20 }, skills: [], supports: [] };
+
+  it('lists the next armory stop’s buys, with why, what they cost and the chance a run makes each', () => {
+    // One use left on Chrom’s only weapon: it runs dry on Chapter 25, whose armory sells another.
+    const run = atLatest(played(all.slice(0, -2)), (s) => ({ ...s, gold: 3000, units: { chrom: { ...chrom, inventory: [{ item: 'Iron Sword', uses: 1 }] } } }));
+    const s = shoppingReadout(engine, run, { runs: 2 });
+    expect(s.title).toBe('Shopping list: Chapter 25');
+    expect(s.note).toMatch(/^Gold on arrival: 3,000G\. What the simulated runs buy here, in priority order: rebuys/);
+    expect(s.rows[0]).toEqual(['Chrom', 'Buy Iron Sword (runs dry before the next armory)', '520G', '100%']);
+  });
+
+  it('says when nothing is to be bought: no gold, or nothing left to play', () => {
+    const run = atLatest(played(all.slice(0, -2)), (s) => ({ ...s, gold: 0 }));
+    expect(shoppingReadout(engine, run, { runs: 1 }).rows).toEqual([]);
+    expect(shoppingReadout(engine, played(all), { runs: 1 })).toMatchObject({ title: 'Shopping list', rows: [] });
+  });
+});
 
 const unit = {
   class: 'Great Knight',

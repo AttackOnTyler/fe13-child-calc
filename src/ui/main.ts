@@ -2431,6 +2431,8 @@ function renderParts(parts: readonly Part[]): void {
                 const roles = engine.roles(roster, planSettings());
                 return (u: RosterUnit) => deployRoleOf(u, roster, roles);
               })(),
+              // The plan's marriages (#187), as the Run view's flawless chance takes them: the shopping list reads the same runs.
+              marriages: () => roster.savedPlan?.marriages ?? engine.plan(roster, planSettings()).marriages.map((m) => [m.husband, m.wife] as const),
               excluded: prepExcluded,
               setExcluded: (u, out) => {
                 const next = new Set(prepExcluded);

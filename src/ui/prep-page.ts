@@ -3,9 +3,10 @@
  * from its start (#131), paired with its back (its highest support by default), with its best weapon from its
  * inventory, against one foe at a time on the run's difficulty. Lunatic+ assumes the pool's worst case.
  */
-import type { ChapterDifficulty, Difficulty, Engine, Foe, Matchup, PrepUnits, RosterUnit, Run, SimGroup, Snapshot } from '../engine';
-import { EMPTY_SNAPSHOT, REINFORCEMENT_RULE, bestWeapon, dangerFlags, deployCount, fighterOf, foeKey, foesOf, forcedOn, latestEntry, openStock, prepUnits, promotionAdvice, sealAvailability, sealsHeld, simLineup, suggestDeployment, suggestLoadout, supplyList, unitName, withSeenSkills, type DeployCandidate, type DeploymentRole } from '../engine';
+import type { ChapterDifficulty, Couple, Difficulty, Engine, FlawlessOptions, Foe, Matchup, PrepUnits, RosterUnit, Run, ShoppingLine, SimGroup, Snapshot } from '../engine';
+import { EMPTY_SNAPSHOT, KIT_FORGE_MT, REINFORCEMENT_RULE, bestWeapon, dangerFlags, deployCount, fighterOf, foeKey, foesOf, forcedOn, latestEntry, prepUnits, promotionAdvice, sealAvailability, sealsHeld, simLineup, suggestDeployment, suggestLoadout, unitName, withSeenSkills, type DeployCandidate, type DeploymentRole } from '../engine';
 import { chanceText } from './chance';
+import { goldRange, goldText } from './run-page';
 import { CHILD_UNITS } from '../game-data/children';
 import { ROBIN_GROWTHS } from '../game-data/robin';
 import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
@@ -29,6 +30,8 @@ export type PrepContext = {
   readonly setFoe: (i: number) => void;
   /** Each unit's deployment role: army fit's for children, the roster's tag otherwise (#121). */
   readonly roleOf: (u: RosterUnit) => DeploymentRole;
+  /** The plan's marriages, as the Run view passes them to the flawless chance: the shopping list runs the same simulation (#190). */
+  readonly marriages?: () => readonly Couple[];
   /** Units the player took out of the deployment (view state). */
   readonly excluded: ReadonlySet<RosterUnit>;
   readonly setExcluded: (u: RosterUnit, out: boolean) => void;
@@ -294,44 +297,63 @@ function loadouts(
   );
 }
 
-/** The supply list (#122): buys and forges that close gaps, within the gold held and what the open armories sell. */
-function supply(ctx: PrepContext, d: ReturnType<typeof suggestDeployment>, byUnit: ReadonlyMap<RosterUnit, DeployCandidate>, snap: Snapshot | undefined, foes: readonly Foe[], pool: (f: Foe) => readonly string[]): HTMLElement {
-  const cleared = new Set(ctx.run.entries.map((e) => e.map));
-  const stock = openStock(cleared);
-  const gold = snap?.gold ?? 0;
-  const leads = d.pairs.flatMap((p) => {
-    const c = byUnit.get(p.lead);
-    return c ? [{ c, back: p.back ? byUnit.get(p.back)?.fighter : undefined, support: p.support }] : [];
-  });
-  const list = supplyList({ leads, foes, pool, stock: stock.armory, forge: stock.forge, gold });
-  const spent = list.reduce((a, s) => a + s.cost, 0);
-  return h(
-    'details',
-    { ...guide('prep-supply') },
-    h('summary', {}, `Supply list (${spent}G of ${gold}G)`),
-    h('p', { class: 'muted small' }, snap?.gold === null || snap?.gold === undefined ? 'Record your gold in the chapter log to get a supply list.' : 'What to buy or forge so more foes fall in one round, cheapest per foe first, within your gold and what the open armories sell. Merchants are random, so their stock isn’t counted.'),
-    list.length
-      ? h(
-          'table',
-          { class: 'grid small' },
-          h('thead', {}, h('tr', {}, ...['For', 'Do', 'Cost', 'Foes it wins'].map((t) => h('th', {}, t)))),
-          h(
-            'tbody',
-            {},
-            ...list.map((s) =>
-              h(
-                'tr',
-                {},
-                h('td', {}, s.unit),
-                h('td', {}, s.action === 'buy' ? `Buy ${s.item}${s.where ? ` (${s.where})` : ''}` : `Forge ${s.item} to +${s.forge!.mt} Mt`),
-                h('td', { class: 'num' }, `${s.cost}G`),
-                h('td', { class: 'num' }, String(s.closes)),
-              ),
-            ),
-          ),
-        )
-      : h('p', { class: 'muted small' }, gold ? 'Nothing affordable here closes a gap.' : ''),
-  );
+const WHY: Readonly<Record<ShoppingLine['kind'], string>> = { rebuy: 'runs dry before the next armory', seal: 'for a promotion', kit: 'endpoint kit' };
+
+/**
+ * The shopping list for the next armory stop (#190): what the simulated runs buy there, in priority order (rebuys,
+ * seals, the endpoint kit), each with the chance a run makes it, and the gold on arrival as a range.
+ */
+export function shoppingReadout(engine: Engine, run: Run, options?: FlawlessOptions): { readonly title: string; readonly note: string; readonly rows: readonly (readonly string[])[] } {
+  const r = engine.flawlessChance(run, options);
+  const stop = r.shopping[0];
+  if (!stop) return { title: 'Shopping list', note: r.maps.length ? 'No simulated run reaches an open armory with nobody lost.' : 'The endpoint is recorded: nothing left to buy for.', rows: [] };
+  const note =
+    `Gold on arrival: ${goldRange(stop.gold)}${r.goldUnrecorded ? ' (your latest entry records no gold, read as none)' : ''}. ` +
+    'What the simulated runs buy here, in priority order: rebuys for items that would run dry before the next armory, a seal when a promotion needs one and none is held, then at the endpoint the endpoint kit, dropping what wins fewest matchups per gold when gold runs short. Only Bullion is sold; merchants are random, so their stock isn’t counted.';
+  const rows = stop.lines.map((l) => [
+    l.name,
+    `${l.action === 'forge' ? `Forge ${l.item} to +${KIT_FORGE_MT} Mt` : `Buy ${l.item}`} (${WHY[l.kind]})`,
+    goldText(l.cost),
+    chanceText(l.share, { miss: 'skipped', make: 'made' }),
+  ]);
+  return { title: `Shopping list: ${stop.label}`, note, rows };
+}
+
+type Shopping = ReturnType<typeof shoppingReadout>;
+
+/** Shopping lists already worked out, by run (a run is replaced, never edited). */
+const SHOPPING = new WeakMap<Run, Shopping>();
+
+/** The shopping list section (#190): it runs the simulation, so the page renders first and the list fills in after. */
+function shopping(ctx: PrepContext): HTMLElement {
+  const draw = (s: Shopping | undefined) =>
+    h(
+      'details',
+      { ...guide('prep-supply'), open: true },
+      h('summary', {}, s?.title ?? 'Shopping list: working it out…'),
+      s ? h('p', { class: 'muted small' }, s.note) : null,
+      s?.rows.length
+        ? h(
+            'table',
+            { class: 'grid small' },
+            h('thead', {}, h('tr', {}, ...['For', 'Do', 'Cost', 'Chance it’s made'].map((t) => h('th', {}, t)))),
+            h('tbody', {}, ...s.rows.map((row) => h('tr', {}, ...row.map((c, i) => h('td', i === 2 ? { class: 'num' } : {}, c))))),
+          )
+        : s
+          ? h('p', { class: 'muted small' }, 'Nothing to buy here.')
+          : null,
+    );
+  const done = SHOPPING.get(ctx.run);
+  if (done) return draw(done);
+  const el = draw(undefined);
+  const run = ctx.run;
+  setTimeout(() => {
+    if (!el.isConnected) return;
+    const s = SHOPPING.get(run) ?? shoppingReadout(ctx.engine, run, { roleOf: ctx.roleOf, ...(ctx.marriages ? { marriages: ctx.marriages() } : {}) });
+    SHOPPING.set(run, s);
+    if (el.isConnected) el.replaceWith(draw(s));
+  }, 0);
+  return el;
 }
 
 /** Seals and promotions (#122): when seals can be bought, how many are held, and promote now or later. */
@@ -478,7 +500,7 @@ export function prepPage(ctx: PrepContext): HTMLElement[] {
       lplus ? checklist(ctx, foes, pool, seen) : null,
       deploymentSection(ctx, deployment, byUnit, prep, gender),
       loadouts(deployment, byUnit, snap, foes, poolFor, gender),
-      supply(ctx, deployment, byUnit, snap, foes, poolFor),
+      shopping(ctx),
       seals(ctx, deployment, byUnit, snap, foes, poolFor, gender, prep.mapOnly),
       howToRun(ctx.engine, m.id),
       h('h3', {}, 'Matchups'),

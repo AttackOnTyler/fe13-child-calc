@@ -3,7 +3,7 @@
  * holds a snapshot: every unit's class, level, EXP, stats, skills, inventory and supports, plus the convoy and gold.
  * A new entry copies the one before; editing a past entry never reaches later ones, which are flagged instead.
  */
-import type { Assumptions, ChildId, Couple, DeploymentRole, Engine, FlawlessOptions, HeldItem, MapOrderStep, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
+import type { Assumptions, ChildId, Couple, DeploymentRole, Engine, FlawlessOptions, GoldSpread, HeldItem, MapOrderStep, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
 import { chanceText } from './chance';
 import { EMPTY_SNAPSHOT, SUPPORT_LEVELS, addEntry, childJoinFrom, chromWedding, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, withUnit } from '../engine';
 import { removeClassChange, tierOfClass, withClassChange, withCountOverride, type Seal } from '../engine';
@@ -138,15 +138,23 @@ export function flawlessReadout(engine: Engine, run: Run, options?: FlawlessOpti
       ? `${names(r.unknownHistory)} ${r.unknownHistory.length === 1 ? 'was' : 'were'} first logged in a class ${r.unknownHistory.length === 1 ? 'it' : 'they'} can’t join in: the Second Seal count before the log is read as 0 (set it on the chapter log if it isn’t).`
       : '',
     blank.length ? `Not simulated, no stats recorded: ${names(blank)}.` : '',
+    `Gold per map is each run’s gold at the map’s end, 10th to 90th percentile: what it held, plus Bullion no play can lose (sold at the next armory), less its rebuys, seals and endpoint kit.`,
+    r.goldUnrecorded ? 'Your latest entry records no gold, so the runs start with none: record it in the chapter log.' : '',
     children.length ? `Children who don’t join the simulated army (their fixed parent isn’t married in the log or the plan, or a parent isn’t simulated): ${names(children)}.` : '',
     `Rests on: ${spots.map((b) => `${b.label[0]!.toLowerCase()}${b.label.slice(1)} (${LEAN[b.lean]})`).join(', ')}.`,
   ].filter(Boolean);
   return {
     text: `Flawless chance: ${chanceText(r.chance)} ±${points(r.margin)} · ${ceiling?.chance !== undefined ? `ceiling ${chanceText(ceiling.chance)}` : 'no ceiling yet'}`,
     detail: detail.join(' '),
-    rows: r.maps.map((m) => `${m.label}: ${m.noDeath === undefined ? 'no run gets here with nobody lost' : chanceText(m.noDeath)}`),
+    rows: r.maps.map((m) => `${m.label}: ${m.noDeath === undefined ? 'no run gets here with nobody lost' : `${chanceText(m.noDeath)}${m.gold ? ` · ${goldRange(m.gold)}` : ''}`}`),
   };
 }
+
+/** Gold as the app writes it: 12,500G. */
+export const goldText = (g: number) => `${Math.round(g).toLocaleString('en-US')}G`;
+
+/** A gold spread as a range, 10th to 90th percentile (#190): "4,000–6,500G", or one amount when every run agrees. */
+export const goldRange = (g: GoldSpread) => (g.low === g.high ? goldText(g.low) : `${Math.round(g.low).toLocaleString('en-US')}–${goldText(g.high)}`);
 
 type Readout = ReturnType<typeof flawlessReadout>;
 

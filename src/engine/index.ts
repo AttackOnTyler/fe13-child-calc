@@ -53,7 +53,8 @@ import { itemByName } from '../game-data/items';
 import { simMapById, type SimMapOptions } from './sim/sim-map';
 import { runSeed } from './sim/random';
 import { simulateRuns, type RunSim, type RunSimInput } from './sim/run-sim';
-import { flawlessCeiling, flawlessChance, type FlawlessChance, type FlawlessOptions } from './flawless';
+import { mapUpkeep, type MapUpkeep } from './sim/upkeep';
+import { flawlessCeiling, flawlessChance, sureIncome, type FlawlessChance, type FlawlessOptions } from './flawless';
 import { simulateCeiling, type Ceiling } from './sim/ceiling';
 import { BLIND_SPOTS, type BlindSpot } from './assumptions';
 import { matchBuilds, matchTemplate, shownMatch, templateSummary, templatesFor } from './builds';
@@ -127,7 +128,8 @@ export { type MapWaves, type Wave, type WaveGroup } from './waves';
 export { type ArmySpread, type SimItem } from './sim/sustain';
 export { EXPOSURE_RISK, MAX_TURNS, type MapPlay, type MapPlayInput, type SimAct, type SimFight, type SimFoeGroup, type SimGroup, type SimMap, type SimStance, type SimTurn, type SimUnit, type SimUnitTally, type SimWave } from './sim/map-play';
 export { simLineup, type SimMapOptions } from './sim/sim-map';
-export { PROMOTION_RULE, levelCap, type ArmyUnit, type ChildRecruit, type RunSim, type RunSimInput, type RunSimMap, type RunSimMapResult, type StatSpread, type UnitForecast, type SupportForecast, type MarriageForecast } from './sim/run-sim';
+export { PROMOTION_RULE, levelCap, type ArmyUnit, type ChildRecruit, type GoldSpread, type RunSim, type RunSimInput, type RunSimMap, type RunSimMapResult, type ShoppingLine, type ShoppingStop, type StatSpread, type UnitForecast, type SupportForecast, type MarriageForecast } from './sim/run-sim';
+export { KIT_FORGE_MT, VULNERARY_VALUE, type MapUpkeep } from './sim/upkeep';
 export { TOP_PAIR_POINTS, combatPoints, mapSupportGains, type SupportGain, type Together } from './sim/support-growth';
 export { FLAWLESS_RUNS, FLAWLESS_SEED, fighterOf, type FlawlessChance, type FlawlessOptions, type NotSimulated } from './flawless';
 export { effectiveCaps, type Ceiling, type CeilingUnit } from './sim/ceiling';
@@ -412,6 +414,12 @@ export type Engine = {
    * that isn't a healing or Rescue staff. Both play calls above fill in the assumed spread when the input has none.
    */
   staffReach(unit: SimUnit, staff: string, spread?: readonly number[]): number;
+  /**
+   * The uses a play spends (#190), expected: by unit, then item. A weapon spends one per hit (a tome's miss per
+   * `tome-miss-use`), the back's weapon one per Dual Strike that hits, Armsthrift saving each at Luck × 2%; a staff or
+   * potion one per use. The simulated runs draw the hits instead.
+   */
+  mapUpkeep(input: MapPlayInput, play: MapPlay): MapUpkeep;
   /** The stated blind spots, each with its lean (may read high, low, or either way). */
   blindSpots(): readonly BlindSpot[];
   /** A map's chapter-guide entries (#123), grouped by source, each with its source's name and link. */
@@ -421,6 +429,11 @@ export type Engine = {
    * lose (`play`). The run's other gold facts are STARTING_GOLD, sellPrice/sellRate and RENOWN.
    */
   mapGold(map: string): readonly GoldRow[];
+  /**
+   * A map's sure income (#190), as the simulated runs count it: the `mapGold` rows no play can lose. Only Bullion is
+   * sold (and Paralogue 13 pays gold); every other item is held.
+   */
+  mapIncome(map: string): number;
   /** Renown for clearing a map: 10 for a story map; a paralogue or DLC map per the `paralogue-renown` assumption. */
   renownGain(map: string): number;
   /** The renown rewards crossed going from `from` renown to `to`, in threshold order. */
@@ -1542,6 +1555,8 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       const item = unit.items?.find((i) => i.item.name === staff)?.item ?? itemByName(staff);
       return item ? staffReach(unit, item, spread) : 0;
     },
+    mapIncome: (map) => sureIncome(mapById(map)),
+    mapUpkeep: (input, play) => mapUpkeep(input.map, play, input.lineup, null, assumptions['tome-miss-use']),
     blindSpots: () => BLIND_SPOTS,
     chapterGuide: (map) => {
       const entries = CHAPTER_GUIDE.filter((e) => e.map === map);

@@ -287,13 +287,15 @@ export const DEEPER: readonly DeeperEntry[] = [
     id: 'supply',
     question: 'What should I buy, forge or promote before this map?',
     answer: [
-      'The supply list suggests a buy or a forge for each deployed lead that turns foes it can’t one-round into one-round kills, cheapest per foe first, within the gold you recorded and only from armories you’ve opened. Merchants are random, so they aren’t counted.',
+      'The shopping list is what the flawless chance’s simulated runs buy at the next armory stop, each with the chance a run makes it: first rebuys for weapons, staves and potions that would run dry before the next armory (a weapon spends a use per hit, a back’s per Dual Strike, a staff per cast; Armsthrift saves some), then a Master Seal at 2,500G when a promotion needs one and none is held, and at the endpoint the endpoint kit: the best weapon the open armories sell for each lead, forged to +5 Mt, and a Vulnerary each. A run short of gold drops the kit pieces that win fewest matchups per gold.',
+      'Each run starts from the gold you recorded and gains only Bullion no play can lose, sold at the next armory; everything else is held, never sold. The Run view shows each map’s gold at its end as a range. Merchants are random, so their stock isn’t counted.',
       'Seals and promotions says where seals come from now (Master Seals in the Port Ferox armory after Chapter 12, Second Seals in the Mila Tree armory after Chapter 16, or the Great Gate, Mercenary Fortress or Manor of Lost Souls armory after Paralogue 6, 10 or 16, naming whichever is open; before that only random merchants), how many you hold, and for each base-class unit at level 10+ whether promoting now wins more of this map’s matchups.',
       'The level-20 stats it shows are expected, from average growths: a guide to “now or later”, not your unit’s real stats.',
     ],
     jump: { to: 'log', target: 'prepare' },
     terms: [
-      { term: 'supply list', def: 'Buys and forges that close the map’s gaps, priced against your gold and limited to open armories.' },
+      { term: 'shopping list', def: 'The buys at an armory stop in priority order (rebuys, seals, the endpoint kit), each with the chance a simulated run makes it.' },
+      { term: 'endpoint kit', def: 'The weapons, forges and Vulneraries the plan buys for the endpoint from the gold left, trimmed when short.' },
       { term: 'expected stats', def: 'Stats projected from average growths; used only for “promote now or later”.' },
     ],
   },
