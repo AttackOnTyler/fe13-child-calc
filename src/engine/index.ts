@@ -165,6 +165,7 @@ export { adoptedOf, proposalId, withDismissedProposal, withEdit, withoutEdit, ty
 export { behindFixes, sameWishlist, type MilestoneMoves, type MovedProposal, type PlanBreak } from './solve/resolve';
 export { forecastBefore, whatChanged, withDismissedChange, withEntryForecast, type ExpAgainstForecast, type WhatChanged } from './what-changed';
 export { falls, openLosses, runLosses, withLossesSettled, type FallLog, type FallRow, type LossItem, type LossKind, type RunLoss } from './losses';
+export { calibration, calibrationLog, expFactors, forecastPercentile, learnCorrections, withCorrectionsOff, withLearned, type Calibration, type UnitCorrection } from './corrections';
 export { COST_ROLL_UP, type CostRow, type CostRowKind, type WhatItCost } from './what-it-cost';
 export { ROBIN_EXTRA, ROBIN_SOLVE, withRobinLock, robinKey, robinLock, robinOptions, wishlistDifference, type RobinCost, type RobinCursor, type RobinInput, type RobinOption, type RobinPick, type RobinStep, type SolvedRobin, type WishlistDifference };
 export type { KeepPin, MarriagePin, SideGoalPin, SpanPin, SpanPosition } from './solve/plan';
@@ -182,6 +183,7 @@ export { FORCED_UNITS, LIKELY_LOSSES, type LikelyLoss, type ReserveReading, type
 export { BLIND_SPOTS, type BlindSpot, type BlindSpotId, type RunBlindSpotId } from './assumptions';
 export { bestWeapon, classTypes, dangerFlags, foeKey, foeOf, foesOf, matchup, pairUpBonus, statValue, type DangerFlag, type Fighter, type Foe, type Matchup } from './solver';
 export {
+  CORRECTION_RANGE,
   EMPTY_RUN,
   EMPTY_SNAPSHOT,
   SUPPORT_LEVELS,

@@ -42,6 +42,7 @@ import { internalLevels } from './internal-level';
 import { remainingMapOrder, type MapOrder } from './map-order';
 import { unitName, withRun, type Couple, type Difficulty, type RosterUnit } from './roster';
 import { EMPTY_SNAPSHOT, isLost, latestEntry, morganStart, recruitSnapshot, unitNamed, type Run, type Snapshot, type UnitSnapshot } from './run';
+import { expFactors } from './corrections';
 import { fixedPass } from './child-skills';
 import { entryAfterShopping } from './shopping';
 import { CHROM_FALLBACK_PARTNER, CHROM_WEDDING_CANDIDATES, CHROM_WEDDING_MAP } from '../game-data/supports';
@@ -443,6 +444,7 @@ export function flawlessInput(
   // The run's span and keep pins (#200), as each map's lineup rules: every lineup the runs play keeps them.
   const keys = maps.map((m) => m.key);
   const rules = lineupRules(livePins(run, runPins(run), keys), keys);
+  const factors = expFactors(run);
   return {
     input: {
       army,
@@ -463,6 +465,8 @@ export function flawlessInput(
       ...(plan ? { builds: Object.fromEntries(plan.wishlist.units.map((w) => [w.unit, w.build])) } : {}),
       // The plan's EXP priorities (#195): who lands kills in each map's play.
       ...(plan?.roadmap.priorities?.length ? { priority: priorityByMap(maps, plan.roadmap.priorities, rules) } : {}),
+      // The learned corrections (#196), unless switched off: every map here is after the last recorded one.
+      ...(Object.keys(factors).length ? { expFactor: factors } : {}),
     },
     notSimulated,
     unknownHistory,

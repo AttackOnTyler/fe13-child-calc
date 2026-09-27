@@ -292,6 +292,11 @@ export type RunSimInput = {
    * it (the realism pass), the rest of its five slots its recorded skills. Absent: units keep the skills they have.
    */
   readonly builds?: Readonly<Partial<Record<RosterUnit, readonly SkillId[]>>>;
+  /**
+   * The learned corrections (#196), by unit: each EXP the unit earns on these maps (all after the last recorded one) is
+   * multiplied by its factor. Absent, or a unit without one: ×1.
+   */
+  readonly expFactor?: Readonly<Partial<Record<RosterUnit, number>>>;
 };
 
 /**
@@ -608,6 +613,8 @@ export type RunState = {
   made: boolean[];
   /** The plan's builds (`RunSimInput.builds`). */
   readonly builds: RunSimInput['builds'];
+  /** The learned corrections (`RunSimInput.expFactor`). */
+  readonly expFactor: RunSimInput['expFactor'];
 };
 
 /** Class growths by class and gender, per set of assumptions (Conqueror's are assumed). */
@@ -839,13 +846,16 @@ function expFoes(map: SimMap): Map<string, ExpFoe | undefined> {
  * kill EXP when the foe falls, damage EXP when it lived through the front's strikes and none when it wasn't hurt, cut
  * on Lunatic from a foe's 4th engagement; Veteran ×1.5 when its holder leads a pair. A paired back gets half its damage
  * EXP from its own Dual Strikes, never kill EXP, weighted by the chance it lands one (the play's expected share). Then
- * each staff use and each Dance. Returns the EXP each unit earned.
+ * each staff use and each Dance, each times the unit's learned correction (#196). Returns the EXP each unit earned.
  */
 function earn(state: RunState, map: SimMap, play: MapPlay, rng: Rng | null, difficulty: Difficulty, assumptions: Assumptions): Map<RosterUnit, number> {
   const foes = expFoes(map);
   const lunatic = difficulty === 'lunatic' || difficulty === 'lunatic-plus';
   const earned = new Map<RosterUnit, number>();
-  const give = (u: Live, exp: number) => {
+  const give = (u: Live, given: number) => {
+    // The unit's learned correction (#196) scales everything it earns.
+    const factor = state.expFactor?.[u.base.id];
+    const exp = factor === undefined ? given : Math.round(given * factor);
     if (exp <= 0) return;
     earned.set(u.base.id, (earned.get(u.base.id) ?? 0) + exp);
     gainExp(u, exp, rng, assumptions);
@@ -1462,6 +1472,7 @@ function newState(input: RunSimInput): RunState {
     carriers: new Map(),
     made: [],
     builds: input.builds,
+    expFactor: input.expFactor,
   };
   for (const [a, b] of input.married ?? []) marry(state, a, b, undefined);
   for (const a of input.army) join(state, a);
