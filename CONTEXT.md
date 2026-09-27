@@ -301,7 +301,7 @@ A map the run can play next: story maps and paralogues its cleared maps have unl
 _Avoid_: Next chapter (paralogues and xenologues count)
 
 **Record results**:
-The guided flow after a map: it makes the map's entry (a copy of the last) and steps through deployed units, recruits, deaths and marriages, convoy and gold, then the shopping step. On Casual a fallen unit isn't recorded as dead.
+The guided flow after a map: it makes the map's entry (a copy of the last) and steps through deployed units, recruits, deaths and marriages, convoy and gold, the shopping step, then side goals secured and renown (asked once per run). On Casual a fallen unit isn't recorded as dead.
 _Avoid_: Save, end chapter
 
 **Inbox**:
@@ -429,7 +429,7 @@ Each simulated run's gold map by map: gold before, plus Bullion sold, minus what
 _Avoid_: Budget, gold projection
 
 **Side goal**:
-Loseable income inside a map: an escaping Thief, a village, Ch 18's chests, a paralogue's result. The solve chooses whether to chase it, paying in actions and turns; its income counts as the share of runs that secure it. The player can pin one to always take or skip.
+Loseable income inside a map: an escaping Thief, a village, Ch 18's chests, a paralogue's result. The solve chooses whether to chase it, paying in actions and turns; its income counts as the share of runs that secure it. The player can pin one to always take or skip; until the solve weighs it, the plan chases one that costs at most one action a turn until its deadline.
 _Avoid_: Bonus objective, optional goal
 
 **Held item**:

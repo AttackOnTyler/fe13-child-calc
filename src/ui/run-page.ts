@@ -8,6 +8,7 @@ import { chanceText } from './chance';
 import { EMPTY_SNAPSHOT, FLAWLESS_SEED, SUPPORT_LEVELS, addEntry, childJoinFrom, chromWedding, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, withUnit } from '../engine';
 import { removeClassChange, tierOfClass, withClassChange, withCountOverride, type Seal } from '../engine';
 import { entryAfterShopping, goldAfterShopping, removeShopLine, shopPrice, withShopLine, type ShopKind, type ShopLine } from '../engine';
+import { withRenown, withSideGoalPin, withSideGoalSecured, type SideGoalDecision, type SideGoalId } from '../engine';
 import { CHILD_UNITS } from '../game-data/children';
 import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
 import { h } from './dom';
@@ -39,7 +40,7 @@ export type RunContext = {
   readonly pins?: () => readonly PlanPin[];
 };
 
-const RECORD_STEPS = ['Deployed units', 'Recruits', 'Deaths and marriages', 'Convoy and gold', 'Shopping'] as const;
+const RECORD_STEPS = ['Deployed units', 'Recruits', 'Deaths and marriages', 'Convoy and gold', 'Shopping', 'Side goals and renown'] as const;
 
 export function runView(ctx: RunContext): HTMLElement[] {
   if (ctx.showingMaps || ctx.maps.map) {
@@ -145,16 +146,131 @@ export function flawlessReadout(engine: Engine, run: Run, options: FlawlessReado
       ? `${names(r.unknownHistory)} ${r.unknownHistory.length === 1 ? 'was' : 'were'} first logged in a class ${r.unknownHistory.length === 1 ? 'it' : 'they'} can’t join in: the Second Seal count before the log is read as 0 (set it on the chapter log if it isn’t).`
       : '',
     blank.length ? `Not simulated, no stats recorded: ${names(blank)}.` : '',
-    `Gold per map is each run’s gold at the map’s end, 10th to 90th percentile: what it held (from your latest entry after its recorded shopping), plus Bullion no play can lose (sold at the next armory), less its rebuys, seals and endpoint kit.`,
+    `Gold per map is each run’s gold at the map’s end, 10th to 90th percentile: what it held (from your latest entry after its recorded shopping), plus Bullion no play can lose, the side goals it secured and renown’s Bullion (sold at the next armory), less its rebuys, seals and endpoint kit.`,
     r.goldUnrecorded ? 'Your latest entry records no gold, so the runs start with none: record it in the chapter log.' : '',
+    r.sideGoals.length ? 'A side goal the plan chases costs actions on its map; the share is the runs that secure it.' : '',
+    r.renown.recorded
+      ? `Renown is ${r.renown.now} now; each reward arrives on the map that crosses it${r.renown.waiting.length ? `, and ${listOf(r.renown.waiting)} ${r.renown.waiting.length === 1 ? 'is' : 'are'} waiting to be claimed` : ''}.`
+      : `Renown isn’t recorded: it reads as 10 per story map logged (${r.renown.now}), every reward so far claimed. Record it in Record results.`,
     children.length ? `Children who don’t join the simulated army (their fixed parent isn’t married in the log or the plan, or a parent isn’t simulated): ${names(children)}.` : '',
     `Rests on: ${spots.map((b) => `${b.label[0]!.toLowerCase()}${b.label.slice(1)} (${LEAN[b.lean]})`).join(', ')}.`,
   ].filter(Boolean);
   return {
     text: `Flawless chance: ${chanceText(r.chance)} ±${points(r.margin)} · ${ceiling?.chance !== undefined ? `ceiling ${chanceText(ceiling.chance)}` : 'no ceiling yet'}`,
     detail: detail.join(' '),
-    rows: r.maps.map((m) => `${m.label}: ${m.noDeath === undefined ? 'no run gets here with nobody lost' : `${chanceText(m.noDeath)}${m.gold ? ` · ${goldRange(m.gold)}` : ''}`}`),
+    rows: r.maps.map((m) => {
+      // Its side goals (#191): the share of runs that secure each one chased; and renown's rewards arriving on it.
+      const goals = r.sideGoals
+        .filter((g) => g.key === m.key)
+        .map((g) => `${g.label.slice(g.label.indexOf(': ') + 2)} ${!g.chase ? 'skipped' : g.secured === undefined ? 'chased' : `secured ${chanceText(g.secured)}`}`);
+      const rewards = r.renown.stops.find((s) => s.key === m.key)?.rewards ?? [];
+      const extra = [...goals, ...(rewards.length ? [`renown: ${listOf(rewards)}`] : [])].map((x) => ` · ${x}`).join('');
+      return `${m.label}: ${m.noDeath === undefined ? 'no run gets here with nobody lost' : `${chanceText(m.noDeath)}${m.gold ? ` · ${goldRange(m.gold)}` : ''}`}${extra}`;
+    }),
   };
+}
+
+/** A side goal's decision as the Run view writes it (#191): a pin, or the default rule's reason. */
+const DECISION_TEXT = {
+  pinned: { chase: 'always take (pinned)', skip: 'always skip (pinned)' },
+  default: { chase: 'chase (at most one action a turn)', skip: 'skip (more than one action a turn)' },
+} as const;
+
+/** The side goals on the map order still to play, each with the plan's decision (#191), for the Run view's pins. */
+export function sideGoalPlanReadout(engine: Engine, run: Run): readonly { readonly id: SideGoalId; readonly label: string; readonly what: string; readonly pin: SideGoalDecision | undefined; readonly text: string }[] {
+  const ahead = new Set(engine.mapOrder(run).steps.map((s) => s.map));
+  return engine
+    .sideGoals(run)
+    .filter((c) => ahead.has(c.goal.map))
+    .map((c) => ({ id: c.goal.id, label: c.goal.label, what: c.goal.what, pin: c.pinned ? c.decision : undefined, text: `${c.goal.label}: ${DECISION_TEXT[c.pinned ? 'pinned' : 'default'][c.decision]}` }));
+}
+
+/** Side goals ahead, each pinnable to always take or skip (#191). */
+function sideGoalsSection(ctx: RunContext): HTMLElement {
+  const rows = sideGoalPlanReadout(ctx.engine, ctx.run);
+  const chased = ctx.engine.sideGoals(ctx.run).filter((c) => rows.some((r) => r.id === c.goal.id) && c.decision === 'chase').length;
+  const pin = (id: SideGoalId, v: string) => ctx.setRun(withSideGoalPin(ctx.run, id, v === 'chase' || v === 'skip' ? v : undefined));
+  return h(
+    'details',
+    { class: 'banner side-goals' },
+    h('summary', {}, h('b', {}, 'Side goals'), h('span', { class: 'muted small' }, rows.length ? ` · ${chased} of ${rows.length} chased` : ' · none left on the map order')),
+    ...rows.map((r) =>
+      h(
+        'div',
+        { class: 'row small' },
+        h('b', { title: r.what }, r.text),
+        h(
+          'select',
+          { 'aria-label': `${r.label}: take or skip`, onchange: (ev) => pin(r.id, (ev.target as HTMLSelectElement).value) },
+          ...([['', 'Plan decides'], ['chase', 'Always take'], ['skip', 'Always skip']] as const).map(([v, t]) => h('option', { value: v, ...((r.pin ?? '') === v ? { selected: 'selected' } : {}) }, t)),
+        ),
+        h('span', { class: 'muted' }, r.what),
+      ),
+    ),
+    h('span', { class: 'muted small' }, 'Chasing costs actions on the map (a Thief killed, a village visited, a chest opened, a villager guarded) by the turn it would be lost; the flawless chance shows the share of runs that secure each one.'),
+  );
+}
+
+/**
+ * Record results' side goals and renown step (#191), as the Run view writes it: each side goal on the entry's map,
+ * secured as recorded or pre-filled from what the map gave, and the run's renown after the map with the rewards reached.
+ */
+export function sideGoalsReadout(engine: Engine, run: Run, entry: string): { readonly goals: readonly { readonly id: SideGoalId; readonly label: string; readonly what: string; readonly secured: boolean; readonly note: string }[]; readonly renown: string } {
+  const goals = engine.sideGoalsSecured(run, entry).map((g) => ({
+    id: g.goal.id,
+    label: g.goal.label,
+    what: g.goal.what,
+    secured: g.secured,
+    note: g.recorded ? 'as you recorded it' : g.found.length ? `pre-filled from the map’s finds: ${listOf(g.found)}` : 'pre-filled: none of its items found',
+  }));
+  const i = run.entries.findIndex((e) => e.id === entry);
+  const before = engine.renown({ ...run, entries: run.entries.slice(0, i) }).now;
+  const after = engine.renown({ ...run, entries: run.entries.slice(0, i + 1) }).now;
+  const crossed = engine.renownRewards(before, after).map((r) => r.item);
+  const renown = run.renown
+    ? `Renown after this map: ${after}${crossed.length ? ` (reached: ${listOf(crossed)})` : ''}.`
+    : 'Renown isn’t recorded yet: enter the renown this file started with, then the rewards already claimed (asked once for the run).';
+  return { goals, renown };
+}
+
+/** The side goals and renown step (#191): each goal's secured box, and renown asked once (start, claimed rewards). */
+function sideGoalsStep(ctx: RunContext, e: RunEntry): HTMLElement[] {
+  const r = sideGoalsReadout(ctx.engine, ctx.run, e.id);
+  const rec = ctx.run.renown;
+  const set = (start: number, claimed: readonly string[]) => ctx.setRun(withRenown(ctx.run, { start, claimed }));
+  const reached = rec ? ctx.engine.renownRewards(-1, ctx.engine.renown(ctx.run).now) : [];
+  const editor = [
+    h('label', { class: 'small' }, 'Renown when this file started ', input(rec?.start ?? '', (v) => set(Math.max(0, Number(v) || 0), rec?.claimed ?? []), { class: 'num-in', 'aria-label': 'Starting renown' })),
+    rec && reached.length
+      ? h(
+          'div',
+          { class: 'row small' },
+          'Claimed already: ',
+          ...reached.map((x) =>
+            h(
+              'label',
+              {},
+              h('input', { type: 'checkbox', checked: rec.claimed.includes(x.item), onchange: (ev) => set(rec.start, (ev.target as HTMLInputElement).checked ? [...rec.claimed, x.item] : rec.claimed.filter((c) => c !== x.item)) }),
+              ` ${x.item} (${x.renown})`,
+            ),
+          ),
+        )
+      : null,
+  ];
+  return [
+    h('p', { class: 'muted small' }, 'Side goals on this map, pre-filled from what the map gave against the entry before: tick what you secured.'),
+    ...(r.goals.length
+      ? r.goals.map((g) =>
+          h(
+            'div',
+            { class: 'row' },
+            h('label', { title: g.what }, h('input', { type: 'checkbox', checked: g.secured, onchange: (ev) => ctx.setRun(withSideGoalSecured(ctx.run, e.id, g.id, (ev.target as HTMLInputElement).checked, ctx.now())) }), ` ${g.label} secured`),
+            h('span', { class: 'muted small' }, g.note),
+          ),
+        )
+      : [h('p', { class: 'muted' }, 'No side goals on this map.')]),
+    h('div', { class: 'banner renown' }, h('b', {}, 'Renown'), h('div', { class: 'small' }, r.renown), ...(rec ? [h('details', {}, h('summary', { class: 'small' }, 'Change the recorded renown'), ...editor)] : editor)),
+  ];
 }
 
 /** Gold as the app writes it: 12,500G. */
@@ -229,7 +345,8 @@ export function childStatsNote(run: Run, e: RunEntry, u: RosterUnit, assumptions
 
 /**
  * Record results (#118): the entry is already a copy of the last, so every step only records changes: deployed units,
- * the map's recruits (pre-filled), deaths and marriages, convoy and gold at the map's end, then shopping (#192).
+ * the map's recruits (pre-filled), deaths and marriages, convoy and gold at the map's end, shopping (#192), then side
+ * goals secured (pre-filled from the map's finds) and renown, asked once for the run (#191).
  */
 function recordResults(ctx: RunContext, e: RunEntry, step: number): HTMLElement {
   const i = ctx.run.entries.findIndex((x) => x.id === e.id);
@@ -288,8 +405,10 @@ function recordResults(ctx: RunContext, e: RunEntry, step: number): HTMLElement 
         ];
       case 3:
         return [h('p', { class: 'muted small' }, 'Gold and items as the map ended, before any shopping.'), goldAndConvoy(ctx, e), problems(e.snapshot)];
-      default:
+      case 4:
         return [shoppingSection(ctx, e)];
+      default:
+        return sideGoalsStep(ctx, e);
     }
   })();
   const last = step === RECORD_STEPS.length - 1;
@@ -422,6 +541,7 @@ function chapterLog(ctx: RunContext): HTMLElement {
     ),
     nextMapSection(ctx),
     flawlessSection(ctx),
+    sideGoalsSection(ctx),
     mapOrderSection(ctx),
     h(
       'div',
