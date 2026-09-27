@@ -8,6 +8,7 @@ import { CHILD_UNITS } from '../game-data/children';
 import { MAPS, type ChapterData } from '../game-data/chapters';
 import { JOIN_DATA, basesOn } from '../game-data/join';
 import { STATS, type Gender, type Stat } from '../game-data/stats';
+import { childParalogueGates } from './child-paralogues';
 import { className } from './classes';
 import { robinBases } from './unit-page';
 import { FORGE, forgeProblem, itemByName } from '../game-data/items';
@@ -279,20 +280,24 @@ export type MapOffer = { readonly map: string; readonly kind: 'story' | 'paralog
 
 /** Paralogues with more to them than their unlocking chapter (SF gaiden chapters; research/chapter-data §2). */
 const PARALOGUE_NOTES: Readonly<Record<string, string>> = {
-  ...Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`paralogue-${i + 5}`, 'Opens once the child’s parent is married (after Chapter 13).'])),
-  'paralogue-7': 'Opens once Maribelle has an S support (after Chapter 13).',
-  'paralogue-12': 'Opens once Robin is married (after Chapter 13).',
   ...Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`paralogue-${i + 18}`, 'Needs SpotPass data, which may no longer be downloadable now the 3DS online services have ended.'])),
 };
 
+/** The units a snapshot has married (a pin doesn't count). */
+export const marriedUnits = (s: Snapshot): Set<RosterUnit> =>
+  new Set((Object.entries(s.spouses) as [RosterUnit, Roster['spouses'][RosterUnit]][]).filter(([, sp]) => sp?.bond === 'married').map(([u]) => u));
+
 /**
  * The maps the run can play next (#118): story and paralogues its cleared maps have unlocked (the Premonition to start),
- * and on a Full route every DLC xenologue it hasn't played. Grind maps are never offered: log them as “other”.
+ * and on a Full route every DLC xenologue it hasn't played. A child paralogue also needs its parent married in the
+ * latest entry and its location reachable (#152). Grind maps are never offered: log them as “other”.
  */
 export function nextMaps(run: Run): MapOffer[] {
   const cleared = new Set(run.entries.map((e) => e.map));
   const unlocked = new Set<string>(['premonition']);
   for (const m of MAPS) if (cleared.has(m.id)) m.unlocks.forEach((u) => unlocked.add(u));
+  const married = marriedUnits(latestEntry(run)?.snapshot ?? EMPTY_SNAPSHOT);
+  for (const g of childParalogueGates({ cleared, married })) if (!g.playable) unlocked.delete(g.map);
   const offers: MapOffer[] = [];
   for (const m of MAPS) {
     if (cleared.has(m.id) || m.grind) continue;

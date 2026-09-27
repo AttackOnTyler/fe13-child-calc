@@ -88,4 +88,11 @@ export const JP_PK_CHILDREN: Citation = {
   label: '天馬騎士団 FE13 children',
   url: 'https://www.pegasusknight.com/wiki/fe13/ユニット/絆・結婚システム/子供',
 };
+export const SF_GAIDEN: Citation = { label: 'SF Gaiden Chapters', url: 'https://serenesforest.net/awakening/miscellaneous/gaiden-chapters/' };
+export const FEW_CHILD_PARALOGUES: Citation = {
+  label: 'FEW Of Sacred Blood and Paralogues 5–16 (oldids 742107; 742102 … 742094)',
+  url: 'https://fireemblemwiki.org/w/index.php?oldid=742107',
+};
+export const FEW_PARALOGUE_7: Citation = { label: 'FEW Noble Lineage (P7, oldid 769016)', url: 'https://fireemblemwiki.org/w/index.php?oldid=769016' };
+export const JP_PARALOGUES: Citation = { label: 'JP 2ch wiki paralogues (p.144, 84, 145, 147, 138) and FAQ (p.19)', url: 'https://w.atwiki.jp/fireemblem3ds/pages/84.html' };
 export const FEW_LUCINA: Citation = { label: 'FEW Lucina (inheritance note)', url: 'https://fireemblemwiki.org/wiki/Lucina' };

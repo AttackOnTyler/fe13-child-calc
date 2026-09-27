@@ -293,7 +293,7 @@ The army's shared storage, recorded in each entry's snapshot with the gold on ha
 _Avoid_: Storage, bag
 
 **Next map**:
-A map the run can play next: story maps and paralogues its cleared maps have unlocked, and on a Full route the DLC xenologues. Grind maps are never offered; they're logged as "other".
+A map the run can play next: story maps and paralogues its cleared maps have unlocked, and on a Full route the DLC xenologues. A child paralogue also needs Chapter 13 cleared, its fixed parent married (a pin doesn't count; Morgan's needs Robin married to anyone) and its map location reachable. Grind maps are never offered; they're logged as "other".
 _Avoid_: Next chapter (paralogues and xenologues count)
 
 **Record results**:

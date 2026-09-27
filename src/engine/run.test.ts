@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { MAPS } from '../game-data/chapters';
+import { CHILD_UNITS } from '../game-data/children';
 import {
   EMPTY_ROSTER,
   EMPTY_RUN,
   addEntry,
+  childParalogueGates,
   editEntry,
   exportRun,
   flaggedEntries,
@@ -21,6 +24,8 @@ import {
   withSpouse,
   withState,
   withUnit,
+  type RosterUnit,
+  type Run,
 } from './index';
 
 const facts = withRun(EMPTY_ROSTER, { gender: 'M', asset: 'mag', flaw: 'str', difficulty: 'lunatic', route: 'main-story' });
@@ -117,6 +122,8 @@ describe('inventory, convoy and gold (#117)', () => {
 describe('next-map offers and Record results (#118)', () => {
   const played = (route: 'main-story' | 'full-route', ...maps: string[]) =>
     maps.reduce((r, m, i) => addEntry(r, m, i + 1), runFromRoster(withRun(facts, { route })));
+  /** Records marriages in the latest entry. */
+  const marry = (run: Run, ...couples: [RosterUnit, RosterUnit][]) => couples.reduce((r, [a, b]) => recordMarriage(r, latestEntry(r)!.id, a, b, 50), run);
 
   it('start at the Premonition, then follow the story and its unlocks', () => {
     expect(nextMaps(runFromRoster(facts)).map((o) => o.map)).toEqual(['premonition']);
@@ -132,12 +139,90 @@ describe('next-map offers and Record results (#118)', () => {
     expect(full).not.toContain('exponential-growth');
   });
 
-  it('note the SpotPass paralogues’ availability, and a child paralogue’s marriage', () => {
+  it('note the SpotPass paralogues’ availability; a child paralogue’s marriage is a condition, not a note', () => {
     const story = ['premonition', 'prologue', ...Array.from({ length: 25 }, (_, i) => `chapter-${i + 1}`)];
     const offers = nextMaps(played('main-story', ...story));
     expect(offers.find((o) => o.map === 'paralogue-18')!.note).toMatch(/SpotPass/);
-    expect(offers.find((o) => o.map === 'paralogue-5')!.note).toMatch(/married/);
+    expect(offers.some((o) => o.map === 'paralogue-5')).toBe(false);
     expect(offers.map((o) => o.map)).toContain('endgame');
+    const married = nextMaps(marry(played('main-story', ...story), ['lissa', 'vaike']));
+    expect(married.find((o) => o.map === 'paralogue-5')).toEqual({ map: 'paralogue-5', kind: 'paralogue' });
+  });
+
+  describe('child paralogues (#152)', () => {
+    const toCh13 = ['premonition', 'prologue', ...Array.from({ length: 13 }, (_, i) => `chapter-${i + 1}`)];
+    const children = Array.from({ length: 12 }, (_, i) => `paralogue-${i + 5}`);
+    const offered = (run: Run) =>
+      nextMaps(run)
+        .map((o) => o.map)
+        .filter((m) => children.includes(m));
+    const then = (run: Run, ...maps: string[]) => maps.reduce((r, m, i) => addEntry(r, m, 100 + i), run);
+
+    it('offer none after Chapter 13 while nobody is married', () => {
+      expect(offered(played('main-story', ...toCh13))).toEqual([]);
+    });
+
+    it('offer none before Chapter 13, whoever is married', () => {
+      expect(offered(marry(played('main-story', ...toCh13.slice(0, -1)), ['sully', 'vaike'], ['tharja', 'stahl']))).toEqual([]);
+    });
+
+    it('open P5 on Lissa’s marriage, but reach it only once Chapter 14 is cleared', () => {
+      const run = marry(played('main-story', ...toCh13), ['lissa', 'vaike']);
+      expect(offered(run)).toEqual([]);
+      expect(offered(then(run, 'chapter-14'))).toEqual(['paralogue-5']);
+    });
+
+    it('offer P9 and P10 before Chapter 14 once Sumia and Cordelia are married', () => {
+      expect(offered(marry(played('main-story', ...toCh13), ['sumia', 'chrom'], ['cordelia', 'stahl']))).toEqual(['paralogue-9', 'paralogue-10']);
+    });
+
+    it('offer P9 alone only once Chapter 18 is cleared', () => {
+      const run = marry(played('main-story', ...toCh13), ['sumia', 'chrom']);
+      expect(offered(then(run, 'chapter-14', 'chapter-15', 'chapter-16', 'chapter-17'))).toEqual([]);
+      expect(offered(then(run, 'chapter-14', 'chapter-15', 'chapter-16', 'chapter-17', 'chapter-18'))).toEqual(['paralogue-9']);
+    });
+
+    it('offer P5 before Chapter 14 once Lissa, Sumia and Cordelia are married', () => {
+      const run = marry(played('main-story', ...toCh13), ['lissa', 'vaike'], ['sumia', 'chrom'], ['cordelia', 'stahl']);
+      expect(offered(run)).toEqual(['paralogue-5', 'paralogue-9', 'paralogue-10']);
+    });
+
+    it('keep P7 closed before Chapter 15 with P12 open but not P6 (C6)', () => {
+      const run = marry(played('main-story', ...toCh13), ['maribelle', 'gaius'], ['robin', 'cherche']);
+      expect(offered(run)).toEqual(['paralogue-12']);
+      expect(offered(then(run, 'chapter-14'))).toEqual(['paralogue-12']);
+      expect(offered(then(run, 'chapter-14', 'chapter-15'))).toEqual(['paralogue-7', 'paralogue-12']);
+      // With Olivia married too, P6 is open and reached through P12, and P7 through P6.
+      expect(offered(marry(run, ['olivia', 'donnel']))).toEqual(['paralogue-6', 'paralogue-7', 'paralogue-12']);
+    });
+
+    it('open P12 on Robin’s marriage to anyone, a child included', () => {
+      expect(offered(marry(played('main-story', ...toCh13), ['robin', 'lucina']))).toEqual(['paralogue-12']);
+    });
+
+    it('never count a pinned marriage', () => {
+      const run = played('main-story', ...toCh13);
+      expect(offered(withRoster(run, withSpouse(rosterOf(run), 'nowi', 'vaike', 'pinned')))).toEqual([]);
+      expect(offered(marry(run, ['nowi', 'vaike']))).toEqual(['paralogue-16']);
+    });
+
+    it('evaluate the gates from cleared maps and marriages alone, as a simulated run does', () => {
+      const gate = (cleared: string[], married: RosterUnit[], map: string) => childParalogueGates({ cleared: new Set(cleared), married: new Set(married) }).find((g) => g.map === map)!;
+      expect(gate(['chapter-13'], ['olivia'], 'paralogue-6')).toEqual({ map: 'paralogue-6', open: true, reachable: false, playable: false });
+      expect(gate(['chapter-13'], ['olivia', 'robin'], 'paralogue-6').playable).toBe(true);
+      // P12 played before Robin's marriage was recorded still opens the road to P6.
+      expect(gate(['chapter-13', 'paralogue-12'], ['olivia'], 'paralogue-6').playable).toBe(true);
+      // Each gate belongs to the child whose fixed parent it names.
+      const story = ['chapter-13', 'chapter-14', 'chapter-15', 'chapter-16', 'chapter-17', 'chapter-18'];
+      for (const child of Object.values(CHILD_UNITS).filter((c) => c.fixedParent !== 'chrom')) {
+        const playable = childParalogueGates({ cleared: new Set(story), married: new Set([child.fixedParent]) }).filter((g) => g.playable);
+        expect(playable.map((g) => MAPS.find((m) => m.id === g.map)!.recruits[0]!.unit)).toEqual([child.name.replace(/ \(.\)$/, '')]);
+      }
+    });
+
+    it('stop offering a child paralogue once it is played', () => {
+      expect(offered(then(marry(played('main-story', ...toCh13), ['nowi', 'vaike']), 'paralogue-16'))).toEqual([]);
+    });
   });
 
   it('records a death on Classic, but not on Casual, and a marriage', () => {

@@ -12,6 +12,9 @@ import {
   FEW_FLAVIA,
   FEW_OLIVIA,
   FEW_PARALOGUE_22,
+  FEW_PARALOGUE_7,
+  JP_PARALOGUES,
+  SF_GAIDEN,
   FEW_GROWTH_MODULE,
   FEW_KJELLE_STATS,
   FEW_LORD,
@@ -147,5 +150,12 @@ export const RESOLVED_DISAGREEMENTS: readonly ResolvedDisagreement[] = [
     winning: { value: 'Res 28, Skl 36', sources: [SF_BASES, FANDOM_AVERSA, FEW_PARALOGUE_22] },
     losing: [{ value: 'Res 26, Skl 34', sources: [FEW_AVERSA] }],
     why: 'FEW’s own Paralogue 22 NPC row gives Res 28, and the unit is recruited from that NPC (research/unit-page-data, #79).',
+  },
+  {
+    id: 'C6',
+    item: 'Paralogue 7 (Brady) map access',
+    winning: { value: 'Chapter 15 cleared, or P6 open and reached (Chapter 14 cleared or P12 open)', sources: [FEW_PARALOGUE_7, JP_PARALOGUES] },
+    losing: [{ value: 'Access to Chapter 16, or Paralogue 6 and/or 12', sources: [SF_GAIDEN] }],
+    why: 'FEW and the JP P7 page both reach P7 through P6; P12 alone doesn’t (research/child-recruitment C6, #152).',
   },
 ];
