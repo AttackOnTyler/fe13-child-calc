@@ -2,7 +2,8 @@
  * The page's side of the solve's Web Worker (#199): starts the worker on a request and hands each reply to the page.
  * One worker per request and slot: a new request, or `stop`, terminates the one before in its slot (a step can't be
  * interrupted mid-way). The solve and its idle work run in the `main` slot; a unit's edits on the Wishlist tab (#203)
- * are costed in the `edits` slot beside it, so opening a unit never stops the search.
+ * and the inbox's "anything else" and single pin costs (#204) are costed in the `edits` slot beside it, so costing an
+ * edit never stops the search.
  * Where there's no Worker (tests), `startSolve` returns undefined and the page works the chance out itself.
  */
 import type { Assumptions, DeploymentRole, EditCost, PinCost, Plan, PlanPin, Readings, ReservesCursor, ReservesStep, RobinCursor, RobinStep, RosterUnit, Run, SolveCursor, SolveStep, UnitEdit, WorthCursor, WorthStep } from '../engine';
@@ -36,6 +37,31 @@ export type SolveRequest =
       readonly edited: Plan;
       /** The budgets to read the cost at, in order (`EDIT_COST_BUDGET.provisional`, then `.settled`). */
       readonly budgets: readonly number[];
+    })
+  | (Common & {
+      /**
+       * The inbox's "anything else" (#204), in the `edits` slot: every edit of the adopted plan (`plan`; absent: the one
+       * the run adopts) the player can make (`editChoices`), listed; then each of `keys` costed at each of `budgets` in
+       * turn (all provisional first, then all settled), each with its edited plan.
+       */
+      readonly kind: 'all-edits';
+      readonly plan?: Plan;
+      readonly pins?: readonly PlanPin[];
+      /** The maps the lineup and pair edits are offered on: the riskiest first. */
+      readonly riskiest?: readonly string[];
+      readonly keys: readonly string[];
+      readonly budgets: readonly number[];
+    })
+  | (Common & {
+      /**
+       * One pin's own cost (#200, on request from "Your edits"), in the `edits` slot: a search with it lifted from the
+       * adopted plan, then its cost.
+       */
+      readonly kind: 'one-pin-cost';
+      readonly plan?: Plan;
+      readonly pins?: readonly PlanPin[];
+      readonly lift: readonly PlanPin[];
+      readonly budget: number;
     })
   | (Common & {
       /**
@@ -90,7 +116,7 @@ export type SolveReply =
   | { readonly id: number; readonly kind: 'idle'; readonly worth: WorthStep; readonly reserves: ReservesStep | undefined; readonly done: boolean }
   | { readonly id: number; readonly kind: 'robin'; readonly step: RobinStep; readonly done: boolean }
   | { readonly id: number; readonly kind: 'edits'; readonly edits: readonly UnitEditView[]; readonly done: boolean }
-  | { readonly id: number; readonly kind: 'edit-cost'; readonly key: string; readonly cost: EditCost; readonly done: boolean };
+  | { readonly id: number; readonly kind: 'edit-cost'; readonly key: string; readonly cost: EditCost; readonly done: boolean; /** The edited plan (#204's "anything else": a plan edit adopts it). */ readonly edited?: Plan };
 
 /** Where a request runs: the solve and its idle work, or a unit's edits beside it. */
 export type SolveSlot = 'main' | 'edits';

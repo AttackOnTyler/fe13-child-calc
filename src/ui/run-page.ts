@@ -13,12 +13,13 @@ import { entryAfterShopping, goldAfterShopping, removeShopLine, shopPrice, withS
 import { withRenown, withSideGoalPin, withSideGoalSecured, type SideGoalDecision, type SideGoalId } from '../engine';
 import { runItemPins, withItemPin, withItemsUsed } from '../engine';
 import { robinLock, withRobinLock, withoutPins } from '../engine';
-import { dismissMigrationNote, withPin } from '../engine';
+import { adoptedOf, dismissMigrationNote, withEdit, withPin } from '../engine';
 import { CHILD_UNITS } from '../game-data/children';
 import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
 import { h } from './dom';
 import { guide } from './guide';
 import { mapsView, type MapsContext } from './maps-page';
+import { afterLockInbox, beforeTheLock, inboxProgress, inboxView, robinName, robinToLock } from './inbox';
 
 export type RunContext = {
   readonly engine: Engine;
@@ -250,6 +251,8 @@ export type FlawlessReadoutOptions = Pick<FlawlessOptions, 'seed' | 'runs' | 'ro
 /** Where the solve's Web Worker stands (#199): its latest best plan, the chance re-scored for it, and what it found. */
 export type SolveProgress = {
   readonly best: Plan;
+  /** The plan the search started from (#204): the adopted plan, or the seed when none is. */
+  readonly start?: Plan;
   readonly chance: FlawlessChance;
   readonly proposals: readonly PlanProposal[];
   readonly closeCalls: readonly CloseCall[];
@@ -269,6 +272,8 @@ export type FlawlessReadout = {
   readonly rows: readonly string[];
   /** The search's improvements, close calls and pruned marriages, one line each (#199; the inbox is #204). */
   readonly found: readonly string[];
+  /** What the search found less its improvements and close calls: the inbox lists those as its own items (#204). */
+  readonly notes: readonly string[];
   /** The plan's roadmap (#194); absent once the endpoint is recorded. */
   readonly roadmap?: RoadmapReadout;
   /** The plan's item plan (#193), and the plan itself (its wishlist offers the item pins' units); absent once the endpoint is recorded. */
@@ -285,7 +290,7 @@ export type FlawlessReadout = {
  */
 export function flawlessReadout(engine: Engine, run: Run, options: FlawlessReadoutOptions = {}): FlawlessReadout {
   const { pins, ...sim } = options;
-  const plan = engine.seedPlan(run, { ...(pins ? { pins } : {}), ...(sim.roleOf ? { roleOf: sim.roleOf } : {}) });
+  const plan = engine.adoptedPlan(run, { ...(pins ? { pins } : {}), ...(sim.roleOf ? { roleOf: sim.roleOf } : {}) });
   // The EXP forecast is the flawless chance's own simulation with the milestones checked: the readings' first pass (#197).
   const forecast = engine.expForecast(run, plan, sim);
   const readings = forecast.maps.length ? engine.readings(run, plan, { ...sim, forecast }) : undefined;
@@ -311,7 +316,7 @@ function readoutOf(
   roleOf: ((u: RosterUnit) => DeploymentRole) | undefined,
   readings?: Readings,
 ): FlawlessReadout {
-  if (!r.maps.length) return { text: 'Flawless chance: the endpoint is recorded, nothing left to simulate.', detail: '', rows: [], found: [] };
+  if (!r.maps.length) return { text: 'Flawless chance: the endpoint is recorded, nothing left to simulate.', detail: '', rows: [], found: [], notes: [] };
   const ceiling = engine.ceiling(run, { runs: r.runs, plan, ...(roleOf ? { roleOf } : {}) });
   const gender = run.roster.run.gender;
   const names = (us: readonly RosterUnit[]) => listOf(us.map((u) => unitName(u, gender)));
@@ -326,7 +331,9 @@ function readoutOf(
     `The chance no unit dies from ${first}${r.maps.length > 1 ? ` to ${last}` : ''} (${r.maps.length} map${r.maps.length === 1 ? '' : 's'}), each played by its suggested deployment while EXP and level-ups are rolled, over ${r.runs} simulated run${r.runs === 1 ? '' : 's'}; the ± is the simulation error (95%).`,
     progress
       ? `It’s the best plan the search has found ${progress.done ? '' : 'so far '}(single edits on the seed plan: ${seedPlan}), each edit kept only when it beats the plan on the same runs by more than twice their error; its chance is worked out again on fresh runs, so picking it doesn’t inflate it.`
-      : `It’s the seed plan’s: ${seedPlan}.`,
+      : run.adopted
+        ? 'It’s your plan’s: the one you adopted (a proposal accepted, a Robin chosen, an edit made).'
+        : `It’s the seed plan’s: ${seedPlan}.`,
     ceiling?.chance !== undefined
       ? `The ceiling is the chance no unit dies on ${ceiling.label} with every unit at its effective caps (a base class promoted) and its recorded skills and weapons: the most any plan for this army could reach there.`
       : '',
@@ -346,10 +353,11 @@ function readoutOf(
     children.length ? `Children who don’t join the simulated army (their fixed parent isn’t married in the log or the plan, or a parent isn’t simulated): ${names(children)}.` : '',
     `Rests on: ${spots.map((b) => `${b.label[0]!.toLowerCase()}${b.label.slice(1)} (${LEAN[b.lean]})`).join(', ')}.`,
   ].filter(Boolean);
-  const found = progress
+  const improvements = progress
+    ? [...progress.proposals.map((p) => `Improvement: ${p.edits.join('; ')}: ${differenceText(p.gain, p.margin)}`), ...progress.closeCalls.map((c) => `${c.label}: ${differenceText(c.gain, c.margin, true)}`)]
+    : [];
+  const notes = progress
     ? [
-        ...progress.proposals.map((p) => `Improvement: ${p.edits.join('; ')}: ${differenceText(p.gain, p.margin)}`),
-        ...progress.closeCalls.map((c) => `${c.label}: ${differenceText(c.gain, c.margin, true)}`),
         ...progress.pruned.map((c) => `Not tried: ${c.label} (its ceiling ${chanceText(c.ceiling)} is below the best found, ${chanceText(c.best)})`),
         ...(progress.pinCost?.pins.length
           ? [
@@ -374,7 +382,8 @@ function readoutOf(
       return `${m.label}: ${m.noDeath === undefined ? 'no run gets here with nobody lost' : `${chanceText(m.noDeath)}${m.gold ? ` · ${goldRange(m.gold)}` : ''}`}${extra}`;
     }),
     roadmap: roadmapReadout(engine, run, plan, readings, new Map(r.maps.map((m) => [m.key, m.label]))),
-    found,
+    found: [...improvements, ...notes],
+    notes,
   };
 }
 
@@ -658,7 +667,7 @@ export function solveState(run: Run): { readonly plan: Plan; readonly progress: 
  * headline updates as it improves the best plan, with what it found listed below (a full solve the first time, about
  * 30 s; a re-solve after an edit or a recorded map, about 5 s). Without a worker the page works out the seed plan's. The item plan (#193) reads the same plan and runs.
  */
-export function flawlessSection(ctx: HeadlineContext): HTMLElement {
+export function flawlessSection(ctx: HeadlineContext, inInbox = false): HTMLElement {
   const draw = (r: FlawlessReadout | undefined) =>
     h(
       'details',
@@ -676,7 +685,7 @@ export function flawlessSection(ctx: HeadlineContext): HTMLElement {
             h('ol', { class: 'small' }, ...r.roadmap.rows.map((x) => h('li', {}, x))),
           )
         : null,
-      r?.found.length ? h('ul', { class: 'small solve-found' }, ...r.found.map((x) => h('li', {}, x))) : null,
+      (inInbox ? r?.notes : r?.found)?.length ? h('ul', { class: 'small solve-found' }, ...(inInbox ? r!.notes : r!.found).map((x) => h('li', {}, x))) : null,
       r?.items ? itemPlanSection(ctx, r.items, r.plan) : null,
     );
   const run = ctx.run;
@@ -699,8 +708,10 @@ export function flawlessSection(ctx: HeadlineContext): HTMLElement {
     const roles = ctx.roleOf ? Object.fromEntries(rosterUnits(run.roster.run).map((u) => [u.id, ctx.roleOf!(u.id)])) : undefined;
     let chance: FlawlessChance | undefined;
     let last: SolveProgress | undefined;
+    // The search starts from the adopted plan (#204), else the seed.
+    const adopted = adoptedOf(run);
     const started = startSolve(
-      { kind: 'solve', assumptions: ctx.assumptions, run, seed: FLAWLESS_SEED, budget: STEP_BUDGET, seconds: solvedOnce ? SOLVE_SECONDS.resolve : SOLVE_SECONDS.full, ...(pins ? { pins } : {}), ...(roles ? { roles } : {}) },
+      { kind: 'solve', assumptions: ctx.assumptions, run, seed: FLAWLESS_SEED, budget: STEP_BUDGET, seconds: solvedOnce ? SOLVE_SECONDS.resolve : SOLVE_SECONDS.full, ...(adopted ? { plan: adopted } : {}), ...(pins ? { pins } : {}), ...(roles ? { roles } : {}) },
       (reply) => {
         if (reply.done && solving === run) {
           solving = undefined;
@@ -712,6 +723,7 @@ export function flawlessSection(ctx: HeadlineContext): HTMLElement {
           if (!last) return void ctx.onProgress?.();
           last = reply.kind === 'pin-cost' ? { ...last, pinCost: reply.cost } : { ...last, ...(reply.readings ? { readings: reply.readings } : {}) };
           PROGRESS.set(run, last);
+          inboxProgress(run, last);
           show(solvedReadout(ctx.engine, run, last, pins, ctx.roleOf));
           return;
         }
@@ -719,8 +731,10 @@ export function flawlessSection(ctx: HeadlineContext): HTMLElement {
         const s = reply.step;
         chance = s.chance ?? chance;
         if (!chance) return;
-        last = { ...(last?.readings && last.best === s.best ? { readings: last.readings } : {}), best: s.best, chance, proposals: s.proposals, closeCalls: s.closeCalls, pruned: s.pruned, done: reply.searched, converged: s.converged };
+        const start = s.cursor.search?.start ?? last?.start;
+        last = { ...(last?.readings && last.best === s.best ? { readings: last.readings } : {}), best: s.best, ...(start ? { start } : {}), chance, proposals: s.proposals, closeCalls: s.closeCalls, pruned: s.pruned, done: reply.searched, converged: s.converged };
         PROGRESS.set(run, last);
+        inboxProgress(run, last);
         show(solvedReadout(ctx.engine, run, last, pins, ctx.roleOf));
       },
     );
@@ -738,14 +752,13 @@ export function flawlessSection(ctx: HeadlineContext): HTMLElement {
   return el;
 }
 
-/** A Robin option as the page writes it: "Female, +Spd −Lck". */
-export const robinName = (r: PlanRobin) => `${r.gender === 'M' ? 'Male' : 'Female'}, +${STAT_LABELS[r.asset]} −${STAT_LABELS[r.flaw]}`;
+export { robinName };
 
 export type RobinReadout = {
   readonly title: string;
   readonly status: string;
   /** Each solved Robin, the reference first, and whether it can be locked from here. */
-  readonly solved: readonly { readonly key: string; readonly robin: PlanRobin; readonly text: string; readonly lock: boolean }[];
+  readonly solved: readonly { readonly key: string; readonly robin: PlanRobin; readonly plan: Plan; readonly text: string; readonly lock: boolean }[];
   /** The options not solved: seed and ceiling, and whether a solve can be asked for. */
   readonly rest: readonly { readonly key: string; readonly text: string; readonly solve: boolean }[];
   /** Once locked: what the lock cost. */
@@ -779,7 +792,7 @@ export function robinReadout(engine: Engine, run: Run, step: RobinStep | undefin
     ].filter(Boolean);
     const spouse = s.plan.wishlist.marriages.find((c) => c.includes('robin'))?.find((u) => u !== 'robin') ?? null;
     const cost = s.cost ? ` · ${differenceText(s.cost.gain, s.cost.margin, s.cost.verdict === 'close')} against ${against} · ${parts.length ? parts.join('; ') : 'the same wishlist'}` : s.key === step.reference ? ` · ${locked ? 'locked' : 'the best'}` : '';
-    return { key: s.key, robin: r, text: `${married(r, spouse)}: ${chanceText(s.chance)} ±${points(s.margin)}${cost}${PICKS[s.pick](r)}`, lock: !locked };
+    return { key: s.key, robin: r, plan: s.plan, text: `${married(r, spouse)}: ${chanceText(s.chance)} ±${points(s.margin)}${cost}${PICKS[s.pick](r)}`, lock: !locked };
   });
   const rest = step.options
     .filter((o) => o.status !== 'solved')
@@ -837,10 +850,12 @@ const robinStateKey = (run: Run) => {
 };
 
 /**
- * The Robin section (#201; the inbox's Robin card is #204): the alternatives worked out by the solve's Web Worker once
- * the headline's search is done, a solve button per option, Lock Robin, and the no-Robin toggle.
+ * The Robin section (#201): the alternatives worked out by the solve's Web Worker once the headline's search is done,
+ * a solve button per option, Lock Robin, and the no-Robin toggle. In the inbox before the Lock (#204) it's the Robin
+ * card, the first decision: the alternatives start on their own, and each solved Robin is chosen (its whole wishlist
+ * adopted) rather than locked; "Lock Robin and start" is the inbox's last card.
  */
-function robinSection(ctx: RunContext): HTMLElement | null {
+function robinSection(ctx: RunContext, inInbox = false): HTMLElement | null {
   const { run } = ctx;
   if (!ctx.assumptions || !nextMaps(run).length) return null;
   const key = robinStateKey(run);
@@ -879,19 +894,22 @@ function robinSection(ctx: RunContext): HTMLElement | null {
     whenIdle = undefined;
     if (solving) whenIdle = start;
     else start();
+    redraw();
   };
   const draw = () => {
     const r = robinReadout(ctx.engine, run, state.step, state.noRobin);
     const locked = robinLock(run);
+    const chosen = robinToLock(run, solveState(run)?.progress);
     return h(
       'details',
-      { class: 'banner robin', ...(robinView?.el.hasAttribute('open') ? { open: 'open' } : {}) },
+      // Kept open or closed across redraws; in the inbox it starts open (Robin is the first decision).
+      { class: 'banner robin', ...((robinView?.el.isConnected ? robinView.el.hasAttribute('open') : inInbox) ? { open: 'open' } : {}) },
       h('summary', {}, h('b', {}, r.title)),
       h(
         'div',
         { class: 'row small' },
         h('span', { class: 'muted' }, r.status),
-        h('button', { class: 'mini', title: 'Work out the Robin alternatives in the background (after the headline’s search)', disabled: !!(state.running || state.step?.converged), onclick: ask }, state.running ? 'Comparing…' : state.step ? 'Carry on' : 'Compare Robins'),
+        h('button', { class: 'mini', title: 'Work out the Robin alternatives in the background (after the headline’s search)', disabled: !!(state.running || state.step?.converged || whenIdle === start), onclick: ask }, state.running ? 'Comparing…' : whenIdle === start ? 'Waiting for the search…' : state.step ? 'Carry on' : 'Compare Robins'),
         locked ? h('button', { class: 'mini ghost', title: 'Unlock Robin: every option is solved again', onclick: () => ctx.setRun(withoutPins(run, [locked])) }, 'Unlock') : null,
       ),
       r.lock ? h('p', { class: 'small' }, h('b', {}, r.lock)) : null,
@@ -900,7 +918,18 @@ function robinSection(ctx: RunContext): HTMLElement | null {
             'ul',
             { class: 'small' },
             ...r.solved.map((x) =>
-              h('li', {}, x.text, x.lock ? h('button', { class: 'mini', title: 'Lock this Robin into the run facts and start: only Robin is locked, the rest stays editable', onclick: () => ctx.setRun(withRobinLock(run, x.robin)) }, 'Lock Robin and start') : null),
+              h(
+                'li',
+                {},
+                x.text,
+                !inInbox
+                  ? x.lock
+                    ? h('button', { class: 'mini', title: 'Lock this Robin into the run facts and start: only Robin is locked, the rest stays editable', onclick: () => ctx.setRun(withRobinLock(run, x.robin)) }, 'Lock Robin and start')
+                    : null
+                  : robinKeyOf(x.robin) === robinKeyOf(chosen)
+                    ? h('span', { class: 'chip small' }, 'your Robin')
+                    : h('button', { class: 'mini', title: 'Take this Robin and its whole wishlist as your plan (lock it with the last card)', onclick: () => ctx.setRun(withEdit(run, { label: `Robin: ${robinName(x.robin)}`, plan: x.plan, accepted: true })) }, 'Choose'),
+              ),
             ),
           )
         : null,
@@ -932,6 +961,8 @@ function robinSection(ctx: RunContext): HTMLElement | null {
     state.running = false;
     whenIdle = start;
   }
+  // In the inbox, Robin is the first decision: the alternatives start on their own once the worker is free.
+  if (inInbox && !state.step && !state.running) ask();
   const el = draw();
   robinView = { el, draw };
   // After a Lock the alternatives are read again (the locked Robin solved), once the worker is free.
@@ -1174,9 +1205,9 @@ function chapterLog(ctx: RunContext): HTMLElement {
       ),
     ),
     migrationNoteSection(ctx),
-    nextMapSection(ctx),
-    flawlessSection(ctx),
-    robinSection(ctx),
+    // Before the Lock the top is the inbox (#204), headline and Robin first, above Next map; after it, today's Run view
+    // (the inbox titled "Before <map>" is #206's).
+    ...(beforeTheLock(run) ? [inboxView(ctx, flawlessSection(ctx, true), robinSection(ctx, true)), nextMapSection(ctx)] : [afterLockInbox(ctx), nextMapSection(ctx), flawlessSection(ctx), robinSection(ctx)]),
     sideGoalsSection(ctx),
     mapOrderSection(ctx),
     h(

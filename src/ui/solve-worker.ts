@@ -6,7 +6,8 @@
  * (#197): the EXP forecast's first pass, then each pending milestone's suggested changes, one milestone a reply, within
  * `READING_SECONDS`. The page may also hand it idle work (#202): the plan's unit worth and utility, then its reserves;
  * or, on request, the Robin alternatives (#201), after the search, pin cost and readings; and the Wishlist tab (#203) asks,
- * in a second worker, for a unit's edits, listed then costed one by one (`unitEdits`). It holds no logic: the search,
+ * in a second worker, for a unit's edits, listed then costed one by one (`unitEdits`); the inbox (#204) asks there for
+ * every edit (`editChoices`), its matches costed with their edited plans, and for one pin's own cost. It holds no logic: the search,
  * its state (the cursor) and its budgets are the engine's. Started by `solve-client.ts`, which terminates it to stop a solve.
  */
 import { EDIT_COST_BUDGET, READING_SECONDS, SOLVE_SECONDS, SUGGEST_RUNS, createEngine, type Assumptions, type DeploymentRole, type Engine, type Plan, type Run, type SolveCursor, type SuggestedChange, type UnitEdit } from '../engine';
@@ -78,6 +79,24 @@ scope.onmessage = ({ data: m }) => {
     }
   }
   if (m.kind === 'edits') return unitEdits(engine, m, roleOf);
+  if (m.kind === 'all-edits') return allEdits(engine, m, roleOf);
+  if (m.kind === 'one-pin-cost') {
+    // One pin's own cost (#200, on request, #204): a search with it lifted from the adopted plan, then its cost.
+    const pins = m.pins ? { pins: m.pins } : {};
+    const plan = m.plan ?? engine.adoptedPlan(m.run, { ...pins, ...(roleOf ? { roleOf } : {}) });
+    const lifted = engine.liftPins(m.run, { ...pins, lift: m.lift });
+    const stop = performance.now() + SOLVE_SECONDS.resolve * 1000;
+    let free = plan;
+    let c: SolveCursor | undefined;
+    for (;;) {
+      const s = engine.solveStep({ run: lifted, plan, budget: m.budget, seed: m.seed, ...(c ? { cursor: c } : {}), ...(roleOf ? { roleOf } : {}) });
+      c = s.cursor;
+      free = s.best;
+      if (s.converged || performance.now() >= stop) break;
+    }
+    const cost = engine.pinCost({ run: m.run, ...pins, lift: m.lift, plan, lifted: free, seed: m.seed, budget: EDIT_COST_BUDGET.settled, ...(roleOf ? { roleOf } : {}) });
+    return void scope.postMessage({ id: m.id, kind: 'pin-cost', cost, done: true });
+  }
   for (const [i, budget] of m.budgets.entries())
     scope.postMessage({ id: m.id, kind: 'cost', cost: engine.editCost({ run: m.run, plan: m.plan, edited: m.edited, seed: m.seed, budget, ...(roleOf ? { roleOf } : {}) }), done: i === m.budgets.length - 1 });
 };
@@ -106,6 +125,31 @@ function unitEdits(engine: Engine, m: Extract<SolveRequest, { kind: 'edits' }>, 
       scope.postMessage({ id: m.id, kind: 'edit-cost', key: e.key, cost, done: false });
     }
   scope.postMessage({ id: m.id, kind: 'edits', edits: views, done: true });
+}
+
+/**
+ * The inbox's "anything else" (#204): every edit the player can make, listed at once; then each of `keys` costed at
+ * each budget in turn (all provisional first, then each settled), each with its edited plan (a plan edit adopts it).
+ */
+function allEdits(engine: Engine, m: Extract<SolveRequest, { kind: 'all-edits' }>, roleOf: ((u: string) => DeploymentRole) | undefined) {
+  const pins = m.pins ? { pins: m.pins } : {};
+  const plan = m.plan ?? engine.adoptedPlan(m.run, { ...pins, ...(roleOf ? { roleOf } : {}) });
+  const edits = engine.editChoices(m.run, plan, { ...pins, seed: m.seed, ...(m.riskiest ? { riskiest: m.riskiest } : {}), ...(roleOf ? { roleOf } : {}) });
+  const asked = m.keys.flatMap((k) => edits.filter((e) => e.key === k));
+  const last = asked.length && m.budgets.length ? asked.length * m.budgets.length : 0;
+  scope.postMessage({ id: m.id, kind: 'edits', edits: edits.map(({ kind, key, label, pins }) => ({ kind, key, label, pins })), done: !last });
+  const plans = new Map<string, Plan>();
+  const settled = new Set<string>();
+  for (const budget of m.budgets)
+    for (const e of asked) {
+      if (settled.has(e.key)) continue;
+      let edited = plans.get(e.key);
+      if (!edited) plans.set(e.key, (edited = e.make()));
+      const cost = engine.editCost({ run: m.run, plan, edited, pins: e.play, seed: m.seed, budget, ...(roleOf ? { roleOf } : {}) });
+      if (cost.settled) settled.add(e.key);
+      scope.postMessage({ id: m.id, kind: 'edit-cost', key: e.key, cost, edited, done: false });
+    }
+  if (last) scope.postMessage({ id: m.id, kind: 'edits', edits: edits.map(({ kind, key, label, pins }) => ({ kind, key, label, pins })), done: true });
 }
 
 /**
