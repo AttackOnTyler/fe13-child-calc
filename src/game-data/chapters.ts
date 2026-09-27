@@ -60,6 +60,27 @@ export type MapConditions = {
   readonly enemies: string;
 };
 
+/**
+ * What play can lose (#180; research/gold-economy §1.4): `escape`, an enemy can leave the map with it (a carrier, or a
+ * Thief that loots the chest); `village`, Barbarians or Berserkers can burn the village; `collapse`, the floor takes the
+ * chest on a set turn (Chapter 18); `result`, paid by how the map went (`tier`: the kills or survivors needed); `choice`,
+ * one of two outcomes the player picks (recruit or kill, Paralogue 5's talk). Drops are otherwise certain on a kill.
+ */
+export type PlayDependence = {
+  readonly kind: 'escape' | 'village' | 'collapse' | 'result' | 'choice';
+  readonly note: string;
+  readonly tier?: number;
+  readonly lostOn?: { readonly turn: number; readonly phase: 'player' | 'enemy' };
+};
+
+export type MapItemRow = {
+  readonly item: string;
+  readonly how: string;
+  readonly play?: PlayDependence;
+  /** Gold paid outright (Paralogue 13, C8): `amount`, or `amount` for each `per`. */
+  readonly gold?: { readonly amount: number; readonly per?: string };
+};
+
 export type ChapterData = {
   readonly id: string;
   readonly kind: MapKind;
@@ -83,7 +104,8 @@ export type ChapterData = {
     readonly stats?: StatText;
   }[];
   readonly forced: readonly string[];
-  readonly items: readonly { readonly item: string; readonly how: string }[];
+  /** Chests, villages, drops and rewards (FEW's item data), with what play can lose (#180). */
+  readonly items: readonly MapItemRow[];
   readonly shop: {
     readonly location: string;
     /** The armory opens after this map is cleared. */
@@ -142,8 +164,10 @@ export const REINFORCEMENT_RULE: Readonly<Record<'normal' | 'hard+', string>> = 
  * says (FEW chapter pages; SF shops agreed 49/49), and the JP 2ch wiki FAQ (p.19) agrees: 「チェンジプルフは16章ないし
  * 外伝6,10,16クリアで購入できる」. Marrying Olivia, Cordelia or Nowi early can open one before Chapter 16. Before any
  * armory, merchants from the Prologue through Chapter 10 (and Paralogues 1–3) can offer either seal, but a merchant
- * appears at random and sells three random picks, so a plan can't count on them. The preparations shop is disabled on
- * Hard and up.
+ * appears at random and sells three random picks, so a plan can't count on them. Master Seals are also sold in the
+ * Paralogue 8, 12 and 13 armories, which open after Chapter 13, so Port Ferox is always first (research/gold-economy §4).
+ * Awakening has no preparations shop on any difficulty: shopping is at world-map armories between maps
+ * (research/gold-economy C1; FEW Preparations, oldid 737954; the "disabled on Hard and up" rule is FE6's).
  */
 export const SEAL_RULES = {
   masterSeal: { armoryAfter: 'chapter-12', location: 'Port Ferox' },
@@ -157,7 +181,7 @@ export const SEAL_RULES = {
     source: 'FEW chapter pages (this data; SF shops agree); JP 2ch wiki FAQ (p.19, https://w.atwiki.jp/fireemblem3ds/pages/19.html)',
   },
   merchantsUntil: 'chapter-10',
-  prepShopOnHardUp: false,
+  prepShop: false,
 } as const;
 
 /**
@@ -352,6 +376,69 @@ export const CHAPTER_DISAGREEMENTS: readonly ChapterDisagreement[] = [
     other: 'FEW trivia: one of four maps that don’t “adhere to the typical chapter deployment style of Chrom being the sole mandatory deployment”',
     status: 'open',
     why: 'The trivia doesn’t say whether no one or more than Chrom is forced; with Chapter 23 (Chrom and Robin) among the four, no one is the likelier reading. Check in game (#132).',
+  },  // The gold research's fixes (#180; research/gold-economy §6, its ids in `why`).
+  {
+    id: 'C22',
+    map: 'prologue',
+    item: 'Southtown armory: Bronze Lance and Bronze Axe prices',
+    used: 'Bronze Lance 350G, Bronze Axe 400G (their worths)',
+    other: 'FEW The Verge of History (oldid 741973): 400G and 350G',
+    status: 'resolved',
+    why: 'A swap on one FEW page against SF, FEW’s own item pages, ptnwiki, FE WoD and Tanas Manor (gold research C2).',
+  },
+  {
+    id: 'C23',
+    map: 'chapter-8',
+    item: 'Merchant Ward price',
+    used: '2,100G',
+    other: 'FEW The Grimleal (oldid 741956): 2,150G',
+    status: 'resolved',
+    why: 'FEW’s Ward page, its five other Ward listings, ptnwiki and FE WoD all give 2,100G (gold research C3).',
+  },
+  {
+    id: 'C24',
+    map: 'chapter-18',
+    item: 'Merchant Thoron price',
+    used: '2,200G',
+    other: 'FEW Sibling Blades (oldid 741909): 2,220G',
+    status: 'resolved',
+    why: 'FEW’s Thoron page, its other listings, ptnwiki and FE WoD give 2,200G; 2,220G is the Brave Lance and Bow price on the same page (gold research C4).',
+  },
+  {
+    id: 'C25',
+    map: 'paralogue-18',
+    item: 'Armory Dragonstone+ and Beaststone+ prices',
+    used: 'Dragonstone+ 3,780G, Beaststone+ 3,220G (their worths)',
+    other: 'FEW The Dead King’s Lament (oldid 741895): 3,220G and 3,780G',
+    status: 'resolved',
+    why: 'A swap on one FEW page against SF, FEW’s item pages and Chapter 17, 18 and 23 listings, ptnwiki, FE WoD and Tanas Manor (gold research C5).',
+  },
+  {
+    id: 'C26',
+    map: 'paralogue-18',
+    item: 'Lunatic drops: the Ruffians’ Tomahawk, Hammer, Silver Swords, Silver Bows and Rexcalibur',
+    used: 'Not dropped: only Zanth’s Bullion (L) and Gangrel’s Levin Sword are',
+    other: 'FEW The Dead King’s Lament, Lunatic tab: all ten flagged as drops',
+    status: 'resolved',
+    why: 'SF’s item locations, FE WoD and FEW’s own Paralogue 18 item list have none of them; the neighbouring rows are flagged forged, so it looks like an entry slip (gold research C13).',
+  },
+  {
+    id: 'C27',
+    map: 'paralogue-13',
+    item: 'The 500G reward',
+    used: '500G for each allied NPC that survives, when you back a side (10,000G when you back neither)',
+    other: 'FE WoD, Gamer Guides and a GameFAQs post: 500G per enemy killed',
+    status: 'resolved',
+    why: 'FEW Rival Bands, Fandom, ptnwiki and SF’s script (gated on being allied with at least one ally alive) agree (gold research C8).',
+  },
+  {
+    id: 'C28',
+    map: 'paralogue-3',
+    item: 'Villager rewards',
+    used: 'FEW: Seraph Robe for one survivor, Log for two, Ladle for three',
+    other: 'SF and FE WoD: the Log for one; ptnwiki: each villager tied to one item',
+    status: 'resolved',
+    why: 'FEW’s tiers are the most detailed; the Log and Ladle sell for 25G each, so little rides on it (gold research C9).',
   },
 ];
 

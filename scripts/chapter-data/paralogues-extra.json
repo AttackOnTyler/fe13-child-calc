@@ -5,43 +5,207 @@
   "kind": "paralogue",
   "order": 401,
   "label": "Paralogue 1",
-  "unlocks": []
+  "unlocks": [],
+  "play": [
+   {
+    "item": "Killer Lance",
+    "play": {
+     "kind": "escape",
+     "note": "A Thief can loot this chest and escape with it; kill it before it leaves to get the item back."
+    }
+   }
+  ]
  },
  "paralogue-2": {
   "kind": "paralogue",
   "order": 601,
   "label": "Paralogue 2",
-  "unlocks": []
+  "unlocks": [],
+  "play": [
+   {
+    "item": "Physic",
+    "how": "Visit",
+    "play": {
+     "kind": "village",
+     "note": "Barbarians and Berserkers can burn the village, and its reward is lost."
+    }
+   }
+  ]
  },
  "paralogue-3": {
   "kind": "paralogue",
   "order": 801,
   "label": "Paralogue 3",
-  "unlocks": []
+  "unlocks": [],
+  "play": [
+   {
+    "item": "Seraph Robe",
+    "play": {
+     "kind": "result",
+     "note": "At the end if at least one NPC Villager survives.",
+     "tier": 1
+    }
+   },
+   {
+    "item": "Log",
+    "play": {
+     "kind": "result",
+     "note": "At the end if at least two NPC Villagers survive.",
+     "tier": 2
+    }
+   },
+   {
+    "item": "Ladle",
+    "play": {
+     "kind": "result",
+     "note": "At the end if all three NPC Villagers survive.",
+     "tier": 3
+    }
+   }
+  ]
  },
  "paralogue-4": {
   "kind": "paralogue",
   "order": 1001,
   "label": "Paralogue 4",
-  "unlocks": []
+  "unlocks": [],
+  "play": [
+   {
+    "item": "Arms Scroll",
+    "play": {
+     "kind": "escape",
+     "note": "A Thief can loot this chest and escape with it; kill it before it leaves to get the item back."
+    }
+   }
+  ]
  },
  "paralogue-5": {
   "kind": "paralogue",
   "order": 1401,
   "label": "Paralogue 5",
-  "unlocks": []
+  "unlocks": [],
+  "play": [
+   {
+    "item": "Missiletainn",
+    "play": {
+     "kind": "choice",
+     "note": "Speak to the southeastern Sage with Owain; anyone else gets the Speed Tonic."
+    }
+   },
+   {
+    "item": "Speed Tonic",
+    "play": {
+     "kind": "choice",
+     "note": "Speak to the southeastern Sage with anyone but Owain; Owain gets Missiletainn."
+    }
+   }
+  ]
  },
  "paralogue-6": {
   "kind": "paralogue",
   "order": 1402,
   "label": "Paralogue 6",
-  "unlocks": []
+  "unlocks": [],
+  "play": [
+   {
+    "item": "Elixir",
+    "how": "At chapter",
+    "play": {
+     "kind": "result",
+     "note": "At the end if Inigo got at least 1 kill.",
+     "tier": 1
+    }
+   },
+   {
+    "item": "Killing Edge",
+    "how": "At chapter",
+    "play": {
+     "kind": "result",
+     "note": "At the end if Inigo got at least 2 kills.",
+     "tier": 2
+    }
+   },
+   {
+    "item": "Speedwing",
+    "how": "At chapter",
+    "play": {
+     "kind": "result",
+     "note": "At the end if Inigo got at least 3 kills.",
+     "tier": 3
+    }
+   },
+   {
+    "item": "Bullion (M)",
+    "how": "At chapter",
+    "play": {
+     "kind": "result",
+     "note": "At the end if Inigo got at least 4 kills.",
+     "tier": 4
+    }
+   },
+   {
+    "item": "Hammerne",
+    "how": "At chapter",
+    "play": {
+     "kind": "result",
+     "note": "At the end if Inigo got at least 5 kills.",
+     "tier": 5
+    }
+   }
+  ]
  },
  "paralogue-7": {
   "kind": "paralogue",
   "order": 1403,
   "label": "Paralogue 7",
-  "unlocks": []
+  "unlocks": [],
+  "play": [
+   {
+    "item": "Mend",
+    "how": "At chapter",
+    "play": {
+     "kind": "result",
+     "note": "At the end if at least 1 NPC Villager survives.",
+     "tier": 1
+    }
+   },
+   {
+    "item": "Blessed Lance",
+    "how": "At chapter",
+    "play": {
+     "kind": "result",
+     "note": "At the end if at least 2 NPC Villagers survive.",
+     "tier": 2
+    }
+   },
+   {
+    "item": "Bullion (M)",
+    "how": "At chapter",
+    "play": {
+     "kind": "result",
+     "note": "At the end if at least 3 NPC Villagers survive.",
+     "tier": 3
+    }
+   },
+   {
+    "item": "Seraph Robe",
+    "how": "At chapter",
+    "play": {
+     "kind": "result",
+     "note": "At the end if at least 4 NPC Villagers survive.",
+     "tier": 4
+    }
+   },
+   {
+    "item": "Fortify",
+    "how": "At chapter",
+    "play": {
+     "kind": "result",
+     "note": "At the end if at least 5 NPC Villagers survive.",
+     "tier": 5
+    }
+   }
+  ]
  },
  "paralogue-8": {
   "kind": "paralogue",
@@ -53,7 +217,17 @@
   "kind": "paralogue",
   "order": 1405,
   "label": "Paralogue 9",
-  "unlocks": []
+  "unlocks": [],
+  "play": [
+   {
+    "item": "Bullion (L)",
+    "how": "Dropped by Ruger",
+    "play": {
+     "kind": "escape",
+     "note": "Ruger escapes with it if he gets off the map."
+    }
+   }
+  ]
  },
  "paralogue-10": {
   "kind": "paralogue",
@@ -65,25 +239,134 @@
   "kind": "paralogue",
   "order": 1407,
   "label": "Paralogue 11",
-  "unlocks": []
+  "unlocks": [],
+  "play": [
+   {
+    "item": "Wyrmslayer",
+    "how": "At chapter",
+    "play": {
+     "kind": "result",
+     "note": "At the end if at least 1 NPC Villager survives.",
+     "tier": 1
+    }
+   },
+   {
+    "item": "Arms Scroll",
+    "how": "At chapter",
+    "play": {
+     "kind": "result",
+     "note": "At the end if at least 2 NPC Villagers survive.",
+     "tier": 2
+    }
+   },
+   {
+    "item": "Recover",
+    "how": "At chapter",
+    "play": {
+     "kind": "result",
+     "note": "At the end if at least 3 NPC Villagers survive.",
+     "tier": 3
+    }
+   },
+   {
+    "item": "Bullion (M)",
+    "how": "At chapter",
+    "play": {
+     "kind": "result",
+     "note": "At the end if at least 4 NPC Villagers survive.",
+     "tier": 4
+    }
+   },
+   {
+    "item": "Seraph Robe",
+    "how": "At chapter",
+    "play": {
+     "kind": "result",
+     "note": "At the end if at least 5 NPC Villagers survive.",
+     "tier": 5
+    }
+   }
+  ]
  },
  "paralogue-12": {
   "kind": "paralogue",
   "order": 1408,
   "label": "Paralogue 12",
-  "unlocks": []
+  "unlocks": [],
+  "play": [
+   {
+    "how": "Open",
+    "play": {
+     "kind": "escape",
+     "note": "Two Thieves loot chests here and escape (which chests isn’t published); kill them before they leave."
+    }
+   }
+  ]
  },
  "paralogue-13": {
   "kind": "paralogue",
   "order": 1409,
   "label": "Paralogue 13",
-  "unlocks": []
+  "unlocks": [],
+  "play": [
+   {
+    "how": "Dropped by",
+    "play": {
+     "kind": "result",
+     "note": "Backing a side makes its leader allied (no Bullion) and closes two villages; backing neither pays 10,000G."
+    }
+   },
+   {
+    "how": "Visit",
+    "play": {
+     "kind": "result",
+     "note": "Backing a side makes its leader allied (no Bullion) and closes two villages; backing neither pays 10,000G."
+    }
+   },
+   {
+    "item": "500G",
+    "play": {
+     "kind": "result",
+     "note": "Paid when you back a side: 500G for each allied NPC that survives."
+    },
+    "gold": {
+     "amount": 500,
+     "per": "surviving allied NPC"
+    }
+   },
+   {
+    "item": "10,000G",
+    "play": {
+     "kind": "result",
+     "note": "Paid when you back neither side."
+    },
+    "gold": {
+     "amount": 10000
+    }
+   }
+  ]
  },
  "paralogue-14": {
   "kind": "paralogue",
   "order": 1410,
   "label": "Paralogue 14",
-  "unlocks": []
+  "unlocks": [],
+  "play": [
+   {
+    "how": "Visit",
+    "play": {
+     "kind": "village",
+     "note": "Mirage villages, visited in order; none appears if any village is burned."
+    }
+   },
+   {
+    "item": "Goddess Staff",
+    "play": {
+     "kind": "village",
+     "note": "Mirage villages, visited in order; none appears if any village is burned."
+    }
+   }
+  ]
  },
  "paralogue-15": {
   "kind": "paralogue",
@@ -107,7 +390,43 @@
   "kind": "paralogue",
   "order": 2601,
   "label": "Paralogue 18",
-  "unlocks": []
+  "unlocks": [],
+  "fixes": {
+   "prices": [
+    {
+     "list": "armory",
+     "item": "Dragonstone+",
+     "cost": 3780
+    },
+    {
+     "list": "armory",
+     "item": "Beaststone+",
+     "cost": 3220
+    }
+   ],
+   "noDrop": [
+    {
+     "difficulty": "lunatic",
+     "enemy": "Ruffian",
+     "items": [
+      "Tomahawk",
+      "Hammer",
+      "Silver Sword",
+      "Silver Bow",
+      "Rexcalibur"
+     ]
+    }
+   ]
+  },
+  "play": [
+   {
+    "how": "Dropped by Gangrel if killed",
+    "play": {
+     "kind": "choice",
+     "note": "The unit’s own weapon: dropped only if the unit is killed rather than recruited."
+    }
+   }
+  ]
  },
  "paralogue-19": {
   "kind": "paralogue",

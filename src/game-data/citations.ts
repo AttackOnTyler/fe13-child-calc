@@ -85,6 +85,12 @@ export const RESEARCH_CHILD_RECRUITMENT: Citation = {
   label: 'Research: child recruitment (#140)',
   url: `${RESEARCH}/research/child-recruitment/research/child-recruitment.md`,
 };
+export const RESEARCH_GOLD: Citation = {
+  label: 'Research: the gold economy (#158)',
+  url: `${RESEARCH}/research/gold-economy/research/gold-economy.md`,
+};
+export const FEW_RENOWN: Citation = { label: 'FEW Renown (oldid 762420)', url: 'https://fireemblemwiki.org/w/index.php?title=Renown&oldid=762420' };
+export const SF_RENOWN: Citation = { label: 'SF Renown', url: 'https://serenesforest.net/awakening/miscellaneous/renown/' };
 export const JP_CHILDREN: Citation = { label: 'JP 2ch wiki child units (p.112)', url: 'https://w.atwiki.jp/fireemblem3ds/pages/112.html' };
 /** The mirror wiki's child units page: a passed skill the child already has wastes the slot. */
 export const JP_CHILDREN_MIRROR: Citation = { label: 'JP 2ch wiki child units (p.89)', url: 'https://w.atwiki.jp/kakuseife/pages/89.html' };

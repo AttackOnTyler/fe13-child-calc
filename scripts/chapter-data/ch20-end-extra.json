@@ -7,6 +7,16 @@
   "label": "Chapter 20",
   "unlocks": [
    "chapter-21"
+  ],
+  "play": [
+   {
+    "item": "Spirit Dust",
+    "how": "Open",
+    "play": {
+     "kind": "escape",
+     "note": "A Thief can loot this chest and escape with it; kill it before it leaves to get the item back."
+    }
+   }
   ]
  },
  "chapter-21": {

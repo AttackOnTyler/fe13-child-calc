@@ -110,7 +110,7 @@ export const CHAPTERS_7_12: readonly ChapterData[] = [
       {"item": "Master Seal", "how": "Visit the western village"},
       {"item": "Second Seal", "how": "Visit the southern village"},
     ],
-    shop: {"location": "Border Sands", "opensAfter": "this chapter", "armory": [{"item": "Mend", "cost": 1000}, {"item": "Concoction", "cost": 600}, {"item": "Skill Tonic", "cost": 150}, {"item": "Speed Tonic", "cost": 150}, {"item": "Luck Tonic", "cost": 150}], "merchant": [{"item": "Steel Sword", "cost": 840}, {"item": "Steel Lance", "cost": 910}, {"item": "Steel Axe", "cost": 980}, {"item": "Steel Bow", "cost": 910}, {"item": "Elwind", "cost": 910}, {"item": "Hammer", "cost": 1850}, {"item": "Ward", "cost": 2150}, {"item": "Master Seal", "cost": 2500}, {"item": "Second Seal", "cost": 2500}]},
+    shop: {"location": "Border Sands", "opensAfter": "this chapter", "armory": [{"item": "Mend", "cost": 1000}, {"item": "Concoction", "cost": 600}, {"item": "Skill Tonic", "cost": 150}, {"item": "Speed Tonic", "cost": 150}, {"item": "Luck Tonic", "cost": 150}], "merchant": [{"item": "Steel Sword", "cost": 840}, {"item": "Steel Lance", "cost": 910}, {"item": "Steel Axe", "cost": 980}, {"item": "Steel Bow", "cost": 910}, {"item": "Elwind", "cost": 910}, {"item": "Hammer", "cost": 1850}, {"item": "Ward", "cost": 2100}, {"item": "Master Seal", "cost": 2500}, {"item": "Second Seal", "cost": 2500}]},
     eventTiles: 2,
     enemies: {
       normal: [
@@ -188,7 +188,7 @@ export const CHAPTERS_7_12: readonly ChapterData[] = [
     items: [
       {"item": "Javelin", "how": "Dropped by enemy Soldier"},
       {"item": "Killer Bow", "how": "Dropped by enemy Archer"},
-      {"item": "Elthunder", "how": "Dropped by Tharja if killed as an enemy"},
+      {"item": "Elthunder", "how": "Dropped by Tharja if killed as an enemy", "play": {"kind": "choice", "note": "The unit’s own weapon: dropped only if the unit is killed rather than recruited."}},
       {"item": "Dracoshield", "how": "Dropped by Campari"},
       {"item": "Hand Axe", "how": "Dropped by an enemy Wyvern Rider (reinforcement)"},
     ],
@@ -282,10 +282,10 @@ export const CHAPTERS_7_12: readonly ChapterData[] = [
     forced: ["Chrom"],
     items: [
       {"item": "Beaststone", "how": "Dropped by Mustafa"},
-      {"item": "Bullion (M)", "how": "Dropped by enemy Thief"},
-      {"item": "Wyrmslayer", "how": "Dropped by enemy Thief"},
-      {"item": "Master Seal", "how": "Dropped by enemy Thief"},
-      {"item": "Seraph Robe", "how": "Dropped by enemy Thief"},
+      {"item": "Bullion (M)", "how": "Dropped by enemy Thief", "play": {"kind": "escape", "note": "Carried by an escaping Thief: lost if it gets off the map."}},
+      {"item": "Wyrmslayer", "how": "Dropped by enemy Thief", "play": {"kind": "escape", "note": "Carried by an escaping Thief: lost if it gets off the map."}},
+      {"item": "Master Seal", "how": "Dropped by enemy Thief", "play": {"kind": "escape", "note": "Carried by an escaping Thief: lost if it gets off the map."}},
+      {"item": "Seraph Robe", "how": "Dropped by enemy Thief", "play": {"kind": "escape", "note": "Carried by an escaping Thief: lost if it gets off the map."}},
     ],
     shop: {"location": "The Midmire", "opensAfter": "this chapter", "armory": [{"item": "Iron Lance", "cost": 560}, {"item": "Javelin", "cost": 700}, {"item": "Iron Axe", "cost": 600}, {"item": "Hand Axe", "cost": 750}], "merchant": [{"item": "Silver Sword", "cost": 1410}, {"item": "Silver Lance", "cost": 1560}, {"item": "Silver Axe", "cost": 1740}, {"item": "Silver Bow", "cost": 1560}, {"item": "Elfire", "cost": 980}, {"item": "Blessed Lance", "cost": 1540}, {"item": "Elixir", "cost": 900}, {"item": "Master Seal", "cost": 2500}, {"item": "Second Seal", "cost": 2500}]},
     eventTiles: 2,
@@ -376,7 +376,7 @@ export const CHAPTERS_7_12: readonly ChapterData[] = [
       {"item": "Spirit Dust", "how": "Dropped by enemy Sage"},
       {"item": "Armorslayer", "how": "Dropped by enemy Mercenary (reinforcement)"},
       {"item": "Speedwing", "how": "Dropped by enemy Hero (reinforcement)"},
-      {"item": "Bullion (L)", "how": "Open western chest"},
+      {"item": "Bullion (L)", "how": "Open western chest", "play": {"kind": "escape", "note": "A Thief can loot this chest and escape with it; kill it before it leaves to get the item back."}},
       {"item": "Goddess Icon", "how": "Open eastern chest"},
     ],
     shop: {"location": "Border Wastes", "opensAfter": "this chapter", "armory": [{"item": "Iron Sword", "cost": 520}, {"item": "Iron Bow", "cost": 560}, {"item": "Fire", "cost": 540}, {"item": "Thunder", "cost": 630}, {"item": "Wind", "cost": 450}], "merchant": [{"item": "Silver Sword", "cost": 1410}, {"item": "Silver Lance", "cost": 1560}, {"item": "Silver Axe", "cost": 1740}, {"item": "Silver Bow", "cost": 1560}, {"item": "Arcthunder", "cost": 1620}, {"item": "Levin Sword", "cost": 1600}, {"item": "Rapier", "cost": 1600}, {"item": "Short Spear", "cost": 1600}, {"item": "Killer Bow", "cost": 1680}]},

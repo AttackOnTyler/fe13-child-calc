@@ -16,7 +16,16 @@
   "label": "Chapter 8",
   "unlocks": [
    "chapter-9"
-  ]
+  ],
+  "fixes": {
+   "prices": [
+    {
+     "list": "merchant",
+     "item": "Ward",
+     "cost": 2100
+    }
+   ]
+  }
  },
  "chapter-9": {
   "kind": "story",
@@ -25,6 +34,15 @@
   "unlocks": [
    "chapter-10",
    "paralogue-4"
+  ],
+  "play": [
+   {
+    "how": "Dropped by Tharja if killed",
+    "play": {
+     "kind": "choice",
+     "note": "The unit’s own weapon: dropped only if the unit is killed rather than recruited."
+    }
+   }
   ]
  },
  "chapter-10": {
@@ -33,6 +51,15 @@
   "label": "Chapter 10",
   "unlocks": [
    "chapter-11"
+  ],
+  "play": [
+   {
+    "how": "Dropped by enemy Thief",
+    "play": {
+     "kind": "escape",
+     "note": "Carried by an escaping Thief: lost if it gets off the map."
+    }
+   }
   ]
  },
  "chapter-11": {
@@ -41,6 +68,16 @@
   "label": "Chapter 11",
   "unlocks": [
    "chapter-12"
+  ],
+  "play": [
+   {
+    "item": "Bullion (L)",
+    "how": "Open western chest",
+    "play": {
+     "kind": "escape",
+     "note": "A Thief can loot this chest and escape with it; kill it before it leaves to get the item back."
+    }
+   }
   ]
  },
  "chapter-12": {

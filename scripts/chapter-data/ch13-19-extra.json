@@ -43,6 +43,15 @@
   "label": "Chapter 16",
   "unlocks": [
    "chapter-17"
+  ],
+  "play": [
+   {
+    "how": "Dropped by enemy Thief",
+    "play": {
+     "kind": "escape",
+     "note": "Carried by an escaping Thief: lost if it gets off the map."
+    }
+   }
   ]
  },
  "chapter-17": {
@@ -51,6 +60,16 @@
   "label": "Chapter 17",
   "unlocks": [
    "chapter-18"
+  ],
+  "play": [
+   {
+    "item": "Seraph Robe",
+    "how": "Open eastern chest",
+    "play": {
+     "kind": "escape",
+     "note": "A Thief can loot this chest and escape with it; kill it before it leaves to get the item back."
+    }
+   }
   ]
  },
  "chapter-18": {
@@ -60,6 +79,62 @@
   "unlocks": [
    "chapter-19",
    "paralogue-17"
+  ],
+  "fixes": {
+   "prices": [
+    {
+     "list": "merchant",
+     "item": "Thoron",
+     "cost": 2200
+    }
+   ]
+  },
+  "play": [
+   {
+    "item": "Second Seal",
+    "play": {
+     "kind": "collapse",
+     "note": "The floor collapses under the chest on turn 11 enemy phase.",
+     "lostOn": {
+      "turn": 11,
+      "phase": "enemy"
+     }
+    }
+   },
+   {
+    "item": "Energy Drop",
+    "how": "Open",
+    "play": {
+     "kind": "collapse",
+     "note": "The floor collapses under the chest on turn 10 enemy phase.",
+     "lostOn": {
+      "turn": 10,
+      "phase": "enemy"
+     }
+    }
+   },
+   {
+    "item": "Rescue",
+    "play": {
+     "kind": "collapse",
+     "note": "The floor collapses under the chest on turn 11 player phase.",
+     "lostOn": {
+      "turn": 11,
+      "phase": "player"
+     }
+    }
+   },
+   {
+    "item": "Bullion (M)",
+    "play": {
+     "kind": "collapse",
+     "note": "The floor collapses under the chest on turn 7 enemy phase.",
+     "lostOn": {
+      "turn": 7,
+      "phase": "enemy"
+     }
+    }
+   }
   ]
  },
  "chapter-19": {

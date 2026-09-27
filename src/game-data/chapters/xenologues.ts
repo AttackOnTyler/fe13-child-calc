@@ -2285,7 +2285,7 @@ export const XENOLOGUES: readonly ChapterData[] = [
     ],
     forced: ["Chrom"],
     items: [
-      {"item": "Bullion (S) (×7)", "how": "Dropped by enemy Revenant"},
+      {"item": "Bullion (S) (×7)", "how": "Dropped by enemy Revenant", "play": {"kind": "escape", "note": "Each Revenant that escapes takes its Bullion."}},
       {"item": "Random", "how": "Open left chest"},
       {"item": "Random", "how": "Open right chest"},
     ],

@@ -218,7 +218,7 @@ function mapPage(ctx: MapsContext, m: ChapterData): HTMLElement[] {
       enemyTable(m.enemies[d] ?? []),
       reinforcements(ctx.engine, m, d),
       howToRun(ctx.engine, m.id),
-      m.items.length ? h('div', {}, h('h3', {}, 'Items'), h('ul', { class: 'small' }, ...m.items.map((i) => h('li', {}, `${i.item}: ${i.how}`)))) : null,
+      m.items.length ? h('div', {}, h('h3', {}, 'Items'), h('ul', { class: 'small' }, ...m.items.map((i) => h('li', {}, `${i.item}: ${i.how}`, i.play ? h('span', { class: 'muted' }, ` · ${i.play.note}`) : null)))) : null,
       m.shop
         ? h(
             'div',

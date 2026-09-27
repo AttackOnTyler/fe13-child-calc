@@ -249,6 +249,9 @@ def parse(path, meta):
         keys = sorted({k[4:] for k in p if k.startswith('item') and not k.endswith(('image', 'article'))}, key=lambda k: (k == 'last', int(k) if k.isdigit() else 0))
         for k in keys:
             items.append({'item': clean(p.get('item' + k)), 'how': clean(p.get('obtain' + k))})
+    # Paralogues 3, 8 and 10 list one item per ChapItemsCell FE13 template instead (#180).
+    for p, _ in templates(text, 'ChapItemsCell FE13'):
+        items.append({'item': clean(p.get('item')), 'how': clean(p.get('obtain'))})
     rec['items'] = items
     shop_sec = section(text, 'Shop data', 3)
     shop = None

@@ -81,6 +81,37 @@ export function forgeCost(item: GameItem, to: ForgeLevels, from: ForgeLevels = {
   return Math.round(stat('mt') + stat('hit') + stat('crit'));
 }
 
+/**
+ * What an armory pays (#180; research/gold-economy §2; FEW Worth, oldid 756230): half the worth, scaled by the uses left.
+ * The 50 items of the event-tile and Barracks pool pay a quarter: the item notes say so for 43, and SF's inventory
+ * footnotes and the 2ch wiki's prices add the seven below. Legendary weapons, the Falchions, the Goddess Staff and the DLC
+ * rewards have no worth and pay nothing; the Supreme Emblem has none but sells for 99,999G. How a used item's price is
+ * rounded isn't published (G2): it is rounded down, as the quarter prices at full uses are. A forged weapon's price isn't
+ * published either (G1): it sells as the unforged one.
+ */
+export type SellRate = { readonly kind: 'half' | 'quarter' | 'none' } | { readonly kind: 'fixed'; readonly gold: number };
+
+const QUARTER_UNNOTED = new Set(['Sweet Tincture', "Gaius's Confect", "Kris's Confect", "Tiki's Tear", 'Seed of Trust', 'Reeking Box', 'Rift Door']);
+const FIXED_SELL: Readonly<Record<string, number>> = { 'Supreme Emblem': 99999 };
+
+export function sellRate(item: GameItem): SellRate {
+  const fixed = FIXED_SELL[item.name];
+  if (fixed !== undefined) return { kind: 'fixed', gold: fixed };
+  if (!item.worth) return { kind: 'none' };
+  if (QUARTER_UNNOTED.has(item.name) || /Sells for 1\/4/.test(item.notes ?? '')) return { kind: 'quarter' };
+  return { kind: 'half' };
+}
+
+/** The gold an armory pays for the item with `usesLeft` uses (default: full). Bullion has no uses: half its worth. */
+export function sellPrice(item: GameItem, usesLeft?: number): number {
+  const rate = sellRate(item);
+  if (rate.kind === 'fixed') return rate.gold;
+  if (rate.kind === 'none') return 0;
+  const share = (item.worth ?? 0) * (rate.kind === 'half' ? 1 / 2 : 1 / 4);
+  const left = item.uses ? Math.min(usesLeft ?? item.uses, item.uses) / item.uses : 1;
+  return Math.floor(share * left + 1e-9);
+}
+
 /** Weapon and item disagreements between SF and FEW: SF's value is used (the ticket's primary source). */
 export type ItemDisagreement = { readonly id: string; readonly item: string; readonly used: string; readonly other: string; readonly status: 'open' | 'resolved'; readonly why: string };
 

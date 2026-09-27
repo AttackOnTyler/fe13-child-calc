@@ -45,6 +45,8 @@ import { unitPage, unitReach, type FrontDoor, type FrontDoorTile, type OpinionBl
 import { SPOTPASS_UNITS } from '../game-data/join';
 import { CHAPTER_DISAGREEMENTS, MAPS, lunaticPlusPoolFor, type ChapterData, type ChapterDifficulty as MapDifficulty, type ChapterDisagreement } from '../game-data/chapters';
 import { mapWaves, type MapWaves } from './waves';
+import type { RenownReward } from '../game-data/gold';
+import { mapGold, renownGain, renownRewards, type GoldRow } from './gold';
 import { matchBuilds, matchTemplate, shownMatch, templateSummary, templatesFor } from './builds';
 import type { SkillId } from '../game-data/skills';
 import { createScorer } from './scoring';
@@ -156,12 +158,17 @@ export {
   forgeProblem,
   forgedStats,
   itemByName,
+  sellPrice,
+  sellRate,
   type Effectiveness,
   type ForgeLevels,
   type GameItem,
   type ItemDisagreement,
   type ItemKind,
+  type SellRate,
 } from '../game-data/items';
+export { RENOWN, STARTING_GOLD, type RenownReward } from '../game-data/gold';
+export type { GoldRow } from './gold';
 export {
   CHAPTER_DIFFICULTIES,
   LUNATIC_PLUS,
@@ -173,6 +180,8 @@ export {
   type ChapterDisagreement,
   type EnemyGroup,
   type MapConditions,
+  type MapItemRow,
+  type PlayDependence,
 } from '../game-data/chapters';
 export { SOURCES, SOURCE_IDS, type SourceEntry, type SourceId, type SourceKind, type SourceRef } from '../curated/sources';
 export type { ResolvedDisagreement } from '../game-data/disagreements';
@@ -344,6 +353,15 @@ export type Engine = {
   mapWaves(map: string, difficulty: MapDifficulty): MapWaves;
   /** A map's chapter-guide entries (#123), grouped by source, each with its source's name and link. */
   chapterGuide(map: string): readonly { readonly source: { readonly id: string; readonly name: string; readonly link: string }; readonly entries: readonly GuideEntry[] }[];
+  /**
+   * A map's gold income (#180): each Bullion at its sale price and Paralogue 13's gold, in item order, with what play can
+   * lose (`play`). The run's other gold facts are STARTING_GOLD, sellPrice/sellRate and RENOWN.
+   */
+  mapGold(map: string): readonly GoldRow[];
+  /** Renown for clearing a map: 10 for a story map; a paralogue or DLC map per the `paralogue-renown` assumption. */
+  renownGain(map: string): number;
+  /** The renown rewards crossed going from `from` renown to `to`, in threshold order. */
+  renownRewards(from: number, to: number): readonly RenownReward[];
   /** The first-gen units with a page (#101), in roster order, SpotPass last. Robin's page comes from the run facts. */
   pageUnits(): readonly { readonly id: PageUnitId; readonly name: string; readonly spotPass: boolean }[];
   /**
@@ -602,6 +620,13 @@ function planGroups(child: ChildId): GroupPlan[] {
     label: parentName(variableParent),
     pairings: robins.map((fixedRobin) => ({ child, fixedRobin, variableParent })),
   }));
+}
+
+/** A map by id; throws for an unknown one. */
+function mapById(id: string): ChapterData {
+  const m = MAPS.find((x) => x.id === id);
+  if (!m) throw new Error(`No chapter data for ${id}`);
+  return m;
 }
 
 export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): Engine {
@@ -1407,6 +1432,9 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       const sources = [...new Set(entries.map((e) => e.source))];
       return sources.map((id) => ({ source: { id, name: SOURCES[id].name, link: SOURCES[id].link }, entries: entries.filter((e) => e.source === id) }));
     },
+    mapGold: (map) => mapGold(mapById(map)),
+    renownGain: (map) => renownGain(mapById(map), assumptions['paralogue-renown']),
+    renownRewards,
     pageUnits: () => {
       const units = (Object.keys(FIRST_GEN_UNITS) as UnitId[]).filter((u): u is PageUnitId => u !== 'maiden');
       const spot = new Set<string>(SPOTPASS_UNITS);

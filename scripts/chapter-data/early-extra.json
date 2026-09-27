@@ -15,7 +15,21 @@
   "label": "Prologue",
   "unlocks": [
    "chapter-1"
-  ]
+  ],
+  "fixes": {
+   "prices": [
+    {
+     "list": "armory",
+     "item": "Bronze Lance",
+     "cost": 350
+    },
+    {
+     "list": "armory",
+     "item": "Bronze Axe",
+     "cost": 400
+    }
+   ]
+  }
  },
  "chapter-1": {
   "kind": "story",
@@ -65,6 +79,15 @@
   "label": "Chapter 6",
   "unlocks": [
    "chapter-7"
+  ],
+  "play": [
+   {
+    "how": "Dropped by Gaius if killed",
+    "play": {
+     "kind": "choice",
+     "note": "The unit’s own weapon: dropped only if the unit is killed rather than recruited."
+    }
+   }
   ]
  }
 }
