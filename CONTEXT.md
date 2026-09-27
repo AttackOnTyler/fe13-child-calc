@@ -594,6 +594,10 @@ _Avoid_: Penalty, pin loss (a lost pin is broken or on hold)
 A game value or rule the sources couldn't verify. It has a default and known alternatives, and the user can override it.
 _Avoid_: Guess, setting, config
 
+**Assumption override**:
+The user's replacement for an assumption's default. It recomputes every pairing, and it is saved in the browser until reset.
+_Avoid_: Setting, preference (preferences are a wider set that includes overrides)
+
 **Stated assumptions**:
 The list of everything the numbers rest on that isn't read from the player's game: blind spots, open rules by stakes, model mismatches, learned corrections, then checked rules. Lives in the Why panel's second tab; any rule can be answered or reopened there.
 _Avoid_: Settings, caveats, fine print
@@ -609,10 +613,6 @@ _Avoid_: Bias (alone), direction
 **Stress-test range**:
 The headline's range under its blind spots' bad cases ("42.0%, as low as 31.8% if two attackers reach each exposed pair"), shown only on the headline, only for blind spots that can be stressed.
 _Avoid_: Confidence interval, error bar (simulation error is separate)
-
-**Assumption override**:
-The user's replacement for an assumption's default. It recomputes every pairing, and it is saved in the browser until reset.
-_Avoid_: Setting, preference (preferences are a wider set that includes overrides)
 
 **In-play check**:
 An observation from the run itself that settles an assumption. The preparation page asks for it when the next map sets up the situation (Robin fielded as a Back, a unit's first kill after an early promotion), and Record results takes the raw observation (a number, yes or no, or "didn't happen") and works out which reading it supports: the best reading makes a checked rule, the other switches the model at once and proposes a re-solve. Until then, planning runs on the default.
