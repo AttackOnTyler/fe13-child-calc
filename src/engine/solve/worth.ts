@@ -37,7 +37,7 @@ import type { Run } from '../run';
 import { withPlanRobin } from '../flawless';
 import type { ArmyUnit, ChildRecruit, LineupPlan, RunSimInput, RunSimMap } from '../sim/run-sim';
 import { paired } from './paired';
-import type { Plan, PlanLineup, PlanPin, WishlistReserve } from './plan';
+import { isRuleOut, type Plan, type PlanLineup, type PlanPin, type WishlistReserve } from './plan';
 import { coupleKey, placedForSupports, planFor, seedPlan, type SeedContext, type SeedOptions } from './seed';
 import { SEARCH_RUNS } from './step';
 
@@ -383,7 +383,7 @@ export function planWithout(
   const spouses = broken.flatMap((c) => c.filter((u) => !gone.has(u)));
   if (spouses.length) {
     // The spouse marries again: the seed's match for it, every other couple (and the player's pins) kept.
-    const pins: PlanPin[] = [...(options.pins ?? []).filter((p) => p.kind !== 'marriage'), ...marriages.map((couple) => ({ kind: 'marriage' as const, couple }))];
+    const pins: PlanPin[] = [...(options.pins ?? []).filter((p) => p.kind !== 'marriage' || isRuleOut(p)), ...marriages.map((couple) => ({ kind: 'marriage' as const, couple }))];
     const again = seedPlan(without, ctx, { ...options, pins });
     for (const c of again.wishlist.marriages) if (c.some((u) => spouses.includes(u)) && !marriages.some((m) => m.some((u) => c.includes(u)))) marriages.push(c);
   }

@@ -158,3 +158,42 @@ describe('the solve with pins, and their cost (#200)', () => {
     expect(engine.pinCost({ run: fact, plan, lifted: plan, seed: 1, budget: 8 })).toEqual({ pins: [], cost: 0, margin: 0, runs: 0, verdict: 'close', settled: true });
   });
 });
+
+describe('rule-outs (#205): a marriage pin with forbid', () => {
+  const marries = (plan: Plan, [a, b]: readonly [RosterUnit, RosterUnit]) => plan.wishlist.marriages.some((c) => c.includes(a) && c.includes(b));
+  const forbid = (a: RosterUnit, b: RosterUnit): PlanPin => ({ kind: 'marriage', couple: [a, b], forbid: true });
+
+  it('is stored with the run, and replaces a pin on the same couple (and back)', () => {
+    const run = withPin(late, forbid('vaike', 'sully'));
+    expect(importRun(exportRun(run)).pins).toEqual([forbid('vaike', 'sully')]);
+    expect(engine.pins(run)).toEqual([forbid('vaike', 'sully')]);
+    const pinned = withPin(run, { kind: 'marriage', couple: ['sully', 'vaike'] });
+    expect(pinned.pins).toEqual([{ kind: 'marriage', couple: ['sully', 'vaike'] }]);
+    expect(withPin(pinned, forbid('vaike', 'sully')).pins).toEqual([forbid('vaike', 'sully')]);
+  });
+
+  it('is never married by the seed', () => {
+    const seed = engine.seedPlan(fresh);
+    const couple = seed.wishlist.marriages.find((c) => !c.includes('chrom') && !c.includes('robin'))!;
+    expect(marries(seed, couple)).toBe(true);
+    expect(marries(engine.seedPlan(withPin(fresh, forbid(...couple))), couple)).toBe(false);
+  });
+
+  it('is never married by the solve, nor by an adopted plan from before it', () => {
+    const adopted = engine.seedPlan(withPin(late, { kind: 'marriage', couple: ['vaike', 'sully'] }));
+    expect(marries(adopted, ['vaike', 'sully'])).toBe(true);
+    const run = withPin(late, forbid('vaike', 'sully'));
+    let s = engine.solveStep({ run, plan: adopted, budget: 0, ...small });
+    expect(marries(s.best, ['vaike', 'sully'])).toBe(false);
+    for (let i = 0; i < 3 && !s.converged; i++) s = engine.solveStep({ run, plan: adopted, budget: 4, ...small, cursor: s.cursor });
+    for (const p of [s.best, ...s.proposals.map((x) => x.plan), ...s.closeCalls.map((x) => x.plan)]) expect(marries(p, ['vaike', 'sully'])).toBe(false);
+  });
+
+  it('is dropped once the record marries either unit', () => {
+    const married = runFromRoster(withSpouse(facts, 'chrom', 'olivia', 'married'));
+    expect(engine.pins(withPin(married, forbid('chrom', 'sumia')))).toEqual([]);
+    // A rule-out never takes a unit from a marriage pin.
+    const both = withPin(withPin(late, forbid('vaike', 'sully')), { kind: 'marriage', couple: ['vaike', 'miriel'] });
+    expect(engine.pins(both)).toHaveLength(2);
+  });
+});

@@ -75,7 +75,7 @@ import { guideFacts, lossPrompt, noteLosses, settleLosses } from './guide-facts'
 import { collapseDock, hasSavedRun, loadGuidePrefs, saveGuidePrefs, welcomeShows, type GuidePrefs } from './guide-prefs';
 import { guideButton, guideLayer, type GuideContext } from './guide-ui';
 import { BASIS_LABELS, LABELS, SCORING_ROLE_UI } from './labels';
-import { loadOverrides, saveOverrides } from './overrides';
+import { loadCheckedRules, overridesOf, ruleEvidence, saveCheckedRules, withOverrides, type CheckedRules } from './checked-rules';
 import {
   BASES,
   CONTEXTS,
@@ -128,7 +128,9 @@ let guidePrefs: GuidePrefs = phone() ? collapseDock(loadGuidePrefs()) : loadGuid
 /** The welcome box is showing: by itself only for a new visitor, read before anything this visit saves. */
 let welcomeOpen = welcomeShows(guidePrefs, hasSavedRun());
 
-let overrides: Overrides = loadOverrides();
+/** Checked rules (#205): global, surviving Clear all; the model reads their values as overrides. */
+let checkedRules: CheckedRules = loadCheckedRules();
+let overrides: Overrides = overridesOf(checkedRules);
 let assumptions: Assumptions = resolveAssumptions(overrides);
 let engine: Engine = createEngine(assumptions);
 let selfTest = engine.selfTest();
@@ -304,8 +306,10 @@ const presetLabel = (p: Preset) => `${p.name}${isModified(p, prefs.edits[p.id]) 
 
 /** Replaces the overrides, saves them and recomputes every pairing. */
 function applyOverrides(next: Overrides): void {
-  overrides = next;
-  saveOverrides(overrides);
+  // A hand answer keeps its evidence: this run and its latest recorded map.
+  checkedRules = withOverrides(checkedRules, next, ruleEvidence(run), Date.now());
+  saveCheckedRules(checkedRules);
+  overrides = overridesOf(checkedRules);
   assumptions = resolveAssumptions(overrides);
   engine = createEngine(assumptions);
   selfTest = engine.selfTest();
@@ -340,9 +344,9 @@ function setDeployment(next: Roster): void {
   setRoster(next);
 }
 
-/** Clear all (Roster): Run facts, unit states and marriages go; the chapter log's units, gold and convoy stay. */
+/** Clear all (Roster): run:v2 is wiped, the chapter log with it (#205); preferences and checked rules stay. */
 function clearRosterState(): void {
-  run = { ...run, roster: EMPTY_ROSTER, entries: run.entries.map((e) => ({ ...e, snapshot: { ...e.snapshot, states: {}, spouses: {} } })) };
+  run = EMPTY_RUN;
   roster = rosterOf(run);
   saveRun(run);
   renderParts(rosterParts());

@@ -4,7 +4,8 @@
  *
  * - **Where they live:** `Run.pins` holds marriage, span, keep-in/out and item pins (#193's `itemPins` read into it);
  *   side goals stay in `Run.sideGoals` (#191) and read as pins; the Plan page's pinned marriages (a pinned bond in the
- *   latest entry) read as marriage pins until #205 moves them. `runPins` lists them all.
+ *   latest entry) read as marriage pins: `run:v2` (#205) migrated the saved ones into `Run.pins`, and today's Plan page
+ *   still writes bonds until #212 retires it. A rule-out is a marriage pin with `forbid` (#205). `runPins` lists them all.
  * - **Recorded facts are never pins** (`livePins`): a marriage pin on a unit the log marries, a span all played, a
  *   side goal on a recorded map, any pin on a unit dead or missed is dropped, and so has no cost.
  * - **Lineups keep them** (`lineupRules`, `pinnedLineup`): each map's span pins, keep-out on every map (a span pin
@@ -47,7 +48,7 @@ export function parsePins(v: unknown, itemPins?: unknown): PlanPin[] {
   for (const x of Array.isArray(v) ? v : []) {
     if (!isObject(x)) continue;
     if (x.kind === 'marriage' && Array.isArray(x.couple) && x.couple.length === 2 && x.couple.every(isText) && x.couple[0] !== x.couple[1])
-      add({ kind: 'marriage', couple: [x.couple[0] as RosterUnit, x.couple[1] as RosterUnit] });
+      add({ kind: 'marriage', couple: [x.couple[0] as RosterUnit, x.couple[1] as RosterUnit], ...(x.forbid === true ? { forbid: true as const } : {}) });
     else if (x.kind === 'span' && isText(x.unit) && POSITIONS.includes(x.position as SpanPosition) && isText(x.from))
       add({
         kind: 'span',
@@ -110,7 +111,8 @@ export function livePins(run: Run, pins: readonly PlanPin[], keys: readonly stri
   return uniquePins(pins).filter((p) => {
     switch (p.kind) {
       case 'marriage': {
-        // Two marriage pins on one unit: the first holds.
+        // A rule-out holds while neither is married; of two marriage pins on one unit, the first holds.
+        if (p.forbid) return !p.couple.some((u) => married(u));
         if (p.couple.some((u) => lost(u) || married(u) || marriedUnits.has(u))) return false;
         p.couple.forEach((u) => marriedUnits.add(u));
         return true;
@@ -310,14 +312,15 @@ export function rulesBroken(l: LineupPlan, rules: readonly LineupRule[] | undefi
 }
 
 /**
- * How many pins a plan breaks, as it lists them: a marriage pin its marriages lack; span and keep rules its named
+ * How many pins a plan breaks, as it lists them: a marriage pin its marriages lack, a rule-out they make; span and keep rules its named
  * lineups break (`rulesBroken`, on its roadmap's order), the endpoint read from the wishlist when the roadmap names
  * none. Side goals and item pins the plan can't break (the runs read the former, item edits skip the latter).
  * `forcedAt` gives each map's forced units.
  */
 export function brokenPins(plan: Plan, pins: readonly PlanPin[], forcedAt: (key: string) => readonly RosterUnit[] = () => []): number {
   const couples = new Set(plan.wishlist.marriages.map((c) => [...c].sort().join('+')));
-  let n = pins.filter((p) => p.kind === 'marriage' && !couples.has([...p.couple].sort().join('+'))).length;
+  // A marriage pin its marriages lack, or a rule-out they make.
+  let n = pins.filter((p) => p.kind === 'marriage' && couples.has([...p.couple].sort().join('+')) === !!p.forbid).length;
   const keys = plan.roadmap.order;
   const rules = lineupRules(pins, keys);
   if (!rules) return n;

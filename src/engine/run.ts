@@ -83,11 +83,21 @@ export type RunEntry = {
   readonly itemsUsed?: readonly ItemUsed[];
 };
 
+/**
+ * The playthrough as `run:v2` stores it (#205; spec #175, Pages, storage and migration): the chapter log with its
+ * Record results steps, the pins (marriage and rule-out, keep-in/out, span, item, side goal, and the Robin Lock once
+ * #201 adds its kind), dismissed proposals and What changed cards (#206), learned corrections and the calibration log
+ * (#196), and the one-time migration note. A `run:v1` save is migrated once (`migrateRun`); export and import carry
+ * the run as it is.
+ */
 export type Run = {
-  readonly version: 1;
+  readonly version: 2;
   /** Lunatic+ random skills the player saw on a map's enemies (#120): map id → foe key → skills. */
   readonly seen?: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>;
-  /** Everything on the roster but unit states and spouses: Run facts, rule-outs, the saved plan, deploy flags. */
+  /**
+   * Everything on the roster but unit states and spouses: Run facts. A migrated run's rule-outs, saved plan and deploy
+   * flags are empty (they became pins or were dropped); today's Roster and Plan pages still write them until #212.
+   */
   readonly roster: Roster;
   /** In play order. */
   readonly entries: readonly RunEntry[];
@@ -102,7 +112,39 @@ export type Run = {
    * stay in `sideGoals` and read as pins (`runPins`). A save from before #200 kept item pins as `itemPins`; they're read in.
    */
   readonly pins?: readonly PlanPin[];
+  /** Proposals the player dismissed (#206), by id. */
+  readonly dismissedProposals?: readonly string[];
+  /** Entries whose What changed card was dismissed with "got it" (#206), by entry id. */
+  readonly dismissedChanges?: readonly string[];
+  /** Learned corrections (#196): each unit's EXP factor (×0.5–×2), and whether the player switched them off. */
+  readonly corrections?: LearnedCorrections;
+  /** The calibration log (#196): each recorded result's percentile in its forecast. */
+  readonly calibration?: readonly CalibrationRow[];
+  /** The one-time migration note (#205): shown on the Run view until dismissed. */
+  readonly migration?: MigrationNote;
 };
+
+export type LearnedCorrections = {
+  readonly units: Readonly<Partial<Record<RosterUnit, number>>>;
+  /** Switched off: forecasts read uncorrected. */
+  readonly off?: true;
+};
+
+/** A recorded result against its forecast: the unit's EXP (or level) percentile, 0–1, on an entry. */
+export type CalibrationRow = { readonly entry: string; readonly unit: RosterUnit; readonly percentile: number };
+
+/**
+ * What the migration from `run:v1` and `plan:v1` kept (as pins) and dropped, in the player's words, and the children
+ * the former priorities suggest keeping in.
+ */
+export type MigrationNote = {
+  readonly kept: readonly string[];
+  readonly dropped: readonly string[];
+  readonly keepIn: readonly RosterUnit[];
+};
+
+/** Clamp for a learned correction's factor. */
+export const CORRECTION_RANGE = { min: 0.5, max: 2 } as const;
 
 export const EMPTY_SNAPSHOT: Snapshot = { units: {}, convoy: [], gold: null, states: {}, spouses: {} };
 
@@ -115,7 +157,7 @@ export function runFromRoster(roster: Roster, now = 0): Run {
     snapshot: { ...EMPTY_SNAPSHOT, states: roster.states, spouses: roster.spouses },
     createdAt: now,
   };
-  return { version: 1, roster: { ...roster, states: {}, spouses: {} }, entries: [first] };
+  return { version: 2, roster: { ...roster, states: {}, spouses: {} }, entries: [first] };
 }
 
 export const EMPTY_RUN: Run = runFromRoster(EMPTY_ROSTER);
@@ -515,9 +557,55 @@ function parseSnapshot(v: unknown, run: Roster['run']): Snapshot {
   };
 }
 
-/** A stored or imported run; anything unreadable falls back to an empty run. */
+/**
+ * A stored or imported `run:v2`; anything unreadable falls back to an empty run. A `run:v1` isn't read here: it's
+ * migrated (`migrateRun`, `importRun`).
+ */
 export function parseRun(raw: unknown): Run {
-  if (!isObject(raw) || raw.version !== 1) return EMPTY_RUN;
+  if (!isObject(raw) || raw.version !== 2) return EMPTY_RUN;
+  const run = parseRunFields(raw);
+  const strings = (v: unknown) => (Array.isArray(v) ? [...new Set(v.filter(isText))] : []);
+  const dismissedProposals = strings(raw.dismissedProposals);
+  const dismissedChanges = strings(raw.dismissedChanges);
+  const corrections = parseCorrections(raw.corrections);
+  const calibration = (Array.isArray(raw.calibration) ? raw.calibration : []).flatMap((r): CalibrationRow[] =>
+    isObject(r) && isText(r.entry) && isText(r.unit) && typeof r.percentile === 'number' && r.percentile >= 0 && r.percentile <= 1 ? [{ entry: r.entry, unit: r.unit as RosterUnit, percentile: r.percentile }] : [],
+  );
+  const migration = parseMigrationNote(raw.migration);
+  return {
+    ...run,
+    ...(dismissedProposals.length ? { dismissedProposals } : {}),
+    ...(dismissedChanges.length ? { dismissedChanges } : {}),
+    ...(corrections ? { corrections } : {}),
+    ...(calibration.length ? { calibration } : {}),
+    ...(migration ? { migration } : {}),
+  };
+}
+
+const isText = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
+
+function parseCorrections(v: unknown): LearnedCorrections | undefined {
+  if (!isObject(v)) return undefined;
+  const units: Partial<Record<RosterUnit, number>> = {};
+  for (const [u, f] of Object.entries(isObject(v.units) ? v.units : {}))
+    if (typeof f === 'number' && Number.isFinite(f)) units[u as RosterUnit] = Math.min(CORRECTION_RANGE.max, Math.max(CORRECTION_RANGE.min, f));
+  const off = v.off === true;
+  return Object.keys(units).length || off ? { units, ...(off ? { off: true as const } : {}) } : undefined;
+}
+
+function parseMigrationNote(v: unknown): MigrationNote | undefined {
+  if (!isObject(v)) return undefined;
+  const list = (x: unknown) => (Array.isArray(x) ? x.filter(isText) : []);
+  const note = { kept: list(v.kept), dropped: list(v.dropped), keepIn: list(v.keepIn) as RosterUnit[] };
+  return note.kept.length || note.dropped.length || note.keepIn.length ? note : undefined;
+}
+
+/**
+ * The fields `run:v1` and `run:v2` share (the chapter log, Run facts, seen skills, counts, side goals, renown, pins),
+ * whatever the version: what `parseRun` and the migration from `run:v1` read. The roster keeps its v1 fields
+ * (rule-outs, saved plan, deploy flags) for the migration to turn into pins or drop.
+ */
+export function parseRunFields(raw: Record<string, unknown>): Run {
   const roster = parseRoster(raw.roster);
   const entries = (Array.isArray(raw.entries) ? raw.entries : []).flatMap((e, i): RunEntry[] => {
     if (!isObject(e)) return [];
@@ -545,7 +633,7 @@ export function parseRun(raw: unknown): Run {
   for (const [map, foes] of Object.entries(isObject(raw.seen) ? raw.seen : {}))
     for (const [foe, skills] of Object.entries(isObject(foes) ? foes : {}))
       if (Array.isArray(skills)) (seen[map] ??= {})[foe] = skills.filter((x): x is string => typeof x === 'string');
-  const base: Run = entries.length ? { version: 1, roster: { ...roster, states: {}, spouses: {} }, entries } : runFromRoster(roster);
+  const base: Run = entries.length ? { version: 2, roster: { ...roster, states: {}, spouses: {} }, entries } : runFromRoster(roster);
   const counts = parseCountOverrides(raw.countOverrides);
   const withCounts: Run = Object.keys(counts).length ? { ...base, countOverrides: counts } : base;
   const goals = parseSideGoalPlan(raw.sideGoals);
@@ -556,7 +644,6 @@ export function parseRun(raw: unknown): Run {
   return Object.keys(seen).length ? { ...withGoals, seen } : withGoals;
 }
 
-/** The run as a file (JSON), read back by importRun. */
+/** The run as a file (JSON): `run:v2` as it is, read back by `importRun`. */
 export const exportRun = (run: Run): string => JSON.stringify(run, null, 1);
-export const importRun = (text: string): Run => parseRun(JSON.parse(text));
 
