@@ -64,7 +64,10 @@ export type PlanLineup = {
   readonly solo: readonly RosterUnit[];
 };
 
-/** A class change the roadmap plans (#194): the unit, the class it reaches, the seal, and the map it's used before. */
+/**
+ * A class change the roadmap plans (#194), a class-reached milestone: the unit, the class it reaches, the seal, and the
+ * map that needs the class (it's used by that map's preparations at the latest; at the unit's level cap if sooner).
+ */
 export type PlanSeal = { readonly unit: RosterUnit; readonly classId: ClassId; readonly seal: 'master' | 'second'; readonly key: string };
 
 /** A held item's planned use or carrier (#193): the item, who holds or uses it, and from which map. */
@@ -84,7 +87,7 @@ export type Roadmap = {
    * them. `roadmapLineups` resolves every map's.
    */
   readonly lineups: readonly PlanLineup[];
-  /** Planned class changes; empty: the promotion rule decides (until #194). */
+  /** Planned class changes, each unit's in the order it makes them: a unit with none never changes class. */
   readonly seals: readonly PlanSeal[];
   /** Planned item uses; empty until the item plan (#193). */
   readonly items: readonly PlanItem[];

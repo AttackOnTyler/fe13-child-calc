@@ -3,7 +3,7 @@
  * holds a snapshot: every unit's class, level, EXP, stats, skills, inventory and supports, plus the convoy and gold.
  * A new entry copies the one before; editing a past entry never reaches later ones, which are flagged instead.
  */
-import type { Assumptions, ChildId, DeploymentRole, Engine, FlawlessOptions, GoldSpread, HeldItem, MapOrderStep, PlanPin, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
+import type { Assumptions, ChildId, DeploymentRole, Engine, FlawlessOptions, GoldSpread, HeldItem, MapOrderStep, Milestone, MilestonePoint, Plan, PlanPin, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
 import { chanceText } from './chance';
 import { EMPTY_SNAPSHOT, FLAWLESS_SEED, SUPPORT_LEVELS, addEntry, childJoinFrom, chromWedding, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, withUnit } from '../engine';
 import { removeClassChange, tierOfClass, withClassChange, withCountOverride, type Seal } from '../engine';
@@ -105,6 +105,45 @@ export function mapOrderReadout(engine: Engine, run: Run): { readonly title: str
   };
 }
 
+/**
+ * The plan's roadmap as the Run view lists it (#194): its milestones in order, one row each, naming what must be true
+ * before which map, and flagging non-starters, wasted passes and seals that aren't sure. A plain list for now: the
+ * milestone chances (#195) and readings (#197) come later.
+ */
+export function roadmapReadout(engine: Engine, run: Run, plan: Plan): { readonly title: string; readonly rows: readonly string[] } {
+  const ms = engine.milestones(run, plan);
+  const gender = run.roster.run.gender;
+  const name = (u: RosterUnit | 'maiden') => unitName(u, gender);
+  const before = (p: MilestonePoint) => (p.when === 'end' ? `by the end of ${p.label}` : `before ${p.label}`);
+  const row = (m: Milestone): string => {
+    switch (m.kind) {
+      case 'support': {
+        const { earliest, latest, maps } = m.window;
+        const head = `${name(m.pair[0])} and ${name(m.pair[1])} reach ${m.rank} ${before(m.at)}${m.fixed ? ' (fixed)' : ''}`;
+        if (m.nonStarter) return `${head} · non-starter: ${maps} maps together needed${earliest ? `, from ${earliest.label} on` : ''}`;
+        return `${head}: start fighting together between ${earliest!.label} and ${latest!.label} (${maps} maps)`;
+      }
+      case 'skill': {
+        const via = m.learn ? ` (${m.learn.className} Lv ${m.learn.level})` : '';
+        const wasted = m.wasted === 'child-has' ? ' · wasted: the child already has it' : m.wasted === 'both-parents' ? ' · wasted: the other parent passes it too' : '';
+        return m.for.kind === 'pass'
+          ? `${name(m.unit)} learns ${m.name}${via} and equips it last ${before(m.at)}, for ${name(m.for.child)}${wasted}`
+          : `${name(m.unit)} learns ${m.name}${via} ${before(m.at)}`;
+      }
+      case 'recruit':
+        return `Recruit ${name(m.child)} (${name(m.parents[0])} and ${name(m.parents[1])}) on ${m.at.label}${m.needed ? `, ${before(m.needed)}` : ''}`;
+      case 'class': {
+        const seal = m.seal === 'master' ? 'Master Seal' : 'Second Seal';
+        const s = m.source;
+        const from = s.how === 'held' ? `a ${seal} held` : s.how === 'found' ? `a ${seal} found on ${s.at.label} (${s.note})` : s.how === 'armory' ? `a ${seal} bought from ${s.at.label}’s armory` : `a ${seal}`;
+        return `${name(m.unit)} reaches ${m.className} ${before(m.at)}: ${from}${m.risk ? ` · at risk: ${m.risk}` : ''}`;
+      }
+    }
+  };
+  const stuck = ms.filter((m) => m.kind === 'support' && m.nonStarter).length;
+  return { title: `Roadmap: ${ms.length} milestone${ms.length === 1 ? '' : 's'}${stuck ? ` · ${stuck} non-starter${stuck === 1 ? '' : 's'}` : ''}`, rows: ms.map(row) };
+}
+
 /** Points of chance, as the ± reads: 0.015 → "1.5". */
 const points = (p: number) => (p * 100).toFixed(1);
 
@@ -117,9 +156,14 @@ export type FlawlessReadoutOptions = Pick<FlawlessOptions, 'seed' | 'runs' | 'ro
  * The headline flawless chance (#186), as the Run view writes it: the seed plan's (#198: its marriages, Robin and
  * lineups, the player's pinned marriages kept) with its simulation error (±, 95%) and the ceiling beside it (#189), what
  * it covers and rests on (units whose seal history is read as 0, units it can't simulate, maps whose foes carry no
- * weapons, the blind spots), and each map's no-death chance for the runs that reach it with nobody lost.
+ * weapons, the blind spots), each map's no-death chance for the runs that reach it with nobody lost, and the plan's
+ * roadmap (#194).
  */
-export function flawlessReadout(engine: Engine, run: Run, options: FlawlessReadoutOptions = {}): { readonly text: string; readonly detail: string; readonly rows: readonly string[] } {
+export function flawlessReadout(
+  engine: Engine,
+  run: Run,
+  options: FlawlessReadoutOptions = {},
+): { readonly text: string; readonly detail: string; readonly rows: readonly string[]; readonly roadmap?: ReturnType<typeof roadmapReadout> } {
   const { pins, ...sim } = options;
   const step = engine.solveStep({ run, budget: 1, seed: sim.seed ?? FLAWLESS_SEED, ...(sim.runs ? { runs: sim.runs } : {}), ...(sim.roleOf ? { roleOf: sim.roleOf } : {}), ...(pins ? { pins } : {}) });
   const r = step.chance!;
@@ -167,6 +211,7 @@ export function flawlessReadout(engine: Engine, run: Run, options: FlawlessReado
       const extra = [...goals, ...(rewards.length ? [`renown: ${listOf(rewards)}`] : [])].map((x) => ` · ${x}`).join('');
       return `${m.label}: ${m.noDeath === undefined ? 'no run gets here with nobody lost' : `${chanceText(m.noDeath)}${m.gold ? ` · ${goldRange(m.gold)}` : ''}`}${extra}`;
     }),
+    roadmap: roadmapReadout(engine, run, step.best),
   };
 }
 
@@ -296,6 +341,9 @@ function flawlessSection(ctx: RunContext): HTMLElement {
       h('summary', {}, h('b', {}, r?.text ?? 'Flawless chance: working it out…')),
       r?.detail ? h('p', { class: 'muted small' }, r.detail) : null,
       r?.rows.length ? h('ol', { class: 'small' }, ...r.rows.map((x) => h('li', {}, x))) : null,
+      r?.roadmap?.rows.length
+        ? h('details', { class: 'roadmap' }, h('summary', {}, h('b', {}, r.roadmap.title)), h('ol', { class: 'small' }, ...r.roadmap.rows.map((x) => h('li', {}, x))))
+        : null,
     );
   const done = READOUTS.get(ctx.run);
   if (done) return draw(done);

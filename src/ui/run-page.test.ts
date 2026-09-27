@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_ROSTER, addEntry, createEngine, editEntry, latestEntry, recordMarriage, runFromRoster, withRenown, withRun, withShopLine, withSideGoalPin, withSideGoalSecured, type Route, type RosterUnit, type Run, type Snapshot, type UnitSnapshot } from '../engine';
-import { childStatsNote, flawlessReadout, heldText, mapOrderReadout, parseHeldText, parseSupportsText, shoppingReadout, sideGoalPlanReadout, sideGoalsReadout, supportsText } from './run-page';
+import { childStatsNote, flawlessReadout, heldText, mapOrderReadout, parseHeldText, parseSupportsText, roadmapReadout, shoppingReadout, sideGoalPlanReadout, sideGoalsReadout, supportsText } from './run-page';
 import { chanceText } from './chance';
 
 describe('the map order readout (#179)', () => {
@@ -42,9 +42,10 @@ describe('the flawless chance readout (#186)', () => {
     expect(r.detail).toContain('from Chapter 25 to Endgame (2 maps)');
     expect(r.detail).toContain('over 3 simulated runs; the ± is the simulation error (95%)');
     expect(r.detail).toContain('Rests on: one worst attacker per pair (may read high)');
-    expect(r.detail).toContain('promotions at the level cap (either way), each fight’s EXP goes to its lead (may read low)');
+    expect(r.detail).toContain('class changes at the level cap or when needed (either way), each fight’s EXP goes to its lead (may read low)');
     expect(r.rows).toHaveLength(2);
     expect(r.rows[0]).toMatch(/^Chapter 25: /);
+    expect(r.roadmap?.title).toMatch(/^Roadmap: [0-9]+ milestones?/);
   });
 
   it('reads the seed plan’s chance, keeping the marriages the player pinned (#198)', () => {
@@ -92,6 +93,39 @@ describe('the flawless chance readout (#186)', () => {
     expect(r.text).toMatch(new RegExp(` · ceiling ${chanceText(ceiling.chance!).replace(/[.()]/g, '\\$&')}$`));
     expect(r.detail).toContain('The ceiling is the chance no unit dies on Apotheosis (secret route)');
     expect(r.detail).not.toContain('simulated yet');
+  });
+});
+
+describe('the roadmap readout (#194)', () => {
+  const engine = createEngine();
+  const fresh = runFromRoster(withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal', gender: 'M', asset: 'mag', flaw: 'hp' }));
+  const plan = engine.seedPlan(fresh, { pins: [{ kind: 'marriage', couple: ['chrom', 'sumia'] }, { kind: 'marriage', couple: ['stahl', 'sully'] }] });
+  const r = roadmapReadout(engine, fresh, plan);
+  const milestones = engine.milestones(fresh, plan);
+
+  it('lists the plan’s milestones in order, one row each', () => {
+    const stuck = milestones.filter((m) => m.kind === 'support' && m.nonStarter).length;
+    expect(r.title).toBe(`Roadmap: ${milestones.length} milestones${stuck ? ` · ${stuck} non-starter${stuck === 1 ? '' : 's'}` : ''}`);
+    expect(r.rows).toHaveLength(milestones.length);
+    const chrom = milestones.findIndex((m) => m.id === 'support:chrom+sumia');
+    expect(r.rows[chrom]).toMatch(/^Chrom and Sumia reach S by the end of Chapter 11 \(fixed\): start fighting together between Chapter \d+ and Chapter \d+ \(\d maps\)$/);
+    const kjelle = milestones.findIndex((m) => m.id === 'recruit:kjelle');
+    expect(r.rows[kjelle]).toBe('Recruit Kjelle (Sully and Stahl) on Paralogue 8, before Endgame');
+    const pass = milestones.find((m) => m.kind === 'skill' && m.unit === 'sumia' && m.for.kind === 'pass' && m.for.child === 'lucina');
+    expect(r.rows[milestones.indexOf(pass!)]).toMatch(/^Sumia learns \S.* \(.* Lv \d+\) and equips it last before Chapter 13, for Lucina$/);
+    const chromClass = milestones.findIndex((m) => m.id === 'class:chrom:great-lord');
+    expect(r.rows[chromClass]).toBe('Chrom reaches Great Lord before Endgame: a Master Seal found on Chapter 8 (Visit the western village)');
+  });
+
+  it('flags non-starters, wasted passes and seals play can lose', () => {
+    const robin = milestones.findIndex((m) => m.kind === 'class' && m.risk);
+    expect(r.rows[robin]).toContain(' · at risk: ');
+    const wasted = { ...plan, wishlist: { ...plan.wishlist, children: plan.wishlist.children.map((c) => (c.child === 'kjelle' ? { ...c, passes: ['luna', 'luna'] as const } : c)) } };
+    expect(roadmapReadout(engine, fresh, wasted).rows).toContain('Stahl learns Luna (Great Knight Lv 5) and equips it last before Paralogue 8, for Kjelle · wasted: the other parent passes it too');
+    // Olivia joins in Chapter 11: too late to reach S with Donnel before Paralogue 6 where the route puts it.
+    const olivia = milestones.findIndex((m) => m.id === 'support:donnel+olivia');
+    if (olivia >= 0) expect(r.rows[olivia]).toBe('Donnel and Olivia reach S before Paralogue 6 · non-starter: 8 maps together needed, from Chapter 11 on');
+    expect(r.rows.filter((x) => x.includes('non-starter'))).toHaveLength(milestones.filter((m) => m.kind === 'support' && m.nonStarter).length);
   });
 });
 

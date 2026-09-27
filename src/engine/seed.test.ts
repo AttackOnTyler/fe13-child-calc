@@ -97,6 +97,17 @@ describe('the seed (#198)', () => {
     expect(fielded).toEqual(units.map((u) => u.unit));
   });
 
+  it('plans each unit’s class change: its wishlist class by the endpoint (#194)', () => {
+    const { seals } = seed.roadmap;
+    expect(seals.length).toBeGreaterThan(10);
+    for (const s of seals) expect(s.key).toBe(seed.wishlist.endpoint);
+    for (const u of seed.wishlist.units) {
+      const s = seals.find((x) => x.unit === u.unit);
+      if (s) expect(s.classId).toBe(u.classId);
+    }
+    expect(seals.find((s) => s.unit === 'chrom')).toEqual({ unit: 'chrom', classId: 'great-lord', seal: 'master', key: seed.wishlist.endpoint });
+  });
+
   it('is plain JSON, and the same for the same run', () => {
     expect(JSON.parse(JSON.stringify(seed))).toEqual(seed);
     expect(engine.seedPlan(fresh)).toEqual(seed);
@@ -121,7 +132,6 @@ describe('the seed (#198)', () => {
     // The ceiling fields the plan's children with what their parents pass.
     const ceiling = engine.ceiling(fresh, { plan, runs: 1 })!;
     expect(ceiling.units.find((u) => u.id === 'lucina')?.skills).toContain(SKILLS[pass].name);
-    expect(engine.flawlessChance(fresh, { plan, runs: 1 }).blindSpots).toContain('passes-as-planned');
   });
 });
 
