@@ -155,7 +155,7 @@ export type ChildJoin = {
 };
 
 /** Morgan's start class: the spouse's starting class, or a Tactician after a Lord, Dancer or Conqueror (classes.ts). */
-function morganStart(child: ChildId, spouse: RosterUnit | 'maiden', assumptions: Assumptions): ClassId | null {
+export function morganStart(child: ChildId, spouse: RosterUnit | 'maiden', assumptions: Assumptions): ClassId | null {
   if (spouse === 'maiden' || spouse === 'robin') return null;
   const secondGen = spouse in CHILD_UNITS;
   const baseClass = secondGen ? CHILD_UNITS[spouse as ChildId].defaultClassSet[0] : FIRST_GEN_UNITS[spouse as UnitId].classes[0];

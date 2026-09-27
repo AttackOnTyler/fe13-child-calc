@@ -3,7 +3,7 @@
  * holds a snapshot: every unit's class, level, EXP, stats, skills, inventory and supports, plus the convoy and gold.
  * A new entry copies the one before; editing a past entry never reaches later ones, which are flagged instead.
  */
-import type { Assumptions, ChildId, DeploymentRole, Engine, FlawlessOptions, HeldItem, MapOrderStep, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
+import type { Assumptions, ChildId, Couple, DeploymentRole, Engine, FlawlessOptions, HeldItem, MapOrderStep, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
 import { chanceText } from './chance';
 import { EMPTY_SNAPSHOT, SUPPORT_LEVELS, addEntry, childJoinFrom, chromWedding, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, withUnit } from '../engine';
 import { removeClassChange, tierOfClass, withClassChange, withCountOverride, type Seal } from '../engine';
@@ -34,6 +34,8 @@ export type RunContext = {
   readonly prepare: (map: string) => void;
   /** Each unit's deployment role, as the preparation page reads it: the flawless chance's lineups use it (#186). */
   readonly roleOf?: (u: RosterUnit) => DeploymentRole;
+  /** The plan's marriages, as the Plan page has them (the adopted plan, else the suggested one): the children they bring join the flawless chance's army (#187). */
+  readonly marriages?: () => readonly Couple[];
 };
 
 const RECORD_STEPS = ['Deployed units', 'Recruits', 'Deaths and marriages', 'Convoy and gold'] as const;
@@ -136,7 +138,7 @@ export function flawlessReadout(engine: Engine, run: Run, options?: FlawlessOpti
       ? `${names(r.unknownHistory)} ${r.unknownHistory.length === 1 ? 'was' : 'were'} first logged in a class ${r.unknownHistory.length === 1 ? 'it' : 'they'} can’t join in: the Second Seal count before the log is read as 0 (set it on the chapter log if it isn’t).`
       : '',
     blank.length ? `Not simulated, no stats recorded: ${names(blank)}.` : '',
-    children.length ? `Children not yet in the log don’t join the simulated army yet: ${names(children)}.` : '',
+    children.length ? `Children who don’t join the simulated army (their fixed parent isn’t married in the log or the plan, or a parent isn’t simulated): ${names(children)}.` : '',
     `Rests on: ${spots.map((b) => `${b.label[0]!.toLowerCase()}${b.label.slice(1)} (${LEAN[b.lean]})`).join(', ')}.`,
   ].filter(Boolean);
   return {
@@ -170,7 +172,7 @@ function flawlessSection(ctx: RunContext): HTMLElement {
   const run = ctx.run;
   setTimeout(() => {
     if (!el.isConnected) return;
-    const r = READOUTS.get(run) ?? flawlessReadout(ctx.engine, run, ctx.roleOf ? { roleOf: ctx.roleOf } : undefined);
+    const r = READOUTS.get(run) ?? flawlessReadout(ctx.engine, run, { ...(ctx.roleOf ? { roleOf: ctx.roleOf } : {}), ...(ctx.marriages ? { marriages: ctx.marriages() } : {}) });
     READOUTS.set(run, r);
     if (el.isConnected) el.replaceWith(draw(r));
   }, 0);
