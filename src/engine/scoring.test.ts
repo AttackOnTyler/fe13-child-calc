@@ -215,15 +215,16 @@ describe('best per child', () => {
 });
 
 describe('performance', () => {
-  // About 100 ms locally; the budget is 200 ms because CI runners vary (they have taken 109–133 ms).
-  it('rescores every pairing within 200 ms', () => {
+  // About 100 ms alone and 109–133 ms on CI runners. The budget is 500 ms because a full parallel run on a busy machine
+  // has taken over 1 s for the best of three; the best of five shows the code's own speed.
+  it('rescores every pairing within 500 ms', () => {
     engine.score(settings('mixed-lead')); // warm-up
-    const runs = [1, 2, 3].map(() => {
+    const runs = [1, 2, 3, 4, 5].map(() => {
       const t0 = performance.now();
       engine.score(settings('mixed-lead', { dlc: true }));
       return performance.now() - t0;
     });
-    expect(Math.min(...runs)).toBeLessThan(200);
+    expect(Math.min(...runs)).toBeLessThan(500);
   });
 });
 
