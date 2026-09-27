@@ -24,7 +24,6 @@
 import { BLIND_SPOTS, type Assumptions, type BlindSpot, type BlindSpotTouch } from './assumptions';
 import { className } from './classes';
 import type { Milestone, MilestonePoint } from './milestones';
-import type { DeploymentRole } from '../curated/deployment';
 import type { Readings } from './readings';
 import { unitName, type RosterUnit } from './roster';
 import type { Run } from './run';
@@ -110,7 +109,6 @@ export type ExplainContext = {
   readonly run?: Run;
   /** The plan the headline's chance is (the solve's best, or the adopted plan). */
   readonly plan?: Plan;
-  readonly roleOf?: (u: RosterUnit) => DeploymentRole;
   /** The simulation input (hand-built, or the run's for the plan). */
   readonly input?: RunSimInput;
   /** The headline's runs. */

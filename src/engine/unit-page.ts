@@ -86,8 +86,8 @@ export type UnitPage = {
 };
 
 /**
- * A child a marriage produces: its pairing (the run's Robin, else the best Robin) and its score in its plan preset, or
- * in its Lead role preset when the plan preset scores nothing (Battery, Rallybot).
+ * A child a marriage produces: its pairing (the run's Robin, else the best Robin) and its score in the explorer's preset
+ * (none when the preset scores nothing, Rallybot).
  */
 export type PartnerChild = {
   readonly child: ChildId;
@@ -97,7 +97,7 @@ export type PartnerChild = {
   readonly preset: PresetId;
 };
 
-/** Where a marriage stands: married, in the saved plan, the partner dead, or blocked (with the blocked-pairing reason). */
+/** Where a marriage stands: married, the partner dead, or blocked (with the blocked-pairing reason). */
 export type PartnerRow = {
   readonly partner: UnitId | ChildId | 'robin';
   readonly name: string;
@@ -105,14 +105,13 @@ export type PartnerRow = {
   /** The best child's score: the row order. */
   readonly best: number | undefined;
   readonly married: boolean;
-  readonly planned: boolean;
   readonly dead: boolean;
   /** The pair's support curve (#177): how many points each rank needs and the fewest maps together to S. */
   readonly curve: PairCurve;
   /** Why the marriage can no longer happen, when it can't. */
   readonly blocked: string | undefined;
-  /** Robin × a child (#103): the pairing the child brings to Morgan, from the saved plan or its best that can still happen. */
-  readonly via?: { readonly label: string; readonly from: 'plan' | 'best' };
+  /** Robin × a child (#103): the pairing the child brings to Morgan, its best that can still happen. */
+  readonly via?: { readonly label: string };
   /** A Robin row: the Robin its best child uses (the run's, else the best), so Robin's page can preview it. */
   readonly robin?: RobinRef;
   /** What a source says about this marriage (#105). */

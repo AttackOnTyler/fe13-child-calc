@@ -163,7 +163,7 @@ function learnedOf(a: ArmyUnit): Set<SkillId> {
 
 /** The milestones of a plan for a run (see the module comment), in order. */
 export function milestones(run: Run, plan: Plan, assumptions: Assumptions): Milestone[] {
-  const { input } = flawlessInput(run, assumptions, undefined, undefined, plan);
+  const { input } = flawlessInput(run, assumptions, undefined, plan);
   const maps = input.maps;
   const last = maps.length - 1;
   if (last < 0) return [];

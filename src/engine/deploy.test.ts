@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SPEED, EMPTY_ROSTER, deployCount, deployMax, deployRoleOf, foesOf, forcedOn, createEngine, itemByName, quotasFor, suggestDeployment, suggestLoadout, withRun, type DeployCandidate, type Fighter, type PlanSettings } from './index';
+import { deployCount, deployMax, foesOf, forcedOn, createEngine, itemByName, leadsByDefault, suggestDeployment, suggestLoadout, type DeployCandidate, type Fighter } from './index';
 
 const engine = createEngine();
 const ch3 = engine.maps().find((m) => m.id === 'chapter-3')!;
@@ -7,20 +7,28 @@ const foes = foesOf(ch3, 'normal');
 const noPool = () => [];
 const stats = (hp: number, str: number, mag: number, skl: number, spd: number, lck: number, def: number, res: number) => ({ hp, str, mag, skl, spd, lck, def, res });
 const w = (name: string) => ({ item: itemByName(name)! });
-const cand = (unit: string, role: DeployCandidate['role'], s: ReturnType<typeof stats>, weapons: string[], className = 'Cavalier', supports: DeployCandidate['supports'] = []): DeployCandidate => {
+const cand = (unit: string, s: ReturnType<typeof stats>, weapons: string[], className = 'Cavalier', supports: DeployCandidate['supports'] = []): DeployCandidate => {
   const ws = weapons.map(w);
   const fighter: Fighter = { name: unit, className, stats: s, skills: [], weapon: ws[0] };
-  return { unit: unit as never, role, fighter, weapons: ws, supports };
+  return { unit: unit as never, fighter, weapons: ws, supports };
 };
+/** An unarmed healer: a staff and nothing to fight with. */
+const healer = (unit: string, s: ReturnType<typeof stats>, className = 'Priest'): DeployCandidate => ({
+  unit: unit as never,
+  fighter: { name: unit, className, stats: s, skills: [], weapon: undefined },
+  weapons: [],
+  items: [{ item: itemByName('Heal')!, uses: 30 }],
+  supports: [],
+});
 
 const army = [
-  cand('chrom', 'lead', stats(22, 9, 1, 10, 10, 7, 8, 1), ['Falchion'], 'Lord', [{ partner: 'sumia' as never, rank: 'C' }]),
-  cand('frederick', 'lead', stats(30, 15, 2, 13, 11, 6, 15, 4), ['Silver Lance'], 'Great Knight'),
-  cand('sully', 'lead', stats(22, 9, 1, 10, 10, 6, 8, 2), ['Iron Lance']),
-  cand('sumia', 'battery', stats(19, 7, 3, 12, 12, 8, 6, 7), ['Iron Lance'], 'Pegasus Knight', [{ partner: 'chrom' as never, rank: 'C' }]),
-  cand('vaike', 'battery', stats(25, 10, 0, 8, 6, 4, 6, 0), ['Iron Axe'], 'Fighter'),
-  cand('lissa', 'staff', stats(18, 1, 6, 5, 5, 9, 3, 5), ['Heal'], 'Priest'),
-  cand('stahl', 'lead', stats(23, 9, 0, 8, 7, 5, 9, 1), ['Steel Sword']),
+  cand('chrom', stats(22, 9, 1, 10, 10, 7, 8, 1), ['Falchion'], 'Lord', [{ partner: 'sumia' as never, rank: 'C' }]),
+  cand('frederick', stats(30, 15, 2, 13, 11, 6, 15, 4), ['Silver Lance'], 'Great Knight'),
+  cand('sully', stats(22, 9, 1, 10, 10, 6, 8, 2), ['Iron Lance']),
+  cand('sumia', stats(19, 7, 3, 12, 12, 8, 6, 7), ['Iron Lance'], 'Pegasus Knight', [{ partner: 'chrom' as never, rank: 'C' }]),
+  cand('vaike', stats(25, 10, 0, 8, 6, 4, 6, 0), ['Iron Axe'], 'Fighter'),
+  healer('lissa', stats(18, 1, 6, 5, 5, 9, 3, 5)),
+  cand('stahl', stats(23, 9, 0, 8, 7, 5, 9, 1), ['Steel Sword']),
 ];
 
 describe('deployment, pairs and loadouts (#121)', () => {
@@ -31,13 +39,13 @@ describe('deployment, pairs and loadouts (#121)', () => {
     expect(deployMax(ch3.conditions.normal!.deploy)).toBe(8);
   });
 
-  it('deploys forced units first, pairs leads with batteries, and stays within the deploy count', () => {
+  it('deploys forced units first, pairs armed units, and stays within the deploy count', () => {
     const d = suggestDeployment({ candidates: army, forced: ['chrom'], max: 5, foes, pool: noPool });
     expect(d.deployed.length).toBeLessThanOrEqual(5);
     expect(d.deployed[0]).toBe('chrom');
-    for (const p of d.pairs) expect(army.find((c) => c.unit === p.lead)!.role).toBe('lead');
-    const backs = d.pairs.flatMap((p) => (p.back ? [p.back] : []));
-    expect(backs.every((b) => ['sumia', 'vaike'].includes(b))).toBe(true);
+    for (const p of d.pairs) expect(leadsByDefault(army.find((c) => c.unit === p.lead)!)).toBe(true);
+    // The healer is never taken as a back: it heals from its own tile.
+    expect(d.pairs.some((p) => p.back === 'lissa')).toBe(false);
     expect(d.pairs[0]!.lead).toBe('chrom');
   });
 
@@ -47,14 +55,14 @@ describe('deployment, pairs and loadouts (#121)', () => {
     expect(d.deployed).toHaveLength(6);
     // Too few slots to spare one: the fighting comes first.
     expect(suggestDeployment({ candidates: army, forced: ['chrom'], max: 5, foes, pool: noPool }).deployed).not.toContain('lissa');
-    const maribelle = cand('maribelle', 'staff', stats(18, 1, 7, 5, 6, 8, 3, 6), ['Heal'], 'Troubadour');
-    const more = [...army, maribelle, ...['a', 'b', 'c', 'd', 'e'].map((x) => cand(x, 'lead', stats(22, 9, 1, 10, 10, 6, 8, 2), ['Iron Lance']))];
+    const maribelle = healer('maribelle', stats(18, 1, 7, 5, 6, 8, 3, 6), 'Troubadour');
+    const more = [...army, maribelle, ...['a', 'b', 'c', 'd', 'e'].map((x) => cand(x, stats(22, 9, 1, 10, 10, 6, 8, 2), ['Iron Lance']))];
     const big = suggestDeployment({ candidates: more, forced: ['chrom'], max: 12, foes, pool: noPool });
     expect(big.deployed).toEqual(expect.arrayContaining(['lissa', 'maribelle']));
   });
 
   it('never has a unit with nothing to fight with lead a pair, forced or not (realism pass)', () => {
-    const unarmed = cand('vaike', 'lead', stats(25, 10, 0, 8, 6, 4, 6, 0), [], 'Fighter');
+    const unarmed = cand('vaike', stats(25, 10, 0, 8, 6, 4, 6, 0), [], 'Fighter');
     const candidates = [...army.filter((c) => c.unit !== 'vaike'), unarmed];
     for (const max of [4, 6, 8]) {
       const d = suggestDeployment({ candidates, forced: ['chrom', 'vaike'], max, foes, pool: noPool });
@@ -78,27 +86,47 @@ describe('deployment, pairs and loadouts (#121)', () => {
   });
 });
 
+describe('the greedy lineup reads no role tag (#212)', () => {
+  const olivia = cand('olivia', stats(18, 3, 1, 5, 8, 6, 2, 2), ['Iron Sword'], 'Dancer');
+
+  it('has an armed unit lead, never a Dancer, and never takes a Dancer or an unarmed healer as a back', () => {
+    expect(leadsByDefault(army[0]!)).toBe(true);
+    expect(leadsByDefault(olivia)).toBe(false);
+    expect(leadsByDefault(army[5]!)).toBe(false);
+    for (const max of [4, 6, 8, 9]) {
+      const d = suggestDeployment({ candidates: [...army, olivia], forced: ['chrom'], max, foes, pool: noPool });
+      const inPairs = d.pairs.flatMap((p) => [p.lead, ...(p.back ? [p.back] : [])]);
+      expect(inPairs).not.toContain('olivia');
+      expect(inPairs).not.toContain('lissa');
+    }
+  });
+});
+
+/** A candidate as a lead, a Dancer or an unarmed healer, for the property tests. */
+type Kind = 'armed' | 'dancer' | 'healer';
+const as = (c: DeployCandidate, kind: Kind): DeployCandidate =>
+  kind === 'armed'
+    ? c.weapons.length
+      ? c
+      : { ...c, weapons: [w('Iron Sword')], fighter: { ...c.fighter, className: 'Myrmidon', weapon: w('Iron Sword') }, items: [] }
+    : kind === 'dancer'
+      ? { ...c, weapons: c.weapons.length ? c.weapons : [w('Iron Sword')], fighter: { ...c.fighter, className: 'Dancer', weapon: c.fighter.weapon ?? w('Iron Sword') } }
+      : healer(c.unit, c.fighter.stats);
+
 describe('deployment with too few leads (#133)', () => {
   const [chrom, frederick, , , , lissa] = army;
-  const robin = cand('robin', 'battery', stats(19, 6, 5, 6, 6, 4, 6, 4), ['Bronze Sword', 'Thunder'], 'Tactician');
-  const as = (c: DeployCandidate, role: DeployCandidate['role']): DeployCandidate => ({ ...c, role });
-  const prologue = (roles: Record<'chrom' | 'robin' | 'frederick', DeployCandidate['role']>) => [as(chrom!, roles.chrom), as(robin, roles.robin), as(frederick!, roles.frederick), lissa!];
+  const robin = cand('robin', stats(19, 6, 5, 6, 6, 4, 6, 4), ['Bronze Sword', 'Thunder'], 'Tactician');
 
-  it('deploys all four on the Prologue with no Lead, with a pair', () => {
-    const d = suggestDeployment({ candidates: prologue({ chrom: 'battery', robin: 'battery', frederick: 'battery' }), forced: ['chrom'], max: 4, foes, pool: noPool });
+  it('deploys all four on the Prologue, with a pair', () => {
+    const d = suggestDeployment({ candidates: [chrom!, robin, frederick!, lissa!], forced: ['chrom'], max: 4, foes, pool: noPool });
     expect([...d.deployed].sort()).toEqual(['chrom', 'frederick', 'lissa', 'robin']);
     expect(d.pairs.some((p) => p.back)).toBe(true);
   });
 
-  it('deploys a spare Battery once the only Lead has its back', () => {
-    const d = suggestDeployment({ candidates: prologue({ chrom: 'battery', robin: 'lead', frederick: 'battery' }), forced: ['chrom'], max: 4, foes, pool: noPool });
-    expect([...d.deployed].sort()).toEqual(['chrom', 'frederick', 'lissa', 'robin']);
-  });
-
-  it('leaves no slot empty while a candidate is undeployed and not dropped, whatever the roles', () => {
-    const roles = ['lead', 'battery', 'staff', 'dancer'] as const;
+  it('leaves no slot empty while a candidate is undeployed and not dropped, whatever the units are', () => {
+    const kinds = ['armed', 'armed', 'healer', 'dancer'] as const;
     for (let seed = 0; seed < 64; seed++) {
-      const candidates = army.map((c, i) => as(c, roles[(seed >> (i % 6)) % 4]!));
+      const candidates = army.map((c, i) => as(c, kinds[(seed >> (i % 6)) % 4]!));
       for (const max of [3, 5, 8]) {
         const excluded = new Set(seed % 3 ? [] : ['vaike' as never]);
         const d = suggestDeployment({ candidates, forced: ['chrom'], max, foes, pool: noPool, excluded });
@@ -128,17 +156,6 @@ describe('deployment with too few leads (#133)', () => {
   });
 });
 
-describe('roles for the solver come from derived roles and army fit', () => {
-  it('uses army fit for children and the roster’s tag for first-gen units', () => {
-    const settings = { context: 'all', preset: 'physical-lead', edits: {}, basis: 'caps-lb', dlc: false, speed: DEFAULT_SPEED, supportRank: 'A', priorities: {}, overrides: {}, roleOverrides: {}, quotas: quotasFor('all') } as PlanSettings;
-    const roster = withRun(EMPTY_ROSTER, { gender: 'M', asset: 'mag', flaw: 'str' });
-    const roles = engine.roles(roster, settings);
-    for (const [child, a] of roles) expect(deployRoleOf(child, roster, roles)).toBe(a.role);
-    expect(deployRoleOf('lissa', roster, roles)).toBe('staff');
-    expect(deployRoleOf('chrom', roster, roles)).toBe('lead');
-  });
-});
-
 describe('forced units on the preparation page (#132)', () => {
   it('reads a map’s forced units as roster units', () => {
     expect(forcedOn('chapter-1')).toEqual(['chrom']);
@@ -146,11 +163,11 @@ describe('forced units on the preparation page (#132)', () => {
     expect(forcedOn('prologue')).toEqual([]);
   });
 
-  it('deploys Robin on Chapter 23 whatever Robin’s role, even with one slot to spare', () => {
-    const robin = (role: DeployCandidate['role']) => cand('robin', role, stats(40, 20, 20, 20, 20, 20, 20, 20), ['Levin Sword'], 'Grandmaster');
-    for (const role of ['lead', 'battery', 'staff', 'dancer'] as const) {
-      const d = suggestDeployment({ candidates: [...army, robin(role)], forced: forcedOn('chapter-23'), max: 2, foes, pool: noPool });
-      expect(d.deployed, role).toEqual(expect.arrayContaining(['chrom', 'robin']));
+  it('deploys Robin on Chapter 23 whatever Robin is, even with one slot to spare', () => {
+    const robin = cand('robin', stats(40, 20, 20, 20, 20, 20, 20, 20), ['Levin Sword'], 'Grandmaster');
+    for (const kind of ['armed', 'dancer', 'healer'] as const) {
+      const d = suggestDeployment({ candidates: [...army, as(robin, kind)], forced: forcedOn('chapter-23'), max: 2, foes, pool: noPool });
+      expect(d.deployed, kind).toEqual(expect.arrayContaining(['chrom', 'robin']));
     }
   });
 });
@@ -172,7 +189,7 @@ describe('review fixes (#131–#133 review)', () => {
 
   it('pairs a unit left over with one already deployed alone when only one slot is left', () => {
     const [chrom, , , sumia] = army;
-    const d = suggestDeployment({ candidates: [{ ...chrom!, role: 'battery' }, sumia!], forced: ['chrom'], max: 2, foes, pool: noPool });
+    const d = suggestDeployment({ candidates: [chrom!, sumia!], forced: ['chrom'], max: 2, foes, pool: noPool });
     expect(d.deployed).toHaveLength(2);
     expect(d.pairs.filter((p) => p.back)).toHaveLength(1);
   });

@@ -25,7 +25,6 @@ const hero = (more: Partial<ArmyUnit> = {}): ArmyUnit => ({
   skills: [],
   weapons: [{ item: itemByName('Iron Sword')! }],
   supports: [],
-  role: 'lead',
   ...more,
 });
 // Hits hard, takes long to fell: a lone hero wears down against it, a healer keeps it up.
@@ -33,7 +32,7 @@ const wall: Foe = { name: 'Wall', className: 'Fighter', count: 1, stats: stats(2
 const group = (foe: Foe): SimFoeGroup => ({ key: foe.name, foe });
 const rout = (id: string, foes: Foe[]): SimMap => ({ id, victory: 'rout', foes: foes.map(group), waves: [], skipped: [] });
 const step = (map: SimMap, more: Partial<RunSimMap> = {}): RunSimMap => ({ key: map.id, label: map.id, map, deploy: 2, forced: [], joining: [], mapOnly: [], later: [], masterSeals: false, ...more });
-const healer = hero({ id: 'lissa', name: 'Lissa', gender: 'F', classId: 'priest', stats: stats(20, 0, 10, 5, 5, 5, 3, 10), weapons: [], items: [{ item: itemByName('Heal')!, uses: 30 }], role: 'staff' });
+const healer = hero({ id: 'lissa', name: 'Lissa', gender: 'F', classId: 'priest', stats: stats(20, 0, 10, 5, 5, 5, 3, 10), weapons: [], items: [{ item: itemByName('Heal')!, uses: 30 }] });
 
 describe('the simulation under a unit’s worth (#202)', () => {
   const input = { army: [hero(), healer], maps: [step(rout('a', [wall]))], difficulty: 'normal' as const };
@@ -61,7 +60,7 @@ describe('a unit’s worth on hand-built runs (#202)', () => {
   const cavalier = (id: RosterUnit, name: string, gender: 'M' | 'F') =>
     hero({ id, name, gender, classId: 'cavalier', weapons: [{ item: itemByName('Iron Lance')! }], stats: stats(30, 15, 10, 15, 15, 10, 10, 5) });
   const zero = { str: 0, mag: 0, skl: 0, spd: 0, lck: 0, def: 0, res: 0 };
-  const kjelle: ChildRecruit = { id: 'kjelle', name: 'Kjelle', parents: ['sully', 'stahl'], growths: flat, modifiers: zero, weapons: [], items: [{ item: itemByName('Heal')!, uses: 30 }], role: 'lead' };
+  const kjelle: ChildRecruit = { id: 'kjelle', name: 'Kjelle', parents: ['sully', 'stahl'], growths: flat, modifiers: zero, weapons: [], items: [{ item: itemByName('Heal')!, uses: 30 }] };
   const input: RunSimInput = {
     army: [hero(), cavalier('sully', 'Sully', 'F'), cavalier('stahl', 'Stahl', 'M'), hero({ id: 'chrom', name: 'Chrom' })],
     maps: [step(rout('paralogue-8', []), { deploy: 4, children: [kjelle] }), step(rout('end', [wall]))],

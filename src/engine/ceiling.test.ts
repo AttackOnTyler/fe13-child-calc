@@ -24,7 +24,6 @@ const hero = (more: Partial<ArmyUnit> = {}): ArmyUnit => ({
   skills: [],
   weapons: [{ item: itemByName('Iron Sword')! }],
   supports: [],
-  role: 'lead',
   ...more,
 });
 
@@ -63,7 +62,7 @@ describe('the ceiling of a hand-built plan (#189)', () => {
   it('fields every child the plan’s marriages produce on the way, at its caps with its inherited skills', () => {
     const sully = hero({ id: 'sully', name: 'Sully', gender: 'F', classId: 'paladin', skills: ['Discipline', 'Outdoor Fighter', 'Defender', 'Aegis', 'Luna'] });
     const stahl = hero({ id: 'stahl', name: 'Stahl', classId: 'great-knight', skills: ['Discipline', 'Outdoor Fighter', 'Defender', 'Luna', 'Dual Guard+'] });
-    const kjelle: ChildRecruit = { id: 'kjelle', name: 'Kjelle', parents: ['sully', 'stahl'], growths: stats(0, 0, 0, 0, 0, 0, 0, 0), modifiers: { ...noMods, def: 2 }, weapons: [{ item: itemByName('Iron Lance')! }], role: 'lead' };
+    const kjelle: ChildRecruit = { id: 'kjelle', name: 'Kjelle', parents: ['sully', 'stahl'], growths: stats(0, 0, 0, 0, 0, 0, 0, 0), modifiers: { ...noMods, def: 2 }, weapons: [{ item: itemByName('Iron Lance')! }] };
     const plan = (children: ChildRecruit[]) => engine.simulateCeiling(input([sully, stahl], [step(rout('paralogue-8', [brute]), { children }), step(rout('end', [brute]), { deploy: 3 })]), 1, 1)!;
     const kid = plan([kjelle]).units.find((u) => u.id === 'kjelle')!;
     // Knight, her first class, promoted.

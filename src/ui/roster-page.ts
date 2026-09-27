@@ -1,33 +1,27 @@
+/**
+ * The Roster (#212: hard facts only): Run facts, each unit's state (Available, Not yet recruited, Missed, Dead) and a
+ * marriage that happened, picked in the spouse picker. Deploy, deployment roles, Benched, pinned marriages and presets
+ * are gone: a preference is an edit with a visible cost (the Wishlist tab), never a roster field.
+ */
 import {
   STATS,
-  DEPLOYMENT_ROLES,
   STAT_LABELS,
-  UNIT_STATES,
-  deploymentOf,
-  isDeployable,
-  pinLoss,
   rosterUnits,
   stateOf,
-  withDeploy,
-  withDeployRole,
   withRun,
   withSpouse,
   withState,
-  type Bond,
-  type DeployableUnit,
-  type DeploymentRole,
   type Engine,
   type Gender,
   type Roster,
   type RosterEntry,
   type RosterUnit,
   type Stat,
+  type UnitState,
 } from '../engine';
 import { h } from './dom';
 import { guide } from './guide';
-import { LABELS, PIN_LOSS_UI, ROLE_UI, STATE_UI } from './labels';
-import { compositionStrip, priorityControl, roleChip, sourceChip, type ChildPlanControls } from './plan-page';
-import { unitLink } from './unit-links';
+import { LABELS, STATE_UI } from './labels';
 import { DIFFICULTIES, type Difficulty } from '../engine/roster';
 
 export const DIFFICULTY_LABELS: Readonly<Record<Difficulty, string>> = { normal: 'Normal', hard: 'Hard', lunatic: 'Lunatic', 'lunatic-plus': 'Lunatic+' };
@@ -38,27 +32,24 @@ export type RosterContext = {
   readonly engine: Engine;
   readonly roster: Roster;
   readonly setRoster: (next: Roster) => void;
-  /** Sets the roster after a Deploy or deployment-role edit, noting the edit for the guide. */
-  readonly setDeployment: (next: Roster) => void;
   /** Wipes the run, `run:v2` (after the user confirms); scoring settings and checked rules are left alone. */
   readonly clearAll: () => void;
 };
 
-const BOND_UI: Readonly<Record<Bond, string>> = { pinned: LABELS.pinned, married: LABELS.married };
+/** The states the Roster offers: hard facts only (#212). Benched went: keeping a unit out is a keep-out edit. */
+export const ROSTER_STATES: readonly UnitState[] = ['available', 'not-recruited', 'missed', 'dead'];
 
 function stateStrip(ctx: RosterContext, u: RosterEntry): HTMLElement {
   const current = stateOf(ctx.roster, u.id);
   return h(
     'span',
     { ...guide('state-strip'), class: 'seg states', role: 'group', 'aria-label': `${u.name}: state` },
-    ...UNIT_STATES.map((st) => {
+    ...ROSTER_STATES.map((st) => {
       const locked = !u.canBeLost && (st === 'dead' || st === 'missed');
       const { icon, label, hint } = STATE_UI[st];
       return h(
         'button',
         {
-          // The guide's bench step is about children: a benched first-gen unit leaves the marriage plan (#127).
-          ...(st === 'benched' && u.kind === 'child' ? guide('bench') : {}),
           class: `st-${st}${st === current ? ' on' : ''}`,
           'aria-pressed': String(st === current),
           'aria-label': label,
@@ -72,14 +63,13 @@ function stateStrip(ctx: RosterContext, u: RosterEntry): HTMLElement {
   );
 }
 
+/** The spouse picker: a marriage that happened in your game (hard). Picking a spouse records it as ✓ Married. */
 function spousePicker(ctx: RosterContext, u: RosterEntry): HTMLElement {
   const { roster } = ctx;
   const spouse = roster.spouses[u.id];
   if (u.partners.length === 0) {
     return h('span', { class: 'spouse muted small' }, u.kind === 'child' ? 'Can’t marry in this run' : 'Only Robin: set Robin’s gender');
   }
-  const bond = spouse?.bond ?? 'pinned';
-  const loss = pinLoss(roster, u.id);
   return h(
     'span',
     { class: 'spouse' },
@@ -88,84 +78,25 @@ function spousePicker(ctx: RosterContext, u: RosterEntry): HTMLElement {
       {
         ...guide('spouse-picker'),
         'aria-label': `${u.name}: spouse`,
+        title: 'Married (hard): the S-support happened in your game',
         onchange: (e) => {
           const v = (e.target as HTMLSelectElement).value;
-          ctx.setRoster(withSpouse(roster, u.id, v ? (v as RosterUnit) : null, bond));
+          ctx.setRoster(withSpouse(roster, u.id, v ? (v as RosterUnit) : null, 'married'));
         },
       },
-      h('option', { value: '', selected: !spouse }, '— no spouse'),
+      h('option', { value: '', selected: !spouse }, '— not married'),
       ...spouseOptions(roster, u).map((o) => h('option', { value: o.value, selected: spouse?.partner === o.value }, o.label)),
     ),
-    h(
-      'span',
-      { class: 'seg' },
-      ...(['pinned', 'married'] as const).map((b) =>
-        h(
-          'button',
-          {
-            ...(b === 'married' ? guide('married') : {}),
-            class: spouse?.bond === b ? 'on' : '',
-            'aria-pressed': String(spouse?.bond === b),
-            disabled: !spouse,
-            title: b === 'pinned' ? 'Pinned (soft): the plan keeps this marriage. It breaks if either unit dies or is missed, and goes on hold while either is benched' : 'Married (hard): the S-support happened',
-            onclick: () => spouse && ctx.setRoster(withSpouse(roster, u.id, spouse.partner, b)),
-          },
-          BOND_UI[b],
-        ),
-      ),
-    ),
-    loss
-      ? h(
-          'span',
-          { class: `small pin-${loss.status}`, title: PIN_LOSS_UI[loss.status].hint },
-          ` ${PIN_LOSS_UI[loss.status].label}: ${loss.reason}`,
-        )
-      : null,
-  );
-}
-
-/** A first-gen unit's Deploy flag and deployment-role tag (defaulted from the curated table). */
-function deployControl(ctx: RosterContext, u: RosterEntry & { id: DeployableUnit }): HTMLElement {
-  const tag = deploymentOf(ctx.roster, u.id);
-  return h(
-    'span',
-    { class: 'deploy' },
-    h(
-      'label',
-      { ...guide('deploy'), title: 'Deploy: counts toward the composition quotas in its role' },
-      h('input', {
-        type: 'checkbox',
-        checked: tag.deploy,
-        'aria-label': `${u.name}: deploy`,
-        onchange: (e) => ctx.setDeployment(withDeploy(ctx.roster, u.id, (e.target as HTMLInputElement).checked)),
-      }),
-      ' Deploy',
-    ),
-    h(
-      'select',
-      {
-        ...guide('deploy-role'),
-        'aria-label': `${u.name}: deployment role`,
-        onchange: (e) => ctx.setDeployment(withDeployRole(ctx.roster, u.id, (e.target as HTMLSelectElement).value as DeploymentRole)),
-      },
-      ...DEPLOYMENT_ROLES.map((r) => h('option', { value: r, selected: r === tag.role }, ROLE_UI[r].label)),
-    ),
+    spouse?.bond === 'married' ? h('span', { ...guide('married'), class: 'small pos', title: 'Married (hard): the S-support happened' }, ` ${LABELS.married}`) : null,
   );
 }
 
 function unitRow(ctx: RosterContext, u: RosterEntry): HTMLElement {
   const st = stateOf(ctx.roster, u.id);
-  const deployable = u.kind !== 'child' && isDeployable(u.id);
   return h(
     'div',
     { class: `unit st-${st}`, 'data-unit': u.id },
-    h(
-      'span',
-      { class: 'uname' },
-      u.name,
-      u.robinOnly ? h('span', { class: 'chip', title: 'Can S-support only Robin' }, 'Robin only') : null,
-      deployable ? deployControl(ctx, u as RosterEntry & { id: DeployableUnit }) : null,
-    ),
+    h('span', { class: 'uname' }, u.name, u.robinOnly ? h('span', { class: 'chip', title: 'Can S-support only Robin' }, 'Robin only') : null),
     stateStrip(ctx, u),
     spousePicker(ctx, u),
   );
@@ -238,7 +169,7 @@ function runFacts(ctx: RosterContext): HTMLElement {
 export function rosterPage(ctx: RosterContext): HTMLElement[] {
   const units = rosterUnits(ctx.roster.run);
   const spouses = Object.values(ctx.roster.spouses);
-  const count = (b: Bond) => spouses.filter((s) => s?.bond === b).length / 2;
+  const married = spouses.filter((s) => s?.bond === 'married').length / 2;
   const lost = units.filter((u) => ['dead', 'missed'].includes(stateOf(ctx.roster, u.id))).length;
   const section = (title: string, list: readonly RosterEntry[]) =>
     h('section', { class: 'rsec', 'aria-label': title }, h('h3', {}, title), ...list.map((u) => unitRow(ctx, u)));
@@ -247,12 +178,12 @@ export function rosterPage(ctx: RosterContext): HTMLElement[] {
     'div',
     { class: 'main-head' },
     h('h2', {}, LABELS.roster),
-    h('span', { class: 'muted' }, `${count('married')} married · ${count('pinned')} pinned · ${lost} dead or missed`),
+    h('span', { class: 'muted' }, `${married} married · ${lost} dead or missed`),
     h(
       'button',
       {
         class: 'clear-all',
-        title: 'Wipe the whole run: run facts, unit states, marriages, pins and the chapter log (scoring settings and checked rules are kept)',
+        title: 'Wipe the whole run: run facts, unit states, marriages, your edits and pins, and the chapter log (scoring settings and checked rules are kept)',
         onclick: () => {
           if (confirm('Clear the whole run: run facts, unit states, marriages, pins and the chapter log? Export it first from the Run view to keep it. Scoring settings and checked rules are kept.')) ctx.clearAll();
         },

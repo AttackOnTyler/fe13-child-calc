@@ -58,7 +58,7 @@ export type SuggestedChange = {
   readonly flawless: number;
 };
 
-export type ExpForecastOptions = Pick<FlawlessOptions, 'seed' | 'runs' | 'roleOf'> & {
+export type ExpForecastOptions = Pick<FlawlessOptions, 'seed' | 'runs'> & {
   /** The EXP priorities to play (in place of the plan's, or the default from its milestones). */
   readonly priorities?: readonly PlanPriority[];
 };
@@ -260,7 +260,7 @@ export function suggestChanges(input: RunSimInput, id: string, seed: number, run
 
 /** The simulation input for a plan's EXP forecast: its milestones checked, and its priorities (or the default). */
 function forecastInput(run: Parameters<typeof flawlessInput>[0], plan: Plan, assumptions: Assumptions, options: ExpForecastOptions) {
-  const base = flawlessInput(run, assumptions, options.roleOf, undefined, plan);
+  const base = flawlessInput(run, assumptions, undefined, plan);
   const ms = milestones(run, plan, assumptions);
   const priorities = options.priorities ?? plan.roadmap.priorities ?? defaultPriorities(ms, base.input);
   const input: RunSimInput = { ...base.input, priority: priorityByMap(base.input.maps, priorities, base.input.pins), milestones: ms.map(milestoneCheck) };

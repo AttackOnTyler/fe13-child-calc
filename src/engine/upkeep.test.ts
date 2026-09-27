@@ -28,7 +28,6 @@ const hero = (more: Partial<ArmyUnit> = {}): ArmyUnit => ({
   skills: [],
   weapons: [{ item: item('Iron Sword') }],
   supports: [],
-  role: 'lead',
   ...more,
 });
 

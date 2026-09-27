@@ -13,7 +13,7 @@ import type { ChildId } from '../../game-data/children';
 import type { ClassId } from '../../game-data/classes';
 import type { SkillId } from '../../game-data/skills';
 import type { Gender, Stat } from '../../game-data/stats';
-import { pinLoss, type Roster, type RosterUnit } from '../roster';
+import type { RosterUnit } from '../roster';
 import type { SideGoalDecision, SideGoalId } from '../side-goals';
 
 /** Where a unit stands in one map's lineup: Lead (with or without a Back), Back, or Solo (fielded unpaired). */
@@ -125,7 +125,7 @@ export type Plan = {
  * already happened (a couple the log marries, a span that's all played, a side goal on a recorded map) or on a unit
  * that is dead or missed is dropped (`livePins`). Stored on the run (`Run.pins`; side goals in `Run.sideGoals`).
  *
- * - **Marriage:** a couple the player wants; or, with `forbid`, a couple ruled out (#205: today's Plan page rule-outs),
+ * - **Marriage:** a couple the player wants; or, with `forbid`, a couple ruled out (#205: the retired Plan page's rule-outs migrate to these),
  *   which no plan marries. Either way the same choice (`pinKey`), so pinning a ruled-out couple replaces the rule-out.
  * - **Span:** a position (Lead, Back, Solo, or out of the lineup) or a pair (with `partner`) kept over a span of the
  *   map order: one map (`to` = `from`, the preparation page's default: `mapSpanPin`), a range, or from a map on (`to`
@@ -270,14 +270,3 @@ export type SolveCursor = {
   readonly evaluations: number;
   readonly search?: SearchState;
 };
-
-/**
- * The roster's pinned marriages as marriage pins, each couple once: what the player kept on today's Plan page since
- * `run:v2` migrated the saved ones into `Run.pins` (#205), until #212 retires that page. A lost pin (either unit dead, missed or benched) isn't one.
- */
-export function marriagePins(roster: Roster): MarriagePin[] {
-  const out: MarriagePin[] = [];
-  for (const [u, s] of Object.entries(roster.spouses) as [RosterUnit, Roster['spouses'][RosterUnit]][])
-    if (s?.bond === 'pinned' && !pinLoss(roster, u) && !out.some((p) => p.couple.includes(u))) out.push({ kind: 'marriage', couple: [u, s.partner] });
-  return out;
-}

@@ -707,8 +707,6 @@ export function inboxProgress(run: Run, progress: SolveProgress): void {
   }
 }
 
-const rolesOf = (ctx: RunContext) => (ctx.roleOf ? Object.fromEntries(rosterUnits(ctx.run.roster.run).map((u) => [u.id, ctx.roleOf!(u.id)])) : undefined);
-
 /**
  * Lists every edit on the worker's `edits` slot once the solve has read the plan (its riskiest maps name the lineup and
  * pair edits), and costs the matches shown that aren't costed yet, provisional first.
@@ -725,7 +723,6 @@ function listEdits(ctx: RunContext, progress: SolveProgress | undefined): void {
     .slice(0, 3)
     .map((m) => m.key);
   const pins = ctx.pins?.();
-  const roles = rolesOf(ctx);
   const plan = heldPlan(ctx.run, progress);
   s.listing = true;
   s.asked = new Set(keys);
@@ -737,7 +734,6 @@ function listEdits(ctx: RunContext, progress: SolveProgress | undefined): void {
       seed: FLAWLESS_SEED,
       ...(plan ? { plan } : {}),
       ...(pins ? { pins } : {}),
-      ...(roles ? { roles } : {}),
       riskiest,
       keys,
       budgets: [EDIT_COST_BUDGET.provisional, EDIT_COST_BUDGET.settled],
@@ -765,11 +761,10 @@ function askPinCost(ctx: RunContext, pins: readonly PlanPin[]): void {
   const s = page;
   if (!s || !ctx.assumptions) return;
   const all = ctx.pins?.();
-  const roles = rolesOf(ctx);
   const plan = heldPlan(ctx.run, progressOf.get(ctx.run));
   s.asked = new Set();
   startSolve(
-    { kind: 'one-pin-cost', assumptions: ctx.assumptions, run: ctx.run, seed: FLAWLESS_SEED, budget: STEP_BUDGET, lift: pins, ...(plan ? { plan } : {}), ...(all ? { pins: all } : {}), ...(roles ? { roles } : {}) },
+    { kind: 'one-pin-cost', assumptions: ctx.assumptions, run: ctx.run, seed: FLAWLESS_SEED, budget: STEP_BUDGET, lift: pins, ...(plan ? { plan } : {}), ...(all ? { pins: all } : {}) },
     (reply) => {
       if (page !== s || reply.kind !== 'pin-cost') return;
       s.pinCosts.set(editPinsKey(pins), reply.cost);
@@ -1101,8 +1096,8 @@ function withoutAdopted(run: Run): Run {
   return rest;
 }
 
-/** What the seed reads besides the run: the player's pins and each unit's role (until #212). */
+/** What the seed reads besides the run: the player's pins. */
 const freshOptions = (ctx: RunContext) => {
   const pins = ctx.pins?.();
-  return { ...(pins ? { pins } : {}), ...(ctx.roleOf ? { roleOf: ctx.roleOf } : {}) };
+  return { ...(pins ? { pins } : {}) };
 };

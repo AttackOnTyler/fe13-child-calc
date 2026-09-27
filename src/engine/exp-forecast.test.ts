@@ -30,7 +30,6 @@ const unit = (id: ArmyUnit['id'], name: string, classId: ClassId, str: number, m
   skills: [],
   weapons: [{ item: itemByName('Iron Sword')! }],
   supports: [],
-  role: 'lead',
   ...more,
 });
 // Chrom fells a Lv 8 dummy in one blow (20 damage); Robin only halves it (10).

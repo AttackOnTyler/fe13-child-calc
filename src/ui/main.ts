@@ -7,14 +7,11 @@ import {
   RANK_LETTERS,
   buildSortKey,
   createEngine,
-  quotaContext,
-  quotasFor,
   describeSource,
   resolveAssumptions,
   EMPTY_ROSTER,
   EMPTY_RUN,
   rosterOf,
-  deployRoleOf,
   withRoster,
   type AssumptionId,
   type Blocking,
@@ -28,6 +25,7 @@ import {
   type ClassMode,
   type ClassSummary,
   type Engine,
+  type ExplorerSettings,
   type Gender,
   type LeaderboardEntry,
   type LeaderboardOptions,
@@ -35,8 +33,6 @@ import {
   type PairingFilter,
   type PairingGroup,
   type PairingScore,
-  type PlanSettings,
-  type PlannedChild,
   type PlayContext,
   type PresetId,
   type RobinMode,
@@ -51,7 +47,6 @@ import {
   type PageSubject,
   type Run,
   type RosterUnit,
-  type DeploymentRole,
   type Difficulty,
   type Pairing,
   type PageUnitId,
@@ -64,7 +59,6 @@ import {
   type Stat,
   type SupportRank,
   type Weights,
-  marriagePins,
 } from '../engine';
 import { h } from './dom';
 import { guide } from './guide';
@@ -72,7 +66,7 @@ import { guideChild } from './guide-deeper';
 import { guideFacts, lossPrompt, noteLosses, settleLosses } from './guide-facts';
 import { collapseDock, hasSavedRun, loadGuidePrefs, saveGuidePrefs, welcomeShows, type GuidePrefs } from './guide-prefs';
 import { guideButton, guideLayer, type GuideContext } from './guide-ui';
-import { BASIS_LABELS, LABELS, SCORING_ROLE_UI } from './labels';
+import { BASIS_LABELS, EXPLORER_NOTE, LABELS, SCORING_ROLE_UI } from './labels';
 import { loadCheckedRules, overridesOf, ruleEvidence, saveCheckedRules, withOverrides, type CheckedRules } from './checked-rules';
 import {
   BASES,
@@ -82,7 +76,6 @@ import {
   RANK_CHOICES,
   ROLES,
   basisOf,
-  changePrefs,
   dlcReachable,
   effectivePreset,
   isModified,
@@ -92,7 +85,6 @@ import {
   scoreSettingsOf,
   speedSettings,
   targetOf,
-  visitPrefs,
   withPreset,
   type ColumnGroup,
   type ScoringPrefs,
@@ -102,23 +94,11 @@ import { rosterPage } from './roster-page';
 import { unitsView, type UnitsContext } from './unit-page';
 import { runView, solveState } from './run-page';
 import { installWhy, whyOpen, whyPanel, type WhyContext } from './why';
-import { notOnTrack, wishlistPage } from './wishlist-page';
+import { notOnTrack, unitWorthOf, wishlistPage, worthText } from './wishlist-page';
 import { prepPage } from './prep-page';
 import { CHILD_UNITS } from '../game-data/children';
 import { unitLink, type OpenUnit } from './unit-links';
 import { loadRun, saveRun } from './roster-store';
-import { planPage, planSidebar, type ChildPlanControls, type PlanPageContext } from './plan-page';
-import {
-  loadPlanPrefs,
-  resetPlanPrefs,
-  savePlanPrefs,
-  withDeployEdited,
-  withPlanPreset,
-  withRoleOverride,
-  withPriority,
-  withQuotas,
-  type PlanPrefs,
-} from './plan-prefs';
 
 /** Phone width, where the Scoring panel and the open guide dock are bottom sheets (the stylesheet's breakpoint). */
 const phone = (): boolean => matchMedia('(max-width: 700px)').matches;
@@ -141,14 +121,6 @@ let run: Run = loadRun();
 let roster: Roster = rosterOf(run);
 // Losses already saved aren't new: the loss prompt is for those recorded from here on.
 guidePrefs = noteLosses(roster, guidePrefs);
-/** Plan preferences (priorities, plan presets): survive Clear all. */
-let planPrefs: PlanPrefs = loadPlanPrefs(engine);
-/** The Plan view's Free re-plan toggle. */
-let freeReplan = false;
-/** The Plan's no-Robin view (#98): view state, carried in the plan settings. */
-let noRobinView = false;
-/** The Plan sidebar's quota editor is open. */
-let editingQuotas = false;
 
 // View state only; all domain answers come from the engine.
 /** A child's table, or the All children leaderboard. */
@@ -156,7 +128,7 @@ let selected: ChildId | 'all' = 'lucina';
 /** The last child the visitor opened from the left rail, which the guide's table jumps show again. */
 let childOpened: ChildId | undefined;
 /** A new visitor starts on Roster, under the welcome box: setup comes first. */
-type View = 'table' | 'validation' | 'roster' | 'plan' | 'units' | 'run' | 'wishlist';
+type View = 'table' | 'validation' | 'roster' | 'units' | 'run' | 'wishlist';
 let view: View = !selfTest.passed ? 'validation' : welcomeOpen ? 'roster' : 'table';
 /** The Units view's open unit page (#101); undefined shows the list. */
 let unitOpen: PageUnitId | 'robin' | ChildId | undefined;
@@ -190,11 +162,6 @@ const solveProgressed = (): void => {
     const parts: Part[] = [...(count !== wishlistCount ? (['rail'] as const) : []), ...(view === 'wishlist' ? (['main'] as const) : [])];
     if (parts.length) renderParts(parts);
   }, 0);
-};
-/** The preparation page's roles, worked out only when the flawless chance needs them (the Run view and Wishlist tab). */
-const runRoleOf = (): ((u: RosterUnit) => DeploymentRole) => {
-  let roles: ReturnType<typeof engine.roles> | undefined;
-  return (u: RosterUnit) => deployRoleOf(u, roster, (roles ??= engine.roles(roster, planSettings())));
 };
 /** The Run view's open map (#109); undefined shows the Maps list. */
 let mapOpen: string | undefined;
@@ -262,21 +229,18 @@ let helper: { cls: ClassId; rank: SupportRank; rawSpd: number } = { cls: 'swordm
 // ---- scoring ----
 
 /**
- * A visit from the Plan's marriage table to a child's table: the table scores with the child's plan preset, and the
- * plan's pairing (`key`) is highlighted. View state: it ends when the visitor leaves the table or the sidebar sets the
- * preset, role or class.
+ * A visit to a child's table on one pairing (a unit page's partner or a front door's tile): the pairing (`key`) is
+ * highlighted and scrolled into view. The table scores with the explorer's preset as always (#212: no plan preset).
+ * View state: it ends when the visitor leaves the table.
  */
-let visit: { child: ChildId; preset: PresetId; key: string } | undefined;
-/** The planned row still to scroll into view once the table renders. */
+let visit: { child: ChildId; key: string } | undefined;
+/** The visited row still to scroll into view once the table renders. */
 let scrollToPlanned = false;
 
 /** The visit, while its child's table is in view. */
 const activeVisit = () => (visit && view === 'table' && selected === visit.child ? visit : undefined);
-/** The prefs the view scores with: the global ones, or on a visit its plan preset (the sidebar shows and edits these). */
-const viewPrefs = (): ScoringPrefs => {
-  const v = activeVisit();
-  return v ? visitPrefs(prefs, v.preset) : prefs;
-};
+/** The prefs the explorer scores with (`scoring:v1`): the sidebar shows and edits these. */
+const viewPrefs = (): ScoringPrefs => prefs;
 
 const presetOf = (p: ScoringPrefs): Preset => engine.presets().find((q) => q.id === p.preset)!;
 const currentPreset = (): Preset => presetOf(viewPrefs());
@@ -310,10 +274,8 @@ function scoring(p: ScoringPrefs = viewPrefs()): Scoring {
 }
 
 function setPrefs(next: Partial<ScoringPrefs>, parts: Part[] = ['rail', 'main', 'panel']): void {
-  const change = changePrefs(prefs, activeVisit()?.preset, next);
-  prefs = change.prefs;
+  prefs = { ...prefs, ...next };
   savePrefs(prefs);
-  if (change.endsVisit) visit = undefined;
   renderParts(parts);
 }
 
@@ -337,8 +299,8 @@ const setOverride = (id: AssumptionId, value: unknown) => applyOverrides(withOve
 
 // ---- roster ----
 
-/** The parts a roster change refreshes: the Plan sidebar lists the run's children. */
-const rosterParts = (): Part[] => (view === 'plan' ? ['rail', 'main', 'panel'] : ['rail', 'main']);
+/** The parts a roster change refreshes. */
+const rosterParts = (): Part[] => ['rail', 'main'];
 
 function setRoster(next: Roster): void {
   const route = next.run.route;
@@ -346,19 +308,13 @@ function setRoster(next: Roster): void {
   run = withRoster(run, next);
   roster = rosterOf(run);
   saveRun(run);
-  // Play context defaults from the route (#108); the lens never changes the run. The header's lens redraws too.
+  // The explorer's play context is its own setting, defaulting to the run's route (#108, #212); the lens never changes
+  // the run. The header's lens redraws too.
   if (routeSet) {
     setPrefs({ context: route }, []);
     return render();
   }
   renderParts(rosterParts());
-}
-
-/** A Deploy or deployment-role edit: the roster holds it, and the plan preferences note the act for the guide. */
-function setDeployment(next: Roster): void {
-  planPrefs = withDeployEdited(planPrefs);
-  savePlanPrefs(planPrefs);
-  setRoster(next);
 }
 
 /** Clear all (Roster): run:v2 is wiped, the chapter log with it (#205); preferences and checked rules stay. */
@@ -377,16 +333,10 @@ function setRun(next: Run): void {
   renderParts(['rail', 'main']);
 }
 
-// ---- marriage plan ----
+// ---- the explorer ----
 
-function setPlanPrefs(next: PlanPrefs): void {
-  planPrefs = next;
-  savePlanPrefs(planPrefs);
-  renderParts(['main', 'panel']);
-}
-
-/** Each child scores in its plan preset (with the user's weight edits), Auto class, and the global rest. */
-const planSettings = (): PlanSettings => ({
+/** A unit page's Partners score each child in the explorer's preset (with the user's weight edits), Auto class, and the global rest. */
+const explorerSettings = (): ExplorerSettings => ({
   context: prefs.context,
   preset: prefs.preset,
   edits: prefs.edits,
@@ -394,12 +344,15 @@ const planSettings = (): PlanSettings => ({
   dlc: dlcReachable(prefs, engine),
   speed: speedSettings(prefs, engine),
   supportRank: prefs.supportRank,
-  priorities: planPrefs.priorities,
-  overrides: planPrefs.overrides,
-  roleOverrides: planPrefs.roleOverrides,
-  quotas: quotasFor(prefs.context, planPrefs.quotas),
-  noRobin: noRobinView,
 });
+
+/** A note when the explorer's play context isn't the run's route (#212): the wishlist reads its templates from the route. */
+const contextNote = (): string | undefined => {
+  const route = roster.run.route;
+  return route && prefs.context !== route
+    ? `You’re exploring in ${CONTEXT_LABELS[prefs.context]}; your run’s route is ${CONTEXT_LABELS[route]}, whose build templates the wishlist reads.`
+    : undefined;
+};
 
 /** A main view's scroller: its `.scroll`, else the region itself. */
 const scrollerOf = (region: HTMLElement): HTMLElement => region.querySelector<HTMLElement>('.scroll') ?? region;
@@ -442,7 +395,21 @@ function openUnit(unit: PageUnitId | 'robin' | ChildId, preview?: RobinRef): voi
   renderParts(['rail', 'main', 'panel']);
 }
 
-const VIEW_LABELS: Readonly<Record<View, string>> = { table: 'Pairings', validation: 'Validation', roster: LABELS.roster, plan: LABELS.plan, units: 'Units', run: 'Run', wishlist: 'Wishlist' };
+const VIEW_LABELS: Readonly<Record<View, string>> = { table: 'Pairings', validation: 'Validation', roster: LABELS.roster, units: 'Units', run: 'Run', wishlist: 'Wishlist' };
+
+/** Opens the Wishlist tab on a unit's entry (#212): its row with its edits open. */
+function openWishlist(unit: RosterUnit): void {
+  view = 'wishlist';
+  wishlistOpen = unit;
+  render();
+}
+
+/** A unit's worth to the adopted plan, once the Wishlist tab's idle work has it (#202): for unit opinion's disagreement. */
+function worthOf(unit: RosterUnit): { points: number; text: string } | undefined {
+  const w = unitWorthOf(run, unit);
+  if (!w || w.forced || w.worth === undefined) return undefined;
+  return { points: w.worth * 100, text: worthText(w, roster.run.gender) };
+}
 
 const unitsContext = (): UnitsContext => ({
   engine,
@@ -486,124 +453,23 @@ const unitsContext = (): UnitsContext => ({
   skillChip,
   buildCard,
   roster,
-  planSettings: planSettings(),
+  explorerSettings: explorerSettings(),
   presetLabel: (id: PresetId) => presetLabel(engine.presets().find((p) => p.id === id)!),
   openPairing: (child, key) => {
     showTable(child);
-    visit = { child, preset: engine.planPreset(child, roster, planSettings()), key };
+    visit = { child, key };
     scrollToPlanned = true;
     renderParts(['rail', 'main', 'panel']);
   },
-  openPlan: () => {
-    view = 'plan';
-    renderParts(['rail', 'main', 'panel']);
-  },
+  openWishlist,
+  ...(contextNote() ? { contextNote: contextNote()! } : {}),
+  worth: worthOf,
   allPartners,
   setAllPartners: (all) => {
     allPartners = all;
     renderParts(['main']);
   },
 });
-
-/** The priority and plan-preset controls: the Plan sidebar and the Wishlist tab's children ledger edit the same values. */
-const planControls = (): ChildPlanControls => ({
-  engine,
-  roster,
-  settings: planSettings(),
-  setPriority: (child, priority) => setPlanPrefs(withPriority(planPrefs, child, priority)),
-  setPlanPreset: (child, preset) => setPlanPrefs(withPlanPreset(planPrefs, child, preset)),
-  setRoleOverride: (child, role) => setPlanPrefs(withRoleOverride(planPrefs, child, role)),
-  openRoles: () => {
-    view = 'plan';
-    render();
-    document.querySelector('[data-guide="role-matrix"]')?.scrollIntoView({ block: 'start' });
-  },
-  openUnit: openAnyUnit,
-  openRunFacts: () => {
-    view = 'roster';
-    render();
-    document.querySelector('[data-guide="run-facts"]')?.scrollIntoView({ block: 'start' });
-  },
-  presetLabel: (id: PresetId) => presetLabel(engine.presets().find((p) => p.id === id)!),
-  quotas: quotasFor(prefs.context, planPrefs.quotas),
-});
-
-const planContext = (): PlanPageContext => ({
-  ...planControls(),
-  setRoster,
-  free: freeReplan,
-  setFree: (free) => {
-    freeReplan = free;
-    renderParts(['main']);
-  },
-  setNoRobin: (on) => {
-    noRobinView = on;
-    renderParts(['rail', 'main', 'panel']);
-  },
-  resetPlanPrefs: () => setPlanPrefs(resetPlanPrefs(planPrefs)),
-  quotasEdited: !!planPrefs.quotas[quotaContext(prefs.context)],
-  setQuotas: (quotas) => setPlanPrefs(withQuotas(planPrefs, quotaContext(prefs.context), quotas)),
-  editingQuotas,
-  setEditingQuotas: (open) => {
-    editingQuotas = open;
-    renderParts(['panel']);
-  },
-  openChild,
-});
-
-/**
- * The child's plan preset as a chip on its table: the tables keep the global preset, and this sets it. On a visit from
- * the marriage table the table already scores with it, for this visit; the chip still makes it the global preset.
- */
-function planPresetChip(child: ChildId): HTMLElement {
-  const id = engine.planPreset(child, roster, planSettings());
-  const name = presetLabel(engine.presets().find((p) => p.id === id)!);
-  const global = id === prefs.preset && (!activeVisit() || prefs.role === 'preset');
-  // On a visit the table scores differently from the global prefs unless they already match it.
-  const visiting = !!activeVisit() && !(global && prefs.classMode === 'auto');
-  const title = visiting
-    ? `Scored with the plan preset (its scoring role, Auto class) for this visit${global ? '' : `: make ${name} the global preset`}`
-    : global
-      ? 'The table already scores with the plan preset'
-      : `The table scores with ${presetLabel(currentPreset())}: switch the global preset to ${name}`;
-  return h(
-    'button',
-    {
-      ...guide('score-with-plan-preset'),
-      class: `chip plan-preset${visiting ? ' visit' : ''}`,
-      disabled: global,
-      title,
-      // Only the preset and its role: a visit goes on (it still scores in Auto class).
-      onclick: () => setPrefs({ preset: id, role: 'preset' }),
-    },
-    `Plan: ${name}`,
-    visiting ? ` ✓ ${LABELS.thisVisit}` : global ? ' ✓' : ` ${LABELS.scoreWithThis}`,
-  );
-}
-
-/** Opens a child's table from the marriage table: scored with its plan preset for this visit, its planned pairing in view. */
-function openChild(c: PlannedChild): void {
-  showTable(c.child);
-  visit = { child: c.child, preset: c.preset, key: c.key };
-  scrollToPlanned = true;
-  renderParts(['rail', 'main', 'panel']);
-}
-
-let planKeysCache: { roster: Roster; engine: Engine; keys: ReadonlySet<string> } | undefined;
-/** The saved plan's pairings, which the tables mark ◆. */
-function planKeys(): ReadonlySet<string> {
-  if (planKeysCache?.roster !== roster || planKeysCache.engine !== engine) planKeysCache = { roster, engine, keys: engine.planKeys(roster) };
-  return planKeysCache.keys;
-}
-
-/** ◆ when any of the results is in the saved plan. */
-function planChip(results: readonly ChildResult[]): HTMLElement | null {
-  const inPlan = results.find((r) => planKeys().has(r.key));
-  if (!inPlan) return null;
-  const af = results.length > 1 ? engine.robinLabel(inPlan.pairing) : undefined;
-  const title = `In the saved marriage plan${af ? ` (${af})` : ''}`;
-  return h('span', { class: 'chip block in-plan', title, 'aria-label': title }, LABELS.inPlan);
-}
 
 const BLOCK_CHIPS: Readonly<Record<Blocking['status'], { mark: string; label: string } | undefined>> = {
   open: undefined,
@@ -654,13 +520,13 @@ function validationButton(report: SelfTestReport): HTMLElement {
 const childrenInRun = () => engine.children().filter((c) => engine.groups(c.id, { run: roster.run }).length > 0);
 
 /**
- * Switches to a child's table or the leaderboard, with rows collapsed. A child's table opens on its plan preset (#97):
- * a visit, which the Scoring sidebar's preset ends to explore others — the plan never reads the table's preset.
+ * Switches to a child's table or the leaderboard, with rows collapsed, scored with the explorer's preset (#212: no plan
+ * preset; the wishlist never reads the table's preset).
  */
 function showTable(id: ChildId | 'all'): void {
   selected = id;
   view = 'table';
-  visit = id === 'all' ? undefined : { child: id, preset: engine.planPreset(id, roster, planSettings()), key: '' };
+  visit = undefined;
   expanded.clear();
   openCards.clear();
   limit = FIRST_PAGE;
@@ -738,19 +604,6 @@ function rail(): HTMLElement[] {
       },
       h('span', {}, LABELS.roster),
       h('b', { class: 'num muted', title: 'Marriages' }, married ? `✓${married}` : ''),
-    ),
-    h(
-      'button',
-      {
-        class: `rail-item roster-item${view === 'plan' ? ' on' : ''}`,
-        title: 'The whole-roster marriage plan',
-        onclick: () => {
-          view = 'plan';
-          render();
-        },
-      },
-      h('span', {}, LABELS.plan),
-      h('b', { class: 'num muted', title: 'A saved plan' }, roster.savedPlan ? LABELS.inPlan : ''),
     ),
     h(
       'button',
@@ -911,7 +764,7 @@ function buildCell(m: BuildMatch | undefined): HTMLElement {
 const classLabel = (score: PairingScore, gender: Gender) =>
   score.class && `${engine.className(score.class, gender)}${score.auto ? ' (Auto)' : ''}`;
 
-const PLANNED_TITLE = 'The marriage plan’s pairing for this child';
+const PLANNED_TITLE = 'The pairing you opened this table on';
 
 function lineRow(line: Line, gender: Gender, cls: string, head: HTMLElement): HTMLElement {
   const { score, result: r } = line;
@@ -1057,7 +910,7 @@ function heatmapRow(child: ChildId, line: Line, gender: Gender, sc: Scoring, nco
       {},
       'Row shows: ',
       h('span', { class: 'af' }, engine.robinLabel(line.result.pairing) ?? ''),
-      line.pinned ? h('span', {}, ' (pinned; click it again to go back to best) ', h('button', { class: 'ghost', onclick: () => togglePin(child, g, shownKey) }, 'Unpin')) : line.planned ? ' (the marriage plan’s)' : ' (best)',
+      line.pinned ? h('span', {}, ' (pinned; click it again to go back to best) ', h('button', { class: 'ghost', onclick: () => togglePin(child, g, shownKey) }, 'Unpin')) : line.planned ? ' (the one you opened)' : ' (best)',
     ),
     map.spread ? h('div', {}, `Colour: red = worst, green = best combo for this parent (${fmt(map.spread.lo)}–${fmt(map.spread.hi)}).`) : null,
     h('div', {}, 'Click a cell to pin that combo into the row. Outline = best, ring = shown.'),
@@ -1386,7 +1239,6 @@ function lineRows(child: ChildId, line: Line, gender: Gender, sc: Scoring, ncols
       af ? h('span', { class: 'af' }, ` ${af}`) : null,
       warnMark([line.result]),
       blockChip(line.blocking),
-      planChip([line.result]),
       skills,
     );
     return [lineRow(line, gender, '', head)];
@@ -1417,14 +1269,13 @@ function lineRows(child: ChildId, line: Line, gender: Gender, sc: Scoring, ncols
       'span',
       {
         class: `af${line.pinned ? ' pinned' : ''}`,
-        title: line.pinned ? 'Pinned asset/flaw' : line.planned ? 'The marriage plan’s asset/flaw' : `Best of ${g.results.length} asset/flaw pairings`,
+        title: line.pinned ? 'Pinned asset/flaw' : line.planned ? 'The asset/flaw you opened' : `Best of ${g.results.length} asset/flaw pairings`,
       },
       ` ${engine.robinLabel(line.result.pairing) ?? ''}`,
     ),
     line.pinned ? h('span', { class: 'muted small' }, ' 📌') : null,
     warnMark(g.results),
     blockChip(line.blocking),
-    planChip(g.results),
     skills,
   );
   const rows = [lineRow(line, gender, 'group-row', head)];
@@ -1516,7 +1367,7 @@ function childTable(child: ChildId): HTMLElement[] {
         (lines.length < allGroups ? ` · ${lines.length} of ${allGroups} parents shown` : '') +
         (hardCount ? ` · ${hardCount} blocked` : ''),
     ),
-    planPresetChip(child),
+    h('span', { class: 'muted small explorer-note' }, EXPLORER_NOTE),
     columnToggles(),
   );
   // Without weights (Rallybot / Dancer) Auto has nothing to maximise and rows show their start class.
@@ -1726,7 +1577,6 @@ function card(e: LeaderboardEntry, statMax: Readonly<Record<Stat, number>>): HTM
       e.robin ? h('span', { class: 'chip af' }, e.robin) : null,
       warnMark([r]),
       e.blocking ? blockChip(e.blocking) : null,
-      planChip([r]),
     ),
     h(
       'div',
@@ -1756,6 +1606,7 @@ function leaderboard(): HTMLElement[] {
     { class: 'main-head' },
     h('h2', {}, LABELS.allChildren),
     h('span', { class: 'muted' }, `${entries.length} pairings · ${presetLabel(currentPreset())} · bars: ${capsHeader()} (${BASIS_LABELS[basis()]})`),
+    h('span', { class: 'muted small explorer-note' }, EXPLORER_NOTE),
     boardControls(),
   );
   const more =
@@ -2045,7 +1896,6 @@ function panel(): HTMLElement[] {
 
   const inspecting = currentCard();
   return [
-    ...(view === 'plan' ? [planSidebar(planContext())] : []),
     ...(inspecting ? [skillCardEl(inspecting.card, inspecting.title)] : []),
     h(
       'div',
@@ -2316,7 +2166,7 @@ function contextSelect(): HTMLElement {
 
 const guideContext = (): GuideContext => ({
   prefs: guidePrefs,
-  facts: guideFacts(roster, planPrefs, prefs.context),
+  facts: guideFacts(roster, prefs.context),
   loss: lossPrompt(roster, guidePrefs),
   welcome: welcomeOpen,
   setPrefs: (next) => {
@@ -2358,7 +2208,7 @@ const guideContext = (): GuideContext => ({
       view = 'units';
       if (jump.to === 'door') {
         const inRun = childrenInRun();
-        const child = guideChild(childOpened, planPrefs.priorities, inRun.map((c) => c.id));
+        const child = guideChild(childOpened, inRun.map((c) => c.id));
         unitOpen = child;
         shown = inRun.find((c) => c.id === child)!.name;
       } else {
@@ -2367,7 +2217,7 @@ const guideContext = (): GuideContext => ({
       }
     } else if (jump.to === 'child') {
       const inRun = childrenInRun();
-      const child = guideChild(childOpened, planPrefs.priorities, inRun.map((c) => c.id));
+      const child = guideChild(childOpened, inRun.map((c) => c.id));
       showTable(child);
       const robin = jump.robinRow ? engine.groups(child, pairingFilter()).find((g) => g.results.length > 1) : undefined;
       if (robin) expanded.add(groupId(child, robin));
@@ -2442,9 +2292,7 @@ function renderParts(parts: readonly Part[]): void {
       ...(view === 'validation'
         ? [validationPanel({ engine, assumptions, selfTest, setOverride, resetAll: () => applyOverrides({}), render })]
         : view === 'roster'
-          ? rosterPage({ engine, roster, setRoster, setDeployment, clearAll: clearRosterState })
-          : view === 'plan'
-          ? planPage(planContext())
+          ? rosterPage({ engine, roster, setRoster, clearAll: clearRosterState })
           : view === 'units'
           ? unitsView(unitsContext())
           : view === 'wishlist'
@@ -2453,8 +2301,7 @@ function renderParts(parts: readonly Part[]): void {
               assumptions,
               run,
               setRun,
-              roleOf: runRoleOf(),
-              pins: () => [...marriagePins(roster), ...(run.pins ?? [])],
+              pins: () => run.pins ?? [],
               onProgress: solveProgressed,
               open: wishlistOpen,
               setOpen: (u) => {
@@ -2464,7 +2311,7 @@ function renderParts(parts: readonly Part[]): void {
               refresh: () => {
                 if (view === 'wishlist') renderParts(['main']);
               },
-              ledger: planControls(),
+              openUnit: openAnyUnit,
             })
           : view === 'run' && preparing
           ? prepPage({
@@ -2481,13 +2328,9 @@ function renderParts(parts: readonly Part[]): void {
                 prepFoe = i;
                 renderParts(['main']);
               },
-              roleOf: (() => {
-                const roles = engine.roles(roster, planSettings());
-                return (u: RosterUnit) => deployRoleOf(u, roster, roles);
-              })(),
               // The adopted plan (#204; the seed until one is adopted), as the Run view's flawless chance takes it: the shopping list reads the same runs.
               // Its backs and drops are span pins over this map only (#207), which this plan keeps.
-              plan: (roleOf) => engine.adoptedPlan(run, { pins: [...marriagePins(roster), ...(run.pins ?? [])], roleOf }),
+              plan: () => engine.adoptedPlan(run, { pins: run.pins ?? [] }),
             })
           : view === 'run'
           ? runView({
@@ -2506,9 +2349,8 @@ function renderParts(parts: readonly Part[]): void {
                 prepFoe = 0;
                 renderParts(['main']);
               },
-              roleOf: runRoleOf(),
-              // The marriages pinned on the Plan page and the run's item pins: the seed plan keeps them (#198, #193).
-              pins: () => [...marriagePins(roster), ...(run.pins ?? [])],
+              // The run's pins (marriage, span, keep, item): the seed plan keeps them (#198, #193, #200).
+              pins: () => run.pins ?? [],
               onProgress: solveProgressed,
               recording,
               setRecording: (r) => {
@@ -2572,8 +2414,7 @@ function whyContext(): WhyContext {
     assumptions,
     run,
     headline,
-    roleOf: runRoleOf(),
-    pins: () => [...marriagePins(roster), ...(run.pins ?? [])],
+    pins: () => run.pins ?? [],
     openMap: (id) => {
       view = 'run';
       preparing = undefined;

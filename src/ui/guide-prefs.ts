@@ -1,4 +1,3 @@
-import { hasSavedPlanPrefs } from './plan-prefs';
 import { hasSavedRoster } from './roster-store';
 
 /** A guide journey: Plan a fresh run, Re-plan after a loss, or Just look around. */
@@ -72,8 +71,8 @@ export const takeLoss = (prefs: GuidePrefs, events: readonly string[]): GuidePre
 /** The loss prompt's ✕: its events are noted, and the dock stays as it is. */
 export const dismissLoss = noteLoss;
 
-/** Whether an earlier visit saved a roster or plan preferences. */
-export const hasSavedRun = (): boolean => hasSavedRoster() || hasSavedPlanPrefs();
+/** Whether an earlier visit saved a run. */
+export const hasSavedRun = (): boolean => hasSavedRoster();
 
 const KEY = 'fe13-child-calc:guide:v1';
 

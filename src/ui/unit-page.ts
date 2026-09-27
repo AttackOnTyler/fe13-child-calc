@@ -1,11 +1,16 @@
 /**
  * The Units view (#101): the list of units, and a unit's page. A header with its identity chips, the class tree, then
- * build coverage (open), "As a parent" and pair-up folding away below it. It follows the global play context.
+ * build coverage (open), "As a parent" and pair-up folding away below it. It follows the explorer's play context.
+ *
+ * The explorer (#212; spec #175, user stories 99–101): unit pages and front doors rank by the explorer's presets
+ * (`scoring:v1`), never by the plan, and say so; each links to the unit's Wishlist entry; unit opinion is labelled as
+ * not read by the wishlist, and shown beside the unit's worth where the two strongly disagree.
  */
-import type { BuildMatch, ChildId, FrontDoor, OpinionBlock, OpinionMark, PairCurve, PresetId, Engine, PageSubject, PageUnitId, PartnerRow, PlanSettings, RobinRef, Roster, SkillRef, SkillViewSettings, TreeClass, UnitPage } from '../engine';
+import type { BuildMatch, ChildId, ExplorerSettings, FrontDoor, OpinionBlock, OpinionMark, PairCurve, PresetId, Engine, PageSubject, PageUnitId, PartnerRow, RobinRef, Roster, RosterUnit, SkillRef, SkillViewSettings, TreeClass, UnitPage } from '../engine';
 import { MOD_STATS, STATS, STAT_LABELS, type Gender, type Stat } from '../game-data/stats';
 import { h } from './dom';
 import { guide } from './guide';
+import { EXPLORER_NOTE, OPINION_NOTE } from './labels';
 
 export type UnitsContext = {
   readonly engine: Engine;
@@ -29,13 +34,18 @@ export type UnitsContext = {
   readonly skillChip: (skill: SkillRef, marks: (HTMLElement | string)[], title: string, cls?: string) => HTMLElement;
   /** A build coverage card (the one the Skills drawer uses). */
   readonly buildCard: (m: BuildMatch) => HTMLElement;
-  /** Partners read the roster, the saved plan and each child's plan preset. */
+  /** Partners read the roster and score each child in the explorer's preset. */
   readonly roster: Roster;
-  readonly planSettings: PlanSettings;
+  readonly explorerSettings: ExplorerSettings;
   /** Opens a child's table on this pairing. */
   readonly openPairing: (child: ChildId, key: string) => void;
-  readonly openPlan: () => void;
+  /** Opens the unit's entry on the Wishlist tab (#212). */
+  readonly openWishlist: (unit: RosterUnit) => void;
   readonly presetLabel: (id: PresetId) => string;
+  /** A note when the explorer's play context isn't the run's route (#212): the wishlist reads the route's templates. */
+  readonly contextNote?: string;
+  /** A unit's worth to the adopted plan in flawless points, once the Wishlist tab has worked it out (#202). */
+  readonly worth?: (unit: RosterUnit) => { readonly points: number; readonly text: string } | undefined;
   /** Every partner row shown, not only the top ones (view state). */
   readonly allPartners: boolean;
   readonly setAllPartners: (all: boolean) => void;
@@ -122,7 +132,8 @@ function frontDoorView(ctx: UnitsContext, d: FrontDoor): HTMLElement[] {
         { class: 'unit-head' },
         h('div', {}, h('button', { class: 'ghost small', onclick: ctx.back }, `← ${ctx.backLabel}`)),
         h('h2', {}, d.name),
-        h('div', { class: 'muted small' }, 'Child · front door'),
+        h('div', { class: 'muted small' }, 'Child · front door · ', wishlistLink(ctx, d.child)),
+        explorerNote(ctx),
         h('div', { class: 'chips' }, chip(`Fixed: ${d.fixedParent}`), chip(d.startClass ? `Starts ${d.startClass}` : 'Start class varies'), d.top[0] ? chip(`Best: ${d.top[0].label} ${d.top[0].score ?? '—'}`, undefined, 'plan') : null),
       ),
       d.waitsOnRobin
@@ -131,13 +142,13 @@ function frontDoorView(ctx: UnitsContext, d: FrontDoor): HTMLElement[] {
             'section',
             { ...guide('front-door-pairings') },
             h('h3', {}, 'Best parents'),
-            h('p', { class: 'muted small' }, 'By the Scoring sidebar’s preset, ranked as the pairing table ranks them.'),
+            h('p', { class: 'muted small' }, `By your preset (${ctx.presetLabel(ctx.explorerSettings.preset)}), ranked as the pairing table ranks them.`),
             h('div', { class: 'tiles' }, ...d.top.map(tile)),
             d.marked.length ? h('div', { class: 'small' }, h('b', {}, 'Also marked by a source: '), h('div', { class: 'tiles' }, ...d.marked.map((t) => tile(t, -1)))) : null,
             h('button', { class: 'ghost small', onclick: () => ctx.openTable(d.child) }, `All ${d.parentCount} parents in the pairing table →`),
           ),
       robinLine(),
-      opinions(ctx, ctx.engine.unitOpinions(d.child, ctx.settings)),
+      opinions(ctx, ctx.engine.unitOpinions(d.child, ctx.settings), d.child),
       h('details', { open: true }, h('summary', {}, 'The same in every pairing'), facts),
     ),
   ];
@@ -151,22 +162,54 @@ const CONTEXT_NAMES = { 'main-story': 'Main story', apotheosis: 'Apotheosis', al
 const markChip = (m: OpinionMark | undefined) =>
   m ? h('span', { class: `chip small op ${m.kind}`, title: `${m.source} ${m.kind === 'recommended' ? 'recommends' : 'warns against'} this${m.reason ? `: ${m.reason}` : ''}` }, `${m.kind === 'recommended' ? '♥' : '⚠'} ${m.source}`) : null;
 
+/** The explorer's header (#212): what the page ranks by, and the play context against the run's route. */
+const explorerNote = (ctx: UnitsContext): HTMLElement =>
+  h('p', { class: 'muted small explorer-note' }, EXPLORER_NOTE, ctx.contextNote ? ` ${ctx.contextNote}` : '');
+
+/** The unit's Wishlist entry (#212): the Wishlist tab with its edits open. */
+const wishlistLink = (ctx: UnitsContext, unit: RosterUnit): HTMLElement =>
+  h('button', { class: 'linkish', title: 'Its row on the Wishlist tab, with every edit that touches it and its cost', onclick: () => ctx.openWishlist(unit) }, 'Wishlist entry →');
+
+/** How a source's tier reads (its leading letter): S or A high, C or F low, B neither. */
+export function tierLean(tier: string | undefined): 'high' | 'low' | undefined {
+  const letter = tier?.trim()[0];
+  return letter === 'S' || letter === 'A' ? 'high' : letter === 'C' || letter === 'F' ? 'low' : undefined;
+}
+
+/** Worth (flawless points) under which a highly rated unit strongly disagrees with the plan, and from which a low one does. */
+export const WORTH_DISAGREES = { low: 1, high: 5 } as const;
+
+/**
+ * Whether a source's tier and the unit's worth to the plan strongly disagree (#212; spec #175, user story 101): rated S
+ * or A but worth under 1 point, or rated C or F but worth 5 points or more.
+ */
+export function opinionDisagrees(tier: string | undefined, points: number): boolean {
+  const lean = tierLean(tier);
+  return (lean === 'high' && points < WORTH_DISAGREES.low) || (lean === 'low' && points >= WORTH_DISAGREES.high);
+}
+
 /**
  * Each source's opinion, side by side and never merged (#105): “Ellery says…” with role, tier, classes, the loadout
- * matched against the unit (“4/5”), partners, note, citation and provenance.
+ * matched against the unit (“4/5”), partners, note, citation and provenance. Labelled as not read by the wishlist
+ * (#212); where a tier strongly disagrees with the unit's worth to the plan, the worth shows beside it.
  */
-function opinions(ctx: UnitsContext, blocks: readonly OpinionBlock[]): HTMLElement | null {
+function opinions(ctx: UnitsContext, blocks: readonly OpinionBlock[], unit: RosterUnit): HTMLElement | null {
   if (!blocks.length) return null;
   const names = (list: OpinionBlock['recommended']) => list.map((p) => (p.reason ? `${p.name} (${p.reason})` : p.name)).join(', ');
+  const worth = ctx.worth?.(unit);
   return h(
     'section',
     { ...guide('unit-opinion'), class: 'opinions' },
+    h('p', { class: 'muted small' }, OPINION_NOTE),
     ...blocks.map((o) =>
       h(
         'div',
         { class: 'opinion' },
         h('h4', {}, `${o.source.name} says…`, h('span', { class: 'muted small' }, ` ${CONTEXT_NAMES[o.context]}`)),
         h('div', { class: 'small' }, h('b', {}, o.role), o.tier ? h('span', { class: 'chip small' }, o.tier) : null),
+        worth && opinionDisagrees(o.tier, worth.points)
+          ? h('div', { class: 'small warn', title: 'The wishlist ranks by flawless chance: a unit’s worth is the chance the plan loses without it' }, `Worth to your plan: ${worth.text}. ${o.source.name} rates it ${o.tier}.`)
+          : null,
         o.classes.length ? h('div', { class: 'small' }, 'Classes: ', o.classes.join(', ')) : null,
         o.robinPick ? h('div', { class: 'small' }, 'Robin: ', h('b', {}, o.robinPick)) : null,
         o.loadout
@@ -202,7 +245,8 @@ function header(ctx: UnitsContext, p: UnitPage): HTMLElement {
     { class: 'unit-head' },
     h('div', {}, h('button', { class: 'ghost small', onclick: ctx.back }, `← ${ctx.backLabel}`)),
     h('h2', {}, p.name),
-    h('div', { class: 'muted small' }, `Joins in ${j.chapterLabel}${how} · Lv ${j.level} ${j.joinClassName}`),
+    h('div', { class: 'muted small' }, `Joins in ${j.chapterLabel}${how} · Lv ${j.level} ${j.joinClassName} · `, wishlistLink(ctx, p.robin ? 'robin' : (p.unit as RosterUnit))),
+    explorerNote(ctx),
     h(
       'div',
       { class: 'chips' },
@@ -277,7 +321,6 @@ function pairUp(p: UnitPage): HTMLElement {
 
 const PARTNER_MARKS = (r: PartnerRow): string[] => [
   ...(r.married ? ['married'] : []),
-  ...(r.planned ? ['◆ in plan'] : []),
   ...(r.dead ? ['dead'] : []),
   ...(r.blocked && !r.married ? ['blocked'] : []),
 ];
@@ -295,7 +338,7 @@ const curveChip = (c: PairCurve) => {
 
 /** Partners (#102): each possible spouse, the children the marriage produces, where it stands; read-only. */
 function partners(ctx: UnitsContext, p: UnitPage): HTMLElement {
-  const rows = ctx.engine.partners(p.robin ?? (p.unit as PageUnitId), ctx.roster, ctx.planSettings);
+  const rows = ctx.engine.partners(p.robin ?? (p.unit as PageUnitId), ctx.roster, ctx.explorerSettings);
   const shown = ctx.allPartners ? rows : rows.slice(0, TOP_PARTNERS);
   const partnerName = (r: PartnerRow) =>
     r.partner === 'robin'
@@ -307,12 +350,12 @@ function partners(ctx: UnitsContext, p: UnitPage): HTMLElement {
     'section',
     { ...guide('unit-partners'), class: 'partners' },
     h('h3', {}, `Partners (${rows.length})`),
-    h('p', { class: 'muted small' }, 'Sorted by the best child, each scored in its plan preset. Pin a marriage on the Plan to see what it costs.'),
+    h('p', { class: 'muted small' }, `Sorted by the best child, each scored in your preset (${ctx.presetLabel(ctx.explorerSettings.preset)}). What a marriage costs your run is a marriage edit on the Wishlist tab.`),
     ...shown.map((r) =>
       h(
         'div',
         { class: `partner${r.blocked && !r.married ? ' blocked' : ''}`, title: r.blocked && !r.married ? `Blocked: ${r.blocked}` : undefined },
-        h('div', {}, partnerName(r), markChip(r.opinion), curveChip(r.curve), ...PARTNER_MARKS(r).map((m) => h('span', { class: 'chip small' }, m)), ' ', h('button', { class: 'mini', title: 'Open the Plan', onclick: ctx.openPlan }, 'Plan →')),
+        h('div', {}, partnerName(r), markChip(r.opinion), curveChip(r.curve), ...PARTNER_MARKS(r).map((m) => h('span', { class: 'chip small' }, m))),
         h(
           'div',
           { class: 'small' },
@@ -322,7 +365,7 @@ function partners(ctx: UnitsContext, p: UnitPage): HTMLElement {
             h('span', { class: 'num', title: `Scored in ${ctx.presetLabel(c.preset)}` }, ` ${c.score ?? '—'}`),
           ]),
         ),
-        r.via ? h('div', { class: 'muted small' }, `Morgan on ${r.via.label} (${r.via.from === 'plan' ? 'its saved-plan pairing' : 'its best pairing left'})`) : null,
+        r.via ? h('div', { class: 'muted small' }, `Morgan on ${r.via.label} (its best pairing left)`) : null,
         r.blocked && !r.married ? h('div', { class: 'muted small' }, r.blocked) : null,
       ),
     ),
@@ -343,7 +386,7 @@ function unitPageView(ctx: UnitsContext, p: UnitPage): HTMLElement[] {
         'div',
         { class: 'unit-cols' },
         h('div', { class: 'unit-main' }, ...mainColumn(ctx, p)),
-        h('aside', { class: 'unit-side' }, opinions(ctx, ctx.engine.unitOpinions(p.robin ?? (p.unit as PageUnitId), ctx.settings)), partners(ctx, p)),
+        h('aside', { class: 'unit-side' }, opinions(ctx, ctx.engine.unitOpinions(p.robin ?? (p.unit as PageUnitId), ctx.settings), p.robin ? 'robin' : (p.unit as RosterUnit)), partners(ctx, p)),
       ),
     ),
   ];

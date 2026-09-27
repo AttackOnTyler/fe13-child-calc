@@ -63,7 +63,6 @@
  */
 import { CLASSES, type ClassId, type ClassTier } from '../../game-data/classes';
 import { STATS, type Gender, type Growths, type Modifiers, type Stat } from '../../game-data/stats';
-import type { DeploymentRole } from '../../curated/deployment';
 import type { Assumptions, BlindSpotId, RunBlindSpotId } from '../assumptions';
 import { CHILD_UNITS, type ChildId } from '../../game-data/children';
 import { CLASS_SKILLS, SKILLS, type SkillId } from '../../game-data/skills';
@@ -74,7 +73,7 @@ import { childJoinStats, classBaseStats, type JoinParent } from '../child-join';
 import { childParalogueGates, isChildParalogue } from '../child-paralogues';
 import { childSkills, type SkillParent } from '../child-skills';
 import { classGrowths, classMaxStats, className } from '../classes';
-import { suggestDeployment, type DeployCandidate, type Deployment, type Pair } from '../deploy';
+import { leadsByDefault, suggestDeployment, type DeployCandidate, type Deployment, type Pair } from '../deploy';
 import { COUNT_CAP, combatExp, danceExp, expFoeOf, secondSealCount, staffExp, tierBonus, type ExpFoe } from '../exp';
 import type { Difficulty, RosterUnit } from '../roster';
 import type { Fighter, Foe, SupportLevel } from '../solver';
@@ -120,7 +119,6 @@ export type ArmyUnit = {
   /** Staves and potions it can spend uses of (#182's sustain), with the uses left: spent map by map (#190). */
   readonly items?: readonly SimItem[];
   readonly supports: readonly { readonly partner: RosterUnit; readonly rank: SupportLevel }[];
-  readonly role: DeploymentRole;
 };
 
 /**
@@ -147,7 +145,6 @@ export type ChildRecruit = {
   readonly modifiers: Modifiers;
   readonly weapons: readonly Weapon[];
   readonly items?: readonly SimItem[];
-  readonly role: DeploymentRole;
   /**
    * A parent who died after marrying (#208, `child-after-parent-death`): its stats, class and skills from before the
    * loss, read in its place (it isn't in the army), fixed parent first. Its pass is frozen: its fixed pass, else its
@@ -931,7 +928,6 @@ function candidatesOf(state: RunState, extra: ReadonlyMap<RosterUnit, Live>, foe
     const kit = carriedBy(u, stats, foes);
     return {
       unit: u.base.id,
-      role: u.base.role,
       fighter: { ...fighterOf(u, stats), weapon: kit.weapons[0] },
       weapons: kit.weapons,
       ...(kit.items.length ? { items: kit.items } : {}),
@@ -988,7 +984,6 @@ function childOf(state: RunState, c: ChildRecruit, assumptions: Assumptions): Li
     weapons: c.weapons,
     ...(c.items ? { items: c.items } : {}),
     supports: [],
-    role: c.role,
   });
 }
 
@@ -1579,7 +1574,11 @@ function deploymentFor(state: RunState, input: RunSimInput, k: number, extra: Re
   const step = input.maps[k]!;
   const pools = new Map<Foe, readonly string[]>(step.map.foes.map((g) => [g.foe, g.pool ?? []]));
   const here = (u: RosterUnit) => state.army.has(u) || extra.has(u);
-  const leads = (u: RosterUnit) => step.forced.includes(u) || (state.army.get(u) ?? extra.get(u))!.base.role === 'lead';
+  // Who of a couple leads (#212: no role tag): a forced unit, else an armed unit that isn't a Dancer.
+  const leads = (u: RosterUnit) => {
+    const l = (state.army.get(u) ?? extra.get(u))!;
+    return step.forced.includes(u) || leadsByDefault({ fighter: fighterOf(l, shownStats(l)), weapons: l.weapons });
+  };
   const max = step.deploy || state.army.size + extra.size;
   // The plan pairs each couple it marries until they marry (#188), the one that leads in front: the couples whose
   // child's paralogue comes first, in half the slots at most (one couple at least; the realism pass). A careful player

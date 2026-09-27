@@ -3,9 +3,9 @@
  * of them still hold, and how a lineup keeps them.
  *
  * - **Where they live:** `Run.pins` holds marriage, span, keep-in/out and item pins (#193's `itemPins` read into it);
- *   side goals stay in `Run.sideGoals` (#191) and read as pins; the Plan page's pinned marriages (a pinned bond in the
- *   latest entry) read as marriage pins: `run:v2` (#205) migrated the saved ones into `Run.pins`, and today's Plan page
- *   still writes bonds until #212 retires it. A rule-out is a marriage pin with `forbid` (#205). `runPins` lists them all.
+ *   side goals stay in `Run.sideGoals` (#191) and read as pins. `run:v2` (#205) migrated the retired Plan page's pinned
+ *   marriages into `Run.pins` (#212 retired the page). A rule-out is a marriage pin with `forbid` (#205). `runPins`
+ *   lists them all.
  * - **Recorded facts are never pins** (`livePins`): a marriage pin on a unit the log marries, a span all played, a
  *   side goal on a recorded map, any pin on a unit dead or missed is dropped, and so has no cost.
  * - **Lineups keep them** (`lineupRules`, `pinnedLineup`): each map's span pins, keep-out on every map (a span pin
@@ -18,7 +18,7 @@ import type { Run, Snapshot } from '../run';
 import { SIDE_GOAL_IDS, sideGoalById, type SideGoalId } from '../side-goals';
 import type { LineupPlan } from '../sim/run-sim';
 import { parseItemPins } from '../item-plan';
-import { marriagePins, type MarriagePin, type Plan, type PlanPin, type Position, type RobinFact, type SpanPin, type SpanPosition } from './plan';
+import { type Plan, type PlanPin, type Position, type RobinFact, type SpanPin, type SpanPosition } from './plan';
 import { STATS, type Stat } from '../../game-data/stats';
 import { withRun } from '../roster';
 
@@ -81,14 +81,11 @@ export function parsePins(v: unknown, itemPins?: unknown): PlanPin[] {
 const latest = (run: Run): Snapshot | undefined => run.entries[run.entries.length - 1]?.snapshot;
 
 /**
- * Every pin the run holds, each once: `Run.pins`, its side goals (`Run.sideGoals`), and the Plan page's pinned marriages
- * (a pinned bond in the latest entry). Facts included: see `livePins`.
+ * Every pin the run holds, each once: `Run.pins` and its side goals (`Run.sideGoals`). Facts included: see `livePins`.
  */
 export function runPins(run: Run): PlanPin[] {
-  const snap = latest(run);
-  const bonds: MarriagePin[] = snap ? marriagePins({ ...run.roster, states: snap.states, spouses: snap.spouses }) : [];
   const goals: PlanPin[] = Object.entries(run.sideGoals ?? {}).map(([goal, decision]) => ({ kind: 'side-goal', goal: goal as SideGoalId, decision: decision! }));
-  return uniquePins([...bonds, ...(run.pins ?? []), ...goals]);
+  return uniquePins([...(run.pins ?? []), ...goals]);
 }
 
 /** Each pin once (by `pinKey`, the later kept, in first-seen order). */
@@ -154,9 +151,8 @@ export function withPin(run: Run, pin: PlanPin): Run {
 }
 
 /**
- * The run with pins lifted (all of them by default): gone from `Run.pins` and `Run.sideGoals`, a pinned bond in the
- * latest entry unpinned, and a lifted Robin Lock's facts opened again (those it filled). What the pin cost's second
- * search solves.
+ * The run with pins lifted (all of them by default): gone from `Run.pins` and `Run.sideGoals`, and a lifted Robin
+ * Lock's facts opened again (those it filled). What the pin cost's second search solves.
  */
 export function withoutPins(run: Run, lift?: readonly PlanPin[]): Run {
   const keys = lift ? new Set(lift.map(pinKey)) : undefined;
@@ -164,21 +160,9 @@ export function withoutPins(run: Run, lift?: readonly PlanPin[]): Run {
   const pins = (run.pins ?? []).filter((p) => !lifted(p));
   const goals = Object.fromEntries(Object.entries(run.sideGoals ?? {}).filter(([goal, decision]) => !lifted({ kind: 'side-goal', goal: goal as SideGoalId, decision: decision! })));
   const { pins: _p, sideGoals: _g, ...base } = run;
-  let entries = run.entries;
-  const last = entries[entries.length - 1];
-  if (last) {
-    const spouses = { ...last.snapshot.spouses };
-    let changed = false;
-    for (const [u, s] of Object.entries(spouses) as [RosterUnit, (typeof spouses)[RosterUnit]][])
-      if (s?.bond === 'pinned' && lifted({ kind: 'marriage', couple: [u, s.partner] })) {
-        delete spouses[u];
-        changed = true;
-      }
-    if (changed) entries = [...entries.slice(0, -1), { ...last, snapshot: { ...last.snapshot, spouses } }];
-  }
   const lock = (run.pins ?? []).find((p) => p.kind === 'robin-lock' && lifted(p));
   const roster = lock?.kind === 'robin-lock' && lock.open.length ? withRun(run.roster, Object.fromEntries(lock.open.map((f) => [f, null]))) : run.roster;
-  return { ...base, roster, entries, ...(pins.length ? { pins } : {}), ...(Object.keys(goals).length ? { sideGoals: goals } : {}) };
+  return { ...base, roster, ...(pins.length ? { pins } : {}), ...(Object.keys(goals).length ? { sideGoals: goals } : {}) };
 }
 
 /** One lineup constraint on one map: a unit's position (or pair), out of the lineup, or in it anywhere (keep-in). */

@@ -21,7 +21,6 @@
 import type {
   ChapterDifficulty,
   Deployment,
-  DeploymentRole,
   Difficulty,
   Engine,
   ExpForecast,
@@ -96,10 +95,8 @@ export type PrepContext = {
   readonly setRun: (run: Run) => void;
   readonly foe: number;
   readonly setFoe: (i: number) => void;
-  /** Each unit's deployment role: army fit's for children, the roster's tag otherwise (#121). */
-  readonly roleOf: (u: RosterUnit) => DeploymentRole;
-  /** The adopted plan (#204; the seed until one is adopted) for these roles, as the Run view's flawless chance reads it. */
-  readonly plan?: (roleOf: (u: RosterUnit) => DeploymentRole) => Plan;
+  /** The adopted plan (#204; the seed until one is adopted), as the Run view's flawless chance reads it. */
+  readonly plan?: () => Plan;
 };
 
 /** A recorded unit as a fighter (the engine's: the flawless chance builds its army the same way). */
@@ -244,8 +241,6 @@ export type PrepInput = {
   readonly forecast: ExpForecast;
   /** The plan's readings (#197), when the worker has read them: at-risk pins. */
   readonly readings?: Readings;
-  /** Roles for a map the forecast doesn't play (a greedy lineup). */
-  readonly roleOf?: (u: RosterUnit) => DeploymentRole;
 };
 
 const PRIORITY_TEXT = { high: 'High', normal: 'Normal', low: 'Low' } as const;
@@ -359,7 +354,7 @@ export function prepReadout(engine: Engine, run: Run, map: string, input: PrepIn
   const byUnit = new Map<RosterUnit, DeployCandidate>(
     prep.units.flatMap(([unit, u]) => {
       const f = fighterOf(unitName(unit, gender), u);
-      return f ? [[unit, { unit, role: input.roleOf?.(unit) ?? 'lead', fighter: f.fighter, weapons: f.weapons, items: f.items, supports: u.supports } as DeployCandidate]] : [];
+      return f ? [[unit, { unit, fighter: f.fighter, weapons: f.weapons, items: f.items, supports: u.supports } as DeployCandidate]] : [];
     }),
   );
   const forced = [...new Set([...forcedOn(map), ...opening])];
@@ -911,7 +906,7 @@ function actionRow(a: PrepAction): HTMLElement {
 function body(ctx: PrepContext, plan: Plan, forecast: ExpForecast): HTMLElement {
   const { engine, run } = ctx;
   const readings = solveState(run)?.readings;
-  const r = prepReadout(engine, run, ctx.map, { plan, forecast, ...(readings ? { readings } : {}), roleOf: ctx.roleOf });
+  const r = prepReadout(engine, run, ctx.map, { plan, forecast, ...(readings ? { readings } : {}) });
   const m = engine.maps().find((x) => x.id === ctx.map)!;
   const difficulty = run.roster.run.difficulty ?? 'normal';
   const table: ChapterDifficulty = difficulty === 'lunatic-plus' ? 'lunatic' : difficulty;
@@ -928,7 +923,7 @@ function body(ctx: PrepContext, plan: Plan, forecast: ExpForecast): HTMLElement 
   const byUnit = new Map<RosterUnit, DeployCandidate>(
     prep.units.flatMap(([unit, u]) => {
       const f = fighterOf(unitName(unit, gender), u);
-      return f ? [[unit, { unit, role: ctx.roleOf(unit), fighter: f.fighter, weapons: f.weapons, items: f.items, supports: u.supports } as DeployCandidate]] : [];
+      return f ? [[unit, { unit, fighter: f.fighter, weapons: f.weapons, items: f.items, supports: u.supports } as DeployCandidate]] : [];
     }),
   );
   const d = r.lineup;
@@ -1096,8 +1091,8 @@ export function prepPage(ctx: PrepContext): HTMLElement[] {
       if (!slot.isConnected) return;
       let f = FORECASTS.get(run);
       if (!f) {
-        const plan = ctx.plan ? ctx.plan(ctx.roleOf) : engine.seedPlan(run, { roleOf: ctx.roleOf });
-        FORECASTS.set(run, (f = { plan, forecast: engine.expForecast(run, plan, { roleOf: ctx.roleOf }) }));
+        const plan = ctx.plan ? ctx.plan() : engine.seedPlan(run);
+        FORECASTS.set(run, (f = { plan, forecast: engine.expForecast(run, plan) }));
       }
       if (slot.isConnected) slot.replaceWith(body(ctx, f.plan, f.forecast));
     }, 0);

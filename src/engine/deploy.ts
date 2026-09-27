@@ -1,24 +1,20 @@
 /**
- * Deployment, pairs and loadouts for the next map (#121). Starting from each unit's deployment role (army fit's for
- * children, the roster's tag for first-gen units and Robin), the solver fills the map's deploy count: forced units,
- * then lead + back pairs by how well they cover the map's foes, then Staff/Rally and dancer units, then whoever is left
- * while there is room (#133). Each deployed unit gets a loadout from its inventory and the convoy. Pure: the caller
- * resolves roles, fighters and foes.
+ * Deployment, pairs and loadouts for the next map (#121). The greedy lineup reads no role tag (#212): it fills the
+ * map's deploy count with forced units, the healers' slots, then lead + back pairs by how well they cover the map's foes (any armed unit
+ * can lead; a Dancer or an unarmed healer doesn't), then the Dancers and healers, then whoever is left while there is
+ * room (#133). Each deployed unit gets a loadout from its inventory and the convoy. Pure: the caller resolves fighters
+ * and foes.
  */
-import type { DeploymentRole } from '../curated/deployment';
 import { unitNamed, type HeldItem } from './run';
 import { MAPS } from '../game-data/chapters';
 import { bestWeapon, matchup, type Fighter, type Foe, type SupportLevel } from './solver';
-import { deploymentOf, type DeployableUnit, type Roster, type RosterUnit } from './roster';
-import type { RoleAssignment } from './army-fit';
-import { CHILD_UNITS, type ChildId } from '../game-data/children';
+import type { RosterUnit } from './roster';
 import { itemByName, type GameItem } from '../game-data/items';
-import type { SimItem } from './sim/sustain';
+import { dances, type SimItem } from './sim/sustain';
 
-/** A unit the solver can deploy: its role, fighter, weapons and supports. */
+/** A unit the solver can deploy: its fighter, weapons, items and supports. */
 export type DeployCandidate = {
   readonly unit: RosterUnit;
-  readonly role: DeploymentRole;
   readonly fighter: Fighter;
   readonly weapons: readonly NonNullable<Fighter['weapon']>[];
   /** Staves and other items it can spend uses of on the map (the simulation's sustain, #182). */
@@ -32,7 +28,7 @@ export type Deployment = {
   readonly max: number;
   readonly deployed: readonly RosterUnit[];
   readonly pairs: readonly Pair[];
-  /** Deployed but not in a pair (Staff/Rally, dancer, a forced unit left over). */
+  /** Deployed but not in a pair (a healer, a Dancer, a forced unit left over). */
   readonly solo: readonly RosterUnit[];
   /** The forced units deployed: the player can't drop them. */
   readonly forced: readonly RosterUnit[];
@@ -59,6 +55,25 @@ export function deployCount(text: string, opening: readonly string[]): number {
 export const forcedOn = (map: string): RosterUnit[] => (MAPS.find((m) => m.id === map)?.forced ?? []).flatMap((n) => unitNamed(n) ?? []);
 
 /**
+ * Whether the greedy lineup has a unit lead a pair (#212, in place of the deployment-role tag): it is armed and isn't a
+ * Dancer (who dances instead).
+ */
+export const leadsByDefault = (c: Pick<DeployCandidate, 'fighter' | 'weapons'>): boolean => armed(c) && !dances(c.fighter);
+
+/**
+ * A unit with something to fight with. One without never leads a pair (Chapter 2's Vaike, his axe in Miriel's hands):
+ * it can only be someone's back, or stand alone out of the way.
+ */
+const armed = (c: Pick<DeployCandidate, 'fighter' | 'weapons'>): boolean =>
+  c.weapons.some((w) => w.item.kind !== 'staff') || (!!c.fighter.weapon && c.fighter.weapon.item.kind !== 'staff');
+
+/** A unit carrying a staff: the suggested deployment keeps healers' slots for these. */
+const staffUser = (c: DeployCandidate): boolean => !!c.items?.some((i) => i.item.kind === 'staff') || c.weapons.some((w) => w.item.kind === 'staff');
+
+/** An unarmed unit with a staff: it heals from its own tile, so it's deployed alone, never as a back. */
+const healer = (c: DeployCandidate): boolean => !armed(c) && staffUser(c);
+
+/**
  * How well a unit covers the foes, as lead with this back: for each foe, 2 when one round kills it, 1 more when the
  * unit survives its worst round, weighted by how many there are.
  */
@@ -76,9 +91,11 @@ export function coverage(c: DeployCandidate, back: DeployCandidate | undefined, 
 const HEALER_SLOTS = [6, 12];
 
 /**
- * The suggested deployment: forced units always; a healer's slot from six slots, a second from twelve; then pairs, each lead (lead role, best coverage first) with the
- * battery (or else any unit) that raises its coverage most; then Staff/Rally and dancers; then, while room remains,
- * the best-covering unit left leads whatever its role (#133); within the deploy count. `pinned` pairs (the player's
+ * The suggested deployment, reading no role tag (#212): forced units always; a healer's slot (a unit carrying a staff,
+ * unarmed ones first) from six slots, a second from twelve; then pairs, each lead (an armed unit, best coverage first)
+ * with the back (an armed unit, or else any unit but a Dancer or a healer) that raises its coverage most; then the
+ * Dancers and unarmed healers; then, while room remains, the best-covering unit left leads (#133); within the deploy
+ * count. `pinned` pairs (the player's
  * edits) are kept as given, but a back an earlier pin already took leaves the later lead alone. A forced unit can't be
  * `excluded`.
  */
@@ -118,8 +135,9 @@ export function suggestDeployment(input: {
   const healing = new Set<RosterUnit>();
   const inPins = new Set((input.pinned ?? []).flatMap((p) => [p.lead, ...(p.back ? [p.back] : [])]));
   const healers = HEALER_SLOTS.filter((n) => input.max >= n).length;
-  const kept = Math.max(0, healers - deployed.filter((u) => byId.get(u)?.role === 'staff').length);
-  for (const c of [...byId.values()].filter((c) => !deployed.includes(c.unit) && c.role === 'staff' && !inPins.has(c.unit)).slice(0, kept)) {
+  const kept = Math.max(0, healers - deployed.filter((u) => byId.has(u) && staffUser(byId.get(u)!)).length);
+  const staffUsers = [...byId.values()].filter((c) => !deployed.includes(c.unit) && staffUser(c) && !inPins.has(c.unit));
+  for (const c of [...staffUsers.filter(healer), ...staffUsers.filter((c) => !healer(c))].slice(0, kept)) {
     if (room() <= 0) break;
     take(c.unit);
     healing.add(c.unit);
@@ -133,12 +151,12 @@ export function suggestDeployment(input: {
   const soloCoverage = new Map<RosterUnit, number>();
   const solo = (c: DeployCandidate) => soloCoverage.get(c.unit) ?? soloCoverage.set(c.unit, coverage(c, undefined, null, foes, pool)).get(c.unit)!;
   /**
-   * Deploys `lead` in a pair, with the battery (or else any unit but a dancer) that raises its coverage most among
-   * those the room allows: one already deployed alone costs no slot.
+   * Deploys `lead` in a pair, with the back (an armed unit, or else any unit but a Dancer or a healer) that raises its
+   * coverage most among those the room allows: one already deployed alone costs no slot.
    */
   const pairUp = (lead: DeployCandidate) => {
-    const backs = [...byId.values()].filter((c) => c.unit !== lead.unit && !paired.has(c.unit) && c.role !== 'dancer' && !healing.has(c.unit));
-    const pool2 = backs.some((c) => c.role === 'battery') ? backs.filter((c) => c.role === 'battery') : backs;
+    const backs = [...byId.values()].filter((c) => c.unit !== lead.unit && !paired.has(c.unit) && !dances(c.fighter) && !healer(c) && !healing.has(c.unit));
+    const pool2 = backs.some(leadsByDefault) ? backs.filter(leadsByDefault) : backs;
     let best: { back: DeployCandidate | undefined; score: number } = { back: undefined, score: solo(lead) };
     for (const back of pool2) {
       if (room() < slotCost(lead) + slotCost(back)) continue;
@@ -147,10 +165,7 @@ export function suggestDeployment(input: {
     }
     addPair(lead, best.back);
   };
-  // A unit with nothing to fight with never leads a pair (Chapter 2's Vaike, his axe in Miriel's hands): it can only
-  // be someone's back, or stand alone out of the way.
-  const armed = (c: DeployCandidate) => c.weapons.length > 0 || !!c.fighter.weapon;
-  const leads = [...byId.values()].filter((c) => c.role === 'lead' && armed(c) && !paired.has(c.unit)).sort((a, b) => solo(b) - solo(a));
+  const leads = [...byId.values()].filter((c) => leadsByDefault(c) && !healing.has(c.unit) && !paired.has(c.unit)).sort((a, b) => solo(b) - solo(a));
   // Forced units lead first, so Chrom (every story map) is paired rather than left alone.
   leads.sort((a, b) => Number(input.forced.includes(b.unit)) - Number(input.forced.includes(a.unit)));
   for (const lead of leads) {
@@ -158,9 +173,9 @@ export function suggestDeployment(input: {
     // A lead another lead took as its back is already in a pair.
     if (!paired.has(lead.unit)) pairUp(lead);
   }
-  const extras = [...byId.values()].filter((c) => !deployed.includes(c.unit) && (c.role === 'staff' || c.role === 'dancer'));
+  const extras = [...byId.values()].filter((c) => !deployed.includes(c.unit) && (healer(c) || dances(c.fighter)));
   for (const c of extras) if (room() > 0) take(c.unit);
-  // Room left with too few leads (#133): the best-covering unit left leads, whatever its role, and takes a back if it can.
+  // Room left (#133): the best-covering unit left leads, and takes a back if it can.
   const waiting = [...byId.values()].filter((c) => !deployed.includes(c.unit)).sort((a, b) => solo(b) - solo(a));
   for (const c of waiting) {
     if (room() <= 0 || deployed.includes(c.unit)) continue;
@@ -209,13 +224,4 @@ export function suggestLoadout(c: DeployCandidate, back: DeployCandidate | undef
   });
   const items = [...weapons, ...others.map((hi) => ({ item: hi.item, from: 'inventory' as const, foes: 0 }))].slice(0, 5);
   return { unit: c.unit, items };
-}
-
-/**
- * A unit's deployment role for the solver: army fit's for a child (its derived role, or where a quota moved it), the
- * roster's tag for a first-gen unit and Robin; a child out of the cast leads.
- */
-export function deployRoleOf(unit: RosterUnit, roster: Roster, roles: ReadonlyMap<ChildId, RoleAssignment>): DeploymentRole {
-  if (unit in CHILD_UNITS) return roles.get(unit as ChildId)?.role ?? 'lead';
-  return deploymentOf(roster, unit as DeployableUnit).role;
 }

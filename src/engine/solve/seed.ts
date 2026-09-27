@@ -36,7 +36,6 @@ import type { SkillId } from '../../game-data/skills';
 import { MOD_STATS, STATS, type Gender, type Modifiers, type Stat } from '../../game-data/stats';
 import { FIRST_GEN_UNITS, type UnitId } from '../../game-data/units';
 import { CHROM_FALLBACK_PARTNER } from '../../game-data/supports';
-import type { DeploymentRole } from '../../curated/deployment';
 import type { Assumptions } from '../assumptions';
 import { className } from '../classes';
 import { flawlessInput, withPlanRobin } from '../flawless';
@@ -76,8 +75,6 @@ export type SeedContext = {
 export type SeedOptions = {
   /** Hard constraints: a pinned couple marries; an item pin places its item (#193). */
   readonly pins?: readonly PlanPin[];
-  /** Each unit's deployment role for the greedy lineups; by default the roster's tag, a child leads (until #212). */
-  readonly roleOf?: (u: RosterUnit) => DeploymentRole;
 };
 
 /** A pairing's endpoint coverage: the seed's value for it. */
@@ -253,7 +250,7 @@ const shareOf = (beaten: number, foes: number, presence: number): EndpointCovera
 
 /** The endpoint coverage of one pairing in a run (the facade's, for the Why panel and tests). */
 export function endpointCoverage(run: Run, ctx: SeedContext, child: ChildId, parents: Couple, robin: PlanRobin): EndpointCoverage | undefined {
-  const { input } = flawlessInput(run, ctx.assumptions, undefined, []);
+  const { input } = flawlessInput(run, ctx.assumptions, []);
   const model = coverageFor(input, input.cleared ?? []);
   const r = robinRef(robin);
   const p = pairingsOf(parents, r).find((x) => x.child === child);
@@ -323,7 +320,7 @@ export function placedForSupports(run: Run, assumptions: Assumptions, plan: Plan
 /** One seed (see the module comment), never matching a `forbidden` couple. */
 function seedOnce(run: Run, ctx: SeedContext, options: SeedOptions, forbidden: ReadonlySet<string>): Plan {
   const facts = run.roster.run;
-  const base = flawlessInput(run, ctx.assumptions, options.roleOf, []);
+  const base = flawlessInput(run, ctx.assumptions, []);
   const model = coverageFor(base.input, base.input.cleared ?? []);
   const snap = latestEntry(run)?.snapshot;
   const recorded: Couple[] = (base.input.married ?? []).filter((c): c is Couple => c[1] !== 'maiden');
@@ -417,7 +414,7 @@ export function planFor(run: Run, ctx: SeedContext, options: SeedOptions, robin:
     roadmap: { order: [], lineups: [], seals: [], items: [] },
   };
   const planned = withPlanRobin(run, shell);
-  const { input, endpoint, sources } = flawlessInput(planned, ctx.assumptions, options.roleOf, marriages as Couple[] as [RosterUnit, RosterUnit][]);
+  const { input, endpoint, sources } = flawlessInput(planned, ctx.assumptions, marriages as Couple[] as [RosterUnit, RosterUnit][]);
   const r = robinRef(robin);
   const inArmy = new Set(input.army.map((a) => a.id));
 
@@ -530,7 +527,7 @@ function keptAtEndpoint(army: ReturnType<typeof ceilingArmy>, rules: readonly Li
 export function withPriorities(run: Run, ctx: SeedContext, options: SeedOptions, plan: Plan): Plan {
   const { roadmap } = plan;
   const bare: Plan = { ...plan, roadmap: { order: roadmap.order, lineups: roadmap.lineups, seals: roadmap.seals, items: roadmap.items } };
-  const priorities = defaultPriorities(milestones(run, bare, ctx.assumptions), flawlessInput(run, ctx.assumptions, options.roleOf, undefined, bare).input);
+  const priorities = defaultPriorities(milestones(run, bare, ctx.assumptions), flawlessInput(run, ctx.assumptions, undefined, bare).input);
   return priorities.length ? { ...bare, roadmap: { ...bare.roadmap, priorities } } : bare;
 }
 

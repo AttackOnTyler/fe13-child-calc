@@ -15,7 +15,6 @@ import {
   welcomeShows,
   type GuidePrefs,
 } from './guide-prefs';
-import { DEFAULT_PLAN_PREFS, savePlanPrefs } from './plan-prefs';
 import { clearRoster, saveRoster } from './roster-store';
 
 const used: GuidePrefs = { seen: true, journey: 'loss', dock: 'pill', lossEvents: ['dead:frederick', 'married:lonqu+cordelia'] };
@@ -60,12 +59,10 @@ describe('guide preferences', () => {
       expect(loadGuidePrefs()).toEqual(used);
     });
 
-    it('count a saved roster or plan preferences as a saved run', () => {
+    it('count nothing but a saved run as a saved run', () => {
       expect(hasSavedRun()).toBe(false);
       saveGuidePrefs(used);
       expect(hasSavedRun()).toBe(false);
-      savePlanPrefs(DEFAULT_PLAN_PREFS);
-      expect(hasSavedRun()).toBe(true);
     });
 
     it('count a saved roster as a saved run', () => {

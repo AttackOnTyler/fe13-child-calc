@@ -29,7 +29,6 @@ const hero = (more: Partial<ArmyUnit> = {}): ArmyUnit => ({
   skills: [],
   weapons: [{ item: item('Iron Sword') }],
   supports: [],
-  role: 'lead',
   ...more,
 });
 
@@ -105,7 +104,7 @@ describe('a parent’s booster before paralogue entry (#193)', () => {
     skills: ['Dual Strike+', 'Charm', 'Aether'],
   });
   const sumia = hero({ id: 'sumia', name: 'Sumia', gender: 'F', classId: 'dark-flier', level: 10, stats: stats(46, 24, 16, 37, 37, 30, 10, 25), skills: ['Speed +2', 'Relief', 'Galeforce'], weapons: [] });
-  const lucina: ChildRecruit = { id: 'lucina', name: 'Lucina', parents: ['chrom', 'sumia'], fixed: [fixedPass('chrom', 'F'), undefined], growths: flat, modifiers: noMods, weapons: [{ item: item('Parallel Falchion') }], role: 'lead' };
+  const lucina: ChildRecruit = { id: 'lucina', name: 'Lucina', parents: ['chrom', 'sumia'], fixed: [fixedPass('chrom', 'F'), undefined], growths: flat, modifiers: noMods, weapons: [{ item: item('Parallel Falchion') }] };
   const robe = { id: 'held:Seraph Robe#0', item: 'Seraph Robe' };
   const maps = [step(rout('chapter-13', []), { children: [lucina], uses: [{ kind: 'booster', item: 'Seraph Robe', unit: 'chrom', source: robe.id }] }), step(rout('end', []), { deploy: 3 })];
   const lucinaHp = (e = engine) => sim({ army: [chrom, sumia], maps, married: [['chrom', 'sumia']], held: [robe] }, 1, e).units.find((u) => u.id === 'lucina')!.stats.hp.median;

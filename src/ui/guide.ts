@@ -1,7 +1,8 @@
 /**
  * Anchors that tie the usage guide to real controls. A control the guide points at carries `data-guide="<id>"`, added
  * through `guide()`, so the guide finds it whatever its class names or label text. `guide.test.ts` fails when a target
- * has no anchor left in the UI source.
+ * has no anchor left in the UI source. #212 removed the Plan page's anchors and the Roster's Deploy, deployment-role
+ * and Bench anchors with their controls, and the guide entries that pointed at them.
  */
 export const GUIDE_TARGETS = [
   // Header
@@ -10,20 +11,11 @@ export const GUIDE_TARGETS = [
   // Roster
   'run-setup',
   'run-facts',
-  'deploy',
-  'deploy-role',
   'state-strip',
-  'bench',
   'spouse-picker',
   'married',
   // Wishlist
   'children-ledger',
-  // Plan
-  'marriage-table',
-  'priority',
-  'quota-bar',
-  'quota-edit',
-  'role-matrix',
   'units-rail',
   'run-rail',
   'chapter-log',
@@ -51,22 +43,9 @@ export const GUIDE_TARGETS = [
   'robin-preview',
   'front-door-pairings',
   'unit-opinion',
-  'no-robin',
-  'robin-first',
-  'robin-gain',
-  'plan-preset',
-  'plan-preset-reset',
-  'pin',
-  'rule-out',
-  'free-replan',
-  'adopt',
-  'robin-lock',
-  'broken-pins',
-  'plan-diff',
   // Tables
   'leaderboard',
   'child-table',
-  'score-with-plan-preset',
   'skills-drawer',
   'robin-heatmap',
   // Scoring sidebar
@@ -77,5 +56,5 @@ export const GUIDE_TARGETS = [
 
 export type GuideTarget = (typeof GUIDE_TARGETS)[number];
 
-/** The `data-guide` attribute for `h()`: `h('button', { ...guide('adopt'), … })`. */
+/** The `data-guide` attribute for `h()`: `h('button', { ...guide('prepare'), … })`. */
 export const guide = (id: GuideTarget): { readonly 'data-guide': GuideTarget } => ({ 'data-guide': id });

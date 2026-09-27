@@ -1,18 +1,16 @@
 /**
- * The supply list, seals and promotions for the next map (#122). What the open armories sell (merchants only as a
- * chance), the purchases and forges that close the solver's gaps within the gold held, when seals can be bought, and
- * whether to promote now or later. Expected stats (from average growths) are used only for that last question, and are
- * labelled as expected.
+ * Stock, seals and promotions for the next map (#122). What the open armories sell (merchants only as a chance), when
+ * seals can be bought, and whether to promote now or later. Expected stats (from average growths) are used only for
+ * that last question, and are labelled as expected. The supply list became the shopping list (#190; removed in #212).
  */
 import { CLASS_BASES, type ClassBase } from '../game-data/class-bases';
 import { CLASSES, type ClassData, type ClassId } from '../game-data/classes';
 import { MAPS, SEAL_RULES } from '../game-data/chapters';
-import { FORGE, forgeCost, itemByName, type ForgeLevels } from '../game-data/items';
 import { STATS, type Gender, type Stat } from '../game-data/stats';
 import { className, promotionsOf } from './classes';
 import type { DeployCandidate } from './deploy';
 import type { HeldItem } from './run';
-import { bestWeapon, type Fighter, type Foe, type SupportLevel } from './solver';
+import { bestWeapon, type Foe } from './solver';
 
 export type StockItem = { readonly item: string; readonly cost: number | null; readonly where: string };
 
@@ -83,21 +81,6 @@ export function sealsHeld(items: readonly HeldItem[]): { master: number; second:
   return { master: count('Master Seal'), second: count('Second Seal') };
 }
 
-// ---- the supply list ----
-
-export type Supply = {
-  readonly unit: string;
-  readonly action: 'buy' | 'forge';
-  readonly item: string;
-  readonly forge?: ForgeLevels;
-  readonly cost: number;
-  /** Foes it turns into one-round kills. */
-  readonly closes: number;
-  readonly where?: string;
-};
-
-const WEAPON_KINDS = new Set(['sword', 'lance', 'axe', 'bow', 'tome']);
-
 /** The weapon kinds a class can use (SF class base stats). */
 export function classWeaponKinds(cls: string): Set<string> {
   const id = classIdByName(cls);
@@ -113,60 +96,6 @@ function classBase(id: ClassId, g: Gender): ClassBase | undefined {
 
 const CLASS_ID = new Map<string, ClassId>((Object.keys(CLASSES) as ClassId[]).flatMap((id) => (['M', 'F'] as Gender[]).map((g) => [className(id, g), id] as const)));
 export const classIdByName = (name: string): ClassId | undefined => CLASS_ID.get(name);
-
-/**
- * Purchases and forges that close the solver's gaps (#122): for each deployed lead, the buy (a weapon the open armories
- * sell, of a kind its class uses) or forge (more Mt on a weapon it holds) that turns most foes it can't one-round into
- * one-round kills, cheapest per foe first, added while the gold lasts. Never more than the gold, never off the shelf.
- */
-export function supplyList(input: {
-  readonly leads: readonly { readonly c: DeployCandidate; readonly back: Fighter | undefined; readonly support: SupportLevel | null }[];
-  readonly foes: readonly Foe[];
-  readonly pool: (f: Foe) => readonly string[];
-  readonly stock: readonly StockItem[];
-  readonly forge: boolean;
-  readonly gold: number;
-}): Supply[] {
-  const kills = (c: DeployCandidate, weapons: readonly NonNullable<Fighter['weapon']>[], back: Fighter | undefined, support: SupportLevel | null) =>
-    input.foes.reduce((n, foe) => {
-      const b = weapons.length ? bestWeapon(c.fighter, weapons, back, support, foe, input.pool(foe)) : undefined;
-      return n + (b && (b.result.oneRounds || b.result.oneRoundsWithDualStrikes) ? (foe.boss ? 1 : foe.count) : 0);
-    }, 0);
-  const options: Supply[] = [];
-  for (const { c, back, support } of input.leads) {
-    const base = kills(c, c.weapons, back, support);
-    const kinds = classWeaponKinds(c.fighter.className);
-    const best: Supply[] = [];
-    for (const s of input.stock) {
-      const it = itemByName(s.item);
-      if (!it || !WEAPON_KINDS.has(it.kind) || !(kinds.has(it.kind) || c.weapons.some((w) => w.item.kind === it.kind)) || s.cost === null) continue;
-      const gain = kills(c, [...c.weapons, { item: it }], back, support) - base;
-      if (gain > 0) best.push({ unit: c.fighter.name, action: 'buy', item: it.name, cost: s.cost, closes: gain, where: s.where });
-    }
-    if (input.forge)
-      for (const w of c.weapons) {
-        if (!w.item.forgeable) continue;
-        const from = { mt: w.forge?.mt ?? 0, hit: (w.forge?.hit ?? 0) / FORGE.step.hit, crit: (w.forge?.crit ?? 0) / FORGE.step.crit };
-        for (let mt = from.mt + 1; mt <= FORGE.maxPerStat; mt++) {
-          const to = { ...from, mt };
-          if (to.mt + to.hit + to.crit > FORGE.maxTotal) break;
-          const forged: NonNullable<Fighter['weapon']> = { item: w.item, forge: { mt, hit: to.hit * FORGE.step.hit, crit: to.crit * FORGE.step.crit } };
-          const gain = kills(c, [...c.weapons.filter((x) => x !== w), forged], back, support) - base;
-          if (gain > 0) {
-            best.push({ unit: c.fighter.name, action: 'forge', item: w.item.name, forge: to, cost: forgeCost(w.item, to, from), closes: gain });
-            break;
-          }
-        }
-      }
-    best.sort((a, b) => a.cost / a.closes - b.cost / b.closes);
-    if (best[0]) options.push(best[0]);
-  }
-  options.sort((a, b) => a.cost / a.closes - b.cost / b.closes);
-  const out: Supply[] = [];
-  let left = input.gold;
-  for (const o of options) if (o.cost <= left) (out.push(o), (left -= o.cost));
-  return out;
-}
 
 // ---- seals and promotions ----
 

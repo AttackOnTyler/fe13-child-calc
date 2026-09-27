@@ -129,8 +129,8 @@ export type Run = {
   /** Lunatic+ random skills the player saw on a map's enemies (#120): map id → foe key → skills. */
   readonly seen?: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>;
   /**
-   * Everything on the roster but unit states and spouses: Run facts. A migrated run's rule-outs, saved plan and deploy
-   * flags are empty (they became pins or were dropped); today's Roster and Plan pages still write them until #212.
+   * Everything on the roster but unit states and spouses: Run facts. A migrated run's rule-outs are empty (they became
+   * pins); nothing writes them since #212 retired the Plan page.
    */
   readonly roster: Roster;
   /** In play order. */

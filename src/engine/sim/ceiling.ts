@@ -94,7 +94,6 @@ function capped(a: ArmyUnit): DeployCandidate & { readonly shown: CeilingUnit } 
   const name = className(classId, a.gender);
   return {
     unit: a.id,
-    role: a.role,
     fighter: { name: a.name, className: name, stats, skills: a.skills, weapon: a.weapons[0] },
     weapons: a.weapons,
     ...(a.items?.length ? { items: a.items } : {}),
@@ -136,7 +135,6 @@ function childUnit(c: ChildRecruit, army: ReadonlyMap<RosterUnit, ArmyUnit>, ass
     weapons: c.weapons,
     ...(c.items ? { items: c.items } : {}),
     supports: [],
-    role: c.role,
   };
 }
 

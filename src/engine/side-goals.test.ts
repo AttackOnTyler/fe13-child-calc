@@ -134,7 +134,6 @@ const soldier = (id: string): ArmyUnit => ({
   skills: [],
   weapons: [weapon('Iron Sword')],
   supports: [],
-  role: 'lead',
 });
 const goal = (chase: boolean, actions: number, by: number): RunSimSideGoal => ({
   id: 'thieves',

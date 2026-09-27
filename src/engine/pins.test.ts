@@ -75,7 +75,9 @@ describe('pins in the lineups (#200)', () => {
   const ch25 = lineupAt(late, seed, 'chapter-25');
   // Units the map doesn't force (Chrom and Robin lead every story map).
   const free = fielded(ch25).filter((u) => u !== 'chrom' && u !== 'robin');
-  const [a, b] = [ch25.pairs.find((p) => p.lead !== 'chrom' && p.lead !== 'robin')!.lead, free.find((u) => !ch25.pairs.some((p) => p.lead === u))!];
+  const a = ch25.pairs.find((p) => p.lead !== 'chrom' && p.lead !== 'robin')!.lead;
+  // A fielded unit that neither leads nor already backs `a` there.
+  const b = free.find((u) => !ch25.pairs.some((p) => p.lead === u || (p.lead === a && p.back === u)))!;
 
   it('keeps a unit out of one map’s lineup, set from the preparation page, and leaves the next map free', () => {
     const run = withPin(late, mapSpanPin(a, 'out', 'chapter-25'));

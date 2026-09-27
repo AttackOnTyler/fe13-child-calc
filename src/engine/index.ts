@@ -82,21 +82,15 @@ import { createScorer } from './scoring';
 import { pairUpSpd } from './pair-up';
 import { contextReachesDlc, defaultTargetBreakpoint } from './speed';
 import { runSelfTest } from './self-test';
-import { EMPTY_ROSTER, evaluateBlocking, rosterUnits, stateOf, unitName, withRun, type Blocking, type Roster, type RosterUnit, type RunFacts } from './roster';
-import { CANDIDATE_PRESETS, PRESETS, type PresetId, type ScoringRole } from '../curated/presets';
-import { DEFAULT_PRIORITY, childLedger, evaluatePlan, savedPairings, solvePlan, type LedgerEntry, type MarriagePlan, type PlanContext, type PlannedChild } from './plan';
-import type { Difficulty, SavedPlan } from './roster';
+import { evaluateBlocking, rosterUnits, stateOf, unitName, withRun, type Blocking, type Roster, type RosterUnit, type RunFacts } from './roster';
+import { PRESETS, type PresetId, type ScoringRole } from '../curated/presets';
+import type { Difficulty } from './roster';
 import { combatExp, type CombatOutcome, type ExpFoe } from './exp';
 import { classChangeProposals, internalLevels, type ProposedClassChange, type UnitInternalLevel } from './internal-level';
 import { entryShopping, type EntryShopping } from './shopping';
 import { sideGoalChoices, sideGoalsSecured, type SideGoalChoice, type SideGoalRecord } from './side-goals';
 import { renownAhead, type RenownAhead } from './renown';
-import { deploymentRoleOf, inPlay } from './composition';
-import { ARMY_FIT_PASS_CAP, armyFit, type RoleAssignment } from './army-fit';
-import { deriveRoles, type Derivation, type RobinGain, type RobinGainSide } from './derive';
-import type { ChildDeploymentRole, DeploymentRole } from '../curated/deployment';
-import { FIXED_INHERITANCE, RALLY_SKILLS } from '../game-data/skills';
-import { STAFF_CLASSES } from '../game-data/classes';
+import { FIXED_INHERITANCE } from '../game-data/skills';
 import { remainingMapOrder, type MapOrder } from './map-order';
 import type { Run } from './run';
 export { dismissMigrationNote, importRun, migrateRun } from './run-migration';
@@ -116,7 +110,7 @@ import type {
   ScoreBasis,
   PairingScore,
   ParentRef,
-  PlanSettings,
+  ExplorerSettings,
   Preset,
   RobinRef,
   Scoring,
@@ -144,8 +138,8 @@ export { childJoinStats, classBaseStats, type ChildJoinInput, type ChildJoinStat
 export { fixedPass, startSkills, type ChildSkills, type ChildSkillsInput, type SkillParent } from './child-skills';
 export type { Citation } from '../game-data/citations';
 export { CHAPTER_GUIDE, type GuideEntry } from '../curated/chapter-guide';
-export { classIdByName, classWeaponKinds, openStock, promotionAdvice, sealAvailability, sealsHeld, supplyList, type PromotionAdvice, type SealAvailability, type StockItem, type Supply } from './supply';
-export { coverage, deployCount, deployMax, deployRoleOf, forcedOn, suggestDeployment, suggestLoadout, type DeployCandidate, type Deployment, type Loadout, type Pair } from './deploy';
+export { classIdByName, classWeaponKinds, openStock, promotionAdvice, sealAvailability, sealsHeld, type PromotionAdvice, type SealAvailability, type StockItem } from './supply';
+export { coverage, deployCount, deployMax, forcedOn, leadsByDefault, suggestDeployment, suggestLoadout, type DeployCandidate, type Deployment, type Loadout, type Pair } from './deploy';
 export { childParalogueGates, isChildParalogue, type ChildParalogueGate, type ParalogueGateState } from './child-paralogues';
 export { type MapWaves, type Wave, type WaveGroup } from './waves';
 export { type ArmySpread, type SimItem } from './sim/sustain';
@@ -159,7 +153,7 @@ export { TOP_PAIR_POINTS, combatPoints, mapSupportGains, type SupportGain, type 
 export { FLAWLESS_RUNS, FLAWLESS_SEED, fighterOf, type FlawlessChance, type FlawlessOptions, type NotSimulated } from './flawless';
 export { effectiveCaps, type Ceiling, type CeilingUnit } from './sim/ceiling';
 export type { LineupPlan } from './sim/run-sim';
-export { isMarriagePin, isRuleOut, mapSpanPin, marriagePins } from './solve/plan';
+export { isMarriagePin, isRuleOut, mapSpanPin } from './solve/plan';
 export { pinKey, withPin, withoutPins, type LineupRule } from './solve/pins';
 export { adoptedOf, proposalId, withDismissedProposal, withEdit, withoutEdit, type NewEdit } from './solve/adopted';
 export { behindFixes, sameWishlist, type MilestoneMoves, type MovedProposal, type PlanBreak } from './solve/resolve';
@@ -292,8 +286,6 @@ export { buildSortKey } from './builds';
 export {
   EMPTY_ROSTER,
   UNIT_STATES,
-  deploymentOf,
-  isDeployable,
   isRuledOut,
   parseRoster,
   pinLoss,
@@ -302,17 +294,12 @@ export {
   unitName,
   withRuleOut,
   withRun,
-  withSavedPlan,
   withSpouse,
   withState,
-  withDeploy,
-  withDeployRole,
   type Blocking,
-  type DeployableUnit,
   type Bond,
   type Couple,
   type PinLoss,
-  type SavedPlan,
   type Spouse,
   type Roster,
   type RosterEntry,
@@ -327,31 +314,10 @@ export {
   type Route,
 } from './roster';
 export type { PresetId, ScoringRole, Weights } from '../curated/presets';
-export { DEPLOYMENT_ROLES, type ChildDeploymentRole, type DeploymentRole, type DeploymentTag, type QuotaRange, type Quotas } from '../curated/deployment';
-export { composition, deploymentRoleOf, quotaContext, quotasFor, type Composition, type QuotaStatus, type RoleCount } from './composition';
-export { ARMY_FIT_PASS_CAP, type RoleAssignment, type RoleSource } from './army-fit';
-export { CHILD_DEPLOYMENT_ROLES, type Derivation, type DerivedRole, type OutOfCast, type RobinGain, type RobinGainSide } from './derive';
 export type { ClassLine, ClassTree, FrontDoor, FrontDoorTile, OpinionBlock, OpinionMark, PageSubject, PageUnitId, ParentedChild, PartnerChild, PartnerRow, PassedClasses, TreeClass, TreeSkill, UnitAsParent, UnitPage } from './unit-page';
-export { CANDIDATE_PRESETS } from '../curated/presets';
 export { STAFF_CLASSES } from '../game-data/classes';
 export { SUPPORT_POINTS_PER_MAP, type PairCurve, type SupportPairCurve } from './support-curves';
 export type { SupportCurve, SupportThresholds, SupportUnit } from '../game-data/supports';
-export {
-  DEFAULT_PRIORITY,
-  PLAN_PRIORITIES,
-  adoptPlan,
-  canPin,
-  diffPlans,
-  lockRobin,
-  type LeftOut,
-  type LeftOutReason,
-  type LedgerEntry,
-  type LedgerStatus,
-  type MarriagePlan,
-  type PlanDiff,
-  type PlanMarriage,
-  type PlannedChild,
-} from './plan';
 
 export type Engine = {
   /** Every child unit, in game-data order. */
@@ -506,10 +472,10 @@ export type Engine = {
   unitSkillCard(subject: PageSubject, id: SkillId, settings: SkillViewSettings): SkillCard;
   /**
    * A unit's Partners (#102): one row per possible S-support partner (Robin's included; SpotPass units have Robin only),
-   * with the children the marriage produces and their scores in their plan presets, and where the marriage stands
-   * against the roster and the saved plan. Sorted by the best child's score; read-only, no plan re-solve.
+   * with the children the marriage produces and their scores in the explorer's preset (#212: `scoring:v1`), and where
+   * the marriage stands against the roster. Sorted by the best child's score. The wishlist never reads it.
    */
-  partners(subject: PageSubject, roster: Roster, settings: PlanSettings): readonly PartnerRow[];
+  partners(subject: PageSubject, roster: Roster, settings: ExplorerSettings): readonly PartnerRow[];
   /**
    * A pair's support curve (#177), either way round: slow, medium, fast or non-romantic, its thresholds (total points
    * for C, B, A and S), maps together to each rank at 3 points a map and one rank a map, and maps to S (slow 8, fast
@@ -530,48 +496,6 @@ export type Engine = {
   unitOpinions(subject: PageSubject | ChildId, settings: SkillViewSettings): readonly OpinionBlock[];
   /** Whether the roster blocks a pairing (hard: it can no longer happen; soft: it contradicts a pin or a bench), and why. */
   blocking(result: ChildResult, roster: Roster): Blocking;
-  /**
-   * A child's plan preset (#96): its preset override, else its role override's role preset, else the role preset of the
-   * role army fit gives it. A child out of the cast without an override gets the global preset.
-   */
-  planPreset(child: ChildId, roster: Roster, settings: PlanSettings): PresetId;
-  /** Every child's deployment role and plan preset after army fit, and where each comes from. */
-  roles(roster: Roster, settings: PlanSettings): ReadonlyMap<ChildId, RoleAssignment>;
-  /**
-   * The children who qualify for Staff/Rally: their planned pairing (their best Lead pairing when unplanned) reaches a
-   * staff class or a rally skill (#71).
-   */
-  staffQualified(roster: Roster, settings: PlanSettings): ReadonlySet<ChildId>;
-  /**
-   * The marriage plan: max Σ priority × score, each child in its plan preset (Auto class), with marriages and pins
-   * fixed, broken and on-hold pins dropped and rule-outs never planned. `free` ignores the pins.
-   */
-  plan(roster: Roster, settings: PlanSettings, options?: { readonly free?: boolean }): MarriagePlan;
-  /**
-   * Derived roles (#95): each child's standing against the cast under every candidate preset, measured on its best
-   * pairing that can still happen, with its role preset per deployment role and its best role. Dead children and
-   * children with no pairing left are out of the cast, and so is Morgan until Robin is set in the run facts.
-   */
-  deriveRoles(roster: Roster, settings: PlanSettings): Derivation;
-  /**
-   * Robin gain (#98): per child except Morgan, its best score under its Lead role preset with Robin in the gene pool
-   * minus its best without, both pairings named. The run facts' Robin when set, else each child's best Robin; it never
-   * ranks Robins for the run. Children out of the cast have no entry.
-   */
-  robinGain(roster: Roster, settings: PlanSettings): ReadonlyMap<ChildId, RobinGain>;
-  /**
-   * A saved plan as it was adopted, valued under today's settings, each child in its plan preset on the roster (as
-   * today's plan has it): only the run facts block its pairings, not the losses and marriages since, so a diff against
-   * today's plan shows what they cost.
-   */
-  evaluatePlan(saved: SavedPlan, roster: Roster, settings: PlanSettings): MarriagePlan;
-  /** The keys of the saved plan's pairings (the tables' ◆ in plan); empty without a saved plan. */
-  planKeys(roster: Roster): ReadonlySet<string>;
-  /**
-   * The children ledger: each child of the run with its fixed parent, the plan's pairing (or its parents' marriage),
-   * its best pairing that can still happen with Δ vs the plan, and its status.
-   */
-  ledger(roster: Roster, settings: PlanSettings): readonly LedgerEntry[];
   /**
    * The EXP one combat gives (research/exp-rules; #185). A back earns only from its own Dual Strikes (half its damage
    * EXP, all of it on a kill, never kill EXP); Veteran's ×1.5 applies only when its holder is in front (C4). The
@@ -653,7 +577,7 @@ export type Engine = {
    * place, seals, items), then keeping it out of the wishlist (a wishlist unit; never Chrom or Robin) or in (anyone
    * else). Each edited plan is built only when it's costed (`editCost` with the edit's `play` pins).
    */
-  unitEdits(run: Run, plan: Plan, unit: RosterUnit, options?: { readonly pins?: readonly PlanPin[]; readonly seed?: number; readonly roleOf?: (u: RosterUnit) => DeploymentRole }): readonly UnitEdit[];
+  unitEdits(run: Run, plan: Plan, unit: RosterUnit, options?: { readonly pins?: readonly PlanPin[]; readonly seed?: number }): readonly UnitEdit[];
   /**
    * The adopted plan (#204): the run's (`Run.adopted`, made to keep the pins set since), or the seed when there's none
    * (or its Robin contradicts the run facts). What the solve starts from and the edits' costs are read against.
@@ -676,12 +600,12 @@ export type Engine = {
    * or Rally action, both on the plan's own runs (paired, ±95%). Chrom and Robin read forced. Every unit in any of the
    * plan's lineups has one. Pass the returned cursor to the next step until converged (runs double to `cap`).
    */
-  unitWorth(input: WorthInput & { readonly roleOf?: (u: RosterUnit) => DeploymentRole }): WorthStep;
+  unitWorth(input: WorthInput): WorthStep;
   /**
    * The plan a unit's worth is read against (#202): without the unit and the children it takes with it, its spouse
    * re-matched, the wishlist rebuilt and the roadmap re-solved greedily where it was named (for the worth's drill-down).
    */
-  worthPlan(run: Run, plan: Plan, unit: RosterUnit, options?: { readonly pins?: readonly PlanPin[]; readonly roleOf?: (u: RosterUnit) => DeploymentRole }): Plan;
+  worthPlan(run: Run, plan: Plan, unit: RosterUnit, options?: { readonly pins?: readonly PlanPin[] }): Plan;
   /** The same over a hand-built army and maps: a unit is removed with the children it parents (tests). */
   simulateWorth(input: RunSimInput, options: Omit<WorthInput, 'run' | 'plan' | 'pins'>): WorthStep;
   /**
@@ -690,7 +614,7 @@ export type Engine = {
    * runs; ordered, each naming the loss it mainly covers. Run it when the worker is idle, after the solve. The plan it
    * returns lists them and changes nothing else: no EXP is set aside for a reserve.
    */
-  reserves(input: ReservesInput & { readonly roleOf?: (u: RosterUnit) => DeploymentRole }): ReservesStep;
+  reserves(input: ReservesInput): ReservesStep;
   /**
    * The Robin alternatives (#201), within a budget of evaluations: every Robin option the run facts leave open (the run
    * with its Robin Lock lifted) screened by its seed and ceiling; the best of each gender solved in full (a budgeted
@@ -700,12 +624,12 @@ export type Engine = {
    * and `lockCost` is what the lock cost. `noRobin` adds the no-Robin view (Robin no one's parent). Pass the returned
    * cursor to the next step, across the Lock too.
    */
-  robinAlternatives(input: RobinInput & { readonly pins?: readonly PlanPin[]; readonly roleOf?: (u: RosterUnit) => DeploymentRole }): RobinStep;
+  robinAlternatives(input: RobinInput & { readonly pins?: readonly PlanPin[] }): RobinStep;
   /**
    * Every map's lineup on a plan's roadmap (#198): its own where it names one, else the greedy lineup its projection
    * picks. Plays every map once: about 2 s on a fresh Full route (the Web Worker's job, #199).
    */
-  roadmapLineups(run: Run, plan: Plan, options?: Pick<FlawlessOptions, 'seed' | 'roleOf'>): readonly PlanLineup[];
+  roadmapLineups(run: Run, plan: Plan, options?: Pick<FlawlessOptions, 'seed'>): readonly PlanLineup[];
   /**
    * A plan's milestones for a run (#194): supports (windows counted in maps, non-starters flagged), skills learned (for
    * a build, or passed at paralogue entry; wasted passes flagged), recruitments and classes reached (each naming its
@@ -714,7 +638,7 @@ export type Engine = {
    */
   milestones(run: Run, plan: Plan): readonly Milestone[];
   /**
-   * The pins that hold on a run (#200): its own (`Run.pins`, its side goals, the Plan page's pinned marriages) and
+   * The pins that hold on a run (#200): its own (`Run.pins` and its side goals) and
    * `extra` (as `solveStep` takes them), each once, less recorded facts (a pin on what already happened, or on a unit
    * dead or missed). Hard constraints on the solve.
    */
@@ -770,7 +694,7 @@ export type Engine = {
    */
   readings(run: Run, plan: Plan, options?: ReadingsOptions): Readings;
   /** The latest recorded map's stats as percentiles of the spread expected there (#197): "Str p12". */
-  recordedStats(run: Run, options?: Pick<FlawlessOptions, 'roleOf'>): readonly UnitStats[];
+  recordedStats(run: Run): readonly UnitStats[];
   /**
    * What a plan can no longer meet on a run (#206): a unit it needs lost, a recorded marriage it doesn't hold, a support
    * of its that's a non-starter in the maps left. Non-empty: the re-solve's proposal is required before the next map.
@@ -814,7 +738,7 @@ export type Engine = {
     run: Run,
     plan: Plan,
     unit: RosterUnit,
-    options?: { readonly seed?: number; readonly runs?: number; readonly idle?: boolean; readonly pins?: readonly PlanPin[]; readonly roleOf?: (u: RosterUnit) => DeploymentRole },
+    options?: { readonly seed?: number; readonly runs?: number; readonly idle?: boolean; readonly pins?: readonly PlanPin[] },
   ): RunSim;
 };
 
@@ -1178,48 +1102,47 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
   const seedBuilds = new Map<string, BuildMatch | undefined>();
   /**
    * A plan's simulation input, kept for the plans a run's solve is comparing (#199): its runs are simulated in batches,
-   * and each batch reuses the input and so its projection (run-sim's). A few plans per run and roles; the oldest goes.
+   * and each batch reuses the input and so its projection (run-sim's). A few plans per run; the oldest goes.
    */
   /** Hand-built worth variants (#202, `simulateWorth`), kept while the input lives. */
   const handBuilt = new WeakMap<RunSimInput, Map<string, RunSimInput>>();
   /** The ceilings explanations read (#210), by input, seed and runs. */
   const ceilings = new WeakMap<RunSimInput, Map<string, Ceiling | undefined>>();
-  const planInputs = new WeakMap<Run, { roleOf: ((u: RosterUnit) => DeploymentRole) | undefined; byPlan: Map<string, ReturnType<typeof flawlessInput>> }>();
-  const planBuilt = (run: Run, plan: Plan, roleOf: ((u: RosterUnit) => DeploymentRole) | undefined): ReturnType<typeof flawlessInput> => {
+  const planInputs = new WeakMap<Run, { byPlan: Map<string, ReturnType<typeof flawlessInput>> }>();
+  const planBuilt = (run: Run, plan: Plan): ReturnType<typeof flawlessInput> => {
     let held = planInputs.get(run);
-    if (!held || held.roleOf !== roleOf) planInputs.set(run, (held = { roleOf, byPlan: new Map() }));
+    if (!held) planInputs.set(run, (held = { byPlan: new Map() }));
     // What the simulation reads of a plan (its builds don't count): plans alike there share an input and its projection.
     const k = simKeyOf(plan);
     let built = held.byPlan.get(k);
     if (built) {
       held.byPlan.delete(k);
     } else {
-      built = flawlessInput(run, assumptions, roleOf, undefined, plan);
+      built = flawlessInput(run, assumptions, undefined, plan);
       if (held.byPlan.size >= PLAN_INPUTS) held.byPlan.delete(held.byPlan.keys().next().value!);
     }
     held.byPlan.set(k, built);
     return built;
   };
-  const planInput = (run: Run, plan: Plan, roleOf: ((u: RosterUnit) => DeploymentRole) | undefined): RunSimInput => planBuilt(run, plan, roleOf).input;
+  const planInput = (run: Run, plan: Plan): RunSimInput => planBuilt(run, plan).input;
   /**
    * A plan's flawless chance (#198): its input kept with the plan's (`planBuilt`), so re-scoring a plan the solve is
    * comparing reuses its projection.
    */
   const planChance = (run: Run, options: FlawlessOptions & { readonly plan: Plan }): FlawlessChance => {
-    if (options.marriages) return flawlessChance(run, assumptions, options);
-    const { input, notSimulated, unknownHistory, endpoint, goldUnrecorded, renown } = planBuilt(run, options.plan, options.roleOf);
+    const { input, notSimulated, unknownHistory, endpoint, goldUnrecorded, renown } = planBuilt(run, options.plan);
     const sim = simulateRuns(input, options.seed ?? FLAWLESS_SEED, options.runs ?? FLAWLESS_RUNS, assumptions);
     return { ...sim, notSimulated, unknownHistory, endpoint, goldUnrecorded, renown };
   };
   /**
    * Worth's variants of a plan (#202), each input built once and kept while the run lives (so each keeps its
    * projection across steps): the plan, the plan without a unit (and the children it takes), the unit idle, and a
-   * reserve stepping into a lost unit's slot. Kept per run and roles, the oldest going first.
+   * reserve stepping into a lost unit's slot. Kept per run, the oldest going first.
    */
-  const worthHeld = new WeakMap<Run, { roleOf: ((u: RosterUnit) => DeploymentRole) | undefined; inputs: Map<string, RunSimInput>; plans: Map<string, Plan> }>();
-  const worthVariants = (run: Run, plan: Plan, roleOf: ((u: RosterUnit) => DeploymentRole) | undefined, pins: readonly PlanPin[] | undefined) => {
+  const worthHeld = new WeakMap<Run, { inputs: Map<string, RunSimInput>; plans: Map<string, Plan> }>();
+  const worthVariants = (run: Run, plan: Plan, pins: readonly PlanPin[] | undefined) => {
     let held = worthHeld.get(run);
-    if (!held || held.roleOf !== roleOf) worthHeld.set(run, (held = { roleOf, inputs: new Map(), plans: new Map() }));
+    if (!held) worthHeld.set(run, (held = { inputs: new Map(), plans: new Map() }));
     const { inputs, plans } = held;
     const planKey = JSON.stringify([plan, pins ?? []]);
     const keep = <T,>(m: Map<string, T>, k: string, make: () => T): T => {
@@ -1232,12 +1155,12 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       m.set(`${planKey}|${k}`, x);
       return x;
     };
-    const inputFor = (p: Plan) => flawlessInput(run, assumptions, roleOf, undefined, p).input;
+    const inputFor = (p: Plan) => flawlessInput(run, assumptions, undefined, p).input;
     const base = keep(inputs, 'plan', () => inputFor(plan));
     const recruited = new Set<RosterUnit>([...base.army.map((a) => a.id), ...base.maps.flatMap((m) => [...m.joining, ...m.later].map((a) => a.id))]);
     const recorded = (base.married ?? []).filter((c): c is readonly [RosterUnit, RosterUnit] => c[1] !== 'maiden');
     const goneOf = (u: RosterUnit) => new Set<RosterUnit>([u, ...childrenOf(plan, u, recruited)]);
-    const options = { ...(pins ? { pins } : {}), ...(roleOf ? { roleOf } : {}) };
+    const options = { ...(pins ? { pins } : {}) };
     const without = (u: RosterUnit) => keep(plans, `without:${u}`, () => planWithout(run, seedContext(run), options, plan, goneOf(u), recorded));
     const inputOf = (v: WorthVariant): RunSimInput => {
       if (v.kind === 'plan') return base;
@@ -1261,15 +1184,15 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     return { base, recruited, goneOf, inputOf, utility, without };
   };
   /** Every map's lineup on a plan's roadmap: its own where it names one, else the greedy lineup its projection picks. */
-  const lineupsOf =(run: Run, plan: Plan, seed: number, roleOf: ((u: RosterUnit) => DeploymentRole) | undefined): PlanLineup[] => {
-    const input = planInput(run, plan, roleOf);
+  const lineupsOf = (run: Run, plan: Plan, seed: number): PlanLineup[] => {
+    const input = planInput(run, plan);
     const lineups = planLineups(input, seed, assumptions);
     return input.maps.map((m, i) => ({ key: m.key, pairs: lineups[i]!.pairs.map((p) => ({ lead: p.lead, ...(p.back ? { back: p.back } : {}) })), solo: [...lineups[i]!.solo] }));
   };
 
   /**
    * The seed for a run, kept while the run lives (a run is replaced, never edited): it takes 0.3–1.2 s since #199 fixes
-   * its non-starters. Without roles only (the roles are a function).
+   * its non-starters.
    */
   /**
    * A run with pins added (#200), or taken off, kept per run and pins: the solve's caches (the seed, each plan's input)
@@ -1283,7 +1206,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     if (!r) held.set(key, (r = make()));
     return r;
   };
-  /** The run with pins given besides its own (the Plan page's, until #205): the run itself when it holds them all. */
+  /** The run with pins given besides its own (a page's, not yet saved): the run itself when it holds them all. */
   const pinnedRun = (run: Run, extra: readonly PlanPin[] | undefined): Run => {
     const has = new Set(runPins(run).map(pinKey));
     const more = (extra ?? []).filter((p) => !has.has(pinKey(p)));
@@ -1295,7 +1218,6 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
   const livePinsOf = (run: Run): PlanPin[] => livePins(run, runPins(run), remainingMapOrder(run).steps.map((s) => s.key));
   const seeds = new WeakMap<Run, Map<string, Plan>>();
   const seedFor = (run: Run, options: SeedOptions): Plan => {
-    if (options.roleOf) return seedPlan(run, seedContext(run), options);
     let held = seeds.get(run);
     if (!held) seeds.set(run, (held = new Map()));
     const k = JSON.stringify(options.pins ?? []);
@@ -1305,9 +1227,9 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
   };
 
   /** The loss item's proposal (#208): the reserves stepping in kept in (keep-in pins), then `lossPlan`. */
-  const lossPlanOf = (run: Run, plan: Plan, roleOf: ((u: RosterUnit) => DeploymentRole) | undefined): Plan => {
+  const lossPlanOf = (run: Run, plan: Plan): Plan => {
     const r = pinnedRun(run, steppingIn(run, plan).map((x): PlanPin => ({ kind: 'keep', unit: x.unit, keep: 'in' })));
-    return lossPlan(r, seedContext(r), { pins: livePinsOf(r), ...(roleOf ? { roleOf } : {}) }, plan);
+    return lossPlan(r, seedContext(r), { pins: livePinsOf(r) }, plan);
   };
   const seedContext = (run: Run): SeedContext => {
     const context: PlayContext = run.roster.run.route ?? 'main-story';
@@ -1338,41 +1260,24 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       breakpoints: assumptions['spd-breakpoints'],
     }))(settings);
 
-  // The plan scores each child in its own preset: keep each preset's scores until the settings change.
-  const planScores = new Map<string, Map<string, PairingScore>>();
-  const planScoresFor = (settings: ScoreSettings) => {
+  // Partners score each child in the explorer's preset: keep each preset's scores until the settings change.
+  const partnerScores = new Map<string, Map<string, PairingScore>>();
+  const partnerScoresFor = (settings: ScoreSettings) => {
     const k = JSON.stringify(settings);
-    let found = planScores.get(k);
+    let found = partnerScores.get(k);
     if (!found) {
-      if (planScores.size >= 32) planScores.clear();
-      planScores.set(k, (found = scoreAll(settings)));
+      if (partnerScores.size >= 32) partnerScores.clear();
+      partnerScores.set(k, (found = scoreAll(settings)));
     }
     return found;
   };
-  // The Plan view asks for the plan and the free re-plan under one roster and settings: share values.
-  let lastPlan: { roster: Roster; settings: string; ctx: PlanContext } | undefined;
-  const planContext = (roster: Roster, s: PlanSettings): PlanContext => {
-    const k = JSON.stringify(s);
-    if (lastPlan?.roster !== roster || lastPlan.settings !== k) lastPlan = { roster, settings: k, ctx: newPlanContext(roster, s, rolesFor(roster, s)) };
-    return lastPlan.ctx;
-  };
-  // A saved plan's pairings on a roster with only the run facts, but each child in the roster's own plan preset: army
-  // fit reads the whole roster (benches, deployment), so the run facts alone would put the children in other presets.
-  // Its values don't depend on the saved plan, so every saved plan under one roster and settings shares them.
-  let lastSaved: { roster: Roster; settings: string; ctx: PlanContext } | undefined;
-  const savedPlanContext = (roster: Roster, s: PlanSettings): PlanContext => {
-    const k = JSON.stringify(s);
-    if (lastSaved?.roster !== roster || lastSaved.settings !== k)
-      lastSaved = { roster, settings: k, ctx: newPlanContext({ ...EMPTY_ROSTER, run: roster.run }, s, rolesFor(roster, s)) };
-    return lastSaved.ctx;
-  };
-  /** A plan preset's scores, in its own role, Auto class and the global rest (undefined: no score). */
-  const presetScores = (preset: PresetId, s: PlanSettings): Map<string, PairingScore> | undefined => {
+  /** A preset's scores, in its own role, Auto class and the global rest (undefined: no score). */
+  const presetScores = (preset: PresetId, s: ExplorerSettings): Map<string, PairingScore> | undefined => {
     const data = PRESETS[preset];
     const edit = s.edits[preset];
     const role = data.role ?? 'lead';
     return data.weights
-      ? planScoresFor({
+      ? partnerScoresFor({
           weights: edit?.weights ?? data.weights,
           mixed: edit?.mixed ?? data.mixed,
           basis: BASES[role].includes(s.basis) ? s.basis : 'caps-lb',
@@ -1383,117 +1288,6 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
           supportRank: s.supportRank,
         })
       : undefined;
-  };
-  const newPlanContext = (roster: Roster, s: PlanSettings, roles: ReadonlyMap<ChildId, RoleAssignment>): PlanContext => {
-    const memo = new Map<string, PlannedChild | undefined>();
-    const byPreset = new Map<PresetId, Map<string, PairingScore> | undefined>();
-    const scoresOf = (preset: PresetId) => {
-      if (!byPreset.has(preset)) byPreset.set(preset, presetScores(preset, s));
-      return byPreset.get(preset);
-    };
-    // Blocking reads only which units a pairing needs, never Robin's asset/flaw: share it across the 56.
-    const blockings = new Map<string, Blocking>();
-    const blockingOf = (pairing: Pairing, key: string) => {
-      const units = key.replace(/robin:\w+\/\w+/g, 'robin');
-      let found = blockings.get(units);
-      if (!found) blockings.set(units, (found = evaluateBlocking(pairing, roster, assumptions)));
-      return found;
-    };
-    const value = (pairing: Pairing, key: string): PlannedChild | undefined => {
-      if (!byKey.has(key) || (s.noRobin && robinRefOf(pairing))) return undefined;
-      const blocking = blockingOf(pairing, key);
-      if (blocking.status === 'hard') return undefined;
-      const { child } = pairing;
-      const assigned = roles.get(child);
-      const preset = assigned?.preset ?? s.overrides[child] ?? s.preset;
-      const sc = scoresOf(preset)?.get(key);
-      const priority = s.priorities[child] ?? DEFAULT_PRIORITY;
-      return {
-        child,
-        name: CHILD_UNITS[child].name,
-        key,
-        parent: parentName(pairing.variableParent),
-        preset,
-        deploymentRole: deploymentRoleOf(preset),
-        priority,
-        score: sc?.score,
-        scaled: sc?.scaled,
-        value: priority * (sc?.scaled ?? 0),
-        notes: blocking.notes,
-        ...(assigned ? { roleSource: assigned.source } : {}),
-        ...(assigned?.reason ? { fitReason: assigned.reason } : {}),
-      };
-    };
-    const candidates = new Map<ChildId, readonly Pairing[]>();
-    return {
-      roster,
-      child: (pairing) => {
-        const key = pairingKey(pairing);
-        if (!memo.has(key)) memo.set(key, value(pairing, key));
-        return memo.get(key);
-      },
-      parentLabel: (pairing) => parentName(pairing.variableParent),
-      candidates: (child) => {
-        let found = candidates.get(child);
-        if (!found) {
-          found = narrowAll(groupsByChild.get(child) ?? [], { run: roster.run })
-            .flatMap((g) => g.results.map((r) => r.pairing))
-            .filter((p) => !s.noRobin || !robinRefOf(p));
-          candidates.set(child, found);
-        }
-        return found;
-      },
-    };
-  };
-
-  /**
-   * A child's pool (#95): the keys of its pairings that can still happen (the run facts narrow Robin; hard-blocked ones
-   * are out). `noRobin` drops every pairing with Robin as a parent (#98). Cached per roster.
-   */
-  let poolRoster: Roster | undefined;
-  const pools = new Map<string, string[]>();
-  const poolFor = (roster: Roster, child: ChildId, noRobin: boolean): string[] => {
-    if (poolRoster !== roster) {
-      poolRoster = roster;
-      pools.clear();
-    }
-    const k = `${child}|${noRobin}`;
-    let found = pools.get(k);
-    if (!found)
-      pools.set(
-        k,
-        (found = narrowAll(groupsByChild.get(child) ?? [], { run: roster.run })
-          .flatMap((g) => g.results.map((r) => r.pairing))
-          .filter((p) => !(noRobin && robinRefOf(p)) && evaluateBlocking(p, roster, assumptions).status !== 'hard')
-          .map(pairingKey)
-          .filter((k) => byKey.has(k))),
-      );
-    return found;
-  };
-  /** Robin gain (#98): per child but Morgan, the best under its Lead role preset with Robin minus without. */
-  const robinGainFor = (roster: Roster, settings: PlanSettings): ReadonlyMap<ChildId, RobinGain> => {
-    const derivation = derivationFor(roster, { ...settings, noRobin: false });
-    const out = new Map<ChildId, RobinGain>();
-    for (const d of derivation.roles) {
-      if (CHILD_UNITS[d.child].fixedParent === 'robin') continue;
-      const preset = d.rolePreset.lead;
-      const sc = presetScores(preset, settings);
-      const best = (keys: readonly string[]): RobinGainSide | undefined => {
-        let top: RobinGainSide | undefined;
-        for (const key of keys) {
-          const score = sc?.get(key)?.score;
-          if (score === undefined || (top && top.score >= score)) continue;
-          const r = byKey.get(key)!;
-          top = { key, parent: parentName(r.pairing.variableParent), score };
-        }
-        return top;
-      };
-      const withRobin = best(poolFor(roster, d.child, false));
-      if (!withRobin) continue;
-      const without = best(poolFor(roster, d.child, true));
-      out.set(d.child, { child: d.child, preset, with: withRobin, without, gain: withRobin.score - (without?.score ?? 0) });
-    }
-    return out;
   };
 
   /** The children a first-gen unit parents, as the fixed or the variable parent, with their pairing keys (#101). */
@@ -1546,41 +1340,29 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     return [...list, ...(robin ? (['robin'] as const) : [])];
   };
   /**
-   * The pairing a child partner of Robin brings to Morgan (#103): its parents in the saved plan, else its best pairing
-   * that can still happen in its plan preset. Robin marries the child, so is never its parent: the pairing holds no
-   * Robin at all, and fits whichever Robin the page previews (#124).
+   * The pairing a child partner of Robin brings to Morgan (#103): its best pairing that can still happen (a
+   * recorded marriage leaves only its own) in the explorer's preset. Robin marries the child, so is never its parent: the pairing
+   * holds no Robin at all, and fits whichever Robin the page previews (#124).
    */
-  const childPartnerPairing = (c: ChildId, roster: Roster, s: PlanSettings): { pairing: Pairing; from: 'plan' | 'best' } | undefined => {
-    const fixed = CHILD_UNITS[c].fixedParent;
-    const spouse = roster.savedPlan?.marriages.find((m) => m.includes(fixed));
-    const other = spouse && (spouse[0] === fixed ? spouse[1] : spouse[0]);
+  const childPartnerPairing = (c: ChildId, roster: Roster, s: ExplorerSettings): { pairing: Pairing } | undefined => {
     const pool = narrowAll(groupsByChild.get(c) ?? [], { run: roster.run })
       .flatMap((g) => g.results)
       .filter((r) => !robinRefOf(r.pairing));
-    if (other) {
-      const planned = pool.find((r) => parentsOf(r.pairing)[1] === other);
-      if (planned) return { pairing: planned.pairing, from: 'plan' };
-    }
-    const scores = presetScores(rolesFor(roster, s).get(c)?.preset ?? s.preset, s) ?? presetScores(s.preset, s);
+    const scores = presetScores(s.preset, s);
     let best: { pairing: Pairing; score: number } | undefined;
     for (const r of pool) {
       if (evaluateBlocking(r.pairing, roster, assumptions).status === 'hard') continue;
       const score = scores?.get(r.key)?.score ?? -1;
       if (!best || score > best.score) best = { pairing: r.pairing, score };
     }
-    return best && { pairing: best.pairing, from: 'best' };
+    return best && { pairing: best.pairing };
   };
   /** A roster unit as a support unit: Robin by the gender the pair gives it. */
   const supportUnitOf = (u: RosterUnit, gender: Gender): SupportUnit => (u === 'robin' ? (gender === 'M' ? 'robin-m' : 'robin-f') : u);
-  const partnersFor = (subject: PageSubject, roster: Roster, s: PlanSettings): PartnerRow[] => {
-    const derivation = derivationFor(roster, s);
+  const partnersFor = (subject: PageSubject, roster: Roster, s: ExplorerSettings): PartnerRow[] => {
     const self: RosterUnit = typeof subject === 'string' ? subject : 'robin';
-    const couple = (a: RosterUnit, b: RosterUnit) => (c: readonly [RosterUnit, RosterUnit]) => (c[0] === a && c[1] === b) || (c[0] === b && c[1] === a);
-    const presetOf = (child: ChildId) => {
-      const planned = rolesFor(roster, s).get(child)?.preset ?? s.overrides[child] ?? s.preset;
-      const lead = derivation.roles.find((d) => d.child === child)?.rolePreset.lead ?? s.preset;
-      return presetScores(planned, s) ? planned : lead;
-    };
+    // Every child scores in the explorer's preset (#212: no plan preset).
+    const presetOf = (_child: ChildId) => s.preset;
     const unitGender = typeof subject === 'string' ? (FIRST_GEN_UNITS[subject].gender as Gender) : undefined;
     // Once the run sets Robin's gender, a unit of that gender can't marry Robin.
     const partners: RosterUnit[] =
@@ -1607,7 +1389,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         if (blocking.status === 'hard') blocked ??= blocking.hard.join('; ');
       };
       if (typeof subject !== 'string' && partner in CHILD_UNITS) {
-        // Robin × a child: Morgan, on the child's plan pairing or its best that can still happen.
+        // Robin × a child: Morgan, on the child's best pairing that can still happen.
         const c = partner as ChildId;
         const brought = childPartnerPairing(c, roster, s);
         if (brought) {
@@ -1618,7 +1400,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
           };
           const key = pairingKey(morgan);
           if (byKey.has(key)) add(morgan.child, [{ key, pairing: morgan }]);
-          via = { label: `${CHILD_UNITS[c].name} ← ${parentName(brought.pairing.variableParent)}`, from: brought.from };
+          via = { label: `${CHILD_UNITS[c].name} ← ${parentName(brought.pairing.variableParent)}` };
         }
       } else
       {
@@ -1658,7 +1440,6 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         children,
         best: defined.length ? Math.max(...defined) : undefined,
         married: spouse?.bond === 'married' && spouse.partner === partner,
-        planned: !!roster.savedPlan?.marriages.some(couple(self, partner)),
         dead: stateOf(roster, partner) === 'dead',
         curve: pairCurve(supportUnitOf(self, gender), supportUnitOf(partner, opposite(gender)))!,
         blocked,
@@ -1766,76 +1547,6 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       waitsOnRobin: waits,
       robin: isMorgan ? { kind: 'robins-child' } : canMarryRobin ? { kind: 'yes', morgan, robinSet } : { kind: 'no' },
     };
-  };
-
-  /** Derived roles for a roster and settings (#95). */
-  const derivationFor = (roster: Roster, settings: PlanSettings): Derivation => {
-    const robinSet = roster.run.gender !== null && roster.run.asset !== null && roster.run.flaw !== null;
-    const children = rosterUnits(roster.run).filter((u) => u.kind === 'child').map((u) => u.id as ChildId);
-    const pool = (child: ChildId) => poolFor(roster, child, !!settings.noRobin);
-    const scores = new Map<PresetId, Map<string, PairingScore> | undefined>();
-    const scoresOf = (preset: PresetId) => {
-      if (!scores.has(preset)) scores.set(preset, presetScores(preset, settings));
-      return scores.get(preset);
-    };
-    return deriveRoles({
-      children,
-      leftOut: (child) =>
-        stateOf(roster, child) === 'dead'
-          ? 'dead'
-          : CHILD_UNITS[child].fixedParent !== 'robin'
-            ? undefined
-            : settings.noRobin
-              ? 'no-robin'
-              : !robinSet
-                ? 'needs-robin'
-                : undefined,
-      pool,
-      raw: (preset, key) => scoresOf(preset)?.get(key)?.raw,
-    });
-  };
-  /** A pairing reaches a staff class or a rally skill (#71). */
-  const qualifiesStaff = (key: string | undefined, s: PlanSettings): boolean => {
-    const r = key ? byKey.get(key) : undefined;
-    if (!r) return false;
-    const reach = { context: s.context, dlc: s.dlc };
-    const dlc = dlcOf(reach);
-    if ([...reachOf(r)].some((id) => (STAFF_CLASSES as readonly ClassId[]).includes(id) && (dlc || !CLASSES[id].dlc))) return true;
-    const skills = reachFor(r, reach);
-    return RALLY_SKILLS.some((id) => skills.sourcesOf(id).length > 0);
-  };
-  /** Army fit (#96): each child's best role or override, moved only where a quota forces it; re-plans to a fixed point. */
-  let lastRoles: { roster: Roster; settings: string; roles: ReadonlyMap<ChildId, RoleAssignment> } | undefined;
-  const rolesFor = (roster: Roster, s: PlanSettings): ReadonlyMap<ChildId, RoleAssignment> => {
-    const k = JSON.stringify(s);
-    if (lastRoles?.roster === roster && lastRoles.settings === k) return lastRoles.roles;
-    const derivation = derivationFor(roster, s);
-    const derived = new Map(derivation.roles.map((r) => [r.child, r]));
-    const cast = derivation.roles.map((r) => r.child).filter((c) => inPlay(roster, c));
-    const base = new Map<ChildId, RoleAssignment>();
-    for (const child of CHILD_IDS) {
-      const preset = s.overrides[child];
-      const role = s.roleOverrides[child];
-      const d = derived.get(child);
-      if (preset) base.set(child, { role: deploymentRoleOf(preset) as ChildDeploymentRole, preset, source: 'preset override' });
-      else if (role) base.set(child, { role, preset: d ? d.rolePreset[role] : CANDIDATE_PRESETS[role][0], source: 'role override' });
-      else if (d) base.set(child, { role: d.bestRole, preset: d.rolePreset[d.bestRole], source: 'derived' });
-    }
-    let roles: ReadonlyMap<ChildId, RoleAssignment> = base;
-    for (let pass = 1; pass <= ARMY_FIT_PASS_CAP; pass++) {
-      const plan = solvePlan(newPlanContext(roster, s, roles));
-      const plannedKey = new Map(plan.marriages.flatMap((m) => m.children.map((c) => [c.child, c.key] as const)));
-      const qualifies = (child: ChildId) => {
-        const d = derived.get(child);
-        return qualifiesStaff(plannedKey.get(child) ?? d?.bestPairing[d.rolePreset.lead], s);
-      };
-      const next = armyFit({ roster, quotas: s.quotas, noRobin: s.noRobin, plan, derived, base, cast, qualifies, order: CHILD_IDS });
-      const same = [...next].every(([c, a]) => roles.get(c)?.preset === a.preset && roles.get(c)?.role === a.role);
-      roles = next;
-      if (same) break;
-    }
-    lastRoles = { roster, settings: k, roles };
-    return roles;
   };
 
   const engine: Engine = {
@@ -2019,26 +1730,6 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       return skillCard(id, reach, settings.context, matchBuilds(reach, settings.context));
     },
     blocking: (r, roster) => evaluateBlocking(r.pairing, roster, assumptions),
-    plan: (roster, settings, options) => solvePlan(planContext(roster, settings), options?.free),
-    deriveRoles: derivationFor,
-    robinGain: robinGainFor,
-    roles: rolesFor,
-    staffQualified: (roster, settings) => {
-      const plan = solvePlan(planContext(roster, settings));
-      const plannedKey = new Map(plan.marriages.flatMap((m) => m.children.map((c) => [c.child, c.key] as const)));
-      const out = new Set<ChildId>();
-      for (const d of derivationFor(roster, settings).roles)
-        if (qualifiesStaff(plannedKey.get(d.child) ?? d.bestPairing[d.rolePreset.lead], settings)) out.add(d.child);
-      return out;
-    },
-    planPreset: (child, roster, settings) => rolesFor(roster, settings).get(child)?.preset ?? settings.overrides[child] ?? settings.preset,
-    evaluatePlan: (saved, roster, settings) => evaluatePlan(savedPlanContext(roster, settings), saved),
-    planKeys: (roster) =>
-      new Set(roster.savedPlan ? savedPairings(roster, roster.savedPlan).map(pairingKey).filter((k) => byKey.has(k)) : []),
-    ledger: (roster, settings) => {
-      const ctx = planContext(roster, settings);
-      return childLedger(ctx, solvePlan(ctx), (p) => evaluateBlocking(p, roster, assumptions));
-    },
     combatExp: (c) =>
       combatExp(c.internalLevel, c.foe, c.outcome, c.pair === 'back', c.difficulty === 'lunatic' || c.difficulty === 'lunatic-plus', c.engagement ?? 1, c.pair === 'front' && c.veteran ? 1.5 : 1),
     internalLevels: (run, entry) => internalLevels(run, assumptions['class-change-internal-level'], entry),
@@ -2057,30 +1748,29 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     },
     endpointCoverage: (run, child, parents, robin) => endpointCoverage(run, seedContext(run), child, parents, robin),
     solveStep: (given) => {
-      const { roleOf } = given;
       // The run's pins and those given, less recorded facts (#200): hard constraints on the seed, every edit and the runs.
       const run = pinnedRun(given.run, given.pins);
       const pins = livePinsOf(run);
       const ctx = seedContext(run);
-      const options = { pins, ...(roleOf ? { roleOf } : {}) };
+      const options = { pins };
       const lunaticPlus = run.roster.run.difficulty === 'lunatic-plus';
       const pinnedKeys = new Set(pins.flatMap((p) => (p.kind === 'marriage' && !p.forbid ? [coupleKey(p.couple)] : [])));
       // An adopted plan from before a pin was set is made to keep it.
       const input = { ...given, run, ...(given.plan ? { plan: keptPins(run, ctx, options, given.plan) } : {}) };
       const forcedAt = (plan: Plan) => {
         let forced: Map<string, readonly RosterUnit[]> | undefined;
-        return (key: string) => (forced ??= new Map(planInput(run, plan, roleOf).maps.map((m) => [m.key, m.forced]))).get(key) ?? [];
+        return (key: string) => (forced ??= new Map(planInput(run, plan).maps.map((m) => [m.key, m.forced]))).get(key) ?? [];
       };
       return solveStep(
         input,
         {
           brokenPins: (plan) => (pins.length ? brokenPins(plan, pins, forcedAt(plan)) : 0),
           seed: () => seedFor(run, options),
-          edits: (plan, hints) => planEdits(run, ctx, options, plan, hints, (p) => lineupsOf(run, p, input.seed, roleOf)),
-          samples: (plan, first, count) => simulateRuns(planInput(run, plan, roleOf), input.seed, count, assumptions, first).samples,
-          rescore: (plan, seed, runs) => planChance(run, { plan, seed, runs, ...(roleOf ? { roleOf } : {}) }),
+          edits: (plan, hints) => planEdits(run, ctx, options, plan, hints, (p) => lineupsOf(run, p, input.seed)),
+          samples: (plan, first, count) => simulateRuns(planInput(run, plan), input.seed, count, assumptions, first).samples,
+          rescore: (plan, seed, runs) => planChance(run, { plan, seed, runs }),
           // Lunatic+ plays the ceiling over a few skill draws; otherwise one play is the ceiling.
-          ceiling: (plan) => simulateCeiling(planInput(run, plan, roleOf), input.seed, lunaticPlus ? CEILING_DRAWS : 1, assumptions)?.chance,
+          ceiling: (plan) => simulateCeiling(planInput(run, plan), input.seed, lunaticPlus ? CEILING_DRAWS : 1, assumptions)?.chance,
           // A pinned couple's non-starter is the player's to lift: only the others count against a plan.
           nonStarters: (plan) => nonStarters(run, assumptions, plan).filter((c) => !pinnedKeys.has(coupleKey(c))),
           // What the simulation reads of a plan: its Robin, marriages, children's passes and its roadmap (not the builds).
@@ -2108,7 +1798,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       return { recorded: false, items: key ? beforeMapItems(sources, plan.roadmap.items, key).map((b) => ({ item: b.item, unit: b.unit })) : [] };
     },
     editCost: (input) => {
-      const samplesOn = (r: Run) => (plan: Plan, first: number, count: number) => simulateRuns(planInput(r, plan, input.roleOf), input.seed, count, assumptions, first).samples;
+      const samplesOn = (r: Run) => (plan: Plan, first: number, count: number) => simulateRuns(planInput(r, plan), input.seed, count, assumptions, first).samples;
       const played = input.pins?.length ? pinnedRun(input.run, input.pins) : input.run;
       // What the simulation reads of a plan (as the search's `simKey`): an edit it can't see costs nothing, on no runs.
       const seen = (plan: Plan) => JSON.stringify([plan.robin, plan.wishlist.marriages, plan.wishlist.children, plan.roadmap]);
@@ -2116,14 +1806,13 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       return editCost(input, samplesOn(input.run), samplesOn(played));
     },
     unitEdits: (given, plan, unit, options = {}) => {
-      const { roleOf } = options;
       const run = pinnedRun(given, options.pins);
       const pins = livePinsOf(run);
-      const opts = { pins, ...(roleOf ? { roleOf } : {}) };
+      const opts = { pins };
       // The endpoint's lineup is the wishlist's: its lineup and pair edits are the ones a unit's row offers.
       const hints = { riskiest: [plan.wishlist.endpoint], stuck: [] };
       const edits: UnitEdit[] = [];
-      for (const e of planEdits(run, seedContext(run), opts, plan, hints, (p) => lineupsOf(run, p, options.seed ?? FLAWLESS_SEED, roleOf)))
+      for (const e of planEdits(run, seedContext(run), opts, plan, hints, (p) => lineupsOf(run, p, options.seed ?? FLAWLESS_SEED)))
         if (e.units?.includes(unit)) edits.push({ kind: e.kind, key: e.key, label: e.label, pins: e.pins ?? [], play: [], make: e.make });
       // Keeping it out (a wishlist unit) or in (anyone else), as a keep pin: the edited plan keeps it, played under it.
       const inWishlist = plan.wishlist.units.some((w) => w.unit === unit);
@@ -2138,7 +1827,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
           play: [keep],
           make: () => {
             const kept = pinnedRun(run, [keep]);
-            return keptPins(kept, seedContext(kept), { pins: livePinsOf(kept), ...(roleOf ? { roleOf } : {}) }, plan);
+            return keptPins(kept, seedContext(kept), { pins: livePinsOf(kept) }, plan);
           },
         });
       }
@@ -2151,14 +1840,14 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       return adopted ? keptPins(run, seedContext(run), opts, adopted) : seedFor(run, opts);
     },
     editChoices: (given, plan, options = {}) => {
-      const { riskiest = [], seed = FLAWLESS_SEED, roleOf } = options;
+      const { riskiest = [], seed = FLAWLESS_SEED } = options;
       const run = pinnedRun(given, options.pins);
       const pins = livePinsOf(run);
       const ctx = seedContext(run);
-      const opts: SeedOptions = { pins, ...(roleOf ? { roleOf } : {}) };
+      const opts: SeedOptions = { pins };
       const base = keptPins(run, ctx, opts, plan);
       const out = new Map<string, UnitEdit>();
-      for (const e of planEdits(run, ctx, opts, base, { riskiest, stuck: [] }, (p) => lineupsOf(run, p, seed, roleOf)))
+      for (const e of planEdits(run, ctx, opts, base, { riskiest, stuck: [] }, (p) => lineupsOf(run, p, seed)))
         if (!out.has(e.key)) out.set(e.key, { kind: e.kind, key: e.key, label: e.label, pins: e.pins ?? [], play: [], make: e.make });
       // Those only the player makes, as pins: the plan keeps them (`keptPins` over the run with them).
       const gender = run.roster.run.gender ?? base.robin.gender;
@@ -2197,8 +1886,8 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       return [...out.values()];
     },
     unitWorth: (input) => {
-      const { run, plan, seed, roleOf, pins } = input;
-      const v = worthVariants(run, plan, roleOf, pins);
+      const { run, plan, seed, pins } = input;
+      const v = worthVariants(run, plan, pins);
       return worthStep(input, {
         subjects: () => {
           // Every unit in any of the plan's lineups, and its wishlist: those the plan fields (not a map's own setup).
@@ -2212,7 +1901,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         samples: (variant, first, count) => simulateRuns(v.inputOf(variant), seed, count, assumptions, first).samples,
       });
     },
-    worthPlan: (run, plan, unit, options = {}) => worthVariants(run, plan, options.roleOf, options.pins).without(unit),
+    worthPlan: (run, plan, unit, options = {}) => worthVariants(run, plan, options.pins).without(unit),
     simulateWorth: (input, options) => {
       let held = handBuilt.get(input);
       if (!held) handBuilt.set(input, (held = new Map()));
@@ -2239,8 +1928,8 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       });
     },
     reserves: (input) => {
-      const { run, plan, seed, roleOf, pins } = input;
-      const v = worthVariants(run, plan, roleOf, pins);
+      const { run, plan, seed, pins } = input;
+      const v = worthVariants(run, plan, pins);
       const wishlist = plan.wishlist.units.map((w) => w.unit);
       return reservesStep(input, {
         losses: (runs) => simulateRuns(v.base, seed, runs, assumptions, 0).losses,
@@ -2261,13 +1950,13 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       // Recorded facts are never pins: nothing to lift, no cost.
       if (!lifting.length) return { pins: [], cost: 0, margin: 0, runs: 0, verdict: 'close', settled: true };
       const free = liftedRun(run, lifting);
-      const samplesOn = (r: Run) => (plan: Plan, first: number, count: number) => simulateRuns(planInput(r, plan, input.roleOf), input.seed, count, assumptions, first).samples;
+      const samplesOn = (r: Run) => (plan: Plan, first: number, count: number) => simulateRuns(planInput(r, plan), input.seed, count, assumptions, first).samples;
       const c = editCost({ ...input, edited: input.lifted }, samplesOn(run), samplesOn(free));
       return { pins: lifting, cost: c.gain, margin: c.margin, runs: c.runs, verdict: c.verdict, settled: c.settled };
     },
-    roadmapLineups: (run, plan, options = {}) => lineupsOf(run, plan, options.seed ?? FLAWLESS_SEED, options.roleOf),
+    roadmapLineups: (run, plan, options = {}) => lineupsOf(run, plan, options.seed ?? FLAWLESS_SEED),
     expForecast: (run, plan, options) => expForecast(run, plan, assumptions, options),
-    defaultPriorities: (run, plan) => defaultPriorities(milestones(run, plan, assumptions), flawlessInput(run, assumptions, undefined, undefined, plan).input),
+    defaultPriorities: (run, plan) => defaultPriorities(milestones(run, plan, assumptions), flawlessInput(run, assumptions, undefined, plan).input),
     suggestedChanges: (run, plan, milestone, options) => suggestedChanges(run, plan, milestone, assumptions, options),
     suggestChanges: (input, milestone, seed, runs) => suggestChanges(input, milestone, seed, runs, assumptions),
     readings: (run, plan, options = {}) => {
@@ -2275,11 +1964,11 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       const f = forecast ?? expForecast(run, plan, assumptions, sim);
       return readings(run, plan, milestones(run, plan, assumptions), f, assumptions, options);
     },
-    recordedStats: (run, options) => recordedStats(run, assumptions, options),
+    recordedStats: (run) => recordedStats(run, assumptions),
     planBreaks: (run, plan) => planBreaks(run, plan, milestones(run, plan, assumptions)),
     milestoneMoves: (run, from, to) => milestoneMoves(milestones(run, from, assumptions), milestones(run, to, assumptions)),
     explain: (id, context) => {
-      const input = context.input ?? (context.run && context.plan ? planInput(context.run, context.plan, context.roleOf) : undefined);
+      const input = context.input ?? (context.run && context.plan ? planInput(context.run, context.plan) : undefined);
       const seed = context.seed ?? FLAWLESS_SEED;
       const runs = context.chance?.runs ?? FLAWLESS_RUNS;
       const ceilingOf = () => {
@@ -2306,17 +1995,17 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       });
     },
     worthChance: (run, plan, unit, options = {}) => {
-      const v = worthVariants(run, plan, options.roleOf, options.pins);
+      const v = worthVariants(run, plan, options.pins);
       return simulateRuns(v.inputOf(options.idle ? { kind: 'idle', unit } : { kind: 'without', unit }), options.seed ?? FLAWLESS_SEED, options.runs ?? FLAWLESS_RUNS, assumptions);
     },
     suggestedEdit: (run, plan, pin) =>
-      suggestedEdit(plan, pin, pin.kind === 'priority' ? (plan.roadmap.priorities ?? defaultPriorities(milestones(run, plan, assumptions), flawlessInput(run, assumptions, undefined, undefined, plan).input)) : []),
-    lossPlan: (run, plan, options = {}) => lossPlanOf(pinnedRun(run, options.pins), plan, options.roleOf),
+      suggestedEdit(plan, pin, pin.kind === 'priority' ? (plan.roadmap.priorities ?? defaultPriorities(milestones(run, plan, assumptions), flawlessInput(run, assumptions, undefined, plan).input)) : []),
+    lossPlan: (run, plan, options = {}) => lossPlanOf(pinnedRun(run, options.pins), plan),
     lossItem: (given, plan, options = {}) => {
       const run = pinnedRun(given, options.pins);
       const losses = openLosses(run, plan);
       if (!losses.length) return undefined;
-      const proposal = lossPlanOf(run, plan, options.roleOf);
+      const proposal = lossPlanOf(run, plan);
       const first = Math.min(...losses.map((l) => run.entries.findIndex((e) => e.id === l.entry)));
       const f = run.entries[first]?.forecast;
       const on = new Set<RosterUnit>(losses.flatMap((l) => l.couple ?? [l.unit]));
@@ -2344,16 +2033,16 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     },
     whatItCost: (given, plan, options = {}) => {
       const run = pinnedRun(given, options.pins);
-      const { seed = FLAWLESS_SEED, runs = COST_RUNS.start, roleOf } = options;
+      const { seed = FLAWLESS_SEED, runs = COST_RUNS.start } = options;
       return whatItCost(run, plan, {
-        sim: (r, p) => simulateRuns(planInput(r, p, roleOf), seed, runs, assumptions),
+        sim: (r, p) => simulateRuns(planInput(r, p), seed, runs, assumptions),
         milestones: (r, p) => milestones(r, p, assumptions),
-        recovery: (r, p) => lossPlanOf(r, p, roleOf),
+        recovery: (r, p) => lossPlanOf(r, p),
         growths: (r, u) => unitGrowths(r, u, assumptions),
       });
     },
     robinAlternatives: (input) => {
-      const { roleOf, seed } = input;
+      const { seed } = input;
       const run = pinnedRun(input.run, input.pins);
       const lock = robinLock(run);
       // The alternatives are read with the lock lifted: its facts open again.
@@ -2362,7 +2051,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       const lunaticPlus = facts.difficulty === 'lunatic-plus';
       const withFacts = (key: string, f: Partial<RunFacts>) => derive(open, key, () => ({ ...open, roster: withRun(open.roster, f) }));
       const forRobin = (r: PlanRobin) => withFacts(`robin:${robinKey(r)}`, r);
-      const optionsOf = (r: Run): SeedOptions => ({ pins: livePinsOf(r), ...(roleOf ? { roleOf } : {}) });
+      const optionsOf = (r: Run): SeedOptions => ({ pins: livePinsOf(r) });
       return robinStep(input, {
         options: robinOptions(facts),
         locked: lock?.robin,
@@ -2374,7 +2063,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         screen: (robin) => {
           const r = forRobin(robin);
           const plan = seedFor(r, optionsOf(r));
-          return { plan, ceiling: flawlessCeiling(r, assumptions, { plan, seed, runs: lunaticPlus ? CEILING_DRAWS : 1, ...(roleOf ? { roleOf } : {}) })?.chance };
+          return { plan, ceiling: flawlessCeiling(r, assumptions, { plan, seed, runs: lunaticPlus ? CEILING_DRAWS : 1 })?.chance };
         },
         solve: (robin, cursor, budget) =>
           engine.solveStep({
@@ -2385,9 +2074,8 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
             ...(input.runs ? { runs: input.runs } : {}),
             ...(input.cap ? { cap: input.cap } : {}),
             ...(cursor ? { cursor } : {}),
-            ...(roleOf ? { roleOf } : {}),
           }),
-        samples: (robin, plan, first, count) => simulateRuns(planInput(forRobin(robin), plan, roleOf), seed, count, assumptions, first).samples,
+        samples: (robin, plan, first, count) => simulateRuns(planInput(forRobin(robin), plan), seed, count, assumptions, first).samples,
         noRobin: (robin, plan) => {
           const r = forRobin(robin);
           return withoutRobinMarriage(r, seedContext(r), optionsOf(r), plan);

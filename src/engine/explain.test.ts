@@ -45,7 +45,6 @@ const hero = (more: Partial<ArmyUnit> = {}): ArmyUnit => ({
   skills: [],
   weapons: [{ item: itemByName('Iron Sword')! }],
   supports: [],
-  role: 'lead',
   ...more,
 });
 // A brute that hits back hard: each fight with it carries some risk.
