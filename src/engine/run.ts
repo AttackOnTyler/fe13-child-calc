@@ -87,18 +87,27 @@ export type RunEntry = {
    * when the map was recorded.
    */
   readonly forecast?: EntryForecast;
+  /**
+   * Units that fell on the map on Casual (#208): each came back after it, keeping its slot and children, so it isn't a
+   * loss; the fall is logged for calibration (`falls`) and What it cost prices the rest of the map it missed.
+   */
+  readonly fell?: readonly RosterUnit[];
 };
 
 /**
  * The plan's forecast as it stood when a map was recorded (#206; What changed): the headline flawless chance with its ±,
  * the map it expected next (its key on the map order, and the map), each unit's forecast EXP there (mean, and its level
  * at the map's end, 10th percentile to 90th, EXP as the fraction), and each unit's reading (`pending`: "at risk?").
+ * #208 adds the map's no-death chance (the fall log's calibration reads it) and the plan's spending at the armory stop
+ * after the map (What it cost's over-plan spending row reads the recorded shopping against it).
  */
 export type EntryForecast = {
   readonly chance: number;
   readonly margin: number;
   readonly key: string;
   readonly map: string;
+  readonly noDeath?: number;
+  readonly spend?: number;
   readonly exp: readonly { readonly unit: RosterUnit; readonly exp: number; readonly level: { readonly low: number; readonly median: number; readonly high: number } }[];
   readonly readings: readonly { readonly unit: RosterUnit; readonly reading: 'on-track' | 'at-risk' | 'behind'; readonly pending?: true }[];
 };
@@ -150,6 +159,12 @@ export type Run = {
   readonly calibration?: readonly CalibrationRow[];
   /** The one-time migration note (#205): shown on the Run view until dismissed. */
   readonly migration?: MigrationNote;
+  /**
+   * Losses the player has settled (#208): a death, a missed recruit or an off-plan marriage whose loss item was accepted
+   * (or seen, when it changed nothing), by key (`dead:<unit>`, `missed:<unit>`, `married:<a>+<b>`). Until then, the
+   * adopted plan predates it.
+   */
+  readonly settledLosses?: readonly string[];
 };
 
 /**
@@ -226,6 +241,9 @@ const UNIT_BY_NAME = new Map<string, RosterUnit>([
   ...(Object.entries(FIRST_GEN_UNITS).map(([id, u]) => [u.name as string, id as RosterUnit]) as [string, RosterUnit][]),
   ...(Object.entries(CHILD_UNITS).map(([id, u]) => [u.name as string, id as RosterUnit]) as [string, RosterUnit][]),
 ]);
+
+/** Every roster unit's id. */
+const UNIT_BY_NAME_IDS = new Set<string>(['robin', ...Object.keys(FIRST_GEN_UNITS), ...Object.keys(CHILD_UNITS)]);
 
 /** The roster unit chapter data names (`Robin`, `Lon'qu`, `Morgan`…). */
 export const unitNamed = (name: string): RosterUnit | undefined => UNIT_BY_NAME.get(name);
@@ -406,6 +424,9 @@ function newRecruits(run: Run, snap: Snapshot, map: string): [RosterUnit, MapRec
   });
 }
 
+/** A unit lost for good (#208): dead or missed, on the run facts or in the snapshot. */
+export const isLost = (run: Run, snap: Snapshot, u: RosterUnit): boolean => [run.roster.states[u], snap.states[u]].some((s) => s === 'dead' || s === 'missed');
+
 /** A recruit who comes after the map starts (turn 2 on, a talk, the map's end): listed with when, never in the opening lineup. */
 export type LaterRecruit = { readonly unit: RosterUnit; readonly how: string | null };
 
@@ -427,7 +448,7 @@ export type PrepUnits = {
 export function prepUnits(run: Run, map: string): PrepUnits {
   const last = latestEntry(run);
   const snap = last ? entryAfterShopping(last) : EMPTY_SNAPSHOT;
-  const alive = (u: RosterUnit) => run.roster.states[u] !== 'dead' && snap.states[u] !== 'dead';
+  const alive = (u: RosterUnit) => !isLost(run, snap, u);
   const units = (Object.entries(snap.units) as [RosterUnit, UnitSnapshot][]).filter(([u]) => alive(u));
   const joining: RosterUnit[] = [];
   const onlyHere: RosterUnit[] = [];
@@ -527,10 +548,54 @@ const withEntryRoster = (run: Run, id: string, edit: (r: Roster) => Roster, now:
     now,
   );
 
-/** A unit fell on the map: dead for good on Classic; on Casual it comes back, so nothing changes. */
+/** Units whose fall is a Game Over (#208; spec #175, Record results): the save is reloaded, so it's never recorded. */
+export const GAME_OVER_UNITS: readonly RosterUnit[] = ['chrom', 'robin'];
+
+/** The run with entry `id` changed by `edit`, marked edited when later entries were copied from it. */
+function withEntry(run: Run, id: string, edit: (e: RunEntry) => RunEntry, now: number): Run {
+  const i = run.entries.findIndex((e) => e.id === id);
+  if (i < 0) return run;
+  const entries = [...run.entries];
+  entries[i] = { ...edit(entries[i]!), ...(i < entries.length - 1 ? { editedAt: now } : {}) };
+  return { ...run, entries };
+}
+
+/**
+ * A unit fell on the map (#208). Classic: dead for good (a loss). Casual: it comes back after the map, keeping its slot
+ * and children, so it isn't a loss: the fall is logged on the entry (`RunEntry.fell`) for calibration. Chrom's or
+ * Robin's fall is a Game Over, never recorded: the run comes back unchanged.
+ */
 export function recordFallen(run: Run, id: string, unit: RosterUnit, now: number): Run {
-  if (run.roster.run.mode === 'casual') return run;
+  if (GAME_OVER_UNITS.includes(unit)) return run;
+  if (run.roster.run.mode === 'casual') return withEntry(run, id, (e) => (e.fell?.includes(unit) ? e : { ...e, fell: [...(e.fell ?? []), unit] }), now);
   return withEntryRoster(run, id, (r) => withState(r, unit, 'dead'), now);
+}
+
+/** A recruit on the map wasn't recruited (#208): missed for good, a loss like a death. Never Chrom or Robin. */
+export function recordMissed(run: Run, id: string, unit: RosterUnit, now: number): Run {
+  if (GAME_OVER_UNITS.includes(unit)) return run;
+  return withEntryRoster(run, id, (r) => withState(r, unit, 'missed'), now);
+}
+
+/**
+ * Undoes a fall, death or miss recorded on entry `id` (a mistake): the unit's state as the entry before had it, and
+ * out of the entry's fall log.
+ */
+export function unrecordLoss(run: Run, id: string, unit: RosterUnit, now: number): Run {
+  const i = run.entries.findIndex((e) => e.id === id);
+  if (i < 0) return run;
+  const was = run.entries[i - 1]?.snapshot.states[unit] ?? 'available';
+  const fell = run.entries[i]!.fell?.filter((u) => u !== unit);
+  const logged = withEntry(
+    run,
+    id,
+    (e) => {
+      const { fell: _, ...rest } = e;
+      return fell?.length ? { ...rest, fell } : rest;
+    },
+    now,
+  );
+  return withEntryRoster(logged, id, (r) => withState(r, unit, was), now);
 }
 
 /** Two units married during the map. */
@@ -608,6 +673,7 @@ export function parseRun(raw: unknown): Run {
   const strings = (v: unknown) => (Array.isArray(v) ? [...new Set(v.filter(isText))] : []);
   const dismissedProposals = strings(raw.dismissedProposals);
   const dismissedChanges = strings(raw.dismissedChanges);
+  const settledLosses = strings(raw.settledLosses);
   const corrections = parseCorrections(raw.corrections);
   const calibration = (Array.isArray(raw.calibration) ? raw.calibration : []).flatMap((r): CalibrationRow[] =>
     isObject(r) && isText(r.entry) && isText(r.unit) && typeof r.percentile === 'number' && r.percentile >= 0 && r.percentile <= 1 ? [{ entry: r.entry, unit: r.unit as RosterUnit, percentile: r.percentile }] : [],
@@ -638,6 +704,7 @@ export function parseRun(raw: unknown): Run {
     ...(edits.length ? { edits } : {}),
     ...(dismissedProposals.length ? { dismissedProposals } : {}),
     ...(dismissedChanges.length ? { dismissedChanges } : {}),
+    ...(settledLosses.length ? { settledLosses } : {}),
     ...(corrections ? { corrections } : {}),
     ...(calibration.length ? { calibration } : {}),
     ...(migration ? { migration } : {}),
@@ -692,7 +759,16 @@ function parseEntryForecast(v: unknown): EntryForecast | undefined {
       ? [{ unit: x.unit as RosterUnit, reading: x.reading as (typeof READING_KINDS)[number], ...(x.pending === true ? { pending: true as const } : {}) }]
       : [],
   );
-  return { chance: v.chance, margin: v.margin, key: v.key, map: v.map, exp, readings };
+  return {
+    chance: v.chance,
+    margin: v.margin,
+    key: v.key,
+    map: v.map,
+    ...(n(v.noDeath) ? { noDeath: v.noDeath as number } : {}),
+    ...(n(v.spend) ? { spend: v.spend as number } : {}),
+    exp,
+    readings,
+  };
 }
 
 export function parseRunFields(raw: Record<string, unknown>): Run {
@@ -705,6 +781,7 @@ export function parseRunFields(raw: Record<string, unknown>): Run {
     const sideGoals = parseSideGoalsSecured(e.sideGoals);
     const itemsUsed = parseItemsUsed(e.itemsUsed);
     const forecast = parseEntryForecast(e.forecast);
+    const fell = Array.isArray(e.fell) ? [...new Set(e.fell.filter((u): u is RosterUnit => typeof u === 'string' && UNIT_BY_NAME_IDS.has(u)))] : [];
     return [
       {
         id: typeof e.id === 'string' && e.id ? e.id : `e${i + 1}`,
@@ -718,6 +795,7 @@ export function parseRunFields(raw: Record<string, unknown>): Run {
         ...(Object.keys(sideGoals).length ? { sideGoals } : {}),
         ...(itemsUsed ? { itemsUsed } : {}),
         ...(forecast ? { forecast } : {}),
+        ...(fell.length ? { fell } : {}),
       },
     ];
   });

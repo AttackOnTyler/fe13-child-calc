@@ -4,7 +4,8 @@
  * solve is done and the run has pins, the worker is idle, so it works out the pin cost (#200): a second search with the
  * pins lifted (`liftPins`), from the best plan found with them, then `pinCost`. Then it reads the adopted plan's readings
  * (#197, #206: the plan the search started from, never its proposals): the EXP forecast's first pass, then each pending milestone's suggested changes, one milestone a reply, within
- * `READING_SECONDS`. The page may also hand it idle work (#202): the plan's unit worth and utility, then its reserves;
+ * `READING_SECONDS`. With an open loss (#208) it first re-solves from the loss item's proposal; after the readings,
+ * when asked, it prices What it cost for the latest recorded map (#208). The page may also hand it idle work (#202): the plan's unit worth and utility, then its reserves;
  * or, on request, the Robin alternatives (#201), after the search, pin cost and readings; and the Wishlist tab (#203) asks,
  * in a second worker, for a unit's edits, listed then costed one by one (`unitEdits`); the inbox (#204) asks there for
  * every edit (`editChoices`), its matches costed with their edited plans, and for one pin's own cost. It holds no logic: the search,
@@ -36,7 +37,8 @@ scope.onmessage = ({ data: m }) => {
       if (!searched) continue;
       // The readings are the adopted plan's (#206): the plan the search started from, which proposals never replace.
       const adopted = step.cursor.search?.start ?? step.best;
-      if (!pinned) return readings(engine, m, adopted, roleOf);
+      if (m.loss) lossResolve(engine, m, adopted, roleOf);
+      if (!pinned) return afterSearch(engine, m, adopted, roleOf);
       // Idle: the pin cost's second search, with the pins lifted, from the best plan found with them.
       const lifted = engine.liftPins(m.run, m.pins ? { pins: m.pins } : {});
       const stop = performance.now() + SOLVE_SECONDS.resolve * 1000;
@@ -50,7 +52,7 @@ scope.onmessage = ({ data: m }) => {
       }
       const cost = engine.pinCost({ run: m.run, ...(m.pins ? { pins: m.pins } : {}), plan: step.best, lifted: free, seed: m.seed, budget: EDIT_COST_BUDGET.settled, ...(roleOf ? { roleOf } : {}) });
       scope.postMessage({ id: m.id, kind: 'pin-cost', cost, done: false });
-      return readings(engine, m, adopted, roleOf);
+      return afterSearch(engine, m, adopted, roleOf);
     }
   }
   if (m.kind === 'idle') {
@@ -155,13 +157,42 @@ function allEdits(engine: Engine, m: Extract<SolveRequest, { kind: 'all-edits' }
 }
 
 /**
+ * The loss item's re-solve (#208): the search again from the loss item's proposal (the plan for the army that's left),
+ * for the re-solve's time budget; its best plan and chance are posted for the player to accept.
+ */
+function lossResolve(engine: Engine, m: Extract<SolveRequest, { kind: 'solve' }>, adopted: Plan, roleOf: ((u: string) => DeploymentRole) | undefined) {
+  const item = engine.lossItem(m.run, adopted, { ...(m.pins ? { pins: m.pins } : {}), ...(roleOf ? { roleOf } : {}) });
+  if (!item) return;
+  const stop = performance.now() + SOLVE_SECONDS.resolve * 1000;
+  let c: SolveCursor | undefined;
+  let best = item.plan;
+  let chance: { chance: number; margin: number } | undefined;
+  for (;;) {
+    const s = engine.solveStep({ run: m.run, plan: item.plan, ...(m.pins ? { pins: m.pins } : {}), budget: m.budget, seed: m.seed, ...(c ? { cursor: c } : {}), ...(roleOf ? { roleOf } : {}) });
+    c = s.cursor;
+    best = s.best;
+    if (s.chance) chance = { chance: s.chance.chance, margin: s.chance.margin };
+    if (s.converged || performance.now() >= stop) break;
+  }
+  if (chance) scope.postMessage({ id: m.id, kind: 'loss', plan: best, ...chance, done: false });
+}
+
+/** Once the search (and pin cost) is done: the readings, then, when asked, What it cost (#208), the last reply. */
+function afterSearch(engine: Engine, m: Extract<SolveRequest, { kind: 'solve' }>, adopted: Plan, roleOf: ((u: string) => DeploymentRole) | undefined) {
+  readings(engine, m, adopted, roleOf, !m.cost);
+  if (!m.cost) return;
+  const cost = engine.whatItCost(m.run, adopted, { seed: m.seed, ...(m.pins ? { pins: m.pins } : {}), ...(roleOf ? { roleOf } : {}) });
+  scope.postMessage({ id: m.id, kind: 'what-it-cost', cost, done: true });
+}
+
+/**
  * The best plan's readings (#197), posted as they firm up: the first pass from its EXP forecast (a unit below 80% reads
  * "at risk?"), then each pending milestone's suggested changes on `SUGGEST_RUNS` runs, until `READING_SECONDS` run out.
  */
-function readings(engine: Engine, m: { readonly id: number; readonly run: Run; readonly seed: number }, plan: Plan, roleOf: ((u: string) => DeploymentRole) | undefined) {
+function readings(engine: Engine, m: { readonly id: number; readonly run: Run; readonly seed: number }, plan: Plan, roleOf: ((u: string) => DeploymentRole) | undefined, last = true) {
   const options = { seed: m.seed, ...(roleOf ? { roleOf } : {}) };
   const forecast = engine.expForecast(m.run, plan, options);
-  if (!forecast.maps.length) return void scope.postMessage({ id: m.id, kind: 'readings', readings: undefined, done: true });
+  if (!forecast.maps.length) return void scope.postMessage({ id: m.id, kind: 'readings', readings: undefined, done: last });
   let read = engine.readings(m.run, plan, { ...options, forecast });
   const suggestions: Record<string, readonly SuggestedChange[]> = {};
   const end = performance.now() + READING_SECONDS * 1000;
@@ -171,5 +202,5 @@ function readings(engine: Engine, m: { readonly id: number; readonly run: Run; r
     suggestions[id] = engine.suggestedChanges(m.run, plan, id, { ...options, runs: SUGGEST_RUNS });
     read = engine.readings(m.run, plan, { ...options, forecast, suggestions, stats: read.stats });
   }
-  scope.postMessage({ id: m.id, kind: 'readings', readings: read, done: true });
+  scope.postMessage({ id: m.id, kind: 'readings', readings: read, done: last });
 }

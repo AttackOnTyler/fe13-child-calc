@@ -20,7 +20,7 @@ import { h } from './dom';
 import { guide } from './guide';
 import { mapsView, type MapsContext } from './maps-page';
 import { beforeTheLock, inboxNudge, inboxProgress, inboxView, robinName, robinToLock } from './inbox';
-import { forecastBefore, withEntryForecast } from '../engine';
+import { GAME_OVER_UNITS, forecastBefore, openLosses, recordMissed, unrecordLoss, withEntryForecast, type WhatItCost } from '../engine';
 
 export type RunContext = {
   readonly engine: Engine;
@@ -280,6 +280,10 @@ export type SolveProgress = {
   readonly pinCost?: PinCost;
   /** The best plan's readings (#197), worked out once the search is done, while the worker is idle. */
   readonly readings?: Readings;
+  /** An open loss's re-solve (#208): the best plan found from the loss item's proposal, and its chance. */
+  readonly loss?: { readonly plan: Plan; readonly chance: number; readonly margin: number };
+  /** What it cost for the latest recorded map (#208), priced after the readings; undefined inside: nothing to price. */
+  readonly cost?: { readonly value: WhatItCost | undefined };
 };
 
 export type FlawlessReadout = {
@@ -737,20 +741,44 @@ export function flawlessSection(ctx: HeadlineContext, inInbox = false): HTMLElem
     const roles = ctx.roleOf ? Object.fromEntries(rosterUnits(run.roster.run).map((u) => [u.id, ctx.roleOf!(u.id)])) : undefined;
     let chance: FlawlessChance | undefined;
     let last: SolveProgress | undefined;
-    // The search starts from the adopted plan (#204), else the seed.
+    // The search starts from the adopted plan (#204), else the seed. With a loss open, the loss item's re-solve follows
+    // it; after a recorded map, What it cost comes after the readings (#208).
     const adopted = adoptedOf(run);
+    const loss = openLosses(run, adopted).length > 0;
+    const entry = latestEntry(run);
+    const cost = !!entry && entry.map !== 'other' && run.entries.length > 1 && !(run.dismissedChanges ?? []).includes(entry.id);
     const started = startSolve(
-      { kind: 'solve', assumptions: ctx.assumptions, run, seed: FLAWLESS_SEED, budget: STEP_BUDGET, seconds: solvedOnce || recorded(run) ? SOLVE_SECONDS.resolve : SOLVE_SECONDS.full, ...(adopted ? { plan: adopted } : {}), ...(pins ? { pins } : {}), ...(roles ? { roles } : {}) },
+      {
+        kind: 'solve',
+        assumptions: ctx.assumptions,
+        run,
+        seed: FLAWLESS_SEED,
+        budget: STEP_BUDGET,
+        seconds: solvedOnce || recorded(run) ? SOLVE_SECONDS.resolve : SOLVE_SECONDS.full,
+        ...(adopted ? { plan: adopted } : {}),
+        ...(pins ? { pins } : {}),
+        ...(roles ? { roles } : {}),
+        ...(loss ? { loss } : {}),
+        ...(cost ? { cost } : {}),
+      },
       (reply) => {
         if (reply.done && solving === run) {
           solving = undefined;
           // The worker is free: the Robin alternatives (#201) may start.
           setTimeout(() => whenIdle?.(), 0);
         }
-        // The pin cost (#200) and then the readings (#197) come once the search is done, while the worker is idle.
-        if (reply.kind === 'pin-cost' || reply.kind === 'readings') {
+        // The loss's re-solve (#208), the pin cost (#200), the readings (#197) and What it cost (#208) come once the
+        // search is done, while the worker is idle.
+        if (reply.kind === 'pin-cost' || reply.kind === 'readings' || reply.kind === 'loss' || reply.kind === 'what-it-cost') {
           if (!last) return void ctx.onProgress?.();
-          last = reply.kind === 'pin-cost' ? { ...last, pinCost: reply.cost } : { ...last, ...(reply.readings ? { readings: reply.readings } : {}) };
+          last =
+            reply.kind === 'pin-cost'
+              ? { ...last, pinCost: reply.cost }
+              : reply.kind === 'loss'
+                ? { ...last, loss: { plan: reply.plan, chance: reply.chance, margin: reply.margin } }
+                : reply.kind === 'what-it-cost'
+                  ? { ...last, cost: { value: reply.cost } }
+                  : { ...last, ...(reply.readings ? { readings: reply.readings } : {}) };
           PROGRESS.set(run, last);
           inboxProgress(run, last);
           show(solvedReadout(ctx.engine, run, last, pins, ctx.roleOf));
@@ -761,7 +789,7 @@ export function flawlessSection(ctx: HeadlineContext, inInbox = false): HTMLElem
         chance = s.chance ?? chance;
         if (!chance) return;
         const start = s.cursor.search?.start ?? last?.start;
-        last = { ...(last?.readings && last.best === s.best ? { readings: last.readings } : {}), best: s.best, ...(start ? { start } : {}), chance, proposals: s.proposals, closeCalls: s.closeCalls, pruned: s.pruned, done: reply.searched, converged: s.converged };
+        last = { ...(last?.readings && last.best === s.best ? { readings: last.readings } : {}), ...(last?.loss ? { loss: last.loss } : {}), ...(last?.cost ? { cost: last.cost } : {}), best: s.best, ...(start ? { start } : {}), chance, proposals: s.proposals, closeCalls: s.closeCalls, pruned: s.pruned, done: reply.searched, converged: s.converged };
         PROGRESS.set(run, last);
         inboxProgress(run, last);
         show(solvedReadout(ctx.engine, run, last, pins, ctx.roleOf));
@@ -1061,20 +1089,29 @@ function recordResults(ctx: RunContext, e: RunEntry, step: number): HTMLElement 
           ? [
               h('p', { class: 'muted small' }, 'Filled in from their join data; a child’s stats from its parents as they were on entering this map.'),
               ...notes.map((n) => h('p', { class: 'small' }, n)),
-              unitTable(ctx, e, recruits),
+              unitTable(ctx, e, recruits.filter((u) => e.snapshot.states[u] !== 'missed')),
+              missedRow(ctx, e, recruits),
             ]
           : [h('p', { class: 'muted' }, 'No one joined on this map.')];
       }
       case 2:
         return [
-          h('p', { class: 'muted small' }, casual ? 'Casual: a unit that falls comes back after the map, so nothing changes.' : 'Classic: a unit that falls is dead for good.'),
+          h(
+            'p',
+            { class: 'muted small' },
+            casual
+              ? 'Casual: a unit that falls comes back after the map with its place in the plan, so it isn’t a loss. Record it anyway: the fall is logged to check the forecast, and What changed prices the rest of the map it missed.'
+              : 'Classic: a unit that falls is dead for good. The inbox then offers a re-solve for the army that’s left.',
+          ),
           h(
             'div',
             { class: 'row' },
             ...all
-              .filter((u) => roster.states[u] !== 'dead')
-              .map((u) => h('button', { class: 'mini', disabled: casual, title: `${name(u)} fell`, onclick: () => ctx.setRun(recordFallen(ctx.run, e.id, u, ctx.now())) }, `✝ ${name(u)}`)),
+              .filter((u) => roster.states[u] !== 'dead' && roster.states[u] !== 'missed' && !GAME_OVER_UNITS.includes(u) && !e.fell?.includes(u))
+              .map((u) => h('button', { class: 'mini', title: casual ? `${name(u)} fell (and came back after the map)` : `${name(u)} fell: dead for good`, onclick: () => ctx.setRun(recordFallen(ctx.run, e.id, u, ctx.now())) }, `✝ ${name(u)}`)),
           ),
+          h('p', { class: 'muted small' }, 'Chrom or Robin falling is a Game Over: reload your save and play the map again; there’s nothing to record.'),
+          lossesHere(ctx, e),
           chromWeddingRow(ctx, e),
           h(
             'div',
@@ -1088,11 +1125,11 @@ function recordResults(ctx: RunContext, e: RunEntry, step: number): HTMLElement 
           h(
             'div',
             { class: 'small' },
-            'Recorded here: ',
-            [
-              ...Object.entries(e.snapshot.states).filter(([u, st]) => st === 'dead' && !ctx.run.entries[i - 1]?.snapshot.states[u as RosterUnit]).map(([u]) => `${name(u as RosterUnit)} fell`),
-              ...Object.entries(e.snapshot.spouses).filter(([u, sp]) => sp?.bond === 'married' && ctx.run.entries[i - 1]?.snapshot.spouses[u as RosterUnit]?.bond !== 'married').map(([u, sp]) => `${name(u as RosterUnit)} × ${name(sp!.partner)}`),
-            ].join(', ') || 'nothing yet',
+            'Marriages recorded here: ',
+            Object.entries(e.snapshot.spouses)
+              .filter(([u, sp]) => sp?.bond === 'married' && ctx.run.entries[i - 1]?.snapshot.spouses[u as RosterUnit]?.bond !== 'married')
+              .map(([u, sp]) => `${name(u as RosterUnit)} × ${name(sp!.partner)}`)
+              .join(', ') || 'none yet',
           ),
         ];
       case 3:
@@ -1121,6 +1158,48 @@ function recordResults(ctx: RunContext, e: RunEntry, step: number): HTMLElement 
         : h('button', { onclick: () => ctx.setRecording({ entry: e.id, step: step + 1 }) }, 'Next →'),
       h('span', { class: 'muted small' }, 'Anything you skip keeps its copied value.'),
     ),
+  );
+}
+
+/**
+ * The falls, deaths and misses recorded on an entry (#208), as Record results lists them: "Frederick died", "Frederick
+ * fell (Casual: logged)", "Missed Kjelle", each with an undo for a mistake.
+ */
+export function lossesRecorded(run: Run, e: RunEntry): readonly { readonly unit: RosterUnit; readonly text: string }[] {
+  const i = run.entries.findIndex((x) => x.id === e.id);
+  const before = run.entries[i - 1]?.snapshot.states ?? {};
+  const name = (u: RosterUnit) => unitName(u, run.roster.run.gender);
+  return [
+    ...(Object.entries(e.snapshot.states) as [RosterUnit, string][]).flatMap(([u, st]) =>
+      before[u] === st ? [] : st === 'dead' ? [{ unit: u, text: `${name(u)} died` }] : st === 'missed' ? [{ unit: u, text: `Missed ${name(u)}` }] : [],
+    ),
+    ...(e.fell ?? []).map((u) => ({ unit: u, text: `${name(u)} fell (Casual: back after the map, logged)` })),
+  ];
+}
+
+function lossesHere(ctx: RunContext, e: RunEntry): HTMLElement {
+  const rows = lossesRecorded(ctx.run, e);
+  return h(
+    'div',
+    { class: 'small' },
+    'Recorded here: ',
+    ...(rows.length
+      ? rows.map((r) => h('span', { class: 'chip small' }, r.text, ' ', h('button', { class: 'mini ghost', title: 'A mistake: undo it', onclick: () => ctx.setRun(unrecordLoss(ctx.run, e.id, r.unit, ctx.now())) }, 'Undo')))
+      : ['nothing yet']),
+  );
+}
+
+/** A recruit on the map that wasn't recruited (#208): Missed, a loss like a death. */
+function missedRow(ctx: RunContext, e: RunEntry, recruits: readonly RosterUnit[]): HTMLElement {
+  const name = (u: RosterUnit) => unitName(u, ctx.run.roster.run.gender);
+  const open = recruits.filter((u) => !GAME_OVER_UNITS.includes(u) && e.snapshot.states[u] !== 'missed' && e.snapshot.states[u] !== 'dead');
+  const missed = recruits.filter((u) => e.snapshot.states[u] === 'missed');
+  return h(
+    'div',
+    { class: 'row small' },
+    open.length ? 'Not recruited? ' : null,
+    ...open.map((u) => h('button', { class: 'mini', title: `${name(u)} wasn’t recruited: missed for good, a loss like a death`, onclick: () => ctx.setRun(recordMissed(ctx.run, e.id, u, ctx.now())) }, `Missed ${name(u)}`)),
+    ...missed.map((u) => h('span', { class: 'chip small' }, `Missed ${name(u)} `, h('button', { class: 'mini ghost', title: 'A mistake: undo it', onclick: () => ctx.setRun(unrecordLoss(ctx.run, e.id, u, ctx.now())) }, 'Undo'))),
   );
 }
 

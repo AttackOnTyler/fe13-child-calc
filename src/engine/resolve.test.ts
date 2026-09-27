@@ -114,7 +114,7 @@ describe('What changed (#206)', () => {
 
   it('keeps the headline, the EXP forecast for the next map and the readings on the entry recorded', () => {
     const f = forecastBefore(late, chance, readings)!;
-    expect(f).toEqual({ chance: 0.42, margin: 0.05, key, map, exp: [{ unit: 'chrom', exp: 120, level: { low: 15.2, median: 16.1, high: 16.9 } }], readings: [{ unit: 'chrom', reading: 'on-track' }, { unit: 'lissa', reading: 'at-risk', pending: true }] });
+    expect(f).toEqual({ chance: 0.42, margin: 0.05, key, map, spend: 0, exp: [{ unit: 'chrom', exp: 120, level: { low: 15.2, median: 16.1, high: 16.9 } }], readings: [{ unit: 'chrom', reading: 'on-track' }, { unit: 'lissa', reading: 'at-risk', pending: true }] });
     const recorded = addEntry(late, map, 9);
     const id = latestEntry(recorded)!.id;
     const kept = withEntryForecast(recorded, id, f);

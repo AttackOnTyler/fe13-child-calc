@@ -54,14 +54,18 @@ import { simMapById, type SimMapOptions } from './sim/sim-map';
 import { runSeed } from './sim/random';
 import { planLineups, simulateRuns, type RunSim, type RunSimInput } from './sim/run-sim';
 import { mapUpkeep, type MapUpkeep } from './sim/upkeep';
-import { FLAWLESS_RUNS, FLAWLESS_SEED, flawlessCeiling, flawlessChance, flawlessInput, runItemSources, sureIncome, type FlawlessChance, type FlawlessOptions } from './flawless';
+import { FLAWLESS_RUNS, FLAWLESS_SEED, flawlessCeiling, flawlessChance, flawlessInput, runItemSources, sureIncome, unitGrowths, type FlawlessChance, type FlawlessOptions } from './flawless';
+import { openLosses, type LossItem } from './losses';
+import { lossPlan, steppingIn } from './solve/loss';
+import { whatItCost, type WhatItCost } from './what-it-cost';
+import { SEARCH_RUNS as COST_RUNS } from './solve/step';
 import { simulateCeiling, type Ceiling } from './sim/ceiling';
 import { coupleKey, endpointCoverage, nonStarters, seedPlan, type EndpointCoverage, type SeedContext, type SeedOptions } from './solve/seed';
 import { milestones, type Milestone } from './milestones';
 import { editCost, solveStep, type EditCost, type EditCostInput, type PinCost, type PinCostInput, type SolveStep, type SolveStepInput, type UnitEdit } from './solve/step';
 import { keptPins, planEdits } from './solve/edits';
 import { adoptedOf } from './solve/adopted';
-import { milestoneMoves, planBreaks, suggestedEdit, type MilestoneMoves, type PlanBreak } from './solve/resolve';
+import { milestoneMoves, planBreaks, sameWishlist, suggestedEdit, type MilestoneMoves, type PlanBreak } from './solve/resolve';
 import type { SuggestedPin } from './exp-forecast';
 import { brokenPins, livePins, pinKey, runPins, withPin, withoutPins } from './solve/pins';
 import { ROBIN_EXTRA, ROBIN_SOLVE, withRobinLock, robinKey, robinLock, robinOptions, robinStep, wishlistDifference, withoutRobinMarriage, type RobinCost, type RobinCursor, type RobinInput, type RobinOption, type RobinPick, type RobinStep, type SolvedRobin, type WishlistDifference } from './solve/robin';
@@ -146,7 +150,7 @@ export { type MapWaves, type Wave, type WaveGroup } from './waves';
 export { type ArmySpread, type SimItem } from './sim/sustain';
 export { EXPOSURE_RISK, MAX_TURNS, type ExpPriority, type MapPlay, type MapPlayInput, type SimAct, type SimChase, type SimFight, type SimFoeGroup, type SimGroup, type SimMap, type SimStance, type SimTurn, type SimUnit, type SimUnitTally, type SimWave } from './sim/map-play';
 export { simLineup, type SimMapOptions } from './sim/sim-map';
-export { levelCap, type ArmyUnit, type ChildRecruit, type GoldSpread, type RunSim, type RunSimInput, type RunSimMap, type RunSimMapResult, type ShoppingLine, type ShoppingStop, type StatSpread, type UnitForecast, type SupportForecast, type MarriageForecast, type RunSimSideGoal, type SideGoalForecast, type ItemSource, type ItemFind, type SimItemUse, type ItemUseForecast, type MapExp, type UnitExp, type MilestoneCheck, type MilestoneChance } from './sim/run-sim';
+export { levelCap, type ArmyUnit, type ChildRecruit, type LostParent, type GoldSpread, type RunSim, type RunSimInput, type RunSimMap, type RunSimMapResult, type ShoppingLine, type ShoppingStop, type StatSpread, type UnitForecast, type SupportForecast, type MarriageForecast, type RunSimSideGoal, type SideGoalForecast, type ItemSource, type ItemFind, type SimItemUse, type ItemUseForecast, type MapExp, type UnitExp, type MilestoneCheck, type MilestoneChance } from './sim/run-sim';
 export { KIT_FORGE_MT, VULNERARY_VALUE, type MapUpkeep } from './sim/upkeep';
 export { SIDE_GOAL_IDS, chaseByDefault, sideGoalById, withSideGoalPin, withSideGoalSecured, type SideGoal, type SideGoalChoice, type SideGoalDecision, type SideGoalId, type SideGoalPart, type SideGoalPlan, type SideGoalRecord } from './side-goals';
 export { rewardsValue, withRenown, type RenownAhead, type RenownStop, type RunRenown } from './renown';
@@ -159,6 +163,8 @@ export { pinKey, withPin, withoutPins, type LineupRule } from './solve/pins';
 export { adoptedOf, proposalId, withDismissedProposal, withEdit, withoutEdit, type NewEdit } from './solve/adopted';
 export { behindFixes, sameWishlist, type MilestoneMoves, type MovedProposal, type PlanBreak } from './solve/resolve';
 export { forecastBefore, whatChanged, withDismissedChange, withEntryForecast, type ExpAgainstForecast, type WhatChanged } from './what-changed';
+export { falls, openLosses, runLosses, withLossesSettled, type FallLog, type FallRow, type LossItem, type LossKind, type RunLoss } from './losses';
+export { COST_ROLL_UP, type CostRow, type CostRowKind, type WhatItCost } from './what-it-cost';
 export { ROBIN_EXTRA, ROBIN_SOLVE, withRobinLock, robinKey, robinLock, robinOptions, wishlistDifference, type RobinCost, type RobinCursor, type RobinInput, type RobinOption, type RobinPick, type RobinStep, type SolvedRobin, type WishlistDifference };
 export type { KeepPin, MarriagePin, SideGoalPin, SpanPin, SpanPosition } from './solve/plan';
 export { NO_PREPARATIONS } from '../game-data/chapters';
@@ -188,8 +194,12 @@ export {
   nextMaps,
   parseRun,
   prepUnits,
+  GAME_OVER_UNITS,
+  isLost,
   recordFallen,
   recordMarriage,
+  recordMissed,
+  unrecordLoss,
   recruitSnapshot,
   removeEntry,
   rosterOf,
@@ -769,6 +779,19 @@ export type Engine = {
    * its Back, or field it), or the plan with the EXP priority span added (to the plan's spans, or the default ones).
    */
   suggestedEdit(run: Run, plan: Plan, pin: SuggestedPin): { readonly pins: readonly PlanPin[] } | { readonly plan: Plan };
+  /**
+   * The loss item (#208): the open losses on `run` against `plan` (the adopted one: deaths, missed recruits, marriages
+   * off it), what they broke, the headline before, and the re-solve's proposal (`lossPlan`); undefined with none open.
+   */
+  lossItem(run: Run, plan: Plan, options?: SeedOptions): LossItem | undefined;
+  /** The plan for the army that's left (#208): reserves step in; marriages, passed skills and the roadmap re-solve. */
+  lossPlan(run: Run, plan: Plan, options?: SeedOptions): Plan;
+  /**
+   * What it cost (#208): each event on the latest recorded map priced in flawless points on paired runs (a loss, a
+   * missed milestone, a fall, a level off the forecast, over-plan spending), small rows rolled up; undefined when the
+   * latest entry isn't a recorded map. Seeded; `runs` defaults to `SEARCH_RUNS.start`.
+   */
+  whatItCost(run: Run, plan: Plan, options?: SeedOptions & { readonly seed?: number; readonly runs?: number }): WhatItCost | undefined;
 };
 
 /** One combat for `Engine.combatExp`. */
@@ -1239,6 +1262,11 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     return plan;
   };
 
+  /** The loss item's proposal (#208): the reserves stepping in kept in (keep-in pins), then `lossPlan`. */
+  const lossPlanOf = (run: Run, plan: Plan, roleOf: ((u: RosterUnit) => DeploymentRole) | undefined): Plan => {
+    const r = pinnedRun(run, steppingIn(run, plan).map((x): PlanPin => ({ kind: 'keep', unit: x.unit, keep: 'in' })));
+    return lossPlan(r, seedContext(r), { pins: livePinsOf(r), ...(roleOf ? { roleOf } : {}) }, plan);
+  };
   const seedContext = (run: Run): SeedContext => {
     const context: PlayContext = run.roster.run.route ?? 'main-story';
     const settings: SkillViewSettings = { context, dlc: false };
@@ -2210,6 +2238,47 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     milestoneMoves: (run, from, to) => milestoneMoves(milestones(run, from, assumptions), milestones(run, to, assumptions)),
     suggestedEdit: (run, plan, pin) =>
       suggestedEdit(plan, pin, pin.kind === 'priority' ? (plan.roadmap.priorities ?? defaultPriorities(milestones(run, plan, assumptions), flawlessInput(run, assumptions, undefined, undefined, plan).input)) : []),
+    lossPlan: (run, plan, options = {}) => lossPlanOf(pinnedRun(run, options.pins), plan, options.roleOf),
+    lossItem: (given, plan, options = {}) => {
+      const run = pinnedRun(given, options.pins);
+      const losses = openLosses(run, plan);
+      if (!losses.length) return undefined;
+      const proposal = lossPlanOf(run, plan, options.roleOf);
+      const first = Math.min(...losses.map((l) => run.entries.findIndex((e) => e.id === l.entry)));
+      const f = run.entries[first]?.forecast;
+      const on = new Set<RosterUnit>(losses.flatMap((l) => l.couple ?? [l.unit]));
+      const broke = milestones({ ...run, entries: run.entries.slice(0, first) }, plan, assumptions).filter((m) => m.units.some((u) => on.has(u)));
+      const d = wishlistDifference(plan, proposal);
+      const passes = proposal.wishlist.children.flatMap((c) => {
+        const was = plan.wishlist.children.find((x) => x.child === c.child && x.parents[0] === c.parents[0] && x.parents[1] === c.parents[1]);
+        if (!was) return [];
+        return ([0, 1] as const).flatMap((k) => {
+          const parent = c.parents[k];
+          return parent !== 'maiden' && was.passes[k] !== c.passes[k] ? [{ child: c.child, parent, from: was.passes[k] ?? null, to: c.passes[k] ?? null }] : [];
+        });
+      });
+      return {
+        losses,
+        broke,
+        before: f ? { chance: f.chance, margin: f.margin } : undefined,
+        plan: proposal,
+        steppingIn: steppingIn(run, plan),
+        marriages: d.marriages,
+        units: d.units,
+        passes,
+        same: sameWishlist(plan, proposal) && JSON.stringify(plan.roadmap) === JSON.stringify(proposal.roadmap),
+      };
+    },
+    whatItCost: (given, plan, options = {}) => {
+      const run = pinnedRun(given, options.pins);
+      const { seed = FLAWLESS_SEED, runs = COST_RUNS.start, roleOf } = options;
+      return whatItCost(run, plan, {
+        sim: (r, p) => simulateRuns(planInput(r, p, roleOf), seed, runs, assumptions),
+        milestones: (r, p) => milestones(r, p, assumptions),
+        recovery: (r, p) => lossPlanOf(r, p, roleOf),
+        growths: (r, u) => unitGrowths(r, u, assumptions),
+      });
+    },
     robinAlternatives: (input) => {
       const { roleOf, seed } = input;
       const run = pinnedRun(input.run, input.pins);

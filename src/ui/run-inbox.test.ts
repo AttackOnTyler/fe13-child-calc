@@ -13,6 +13,7 @@ import {
   withDismissedProposal,
   withEdit,
   withEntryForecast,
+  withLossesSettled,
   withRun,
   type FlawlessChance,
   type Plan,
@@ -103,7 +104,8 @@ describe('the inbox after the Lock (#206)', () => {
 
   it('marks the re-solve required once the adopted roadmap can no longer be met', () => {
     const lost = seed.wishlist.units.map((w) => w.unit).find((u) => u !== 'chrom' && u !== 'robin')!;
-    const dead = recordFallen(late, latestEntry(late)!.id, lost, 9);
+    // The death's loss item kept as it is (#208): the plan still needs the unit.
+    const dead = withLossesSettled(recordFallen(late, latestEntry(late)!.id, lost, 9), [`dead:${lost}`]);
     const r = item(dead, 'resolve')!;
     expect(r.title.endsWith(': required before the next map')).toBe(true);
     expect(r.required).toBe(true);

@@ -69,7 +69,7 @@ const couplesKey = (cs: readonly Couple[]) =>
     .join(',');
 
 /** The plan with other marriages or another Robin: rebuilt, keeping what the edit didn't touch. */
-function rebuilt(run: Run, ctx: SeedContext, options: SeedOptions, prev: Plan, robin: PlanRobin, marriages: readonly Couple[]): Plan {
+export function rebuilt(run: Run, ctx: SeedContext, options: SeedOptions, prev: Plan, robin: PlanRobin, marriages: readonly Couple[]): Plan {
   const next = planFor(run, ctx, options, robin, marriages);
   const end = next.wishlist.endpoint;
   const order = [...prev.roadmap.order].sort().join() === [...next.roadmap.order].sort().join() ? prev.roadmap.order : next.roadmap.order;
