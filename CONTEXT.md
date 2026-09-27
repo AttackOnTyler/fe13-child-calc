@@ -99,6 +99,30 @@ _Avoid_: Route (the Route is Main story or Full route), schedule
 Something the adopted roadmap needs true before an event on its map order: a map, a point inside a map, a child's paralogue entry, or the endpoint. One of four kinds: a pair's support rank, a skill learned (for a build, or passed at paralogue entry from the last active slot), a child recruited, or a class reached (naming the seal it uses). Derived from the roadmap, never written by the player; ordered by where its event falls, preconditions first. A support milestone is a window counted in maps: earliest start, latest start, deadline.
 _Avoid_: Goal, checkpoint, level-by-map target
 
+**Milestone chance**:
+The share of simulated runs in which a milestone is met before its deadline map starts, with the median level there for a level milestone. Read from the same simulation as the flawless chance.
+_Avoid_: Probability (alone), level band
+
+**On track**:
+A unit whose worst open milestone has a milestone chance of 80% or more. A unit with no open milestones reads on track, with "no milestones left". Reserves get no reading.
+_Avoid_: Green, fine, safe
+
+**At risk**:
+A unit whose worst open milestone is below 80%, where one suggested change brings it back to 80% without pushing another milestone below 80%. The change shows as a one-click span pin.
+_Avoid_: Amber, warning
+
+**Behind**:
+A unit whose worst open milestone no single change can bring back to 80%, or whose deadline map has started without it met. It gets a re-solve proposal: the roadmap first, then a wishlist change (a reserve steps in).
+_Avoid_: Failed, off track, red
+
+**Suggested change**:
+The smallest edit that lifts a low milestone chance to 80%: one span pin from the unit's join map to the deadline (raise its priority, lower another's, pair it as Lead with a Back, or field it earlier). Changes that break another milestone come after, flagged.
+_Avoid_: Fix, recommendation
+
+**Paralogue entry**:
+The moment a child's inheritance is read: when its paralogue is entered (Lucina: the start of Chapter 13). Each parent passes its bottom-slot eligible skill, and the child's join stats read the parents' current stats, then. A parent only needs the skill learned by then.
+_Avoid_: Recruitment (the child joins later in the map), S-support (too early)
+
 **Reserve**:
 A wishlist unit beyond the endpoint's deploy count, ordered by who steps in first when a wishlist unit is lost or falls behind. Chosen after the solve, by how much flawless chance each candidate restores across the likely losses; each names the loss it mainly covers. The roadmap spends no EXP on a reserve unless a span pin asks for it.
 _Avoid_: Bench (Benched is a unit state), backup
@@ -114,6 +138,10 @@ _Avoid_: Build (alone, when the template is meant), preset (a preset weights sta
 **Unit page**:
 A first-gen unit seen on its own: its join data, class tree, build coverage over everything it can reach, what it passes as a parent, and pair-up bonuses. Opened from Units in the rail.
 _Avoid_: Character page, profile
+
+**Explorer**:
+The Table view and unit pages, as opposed to planning: pairings scored on stats with presets and Σ, and unit opinions. It keeps its own play context (defaulting to the run's route) and never feeds the wishlist.
+_Avoid_: Planner (the inbox, Wishlist tab and Run view plan), table (alone)
 
 **Class tree**:
 A unit's classes as base → promotion lines plus the DLC classes, each with the skills it teaches and their levels, starting skills marked.
@@ -248,6 +276,14 @@ _Avoid_: Weakness, super-effective
 A run's record of play: one **entry** per map played, in play order, each tagged with the map (or "other" for a skirmish or a grind map). The Roster's unit states and marriages come from the latest entry.
 _Avoid_: Save file, history
 
+**Class change**:
+A Master or Second Seal used on a unit, recorded on the entry for the map it happened on: the unit, its class before and after, which seal, and the displayed level at use. Record results proposes one when it sees a level reset.
+_Avoid_: Reclass (alone — a Master Seal promotes), promotion (alone)
+
+**Internal level**:
+The hidden level EXP is computed from: the displayed level (+20 in an advanced class), plus a cumulative level from Second Seals, capped by difficulty. Worked out from the chapter log's class changes; the player never enters a tier or a count, but can override the count.
+_Avoid_: True level, hidden level, cumulative level (only the Second Seal part)
+
 **Snapshot**:
 What an entry records about the army: each unit's class, level, promoted/reclassed status, EXP, stats (as the stat screen shows them, without pair-up), equipped skills, inventory with forges, and support ranks; plus the convoy, gold, unit states and marriages.
 _Avoid_: State, save
@@ -263,6 +299,50 @@ _Avoid_: Next chapter (paralogues and xenologues count)
 **Record results**:
 The guided flow after a map: it makes the map's entry (a copy of the last) and steps through deployed units, recruits, deaths and marriages, then convoy and gold. On Casual a fallen unit isn't recorded as dead.
 _Avoid_: Save, end chapter
+
+**Inbox**:
+"What needs you": the one list of decisions before the run and during it. Before the Lock it holds Robin, the search's improvements, close calls and "anything else"; after, titled "Before <map>", it holds at-risk pins, behind re-solves, proposals, loss items and this map's actions and checks, above Next map. A nudge, never a gate.
+_Avoid_: Notifications, to-do list, dashboard
+
+**Close call**:
+An alternative the flawless chance can't tell from the proposal: within twice the paired error. Read as "no measurable difference"; the player picks on taste.
+_Avoid_: Tie, toss-up
+
+**What changed**:
+The card above the inbox after a map is recorded: the flawless chance before and after, EXP against the forecast, readings that moved, and the improvements the re-solve found, then its What it cost list. Dismissed with "got it".
+_Avoid_: Diff, changelog
+
+**What it cost**:
+What changed's list of what the map cost or gained, in flawless points: deaths and what they broke, missed milestones, over-plan spending, gains; rows under about 0.1 are rolled into one.
+_Avoid_: Damage report
+
+**Over-plan spending**:
+One What it cost row: recorded gold and items against the simulation's expectation, shown as the endpoint kit shrinking ("Spent 3,400G more than planned; endpoint kit: −1 Silver Sword → −0.6").
+_Avoid_: Overspend, budget overrun
+
+**Loss item**:
+The inbox's single entry after a recorded death or missed recruit: a re-solve proposal (reserves step in; marriages, passed skills and the roadmap re-solve around the gap) with the flawless chance before and after, never applied until accepted.
+_Avoid_: Death alert, After a loss (the retired journey)
+
+**Fell**:
+A Casual fall: a failure, not a loss. The unit keeps its slot and children; its What it cost row prices the rest of the map it missed, and the fall is logged for calibration.
+_Avoid_: Died (on Casual), loss
+
+**Wishlist tab**:
+The whole wishlist as Lead/Back rows next to Run, replacing the Plan page: each unit's class, build, worth, parents and passed skills and its reading, with a count of units not on track. Clicking a unit lists its edits and their costs (after the Lock, as proposals); reserves follow, and the children ledger lives here.
+_Avoid_: Plan page (replaced), roster
+
+**Why panel**:
+The side panel a number opens beside the Run view or Wishlist tab: its value, what it is, its math, the rows that moved it (each drilling on, map to fight), where the trail stops, and only the blind spots and stated assumptions that touch it. Its second tab is the whole stated assumptions list.
+_Avoid_: Tooltip, details, breakdown (alone)
+
+**Share of the risk**:
+How the flawless chance's lost points are split between maps: each map's share of the total risk (log share), so the rows add up. Maps that each cost under about 0.5 points are grouped.
+_Avoid_: Map cost, contribution
+
+**Migration note**:
+The one-time note on first load after endpoint-first planning ships: what of the old plan was kept as edits (pinned marriages, rule-outs, keep-outs) and what was dropped (the adopted plan, deployment roles, priorities, overrides, quotas).
+_Avoid_: Changelog, upgrade notice
 
 **Map solver**:
 The engine's combat math for the next map: a lead and back, with a weapon and forge, against each enemy group and the boss on the run's difficulty. It doesn't plan movement.
@@ -304,6 +384,18 @@ _Avoid_: Healing (alone), recovery
 The page for getting ready for the next map, reached from Next map: its matchups first.
 _Avoid_: Prep screen, battle prep
 
+**Pair card**:
+The preparation page's card for one pair or solo unit in the roadmap's lineup for the next map: positions and partner, each unit's job, EXP priority and expected EXP, the milestone it feeds, an at-risk pin, the stance plan and the threats to it, with a count of its to-dos (the actions stay in the page's one checklist).
+_Avoid_: Unit card, deployment row
+
+**Stance plan**:
+A pair's stances turn by turn on one map, from the simulation ("T1–4 together, Robin in front → T5 Switch: Chrom in front").
+_Avoid_: Formation plan
+
+**No-death chance**:
+The chance nobody dies on one map, for the runs that reach it with the plan's lineup; the flawless chance is its product over the maps to the endpoint. Computed exactly per map; read near 100% as "loses a unit about 1 run in N".
+_Avoid_: Map chance, survival rate
+
 **Danger flag**:
 Something on the next map that threatens a unit: a weapon effective against it, Counter against a melee unit, a boss that doubles it, or a round that can kill it. On Lunatic+ it counts the worst of the pool until the player records the skills seen.
 _Avoid_: Warning (too broad)
@@ -313,24 +405,84 @@ The weapons a deployed unit takes into the next map, chosen from its inventory a
 _Avoid_: Equipment, kit (the endpoint kit is a plan's assumption)
 
 **Supply list**:
-Buys and forges that turn foes a deployed lead can't one-round into one-round kills, cheapest per foe first, within the gold recorded and from armories the run has opened. Random merchants aren't counted.
-_Avoid_: Shopping list, shop advice
+Buys and forges that turn foes a deployed lead can't one-round into one-round kills, cheapest per foe first, within the gold recorded and from armories the run has opened. Random merchants aren't counted. Endpoint-first planning replaces it with the shopping list.
+_Avoid_: Shopping list (its replacement), shop advice
 
 **Endpoint kit**:
 The weapons, forges and potions a plan assumes each unit carries at the endpoint: what it already owns first, then the best the open armories sell, paid from the gold left after the run's upkeep, seals and promotions, and trimmed where that costs the fewest points of flawless chance.
 _Avoid_: Loadout (the next map's), gear
 
+**Gold forecast**:
+Each simulated run's gold map by map: gold before, plus Bullion sold, minus what that run bought down its shopping list. Part of the flawless chance's simulation, not a separate projection; shown as a range per map with each purchase's chance of being made.
+_Avoid_: Budget, gold projection
+
+**Side goal**:
+Loseable income inside a map: an escaping Thief, a village, Ch 18's chests, a paralogue's result. The solve chooses whether to chase it, paying in actions and turns; its income counts as the share of runs that secure it. The player can pin one to always take or skip.
+_Avoid_: Bonus objective, optional goal
+
+**Held item**:
+Anything owned but Bullion: stat boosters, tonics, seals, dropped and reward weapons. A resource the solve spends, never sold unless no use is worth more than its sell price.
+_Avoid_: Loot, inventory (alone)
+
+**Shopping list**:
+The plan's buys at each armory stop, in priority order: rebuys from simulated hits, seals when none is held, tonics, kit pieces. Each run buys down it with its own gold; when short it drops what costs the fewest flawless points per gold. Replaces the supply list.
+_Avoid_: Supply list (replaced), shop advice
+
+**Shopping step**:
+Record results' step between maps, after convoy and gold: buys, sells and forges, each with its gold. The entry's gold is gold at map end; gold after shopping is derived.
+_Avoid_: Shop entry
+
+**Renown**:
+The game's renown count, recorded once per run (starting value and rewards already claimed), then derived at +10 per story map; the forecast places every reward crossed on its map. Paralogue and DLC renown count as 0 until recorded.
+_Avoid_: Fame, points
+
+**Item plan**:
+The roadmap's row per held item, owned or expected: its planned use or carrier timeline, arrival chance and gain in flawless points; tonics summarised per map. An item with no use worth its price says "sell".
+_Avoid_: Item schedule, loot plan
+
+**Planned use**:
+Where the solve spends a held item: a unit and a map for a booster or tonic (drunk in preparations), a carrier per map for a weapon. Searched and scored by the flawless chance, overridden by a pin at a visible cost. Not a milestone.
+_Avoid_: Allocation, assignment
+
+**Arrival chance**:
+The share of simulated runs that secure an item that arrives only sometimes (a side goal's reward, a boss drop). A run without it plays without it; the re-solve after each recorded map is the fallback.
+_Avoid_: Drop rate
+
+**Carrier**:
+The unit holding a held weapon on one map, picked by the solve with the lineup and read as a timeline ("Levin Sword: Robin Ch 5–Ch 11, Chrom from Ch 12").
+_Avoid_: Owner, wielder
+
+**Carrier pin**:
+A carrier the player keeps over a span ("Gradivus stays with Lucina from P21"), with its flawless-chance cost shown.
+_Avoid_: Weapon lock
+
+**Items used**:
+Record results' step confirming the boosters, tonics and handovers actually used, pre-filled from the preparation page's "before this map" list. Asked, never derived from stat jumps.
+_Avoid_: Consumed items
+
 **Expected stats**:
-Stats projected from growths (personal plus class) along a unit's planned path, as a spread of likely values rather than a single line, and labelled as expected. They judge promoting now or later and are the projection behind the flawless chance; the next map's matchups use recorded stats.
+Stats projected from growths (personal plus class) along a unit's planned path, as a spread of likely values rather than a single line, and labelled as expected. They judge promoting now or later and are the projection behind the flawless chance; the next map's matchups use recorded stats. A recorded stat reads as its percentile in the spread ("Str p12"); poor rolls never change a unit's reading.
 _Avoid_: Projected stats, averages (alone)
 
 **EXP priority**:
 The units deployed on the next map, ranked by how much EXP each needs there to stay on track for the wishlist. Guidance on who should take which foes, never a turn-by-turn kill plan.
 _Avoid_: Kill plan, feed list, XP budget
 
+**Wait**:
+What a lower-priority unit does when a higher-priority unit could take a kill: it chips the foe into that unit's kill range, or holds its action. The foes left alive cost extra turns, which the flawless chance counts.
+_Avoid_: Skip, pass
+
 **EXP forecast**:
 The expected EXP, and so the expected level range, each deployed unit ends a map with: the map's foes, the lineup's matchups and the EXP priority, with the kills shared among the units able to take them. Recalibrated from each recorded entry.
 _Avoid_: EXP plan, projection (alone)
+
+**Learned correction**:
+A per-unit EXP factor learned from each recorded map against the uncorrected forecast, shrunk toward ×1 and clamped to ×0.5–×2, applied to the maps after the last recorded one. Shown as a stated assumption, and relearned from the whole chapter log whenever a rule changes.
+_Avoid_: Fudge factor, bias
+
+**Calibration**:
+How honest the forecasts are against recorded play: how many recorded results fall inside the forecast's 10th–90th percentile (about 80% if honest) and their mean percentile (50 if unbiased). Casual falls are logged for it too.
+_Avoid_: Accuracy, score
 
 **Copy-forward**:
 A new entry starts as a copy of the one before, with the map's recruits filled in from join data. Editing a past entry never changes later ones; they're flagged instead.
@@ -442,13 +594,49 @@ _Avoid_: Penalty, pin loss (a lost pin is broken or on hold)
 A game value or rule the sources couldn't verify. It has a default and known alternatives, and the user can override it.
 _Avoid_: Guess, setting, config
 
+**Stated assumptions**:
+The list of everything the numbers rest on that isn't read from the player's game: blind spots, open rules by stakes, model mismatches, learned corrections, then checked rules. Lives in the Why panel's second tab; any rule can be answered or reopened there.
+_Avoid_: Settings, caveats, fine print
+
+**Blind spot**:
+Something the flawless chance knowingly leaves out and play can't check (one worst attacker per pair, the assumed army spread, no taxiing). Shown only beside the numbers it touches, with its lean.
+_Avoid_: Assumption (an assumption can be checked), limitation, bug
+
+**Lean**:
+Which way a blind spot likely moves a number: may read high, may read low, or either way.
+_Avoid_: Bias (alone), direction
+
+**Stress-test range**:
+The headline's range under its blind spots' bad cases ("42.0%, as low as 31.8% if two attackers reach each exposed pair"), shown only on the headline, only for blind spots that can be stressed.
+_Avoid_: Confidence interval, error bar (simulation error is separate)
+
 **Assumption override**:
 The user's replacement for an assumption's default. It recomputes every pairing, and it is saved in the browser until reset.
 _Avoid_: Setting, preference (preferences are a wider set that includes overrides)
 
 **In-play check**:
-An observation from the run itself that settles an assumption. The preparation page asks for it when the next map sets up the situation (Robin fielded as a Back, a unit's first kill after an early promotion), and Record results takes the reading, which confirms the default or replaces it. Until then, planning runs on the default.
+An observation from the run itself that settles an assumption. The preparation page asks for it when the next map sets up the situation (Robin fielded as a Back, a unit's first kill after an early promotion), and Record results takes the raw observation (a number, yes or no, or "didn't happen") and works out which reading it supports: the best reading makes a checked rule, the other switches the model at once and proposes a re-solve. Until then, planning runs on the default.
 _Avoid_: Test, experiment, checklist (the list of open checks)
+
+**Checked rule**:
+An open rule settled by an in-play check or a hand answer that matched its best reading. It leaves the open list, outlives the run, keeps its evidence (run and map) and can be reopened.
+_Avoid_: Verified fact, confirmed assumption
+
+**Stakes**:
+How far the flawless chance would move if an open rule's other reading held, from one background re-run of the plan. Orders the checks and shows beside each ("worth ±2.3 flawless points").
+_Avoid_: Impact, priority
+
+**Free check**:
+An in-play check the adopted roadmap already sets up on a map, listed in the inbox's This map and Prepare at no cost.
+_Avoid_: Passive check
+
+**Setup check**:
+A costed edit the inbox offers to set up an in-play check whose stakes are above about 1 flawless point when no upcoming map sets it up ("costs −0.1, settles ±2.3").
+_Avoid_: Test map, experiment
+
+**Model mismatch**:
+A rule play contradicted twice, matching neither reading. It becomes a stated blind spot; forecasts keep the best reading and are widened where it touches them.
+_Avoid_: Bug, error, conflict
 
 **Resolved disagreement**:
 A value where the sources conflicted and the research picked a winner. It is listed with the winning and losing values and their sources. It is not an assumption, because it can't be overridden.
