@@ -103,6 +103,22 @@ const TIER_BY_NAME = new Map<string, ClassTier>([
 /** A class name's tier from the class data (enemy-only classes included), or undefined: never guessed. */
 export const tierOfClass = (name: string): ClassTier | undefined => TIER_BY_NAME.get(name.trim());
 
+/**
+ * The Deadlords (Chapter 22 and Infinite Regalia), by name: each carries the +20 unit bonus (research/exp-rules §1.2,
+ * SF calculations). Whether the boss +20 comes on top is open (G8; assumption `deadlord-boss-bonus`).
+ */
+export const DEADLORDS: ReadonlySet<string> = new Set(['Mus', 'Bovis', 'Tigris', 'Lepus', 'Draco', 'Anguilla', 'Equus', 'Ovis', 'Simia', 'Gallus', 'Canis', 'Porcus']);
+export const DEADLORD_UNIT_BONUS = 20;
+
+/**
+ * A map foe for the EXP formulas (#185, #209): a Deadlord gets its +20 unit bonus, and the boss +20 only where the
+ * chapter data marks it a boss and `deadlordBoss` is 'boss-too'; any other foe as the data has it.
+ */
+export function mapExpFoe(name: string, cls: string, level: number, boss: boolean, deadlordBoss: 'unit-only' | 'boss-too'): ExpFoe | undefined {
+  if (!DEADLORDS.has(name.trim())) return expFoeOf(cls, level, boss);
+  return expFoeOf(cls, level, boss && deadlordBoss === 'boss-too', DEADLORD_UNIT_BONUS);
+}
+
 /** A foe for the EXP formulas from its class name and level; undefined for a class the data doesn't know. */
 export function expFoeOf(cls: string, level: number, boss = false, unitBonus?: number): ExpFoe | undefined {
   const tier = tierOfClass(cls);

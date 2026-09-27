@@ -108,6 +108,8 @@ type AssumptionValues = {
   'veteran-as-back': 'lead-only' | 'paired';
   /** A Master or Second Seal and the EXP bar: reset to 0 with the level, or kept. */
   'seal-exp-bar': 'reset' | 'kept';
+  /** A Deadlord's kill: its +20 unit bonus only, or the boss +20 on top where the chapter data marks it a boss. */
+  'deadlord-boss-bonus': 'unit-only' | 'boss-too';
 };
 
 export type AssumptionId = keyof AssumptionValues;
@@ -553,6 +555,21 @@ export const ASSUMPTION_REGISTRY: { readonly [K in AssumptionId]: AssumptionDef<
     format: (v) => (v === 'reset' ? 'Reset to 0 with the level' : 'Kept through the seal'),
     parse: (raw) => (raw === 'reset' || raw === 'kept' ? raw : undefined),
     affects: 'EXP after a class change in the simulated runs',
+  }),
+  'deadlord-boss-bonus': entry({
+    id: 'deadlord-boss-bonus',
+    label: 'Deadlords and the boss bonus',
+    why:
+      'A Deadlord (Chapter 22, Infinite Regalia) carries a +20 unit bonus, which caps its class bonus (SF calculations). The chapter data ' +
+      'marks Chapter 22’s as bosses, but whether the boss +20 comes on top of the unit bonus isn’t published (research G8). The runs give ' +
+      'the unit bonus only. An open rule until one Deadlord kill is noted with the killer’s level.',
+    sources: [RESEARCH_EXP, CHECK_IN_PLAY],
+    default: 'unit-only',
+    alternatives: [{ label: 'The boss +20 on top (where the data marks a boss)', value: 'boss-too' }],
+    input: 'choice',
+    format: (v) => (v === 'unit-only' ? 'The +20 unit bonus only' : 'The unit bonus and the boss +20'),
+    parse: (raw) => (raw === 'unit-only' || raw === 'boss-too' ? raw : undefined),
+    affects: 'EXP from Deadlord kills in the simulated runs',
   }),
 };
 

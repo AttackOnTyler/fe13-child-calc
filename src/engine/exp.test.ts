@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { combatExp, createEngine, danceExp, expFoeOf, internalLevel, secondSealCount, staffExp, type ExpFoe } from './index';
+import { combatExp, createEngine, danceExp, expFoeOf, internalLevel, mapExpFoe, secondSealCount, staffExp, type ExpFoe } from './index';
 
 const engine = createEngine();
 const fighter: ExpFoe = { level: 1, advanced: false, boss: false, classBonus: 0 };
@@ -70,6 +70,12 @@ describe('the EXP formula', () => {
     expect(combatExp(10, expFoeOf('Thief', 10)!, 'kill')).toBe(50);
     expect(combatExp(10, expFoeOf('Revenant', 10)!, 'kill')).toBe(100);
     expect(combatExp(10, expFoeOf('Cleric', 10)!, 'kill')).toBe(20);
+    // A Deadlord (#209): the +20 unit bonus caps its class bonus (Porcus, an Assassin: min(20 + 20, 20)); the boss +20
+    // on top only under the other reading of G8. Advanced Lv 15 against IL 35: LD 0, so 10 + 20 + bonus.
+    expect(combatExp(35, mapExpFoe('Porcus', 'Assassin', 15, true, 'unit-only')!, 'kill')).toBe(50);
+    expect(combatExp(35, mapExpFoe('Porcus', 'Assassin', 15, true, 'boss-too')!, 'kill')).toBe(70);
+    // Any other foe is as the data has it.
+    expect(mapExpFoe('Aversa', 'Dark Flier', 16, true, 'unit-only')).toEqual(expFoeOf('Dark Flier', 16, true));
     // An Einherjar Cleric: min(20 − 10, 20).
     expect(combatExp(10, { ...expFoeOf('Cleric', 10)!, unitBonus: 20 }, 'kill')).toBe(40);
     // Entombed are advanced as well as +80.

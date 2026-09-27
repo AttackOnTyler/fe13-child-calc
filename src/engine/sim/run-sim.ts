@@ -74,7 +74,7 @@ import { childParalogueGates, isChildParalogue } from '../child-paralogues';
 import { childSkills, type SkillParent } from '../child-skills';
 import { classGrowths, classMaxStats, className } from '../classes';
 import { leadsByDefault, suggestDeployment, type DeployCandidate, type Deployment, type Pair } from '../deploy';
-import { COUNT_CAP, combatExp, danceExp, expFoeOf, secondSealCount, staffExp, tierBonus, type ExpFoe } from '../exp';
+import { COUNT_CAP, combatExp, danceExp, mapExpFoe, secondSealCount, staffExp, tierBonus, type ExpFoe } from '../exp';
 import type { Difficulty, RosterUnit } from '../roster';
 import type { Fighter, Foe, SupportLevel } from '../solver';
 import { CHROM_WEDDING_CANDIDATES, CHROM_WEDDING_MAP } from '../../game-data/supports';
@@ -827,14 +827,16 @@ const fighterOf = (u: Live, stats: Readonly<Record<Stat, number>>): Fighter => (
 });
 
 /** Each foe group's EXP foe on a map, by key (undefined for a class the EXP data doesn't know: it gives none). */
-const EXP_FOES = new WeakMap<SimMap, Map<string, ExpFoe | undefined>>();
-function expFoes(map: SimMap): Map<string, ExpFoe | undefined> {
-  let m = EXP_FOES.get(map);
+const EXP_FOES = new WeakMap<SimMap, Partial<Record<Assumptions['deadlord-boss-bonus'], Map<string, ExpFoe | undefined>>>>();
+function expFoes(map: SimMap, deadlordBoss: Assumptions['deadlord-boss-bonus']): Map<string, ExpFoe | undefined> {
+  let byReading = EXP_FOES.get(map);
+  if (!byReading) EXP_FOES.set(map, (byReading = {}));
+  let m = byReading[deadlordBoss];
   if (!m) {
-    m = new Map();
+    m = byReading[deadlordBoss] = new Map();
     const groups: SimFoeGroup[] = [...map.foes, ...map.waves.flatMap((w) => w.groups)];
-    for (const g of groups) m.set(g.key, expFoeOf(g.foe.className, g.foe.level ?? 1, g.foe.boss));
-    EXP_FOES.set(map, m);
+    // A Deadlord carries its +20 unit bonus; the boss +20 on top is an open rule (#209, `deadlord-boss-bonus`).
+    for (const g of groups) m.set(g.key, mapExpFoe(g.foe.name, g.foe.className, g.foe.level ?? 1, g.foe.boss, deadlordBoss));
   }
   return m;
 }
@@ -847,7 +849,7 @@ function expFoes(map: SimMap): Map<string, ExpFoe | undefined> {
  * each staff use and each Dance, each times the unit's learned correction (#196). Returns the EXP each unit earned.
  */
 function earn(state: RunState, map: SimMap, play: MapPlay, rng: Rng | null, difficulty: Difficulty, assumptions: Assumptions): Map<RosterUnit, number> {
-  const foes = expFoes(map);
+  const foes = expFoes(map, assumptions['deadlord-boss-bonus']);
   const lunatic = difficulty === 'lunatic' || difficulty === 'lunatic-plus';
   const veteranBack = assumptions['veteran-as-back'] === 'paired';
   const earned = new Map<RosterUnit, number>();
