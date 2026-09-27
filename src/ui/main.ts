@@ -64,10 +64,7 @@ import {
   type Stat,
   type SupportRank,
   type Weights,
-  mapSpanPin,
   marriagePins,
-  withPin,
-  withoutPins,
 } from '../engine';
 import { h } from './dom';
 import { guide } from './guide';
@@ -170,17 +167,9 @@ let openEntry: string | undefined;
 let showingMaps = false;
 /** Record results in progress (#118; view state). */
 let recording: { entry: string; step: number } | undefined;
-/** The preparation page open (#119), its chosen backs and foe (view state). */
+/** The preparation page open (#119) and its chosen foe (view state); its backs and drops are span pins (#207). */
 let preparing: string | undefined;
-let prepBacks: Partial<Record<RosterUnit, RosterUnit | 'none'>> = {};
 let prepFoe = 0;
-/** A map's key on the run's map order (the preparation page's map). */
-const prepKey = (r: Run, map: string): string => engine.mapOrder(r).steps.find((s) => s.map === map)?.key ?? map;
-/** The units dropped on the preparation page's map: span pins keeping them out of this map only (#200). */
-const droppedHere = (r: Run, map: string): ReadonlySet<RosterUnit> => {
-  const key = prepKey(r, map);
-  return new Set((r.pins ?? []).flatMap((p) => (p.kind === 'span' && p.position === 'out' && p.from === key && p.to === key ? [p.unit] : [])));
-};
 /** The Wishlist tab's unit whose edits are open (#203; view state). */
 let wishlistOpen: RosterUnit | undefined;
 /** The count of units not on track the Wishlist tab's rail button last showed (#203). */
@@ -2486,16 +2475,6 @@ function renderParts(parts: readonly Part[]): void {
                 preparing = undefined;
                 renderParts(['main']);
               },
-              backs: prepBacks,
-              swap: (lead, back) => {
-                const { [lead]: _, ...rest } = prepBacks;
-                prepBacks = { ...rest, [back]: lead };
-                renderParts(['main']);
-              },
-              setBack: (lead, back) => {
-                prepBacks = { ...prepBacks, [lead]: back };
-                renderParts(['main']);
-              },
               foe: prepFoe,
               setFoe: (i) => {
                 prepFoe = i;
@@ -2506,13 +2485,8 @@ function renderParts(parts: readonly Part[]): void {
                 return (u: RosterUnit) => deployRoleOf(u, roster, roles);
               })(),
               // The adopted plan (#204; the seed until one is adopted), as the Run view's flawless chance takes it: the shopping list reads the same runs.
+              // Its backs and drops are span pins over this map only (#207), which this plan keeps.
               plan: (roleOf) => engine.adoptedPlan(run, { pins: [...marriagePins(roster), ...(run.pins ?? [])], roleOf }),
-              // A unit dropped here is a span pin over this map only (#200): the flawless chance and the solve keep it out.
-              excluded: droppedHere(run, preparing),
-              setExcluded: (u, out) => {
-                const pin = mapSpanPin(u, 'out', prepKey(run, preparing!));
-                setRun(out ? withPin(run, pin) : withoutPins(run, [pin]));
-              },
             })
           : view === 'run'
           ? runView({
@@ -2529,7 +2503,6 @@ function renderParts(parts: readonly Part[]): void {
               prepare: (map) => {
                 preparing = map;
                 prepFoe = 0;
-                prepBacks = {};
                 renderParts(['main']);
               },
               roleOf: runRoleOf(),

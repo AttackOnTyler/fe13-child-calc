@@ -40,7 +40,6 @@ export const GUIDE_TARGETS = [
   'prep-threats',
   'danger-flags',
   'lplus-checklist',
-  'prep-deployment',
   'prep-loadouts',
   'prep-supply',
   'prep-seals',
