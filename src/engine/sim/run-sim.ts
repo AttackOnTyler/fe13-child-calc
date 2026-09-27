@@ -63,7 +63,7 @@ import type { DeploymentRole } from '../../curated/deployment';
 import type { Assumptions, BlindSpotId, RunBlindSpotId } from '../assumptions';
 import { CHILD_UNITS, type ChildId } from '../../game-data/children';
 import { CLASS_SKILLS, SKILLS, type SkillId } from '../../game-data/skills';
-import type { PlanSeal } from '../solve/plan';
+import type { PlanPriority, PlanSeal } from '../solve/plan';
 import { pinnedLineup, rulesBroken, type LineupRule } from '../solve/pins';
 import { SEAL_LEVEL, classChangeGains, plannedSeals, sealReaches } from './class-changes';
 import { childJoinStats, classBaseStats, type JoinParent } from '../child-join';
@@ -71,14 +71,14 @@ import { childParalogueGates, isChildParalogue } from '../child-paralogues';
 import { childSkills, type SkillParent } from '../child-skills';
 import { classGrowths, classMaxStats, className } from '../classes';
 import { suggestDeployment, type DeployCandidate, type Deployment, type Pair } from '../deploy';
-import { COUNT_CAP, combatExp, expFoeOf, secondSealCount, tierBonus, type ExpFoe } from '../exp';
+import { COUNT_CAP, combatExp, danceExp, expFoeOf, secondSealCount, staffExp, tierBonus, type ExpFoe } from '../exp';
 import type { Difficulty, RosterUnit } from '../roster';
 import type { Fighter, Foe, SupportLevel } from '../solver';
 import { CHROM_WEDDING_CANDIDATES, CHROM_WEDDING_MAP } from '../../game-data/supports';
 import { chromWifeByPoints, type ChromStanding } from '../chrom-wedding';
 import { SUPPORT_LEVELS } from '../run';
 import { addPoints, mapSupportGains, pairThresholds, pointsOfRank, rankOf } from './support-growth';
-import { playMap, type MapPlay, type SimChase, type SimFoeGroup, type SimGroup, type SimMap, type SimUnit } from './map-play';
+import { playMap, type ExpPriority, type MapPlay, type MapPlayInput, type SimChase, type SimFoeGroup, type SimGroup, type SimMap, type SimUnit } from './map-play';
 import { createRng, runSeed, type Rng } from './random';
 import type { SimItem } from './sustain';
 import { STAT_BOOSTERS, TONICS, statItemGain, type GameItem } from '../../game-data/items';
@@ -265,13 +265,102 @@ export type RunSimInput = {
    * the plan or greedy, keeps them (`pinnedLineup`).
    */
   readonly pins?: readonly (readonly LineupRule[] | undefined)[];
+  /**
+   * Each map's EXP priorities (#195), by map in `maps` order and unit: who lands kills in its play (`MapPlayInput.priority`).
+   * Absent, or a map without one: everyone normal.
+   */
+  readonly priority?: readonly (Readonly<Partial<Record<RosterUnit, ExpPriority>>> | undefined)[];
+  /** The roadmap's milestones (#194) as the runs check them (#195): each one's chance of being met is counted over the runs. */
+  readonly milestones?: readonly MilestoneCheck[];
 };
 
-/** A lineup a plan names for one map (#198): its pairs (a Lead, and its Back if any) and its units alone. */
+/**
+ * A lineup a plan names for one map (#198): its pairs (a Lead, and its Back if any) and its units alone. A pair a span
+ * pin keeps (`kept`, #195) stays paired in the play while that's safe, as a couple still to marry does.
+ */
 export type LineupPlan = {
-  readonly pairs: readonly { readonly lead: RosterUnit; readonly back?: RosterUnit }[];
+  readonly pairs: readonly { readonly lead: RosterUnit; readonly back?: RosterUnit; readonly kept?: boolean }[];
   readonly solo: readonly RosterUnit[];
 };
+
+/**
+ * A milestone (#194) as a run checks it (#195): whether it holds in the run at its point on the map order (map `index`'s
+ * start, after its preparations, or its end): a skill learned, a class reached, a pair at S (or married), a child
+ * recruited.
+ */
+export type MilestoneCheck = {
+  readonly id: string;
+  readonly index: number;
+  readonly when: 'start' | 'end';
+  /** Who it counts against; a suggested change is for the first. */
+  readonly units: readonly RosterUnit[];
+  readonly test:
+    | { readonly kind: 'skill'; readonly unit: RosterUnit; readonly skill: SkillId }
+    | { readonly kind: 'class'; readonly unit: RosterUnit; readonly classId: ClassId }
+    | { readonly kind: 'support'; readonly pair: readonly [RosterUnit, RosterUnit] }
+    | { readonly kind: 'recruit'; readonly child: RosterUnit };
+};
+
+/** A milestone's chance (#195): the share of the runs reaching its point with nobody lost in which it holds. */
+export type MilestoneChance = {
+  readonly id: string;
+  /** Undefined when no run reaches its point. */
+  readonly chance: number | undefined;
+  readonly runs: number;
+  /** A skill or class milestone: the unit's median level there (in the class it's in; undefined when not in the army). */
+  readonly level: number | undefined;
+};
+
+/**
+ * One map of the EXP forecast (#195), over the runs that play it with nobody lost before it: each fielded unit's
+ * expected EXP, its level at the map's end, and the kills it lands per foe group (a mean over runs; never which foe on
+ * which turn).
+ */
+export type MapExp = {
+  readonly key: string;
+  readonly label: string;
+  readonly runs: number;
+  /** The map's foe groups (as the first run met them), by key. */
+  readonly groups: readonly { readonly key: string; readonly name: string; readonly className: string; readonly count: number }[];
+  readonly units: readonly UnitExp[];
+};
+
+export type UnitExp = {
+  readonly unit: RosterUnit;
+  readonly name: string;
+  readonly priority: ExpPriority;
+  /** Mean EXP earned on the map (combat, Dual Strikes, staves, Dances; before the level cap takes any). */
+  readonly exp: number;
+  /** Its level at the map's end, with EXP as the fraction (Lv 5, 40 EXP → 5.4): 10th percentile, median, 90th. */
+  readonly level: { readonly low: number; readonly median: number; readonly high: number };
+  /** Mean kills per run, by foe group key (groups it never fells are left out). */
+  readonly kills: Readonly<Record<string, number>>;
+};
+
+/**
+ * A plan's EXP priorities (#195) as the runs read them: by map in `maps` order, each unit's priority there. A span whose
+ * keys aren't on the order is dropped; a later span overrides an earlier one where they overlap. Span pins win where
+ * they overlap (#200, `rules`: each map's lineup rules): a unit a pin keeps out, or as a Back, has no priority there
+ * (it lands no kills of its own).
+ */
+export function priorityByMap(
+  maps: readonly { readonly key: string }[],
+  spans: readonly PlanPriority[],
+  rules?: readonly (readonly LineupRule[] | undefined)[],
+): (Partial<Record<RosterUnit, ExpPriority>> | undefined)[] {
+  const out: (Partial<Record<RosterUnit, ExpPriority>> | undefined)[] = maps.map(() => undefined);
+  const index = new Map(maps.map((m, i) => [m.key, i]));
+  for (const p of spans) {
+    const from = index.get(p.from);
+    const to = index.get(p.to);
+    if (from === undefined || to === undefined) continue;
+    for (let i = from; i <= to; i++) {
+      if (rules?.[i]?.some((r) => r.unit === p.unit && (r.position === 'out' || r.position === 'back'))) continue;
+      out[i] = { ...out[i], [p.unit]: p.priority };
+    }
+  }
+  return out;
+}
 
 /** A stat's spread over the runs at the endpoint: 10th percentile, median, 90th, and the effective cap. */
 export type StatSpread = { readonly low: number; readonly median: number; readonly high: number; readonly cap: number };
@@ -407,12 +496,16 @@ export type RunSim = {
    * none aren't listed; most lost first.
    */
   readonly losses: readonly { readonly unit: string; readonly chance: number }[];
+  /** The EXP forecast (#195): each map some run played with nobody lost before it, in map order. */
+  readonly exp: readonly MapExp[];
+  /** Each of the input's milestones, its chance over the runs (#195). */
+  readonly milestones: readonly MilestoneChance[];
   /** The stated blind spots it rests on: the map simulation's, then the run simulation's own. */
   readonly blindSpots: readonly (BlindSpotId | RunBlindSpotId)[];
 };
 
 /** The run simulation's own blind spots (see BLIND_SPOTS): what it simplifies between maps. */
-const RUN_BLIND_SPOTS: readonly RunBlindSpotId[] = ['class-change-at-cap', 'lead-takes-exp', 'supports-from-pair-combats', 'side-goal-actions', 'kit-by-matchups-won'];
+const RUN_BLIND_SPOTS: readonly RunBlindSpotId[] = ['class-change-at-cap', 'exp-from-likely-play', 'supports-from-pair-combats', 'side-goal-actions', 'kit-by-matchups-won'];
 
 /** Special classes (Dancer, Villager, Taguel, Manakete, the DLC classes) level to 30; base and advanced to 20. */
 export const levelCap = (tier: ClassTier): number => (tier === 'special' ? 30 : 20);
@@ -674,21 +767,38 @@ function expFoes(map: SimMap): Map<string, ExpFoe | undefined> {
 }
 
 /**
- * The EXP each fight gives, in the play's order, landing on the lead (a kill, or damage when the foe lived). A back's
- * Dual Strike EXP isn't counted (#195 splits EXP), nor the Lunatic cut for a foe's repeat engagements.
+ * The EXP a map gives (#185, #195), in the play's order, at each unit's internal level then: each fight's front gets
+ * kill EXP when the foe falls, damage EXP when it lived through the front's strikes and none when it wasn't hurt, cut
+ * on Lunatic from a foe's 4th engagement; Veteran ×1.5 when its holder leads a pair. A paired back gets half its damage
+ * EXP from its own Dual Strikes, never kill EXP, weighted by the chance it lands one (the play's expected share). Then
+ * each staff use and each Dance. Returns the EXP each unit earned.
  */
-function earn(state: RunState, map: SimMap, play: MapPlay, rng: Rng | null, difficulty: Difficulty, assumptions: Assumptions) {
+function earn(state: RunState, map: SimMap, play: MapPlay, rng: Rng | null, difficulty: Difficulty, assumptions: Assumptions): Map<RosterUnit, number> {
   const foes = expFoes(map);
   const lunatic = difficulty === 'lunatic' || difficulty === 'lunatic-plus';
+  const earned = new Map<RosterUnit, number>();
+  const give = (u: Live, exp: number) => {
+    if (exp <= 0) return;
+    earned.set(u.base.id, (earned.get(u.base.id) ?? 0) + exp);
+    gainExp(u, exp, rng, assumptions);
+  };
   for (const turn of play.log) {
     for (const f of turn.fights) {
-      const u = state.army.get(f.lead as RosterUnit);
       const foe = foes.get(f.foe);
-      if (!u || !foe) continue;
-      const veteran = u.base.skills.includes('Veteran') ? 1.5 : 1;
-      gainExp(u, combatExp(internalOf(u, difficulty), foe, f.kill ? 'kill' : 'damage', false, lunatic, 1, veteran), rng, assumptions);
+      if (!foe) continue;
+      const u = state.army.get(f.lead as RosterUnit);
+      if (u) give(u, combatExp(internalOf(u, difficulty), foe, f.kill ? 'kill' : f.dealt ? 'damage' : 'miss', false, lunatic, f.engagement, f.back && u.base.skills.includes('Veteran') ? 1.5 : 1));
+      const b = f.back && f.dualStrike ? state.army.get(f.back as RosterUnit) : undefined;
+      if (b) give(b, Math.round(f.dualStrike! * combatExp(internalOf(b, difficulty), foe, 'damage', true, lunatic, f.engagement)));
     }
   }
+  for (const [id, t] of Object.entries(play.units)) {
+    const u = state.army.get(id as RosterUnit);
+    if (!u) continue;
+    for (const [item, n] of Object.entries(t.used)) for (let k = 0; k < n; k++) give(u, staffExp(internalOf(u, difficulty), item, u.tier, difficulty));
+    for (let k = 0; k < t.dances; k++) give(u, danceExp(internalOf(u, difficulty)));
+  }
+  return earned;
 }
 
 /** Interned lineup objects: the same unit and stats (and the same pair) is the same object across runs, so the map simulation's combat caches hit. */
@@ -975,13 +1085,13 @@ function beforeMap(state: RunState, step: RunSimMap, at: number, assumptions: As
  * After map `at`: EXP and level-ups from its fights, support points from its combats together and the marriages they
  * make, the recruits and children who came during it, then (Chapter 11) Chrom's wedding.
  */
-function afterMap(state: RunState, step: RunSimMap, at: number, play: MapPlay, rng: Rng | null, difficulty: Difficulty, assumptions: Assumptions, spent?: MapUpkeep) {
+function afterMap(state: RunState, step: RunSimMap, at: number, play: MapPlay, rng: Rng | null, difficulty: Difficulty, assumptions: Assumptions, spent?: MapUpkeep): Map<RosterUnit, number> {
   if (spent) upkeep(state, step, spent);
   secure(state, step, play);
   // Tonics last the map; its finds are held from the next (a side goal's only when its part was secured, #193).
   for (const u of state.army.values()) u.boost = {};
   for (const f of step.finds ?? []) if (!f.part || play.chased?.[f.part] === true) state.pool.set(f.id, f);
-  earn(state, step.map, play, rng, difficulty, assumptions);
+  const earned = earn(state, step.map, play, rng, difficulty, assumptions);
   // Chrom's wedding reads the ranks viewed before Chapter 11: those its points reached by the map before.
   const viewed = step.map.id === CHROM_WEDDING_MAP ? new Map(state.supports) : undefined;
   growSupports(state, play, at, assumptions['support-past-threshold']);
@@ -990,6 +1100,7 @@ function afterMap(state: RunState, step: RunSimMap, at: number, play: MapPlay, r
   state.arriving = [];
   state.cleared.add(step.map.id);
   if (viewed) chromWedding(state, at, viewed, assumptions);
+  return earned;
 }
 
 /** The chased side goals' parts, as the map play takes them (#191); undefined when the plan chases none there. */
@@ -1002,10 +1113,16 @@ function chasesOf(step: RunSimMap): readonly SimChase[] | undefined {
   return CHASES.get(step);
 }
 
-/** The map play's input for a step: the lineup, the couples to keep together (#184) and the side goals chased (#191). */
-function playInput(state: RunState, step: RunSimMap, lineup: readonly SimGroup[], idle?: readonly RosterUnit[]) {
+/**
+ * The map play's input for map `i`: the lineup, the couples to keep together (#184) and the pairs a span pin keeps
+ * (#195), the side goals chased (#191), the EXP priorities (#195) and, in the runs only, the idle units (#202).
+ */
+function playInput(state: RunState, input: RunSimInput, i: number, lineup: readonly SimGroup[], idle?: readonly RosterUnit[]): MapPlayInput {
+  const step = input.maps[i]!;
   const chase = chasesOf(step);
-  return { map: step.map, lineup, bonds: couplesToMarry(state), ...(chase ? { chase } : {}), ...(idle?.length ? { idle } : {}) };
+  const kept = (input.lineups?.[i]?.pairs ?? []).flatMap((p) => (p.kept && p.back ? [[p.lead, p.back] as const] : []));
+  const priority = input.priority?.[i];
+  return { map: step.map, lineup, bonds: [...couplesToMarry(state), ...kept], ...(chase ? { chase } : {}), ...(priority ? { priority } : {}), ...(idle?.length ? { idle } : {}) };
 }
 
 /** Each unit's share of a play's lost chance (#202): its death risk there, the log of its fights' survival, over all of theirs. */
@@ -1264,7 +1381,7 @@ function planner(input: RunSimInput, seed: number, assumptions: Assumptions): Pl
       }
       if (k === last && step.armory?.length) kit = kitFor(state, step, d);
       const lineup = lineupOf(state, d, extra, interner);
-      const play = playMap(playInput(state, step, lineup), runSeed(seed, k));
+      const play = playMap(playInput(state, input, k, lineup), runSeed(seed, k));
       wear.push(mapUpkeep(step.map, play, lineup, null, assumptions['tome-miss-use']));
       afterMap(state, step, k, play, null, input.difficulty, assumptions);
       done.push(d);
@@ -1416,6 +1533,40 @@ function shoppingStop(step: RunSimMap, s: StopTally): ShoppingStop {
   return { key: step.key, label: step.label, gold: goldSpread(s.gold), runs: s.runs, lines };
 }
 
+/** Whether a milestone holds in a run as it stands now (see `MilestoneCheck`). */
+function holds(state: RunState, c: MilestoneCheck): boolean {
+  const t = c.test;
+  switch (t.kind) {
+    case 'skill':
+      return !!state.army.get(t.unit)?.learned.has(t.skill);
+    case 'class':
+      return state.army.get(t.unit)?.classId === t.classId || state.classChanges.some((x, i) => state.changed.has(i) && x.seal.unit === t.unit && x.seal.classId === t.classId);
+    case 'support':
+      return state.spouses.get(t.pair[0]) === t.pair[1] || rankIn(state, t.pair[0], t.pair[1]) === 'S';
+    case 'recruit':
+      return state.army.has(t.child) || state.arriving.some((u) => u.base.id === t.child);
+  }
+}
+
+/** The unit whose level a milestone reports: a skill's learner, a class change's unit. */
+const levelUnit = (c: MilestoneCheck): RosterUnit | undefined => (c.test.kind === 'skill' || c.test.kind === 'class' ? c.test.unit : undefined);
+
+/** One map's EXP over the runs that play it (#195): each unit's EXP, levels at the map's end and kills by foe group. */
+type ExpTally = { runs: number; readonly groups: MapPlay['groups']; readonly units: Map<RosterUnit, { readonly name: string; exp: number; readonly levels: number[]; readonly kills: Record<string, number> }> };
+
+function tallyExp(t: ExpTally, state: RunState, play: MapPlay, earned: ReadonlyMap<RosterUnit, number>) {
+  t.runs++;
+  for (const [id, tally] of Object.entries(play.units)) {
+    const u = state.army.get(id as RosterUnit);
+    if (!u) continue;
+    let e = t.units.get(u.base.id);
+    if (!e) t.units.set(u.base.id, (e = { name: u.base.name, exp: 0, levels: [], kills: {} }));
+    e.exp += earned.get(u.base.id) ?? 0;
+    e.levels.push(u.level + u.exp / 100);
+    for (const [g, n] of Object.entries(tally.kills)) e.kills[g] = (e.kills[g] ?? 0) + n;
+  }
+}
+
 /**
  * The flawless chance over `runs` simulated runs from `seed` (see the module comment). The same input, seed and run
  * count give the same result; more runs narrow the margin. `first` starts at a later run index (#199): runs `first` to
@@ -1444,6 +1595,23 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
   const made = input.maps.map((m) => (m.uses ?? []).map(() => 0));
   // The chance each unit is lost, summed over the runs (#202).
   const lost = new Map<string, number>();
+  // The EXP forecast by map, and each milestone's runs reaching its point, runs meeting it, and levels there (#195).
+  const expTallies: (ExpTally | undefined)[] = input.maps.map(() => undefined);
+  const checks = input.milestones ?? [];
+  const checksAt = new Map<string, number[]>();
+  checks.forEach((c, k) => checksAt.set(`${c.index}|${c.when}`, [...(checksAt.get(`${c.index}|${c.when}`) ?? []), k]));
+  const checked = checks.map(() => ({ runs: 0, met: 0, levels: [] as number[] }));
+  const check = (state: RunState, i: number, when: MilestoneCheck['when']) => {
+    for (const k of checksAt.get(`${i}|${when}`) ?? []) {
+      const c = checks[k]!;
+      const x = checked[k]!;
+      x.runs++;
+      if (holds(state, c)) x.met++;
+      const u = levelUnit(c);
+      const live = u ? state.army.get(u) : undefined;
+      if (live) x.levels.push(live.level);
+    }
+  };
   // Each stop's next stop: a rebuy covers what the plan spends until then.
   const nextStop = input.maps.map((_, i) => {
     let j = i + 1;
@@ -1471,24 +1639,30 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
       const extra = beforeMap(state, step, i, assumptions, { need: need(i), ...(i === last ? { kit: plan.kit } : {}) });
       const receipts = state.receipts;
       state.receipts = null;
+      check(state, i, 'start');
       if (i === last) {
         recordEndpoint(atEnd, state);
         recordBonds(bonds, state);
       }
       // A child paralogue whose gates don't hold in this run isn't played.
-      if (!extra) continue;
+      if (!extra) {
+        check(state, i, 'end');
+        continue;
+      }
       entering[i]!++;
       state.made.forEach((ok, j) => ok && made[i]![j]!++);
       if (step.armory?.length) recordStop(stops[i]!, arriving, receipts);
       const lineup = lineupOf(state, (lineups[i] ??= plan.lineup(i)), extra, interner);
-      const play = playMap(playInput(state, step, lineup, input.idle), runSeed(rs, i));
+      const play = playMap(playInput(state, input, i, lineup, input.idle), runSeed(rs, i));
       if (play.noDeath < 1) for (const [u, share] of lossShares(play)) lost.set(u, (lost.get(u) ?? 0) + flawless * (1 - play.noDeath) * share);
       reach[i]! += flawless;
       noDeath[i]! += flawless * play.noDeath;
       turns[i]! += flawless * play.turns;
       flawless *= play.noDeath;
       for (const b of play.blindSpots) spots.add(b);
-      afterMap(state, step, i, play, rng, input.difficulty, assumptions, mapUpkeep(step.map, play, lineup, hits, assumptions['tome-miss-use']));
+      const earned = afterMap(state, step, i, play, rng, input.difficulty, assumptions, mapUpkeep(step.map, play, lineup, hits, assumptions['tome-miss-use']));
+      tallyExp((expTallies[i] ??= { runs: 0, groups: play.groups, units: new Map() }), state, play, earned);
+      check(state, i, 'end');
       golds[i]!.push(state.gold);
       for (const g of step.sideGoals ?? []) if (secured(g, play)) goals.set(`${i}|${g.id}`, (goals.get(`${i}|${g.id}`) ?? 0) + 1);
     }
@@ -1521,6 +1695,27 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
     ),
     items: input.maps.flatMap((m, i) => (m.uses ?? []).map((u, j) => ({ ...u, key: m.key, label: m.label, share: entering[i]! ? made[i]![j]! / entering[i]! : undefined }))),
     losses: [...lost].map(([unit, c]) => ({ unit, chance: c / n })).sort((a, b) => b.chance - a.chance || a.unit.localeCompare(b.unit)),
+    exp: expTallies.flatMap((t, i) => {
+      if (!t) return [];
+      const m = input.maps[i]!;
+      const units = [...t.units].map(([unit, e]): UnitExp => {
+        const sorted = [...e.levels].sort((a, b) => a - b);
+        return {
+          unit,
+          name: e.name,
+          priority: input.priority?.[i]?.[unit] ?? 'normal',
+          exp: e.exp / t.runs,
+          level: { low: quantile(sorted, 0.1), median: quantile(sorted, 0.5), high: quantile(sorted, 0.9) },
+          kills: Object.fromEntries(Object.entries(e.kills).map(([g, n]) => [g, n / t.runs])),
+        };
+      });
+      return [{ key: m.key, label: m.label, runs: t.runs, groups: t.groups.map(({ key, name, className, count }) => ({ key, name, className, count })), units }];
+    }),
+    milestones: checks.map((c, k) => {
+      const x = checked[k]!;
+      const sorted = [...x.levels].sort((a, b) => a - b);
+      return { id: c.id, chance: x.runs ? x.met / x.runs : undefined, runs: x.runs, level: sorted.length ? quantile(sorted, 0.5) : undefined };
+    }),
     units: [...atEnd.entries()].map(([id, e]) => {
       const [cls, { caps, levelCap: top }] = [...e.classes.entries()].sort((a, b) => b[1].runs - a[1].runs)[0]!;
       return {

@@ -3,7 +3,7 @@
  * from its start (#131), paired with its back (its highest support by default), with its best weapon from its
  * inventory, against one foe at a time on the run's difficulty. Lunatic+ assumes the pool's worst case.
  */
-import type { ChapterDifficulty, Couple, Difficulty, Engine, FlawlessOptions, Foe, Matchup, Plan, PrepUnits, RosterUnit, Run, ShoppingLine, SimGroup, Snapshot } from '../engine';
+import type { ChapterDifficulty, Couple, Difficulty, Engine, ExpPriority, FlawlessOptions, Foe, Matchup, Plan, PrepUnits, RosterUnit, Run, ShoppingLine, SimGroup, Snapshot } from '../engine';
 import { EMPTY_SNAPSHOT, KIT_FORGE_MT, NO_PREPARATIONS, REINFORCEMENT_RULE, bestWeapon, dangerFlags, deployCount, fighterOf, foeKey, foesOf, forcedOn, latestEntry, prepUnits, promotionAdvice, sealAvailability, sealsHeld, simLineup, suggestDeployment, suggestLoadout, unitName, withSeenSkills, type DeployCandidate, type DeploymentRole } from '../engine';
 import { chanceText } from './chance';
 import { goldRange, goldText } from './run-page';
@@ -412,6 +412,76 @@ function shopping(ctx: PrepContext): HTMLElement {
   return el;
 }
 
+const PRIORITY_TEXT: Readonly<Record<ExpPriority, string>> = { high: 'High', normal: 'Normal', low: 'Low' };
+
+/** A level with its EXP as the fraction (5.4 → "Lv 5, 40 EXP"), as the game shows it. */
+const levelText = (x: number) => `Lv ${Math.floor(x + 1e-9)}${Math.round((x % 1) * 100) ? ` ${Math.round((x % 1) * 100)} EXP` : ''}`;
+
+/**
+ * The EXP forecast for this map (#195): each fielded unit's EXP priority, its expected EXP, its level at the map's end
+ * (10th to 90th percentile) and who takes which foe groups (mean kills per run), from the plan's own simulated runs.
+ * Guidance by foe group, never which foe falls on which turn.
+ */
+export function expReadout(engine: Engine, run: Run, map: string, plan: Plan, options?: Pick<FlawlessOptions, 'roleOf' | 'runs'>): { readonly title: string; readonly note: string; readonly rows: readonly (readonly string[])[] } {
+  const f = engine.expForecast(run, plan, options);
+  const m = f.exp.find((x) => x.key === map) ?? (f.exp[0]?.key.startsWith(map) ? f.exp[0] : undefined);
+  const title = 'Expected EXP';
+  if (!m) return { title, note: f.maps.length ? 'No simulated run plays this map with nobody lost.' : 'The endpoint is recorded: no map left to forecast.', rows: [] };
+  const names = new Map(m.groups.map((g) => [g.key, g.name]));
+  const note =
+    `Over ${m.runs} simulated run${m.runs === 1 ? '' : 's'} of the plan: EXP from kills, damage, a back’s Dual Strikes, staves and Dances, at each unit’s internal level. ` +
+    'The EXP priority decides who lands the kills: a lower unit chips a foe into a higher unit’s range, or waits, and the turns that costs are in the flawless chance. ' +
+    'Who takes which foes is a mean over the runs, never a turn-by-turn plan.';
+  const rows = [...m.units]
+    .sort((a, b) => b.exp - a.exp || a.name.localeCompare(b.name))
+    .map((u) => {
+      const takes = Object.entries(u.kills)
+        .filter(([, k]) => k >= 0.05)
+        .sort((a, b) => b[1] - a[1])
+        .map(([g, k]) => `${names.get(g) ?? g} ×${k.toFixed(1)}`)
+        .join(' · ');
+      const level = u.level.low === u.level.high ? levelText(u.level.median) : `${levelText(u.level.low)} – ${levelText(u.level.high)}`;
+      return [u.name, PRIORITY_TEXT[u.priority], String(Math.round(u.exp)), level, takes || '—'];
+    });
+  return { title: `${title}: ${m.label}`, note, rows };
+}
+
+type ExpSection = ReturnType<typeof expReadout>;
+
+/** EXP forecasts already worked out, by run. */
+const EXP = new WeakMap<Run, ExpSection>();
+
+/** The EXP forecast section (#195): it runs the simulation, so it fills in after the page renders. */
+function expSection(ctx: PrepContext): HTMLElement {
+  const draw = (s: ExpSection | undefined) =>
+    h(
+      'details',
+      { open: true },
+      h('summary', {}, s?.title ?? 'Expected EXP: working it out…'),
+      s ? h('p', { class: 'muted small' }, s.note) : null,
+      s?.rows.length
+        ? h(
+            'table',
+            { class: 'grid small' },
+            h('thead', {}, h('tr', {}, ...['Unit', 'EXP priority', 'Expected EXP', 'Level at the end', 'Takes (kills a run)'].map((t) => h('th', {}, t)))),
+            h('tbody', {}, ...s.rows.map((row) => h('tr', {}, ...row.map((c, i) => h('td', i === 2 ? { class: 'num' } : {}, c))))),
+          )
+        : null,
+    );
+  const done = EXP.get(ctx.run);
+  if (done) return draw(done);
+  const el = draw(undefined);
+  const run = ctx.run;
+  setTimeout(() => {
+    if (!el.isConnected) return;
+    const plan = ctx.plan ? ctx.plan(ctx.roleOf) : ctx.engine.seedPlan(run, { roleOf: ctx.roleOf });
+    const s = EXP.get(run) ?? expReadout(ctx.engine, run, ctx.map, plan, { roleOf: ctx.roleOf });
+    EXP.set(run, s);
+    if (el.isConnected) el.replaceWith(draw(s));
+  }, 0);
+  return el;
+}
+
 /** Seals and promotions (#122): when seals can be bought, how many are held, and promote now or later. */
 function seals(
   ctx: PrepContext,
@@ -558,6 +628,7 @@ export function prepPage(ctx: PrepContext): HTMLElement[] {
       loadouts(deployment, byUnit, snap, foes, poolFor, gender),
       beforeThisMap(ctx),
       shopping(ctx),
+      expSection(ctx),
       seals(ctx, deployment, byUnit, snap, foes, poolFor, gender, prep.mapOnly),
       howToRun(ctx.engine, m.id),
       h('h3', {}, 'Matchups'),

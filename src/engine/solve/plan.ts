@@ -72,6 +72,12 @@ export type PlanLineup = {
 export type PlanSeal = { readonly unit: RosterUnit; readonly classId: ClassId; readonly seal: 'master' | 'second'; readonly key: string };
 
 /**
+ * A unit's EXP priority over a span of the map order (#195), both ends included by map key: high takes the kills, low
+ * chips and waits for the others. A unit on a map no priority names is normal.
+ */
+export type PlanPriority = { readonly unit: RosterUnit; readonly priority: 'high' | 'low'; readonly from: string; readonly to: string };
+
+/**
  * A held item's planned use or carrier (#193; `item-plan.ts`): the item, the unit, the map key, and which copy
  * (`source`, an `ItemSource` id). A booster is drunk by the unit in that map's preparations; a tonic too (a held one
  * first, else bought at an open armory there: `source` is `buy`); a weapon is handed to its carrier there and stays
@@ -97,6 +103,11 @@ export type Roadmap = {
   readonly seals: readonly PlanSeal[];
   /** Planned item uses; empty until the item plan (#193). */
   readonly items: readonly PlanItem[];
+  /**
+   * The EXP priorities the plan sets (#195). Absent: everyone normal in the flawless chance; the EXP forecast then
+   * reads the default from the milestones (`defaultPriorities`).
+   */
+  readonly priorities?: readonly PlanPriority[];
 };
 
 /** Robin as the plan has it: the run facts, with whatever they leave open chosen by the plan. */

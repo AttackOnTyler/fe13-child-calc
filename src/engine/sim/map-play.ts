@@ -15,7 +15,8 @@
  * - `playerPhase`: each front not spent has one action, an equal share (a stated blind spot); a Dance gives one more.
  *   `chooseAction` picks the next action by the policy's tiers (`POLICY`) and `apply` plays it. Actions are a union:
  *   #182 added sustain (a heal, Fortify, Rescue, a potion), Dance and Rally (`sustain.ts`); #183 added the bait (a
- *   front waits in reach); #195 (EXP priority: who lands kills, waiting) adds kinds and tiers, not a new loop. Talks
+ *   front waits in reach); the EXP priority (#195, `MapPlayInput.priority`) only reorders the fighting tiers: who lands
+ *   kills, a lower unit chipping or waiting for a higher one, never an extra action. Talks
  *   (#184) come first: a talker spends its action on the turn the solve sends it, and the recruit joins. Then the side
  *   goals chased (#191, `MapPlayInput.chase`): each costs actions by a turn, and the play reports whether it was met.
  * - `allyPhase` (#184): the third party (an NPC the army must keep alive, a recruit before it joins) acts between player
@@ -160,7 +161,17 @@ export type MapPlayInput = {
    * Rally; a potion on itself is its own fighting), by id: a unit's utility (#202) is the flawless chance lost this way.
    */
   readonly idle?: readonly string[];
+  /**
+   * Each unit's EXP priority on this map (#195), by unit id; absent: normal. It decides who lands kills, never how many
+   * actions anyone gets: a unit doesn't take a kill a higher unit still to act could take (it chips another foe, or
+   * waits), and a lower unit chips first, into a higher unit's kill range. The foes left alive cost turns.
+   */
+  readonly priority?: Readonly<Partial<Record<string, ExpPriority>>>;
 };
+
+/** Who lands kills (#195): a lower unit chips or waits for a higher one; normal by default. */
+export type ExpPriority = 'high' | 'normal' | 'low';
+const RANK: Readonly<Record<ExpPriority, number>> = { low: 0, normal: 1, high: 2 };
 
 /**
  * A side goal's cost in the play (#191): `actions` actions spent by the end of turn `by`'s player phase, paced from the
@@ -201,6 +212,12 @@ export type SimFight = {
   readonly survive: number;
   /** Whether the foe fell (the likely result). */
   readonly kill: boolean;
+  /** Whether the front's strikes hurt the foe (the likely result): a kill, or damage it lived through. */
+  readonly dealt: boolean;
+  /** The foe's engagements so far, this one included: the Lunatic EXP cut reads it (#195). */
+  readonly engagement: number;
+  /** Paired: the chance the back lands a Dual Strike in the exchange (its half damage EXP, #195). */
+  readonly dualStrike?: number;
 };
 
 /**
@@ -287,7 +304,8 @@ const TOP_UP = 0.01;
 /** Choices this close count as equal (a stance change needs a real difference). */
 const EPS = 1e-9;
 
-type FoeInstance = { readonly g: number; hp: number };
+/** A foe on the field: its group, HP, and engagements so far (`n`). */
+type FoeInstance = { readonly g: number; hp: number; n?: number };
 
 /**
  * What a front can do with its action, valued on one scale: the chance of felling a foe, less the chance of a death it
@@ -577,6 +595,9 @@ class MapState {
   joins: string[] = [];
   /** The side goals chased (#191), with the actions spent on each so far. */
   readonly chases: { readonly c: SimChase; spent: number }[];
+  /** Each unit's EXP priority (#195) as a rank (low 0, normal 1, high 2), and whether the lineup's ranks differ at all. */
+  private readonly ranks: number[] = [];
+  private ranked = false;
 
   constructor(
     readonly input: MapPlayInput,
@@ -646,6 +667,10 @@ class MapState {
     }
     const idle = new Set(input.idle ?? []);
     this.kits = this.units.map((u) => (idle.has(u.id) ? { ...kitOf(u, input.spread), staves: [], dances: false, rally: undefined } : kitOf(u, input.spread)));
+    if (input.priority) {
+      for (const u of this.units) this.ranks.push(RANK[input.priority[u.id] ?? 'normal']);
+      this.ranked = this.ranks.some((r) => r !== this.ranks[0]);
+    }
     this.uses = this.units.map((u) => (u.items ?? []).map((i) => i.uses));
     this.clearQueue = input.map.waves.filter((w) => w.onClear);
     this.chases = (input.chase ?? []).map((c) => ({ c, spent: 0 }));
@@ -915,6 +940,9 @@ class MapState {
     const lead = this.units[a.unit]!;
     const back = a.back !== undefined ? this.units[a.back]! : undefined;
     const key = this.groups[f.g]!.key;
+    const engagement = (f.n = (f.n ?? 0) + 1);
+    const dealt = ex.survive > 0 && ex.foeHp < f.hp;
+    const dualStrike = back && ex.leadStrikes ? this.dualStrikeChance(gi, f) : 0;
     this.noDeath *= ex.survive;
     this.foeVersion++;
     if (ex.survive > 0) {
@@ -939,7 +967,20 @@ class MapState {
       const b = this.tallies.get(back.id)!;
       b.together[lead.id] = (b.together[lead.id] ?? 0) + 1;
     }
-    this.fights.push({ phase, lead: lead.id, ...(back ? { back: back.id } : {}), foe: key, survive: ex.survive, kill });
+    this.fights.push({ phase, lead: lead.id, ...(back ? { back: back.id } : {}), foe: key, survive: ex.survive, kill, dealt, engagement, ...(dualStrike > 0 ? { dualStrike } : {}) });
+  }
+
+  /**
+   * The chance a paired back lands at least one Dual Strike in front `gi`'s exchange with foe `f` (#195): each of the
+   * lead's strikes rolls one, at the matchup's Dual Strike rate and the back's hit; 0 when the back can't hurt the foe.
+   */
+  private dualStrikeChance(gi: number, f: FoeInstance): number {
+    const a = this.front[gi]!;
+    const bonus = this.bonus[gi];
+    const { m } = this.combatWith(bonus ? ralliedGroup(a.grp, bonus) : a.grp, a.rows, bonus ? 1 : 0, f);
+    if (m.backDamage <= 0) return 0;
+    const p = (m.dualStrikeRate / 100) * (m.backHit / 100);
+    return 1 - (1 - p) ** Math.max(1, m.hits);
   }
 
   /**
@@ -1181,6 +1222,7 @@ class MapState {
    * fells the foe (the target boss first once it's open), a little for the damage it does, less the chance of a death.
    */
   bestAttack(ctx: PolicyContext, all = false, maxRisk = EXPOSURE_RISK): Attack | undefined {
+    if (this.ranked) return this.rankedAttack(ctx, all, maxRisk);
     let best: Attack | undefined;
     for (let gi = 0; gi < this.front.length; gi++) {
       if (ctx.acted.has(gi) || (!all && ctx.held?.has(gi))) continue;
@@ -1188,6 +1230,53 @@ class MapState {
       if (a && (!best || a.value > best.value)) best = a;
     }
     return best;
+  }
+
+  /**
+   * The next attack under EXP priorities (#195), from the same fronts and attacks within `maxRisk` as `bestAttack`:
+   * - a kill, the highest front's first, but never one a higher front still to act could take on the same foe (that
+   *   kill is left for it);
+   * - else a chip, the lowest front's first, one that brings its foe into a higher front's kill range before any other.
+   * A front with nothing left but kills kept for others waits (this tier gives it nothing). Each front still has one
+   * action: priority only orders who acts on what.
+   */
+  private rankedAttack(ctx: PolicyContext, all: boolean, maxRisk: number): Attack | undefined {
+    const open: number[] = [];
+    for (let gi = 0; gi < this.front.length; gi++) if (!ctx.acted.has(gi) && (all || !ctx.held?.has(gi))) open.push(gi);
+    const rank = (gi: number) => this.ranks[this.front[gi]!.unit]!;
+    const kills: Attack[] = [];
+    const chips: Attack[] = [];
+    for (const gi of open) {
+      for (const a of this.attacksOf(gi, ctx)) {
+        this.exposure(a, ctx, maxRisk < 1);
+        if (a.risk <= maxRisk) (a.ex.foeHp <= 0 ? kills : chips).push(a);
+      }
+    }
+    let best: Attack | undefined;
+    for (const a of kills) {
+      const r = rank(a.group);
+      if (kills.some((b) => b.foe === a.foe && rank(b.group) > r)) continue;
+      if (!best || r > rank(best.group) || (r === rank(best.group) && a.value > best.value)) best = a;
+    }
+    if (best || !chips.length) return best;
+    const low = Math.min(...chips.map((a) => rank(a.group)));
+    let bestSetUp = false;
+    for (const a of chips) {
+      if (rank(a.group) !== low) continue;
+      const setUp = open.some((gj) => gj !== a.group && rank(gj) > low && this.fells(gj, a.foe.g, a.ex.foeHp, ctx));
+      if (!best || (setUp && !bestSetUp) || (setUp === bestSetUp && a.value > best.value)) {
+        best = a;
+        bestSetUp = setUp;
+      }
+    }
+    return best;
+  }
+
+  /** Whether front `gi` likely fells a foe of group `g` left at `hp`, living through it (a chip's set-up, #195). */
+  private fells(gi: number, g: number, hp: number, ctx: PolicyContext): boolean {
+    if (!this.armed(gi) || (this.groups[g]!.target && !ctx.open)) return false;
+    const ex = this.exchangeOf(gi, { g, hp }, 'player');
+    return ex.leadStrikes && ex.survive >= 0.5 && ex.foeHp <= 0;
   }
 
   /** Front `gi`'s attacks, one per foe group (its most worn-down foe), memoised while that foe and the front are unchanged. */
@@ -1676,7 +1765,7 @@ type PolicyContext = {
  * 4. Sustain: a heal, Fortify, Rescue or potion, by the enemy-phase survival it buys.
  * 5. Safe fighting by anyone left, held back or not.
  * 6. Engaging (#183): nobody is in reach yet, so the least risky attack or bait goes ahead; the rest hold back.
- * #195 (EXP priority, waiting) adds its tiers here.
+ * EXP priorities (#195) change who fights in tiers 2 and 5 (`rankedAttack`), not the tiers.
  */
 const POLICY: readonly ((s: MapState, ctx: PolicyContext) => Action | undefined)[] = [
   (s, ctx) => s.bestRally(ctx),

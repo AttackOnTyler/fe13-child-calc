@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_ROSTER, addEntry, createEngine, deployCount, deployRoleOf, editEntry, foesOf, forcedOn, itemByName, latestEntry, prepUnits, runFromRoster, simLineup, suggestDeployment, unitName, withRun, type Difficulty, type Run, type SimGroup, type Snapshot } from '../engine';
-import { beforeThisMapReadout, fighterOf, noDeathReadout, shoppingReadout } from './prep-page';
+import { beforeThisMapReadout, expReadout, fighterOf, noDeathReadout, shoppingReadout } from './prep-page';
 
-describe('the shopping list (#190)', () => {
+describe('the shopping list (#190) and expected EXP (#195)', () => {
   const engine = createEngine();
   const facts = withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal', gender: 'M', asset: 'mag', flaw: 'hp' });
   const played = (maps: readonly string[]) => maps.reduce((r, m, i) => addEntry(r, m, i + 1), runFromRoster(facts));
@@ -17,6 +17,20 @@ describe('the shopping list (#190)', () => {
     expect(s.title).toBe('Shopping list: Chapter 25');
     expect(s.note).toMatch(/^Gold on arrival: 3,000G\. What the simulated runs buy here, in priority order: rebuys/);
     expect(s.rows[0]).toEqual(['Chrom', 'Buy Iron Sword (runs dry before the next armory)', '520G', '100%']);
+  });
+
+  it('shows the map’s expected EXP: each unit’s priority, EXP, level at the end and the foe groups it takes (#195)', () => {
+    const run = atLatest(played(all.slice(0, -2)), (s) => ({ ...s, units: { chrom: { ...chrom, inventory: [{ item: 'Silver Sword', uses: 30 }] } } }));
+    const s = expReadout(engine, run, 'chapter-25', engine.seedPlan(run), { runs: 2 });
+    expect(s.title).toBe('Expected EXP: Chapter 25');
+    expect(s.note).toMatch(/^Over 2 simulated runs of the plan: EXP from kills, damage, a back’s Dual Strikes, staves and Dances/);
+    expect(s.note).toContain('never a turn-by-turn plan');
+    const [name, priority, exp, level, takes] = s.rows[0]!;
+    expect([name, priority]).toEqual(['Chrom', 'Normal']);
+    expect(Number(exp)).toBeGreaterThan(0);
+    expect(level).toMatch(/^Lv \d+/);
+    expect(takes).toMatch(/×\d+\.\d/);
+    expect(expReadout(engine, played(all), 'endgame', engine.seedPlan(played(all)), { runs: 1 }).rows).toEqual([]);
   });
 
   it('says when nothing is to be bought: no gold, or nothing left to play', () => {

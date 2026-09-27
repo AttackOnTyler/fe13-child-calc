@@ -49,7 +49,7 @@ import { classIdByName, openStock, sealAvailability, sealsHeld } from './supply'
 import { simMapById } from './sim/sim-map';
 import type { SimMap, SimUnit } from './sim/map-play';
 import { simulateCeiling, type Ceiling } from './sim/ceiling';
-import { simulateRuns, type ArmyUnit, type ChildRecruit, type RunSim, type RunSimInput, type RunSimMap, type RunSimSideGoal } from './sim/run-sim';
+import { priorityByMap, simulateRuns, type ArmyUnit, type ChildRecruit, type RunSim, type RunSimInput, type RunSimMap, type RunSimSideGoal } from './sim/run-sim';
 import { sideGoalChoices } from './side-goals';
 import { renownAhead, rewardsValue, type RenownAhead } from './renown';
 import { hasPreparations, itemSources, simItems, simUses, type PlanSource } from './item-plan';
@@ -425,6 +425,8 @@ export function flawlessInput(
       ...(plan ? { seals: plan.roadmap.seals } : {}),
       ...(items.held.length ? { held: items.held } : {}),
       ...(rules ? { pins: rules } : {}),
+      // The plan's EXP priorities (#195): who lands kills in each map's play.
+      ...(plan?.roadmap.priorities?.length ? { priority: priorityByMap(maps, plan.roadmap.priorities, rules) } : {}),
     },
     notSimulated,
     unknownHistory,
