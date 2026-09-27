@@ -307,6 +307,19 @@ describe('stances and exposure (#183)', () => {
     expect(engine.playMap({ map, lineup: [pair(hero, wall)] }, 1).blindSpots).not.toContain('attack-stance-adjacency');
   });
 
+  it('keeps a bonded pair together while that’s safe, so its support grows: combats together', () => {
+    // Two armed partners that could each fell a Post safely alone: unbonded they split (above); a bond (a couple the
+    // plan still has to marry) keeps them paired, one action a turn, every combat together.
+    const map = rout([group(post)]);
+    const bonded = engine.playMap({ map, lineup: [pair(hero, twin)], bonds: [['twin', 'hero']] }, 1);
+    expect(bonded.log.every((t) => t.stances.every((s) => s.stance === 'together'))).toBe(true);
+    expect(bonded).toMatchObject({ ended: 'rout', noDeath: 1, turns: 4 });
+    expect(bonded.units.hero!.together).toEqual({ twin: 4 });
+    // Unbonded, the same pair splits and grows nothing.
+    const apart = engine.playMap({ map, lineup: [pair(hero, twin)] }, 1);
+    expect(apart.units.hero!.together).toEqual({});
+  });
+
   it('switches the sturdier unit to the front for free, and it fights that turn', () => {
     // The Biter hits 25: 23 on the frail lead even paired up (dead), 5 on the tough back.
     const frail: Fighter = { ...hero, name: 'Frail' };

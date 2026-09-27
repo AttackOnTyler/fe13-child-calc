@@ -743,6 +743,9 @@ const pairKey = (a: string, b: string) => (a < b ? `${a}+${b}` : `${b}+${a}`);
 /** A fixed parent's spouse in the run: Chrom's is the Maiden until he marries (Lucina's other parent). */
 const spouseIn = (state: RunState, u: RosterUnit): RosterUnit | 'maiden' | undefined => state.spouses.get(u) ?? (u === 'chrom' ? 'maiden' : undefined);
 
+/** The plan's couples still to marry in the run: the map play keeps them together while that's safe (#184). */
+const couplesToMarry = (state: RunState): (readonly [RosterUnit, RosterUnit])[] => [...state.couples.values()].filter(([a, b]) => !state.married.has(a) && !state.married.has(b));
+
 /** Whether a pair can reach S in the run: married to each other, or a plan's couple with neither married yet. */
 const sAllowed = (state: RunState, a: RosterUnit, b: RosterUnit): boolean =>
   state.spouses.get(a) === b || (state.couples.has(pairKey(a, b)) && !state.married.has(a) && !state.married.has(b));
@@ -917,7 +920,7 @@ function planner(input: RunSimInput, seed: number, assumptions: Assumptions): Pl
       });
       if (k === last && step.armory?.length) kit = kitFor(state, step, d);
       const lineup = lineupOf(state, d, extra, interner);
-      const play = playMap({ map: step.map, lineup }, runSeed(seed, k));
+      const play = playMap({ map: step.map, lineup, bonds: couplesToMarry(state) }, runSeed(seed, k));
       wear.push(mapUpkeep(step.map, play, lineup, null, assumptions['tome-miss-use']));
       afterMap(state, step, k, play, null, input.difficulty, assumptions);
       done.push(d);
@@ -1069,7 +1072,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
       if (!extra) continue;
       if (step.armory?.length) recordStop(stops[i]!, arriving, receipts);
       const lineup = lineupOf(state, (lineups[i] ??= plan.lineup(i)), extra, interner);
-      const play = playMap({ map: step.map, lineup }, runSeed(rs, i));
+      const play = playMap({ map: step.map, lineup, bonds: couplesToMarry(state) }, runSeed(rs, i));
       reach[i]! += flawless;
       noDeath[i]! += flawless * play.noDeath;
       turns[i]! += flawless * play.turns;
