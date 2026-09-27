@@ -1530,6 +1530,13 @@ function planner(input: RunSimInput, seed: number, assumptions: Assumptions): Pl
   };
 }
 
+/** The first map from `k` on whose child the couple brings (its paralogue), by index; past the order when none does. */
+function childDue(input: RunSimInput, k: number, [a, b]: readonly [RosterUnit, RosterUnit]): number {
+  for (let j = k; j < input.maps.length; j++)
+    if (input.maps[j]!.children?.some((c) => (c.parents[0] === a && c.parents[1] === b) || (c.parents[0] === b && c.parents[1] === a))) return j;
+  return input.maps.length;
+}
+
 /**
  * The lineup a map is played with, from where the army stands (`state`): the plan's (#198), else the greedy one
  * (`suggestDeployment`, each couple the plan marries paired until it marries, #188), both keeping the pins' rules (#200).
@@ -1539,11 +1546,16 @@ function deploymentFor(state: RunState, input: RunSimInput, k: number, extra: Re
   const pools = new Map<Foe, readonly string[]>(step.map.foes.map((g) => [g.foe, g.pool ?? []]));
   const here = (u: RosterUnit) => state.army.has(u) || extra.has(u);
   const leads = (u: RosterUnit) => step.forced.includes(u) || (state.army.get(u) ?? extra.get(u))!.base.role === 'lead';
-  // The plan pairs each couple it marries until they marry (#188), the one that leads in front.
+  const max = step.deploy || state.army.size + extra.size;
+  // The plan pairs each couple it marries until they marry (#188), the one that leads in front: the couples whose
+  // child's paralogue comes first, in half the slots at most (one couple at least; the realism pass). A careful player
+  // builds supports alongside a fighting core, not with every slot of the army.
   const pinned = [...state.couples.values()]
     .filter(([a, b]) => here(a) && here(b) && !state.married.has(a) && !state.married.has(b))
-    .map(([a, b]) => (leads(b) && !leads(a) ? { lead: b, back: a } : { lead: a, back: b }));
-  const max = step.deploy || state.army.size + extra.size;
+    .map((c) => ({ c, due: childDue(input, k, c) }))
+    .sort((x, y) => x.due - y.due)
+    .slice(0, Math.max(1, Math.floor(max / 4)))
+    .map(({ c: [a, b] }) => (leads(b) && !leads(a) ? { lead: b, back: a } : { lead: a, back: b }));
   const planned = input.lineups?.[k];
   // The pins' rules on this map (#200): the greedy lineup starts from their pairs and leaves out who's kept out;
   // either lineup then keeps them.
