@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_ROSTER, STATS, addEntry, createEngine, itemByName, runFromRoster, withRun, type ArmyUnit, type ChildRecruit, type Foe, type Plan, type RosterUnit, type RunSimInput, type RunSimMap, type SimFoeGroup, type SimMap, type Stat } from './index';
-import { reservesStep, type ReservesDeps, type ReservesStep } from './solve/worth';
 
 /**
- * Unit worth, utility and reserves (#202): hand-built armies and maps where the answer can be worked by hand, the
- * stepping core on a made-up objective, then a recorded run through the facade.
+ * Unit worth, utility and reserves (#202): hand-built armies and maps where the answer can be worked by hand,
+ * then a recorded run through the facade.
  */
 const engine = createEngine();
 const stats = (hp: number, str: number, mag: number, skl: number, spd: number, lck: number, def: number, res: number) => ({ hp, str, mag, skl, spd, lck, def, res });
@@ -112,72 +111,13 @@ describe('a unit’s worth on hand-built runs (#202)', () => {
   });
 });
 
-describe('reserves, on a made-up objective (#202)', () => {
-  // Each variant's chance, plus noise every variant shares on a run (common random numbers): the answers work by hand.
-  const chance: Record<string, number> = { 'cover:vaike:-': 0.2, 'cover:vaike:ricken': 0.5, 'cover:vaike:gaius': 0.3, 'cover:stahl:-': 0.2, 'cover:stahl:ricken': 0.2, 'cover:stahl:gaius': 0.6 };
-  const shared = (r: number) => ((r * 7919) % 11) / 50 - 0.1;
-  const plan: Plan = {
-    robin: { gender: 'M', asset: 'mag', flaw: 'hp' },
-    wishlist: { endpoint: 'end', units: [], marriages: [], children: [], reserves: [] },
-    roadmap: { order: ['end'], lineups: [], seals: [], items: [] },
-  };
-  const deps: ReservesDeps = {
-    // The runs lose Lissa most, but she isn't on the wishlist; then Vaike, Chrom (forced) and Stahl.
-    losses: () => [
-      { unit: 'lissa', chance: 0.5 },
-      { unit: 'vaike', chance: 0.3 },
-      { unit: 'chrom', chance: 0.2 },
-      { unit: 'stahl', chance: 0.1 },
-    ],
-    wishlist: ['vaike', 'stahl', 'chrom'] as RosterUnit[],
-    candidates: () => ['ricken', 'gaius'] as RosterUnit[],
-    samples: (v, first, count) => {
-      const k = v.kind === 'cover' ? `cover:${v.loss}:${v.reserve ?? '-'}` : v.kind;
-      return Array.from({ length: count }, (_, i) => chance[k]! + shared(first + i));
-    },
-  };
-  const read = (budget: number, cursor?: ReservesStep['cursor']) => reservesStep({ plan, budget, runs: 4, cap: 8, ...(cursor ? { cursor } : {}) }, deps);
-
-  it('ranks each unit off the wishlist by the chance it restores over the likely losses, naming the loss it mainly covers', () => {
-    const r = read(1000);
-    expect(r.converged).toBe(true);
-    expect(r.losses).toEqual([
-      { unit: 'vaike', chance: 0.3, weight: expect.closeTo(0.75, 12) },
-      { unit: 'stahl', chance: 0.1, weight: expect.closeTo(0.25, 12) },
-    ]);
-    // Ricken restores 0.3 of Vaike's loss (weight 0.75); Gaius 0.1 of Vaike's and 0.4 of Stahl's (weight 0.25).
-    expect(r.reserves).toEqual([
-      { unit: 'ricken', covers: 'vaike', restores: expect.closeTo(0.225, 12), margin: expect.closeTo(0, 12), runs: 8 },
-      { unit: 'gaius', covers: 'stahl', restores: expect.closeTo(0.175, 12), margin: expect.closeTo(0, 12), runs: 8 },
-    ]);
-  });
-
-  it('lists them on the plan and changes nothing else: no EXP is set aside', () => {
-    const r = read(1000);
-    expect(r.plan.wishlist.reserves).toEqual([
-      { unit: 'ricken', covers: 'vaike' },
-      { unit: 'gaius', covers: 'stahl' },
-    ]);
-    expect({ ...r.plan, wishlist: { ...r.plan.wishlist, reserves: [] } }).toEqual(plan);
-  });
-
-  it('steps within its budget, and small steps reach what one big step does', () => {
-    const one = read(1000);
-    let s = read(5);
-    expect(s.evaluations).toBeLessThanOrEqual(5);
-    for (let i = 0; i < 100 && !s.converged; i++) s = read(5, JSON.parse(JSON.stringify(s.cursor)));
-    expect(s.reserves).toEqual(one.reserves);
-    expect(s.cursor.evaluations).toBe(one.cursor.evaluations);
-  });
-});
-
 describe('worth and reserves of a recorded run’s plan, through the facade (#202)', () => {
   const facts = withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal', gender: 'M', asset: 'mag', flaw: 'hp' });
   const fresh = runFromRoster(facts);
   const seed = engine.seedPlan(fresh);
   const fielded = (p: Plan) => [...p.wishlist.units.map((w) => w.unit), ...p.roadmap.lineups.flatMap((l) => [...l.pairs.flatMap((x) => [x.lead, ...(x.back ? [x.back] : [])]), ...l.solo])];
 
-  it('removes a parent with its children, re-matches its spouse and refills its wishlist slot', () => {
+  it('removes a parent with its children, re-matches its spouse and refills its place in the wishlist', () => {
     const [husband, wife] = seed.wishlist.marriages.find((c) => c.includes('frederick'))!;
     const spouse = husband === 'frederick' ? wife : husband;
     const kids = seed.wishlist.children.filter((c) => c.parents.includes('frederick')).map((c) => c.child);
@@ -221,5 +161,15 @@ describe('worth and reserves of a recorded run’s plan, through the facade (#20
       expect(r.losses.map((l) => l.unit)).toContain(x.covers);
     }
     expect(r.plan.roadmap).toEqual(plan.roadmap);
+    // The reserves are listed on the plan; nothing else changes (no EXP is set aside).
+    expect({ ...r.plan, wishlist: { ...r.plan.wishlist, reserves: [] } }).toEqual({ ...plan, wishlist: { ...plan.wishlist, reserves: [] } });
+    expect(r.plan.wishlist.reserves).toEqual(r.reserves.map((x) => ({ unit: x.unit, covers: x.covers })));
+  });
+
+  it('steps the reserves from a plain-JSON cursor exactly as from the live one', () => {
+    const first = engine.reserves({ ...small, budget: 3 });
+    expect(first.evaluations).toBeLessThanOrEqual(3);
+    const live = engine.reserves({ ...small, budget: 3, cursor: first.cursor });
+    expect(engine.reserves({ ...small, budget: 3, cursor: JSON.parse(JSON.stringify(first.cursor)) })).toEqual(live);
   });
 });

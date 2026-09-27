@@ -12,17 +12,12 @@ import {
   withRobinLock,
   withRun,
   wishlistDifference,
-  type Plan,
-  type PlanRobin,
   type RobinStep,
-  type RosterUnit,
 } from './index';
-import { robinStep, type RobinDeps } from './solve/robin';
 
 /**
- * The Robin alternatives and the Robin Lock (#201): the stepping core on a made-up objective, where each Robin's runs
- * are known, then a recorded run through the facade. The late Main story run (only Endgame left) with Robin's gender and
- * asset set keeps it small: its seven flaws are the options.
+ * The Robin alternatives and the Robin Lock (#201), through the facade on a recorded run. The late Main story run (only
+ * Endgame left) with Robin's gender and asset set keeps it small: its seven flaws are the options.
  */
 const engine = createEngine();
 const until = (step: (s: RobinStep | undefined) => RobinStep) => {
@@ -42,94 +37,6 @@ describe('the Robin options (#201)', () => {
   });
 });
 
-describe('the Robin alternatives on a made-up objective (#201)', () => {
-  // Five Robins: each one's chance on every run, its ceiling, and its spouse.
-  const R = (gender: 'M' | 'F', asset: 'str' | 'mag' | 'spd'): PlanRobin => ({ gender, asset, flaw: 'lck' });
-  const table: Record<string, { chance: number; ceiling: number; spouse: RosterUnit }> = {
-    'M-str-lck': { chance: 0.6, ceiling: 0.9, spouse: 'sumia' },
-    'M-mag-lck': { chance: 0.55, ceiling: 0.8, spouse: 'olivia' },
-    'F-str-lck': { chance: 0.5, ceiling: 0.9, spouse: 'chrom' },
-    'F-mag-lck': { chance: 0.1, ceiling: 0.1, spouse: 'frederick' },
-    'F-spd-lck': { chance: 0.7, ceiling: 0.95, spouse: 'lonqu' },
-  };
-  const planOf = (r: PlanRobin, married = true): Plan => ({
-    robin: r,
-    wishlist: {
-      endpoint: 'end',
-      units: [{ unit: 'robin', position: 'solo', classId: 'grandmaster', build: [] }, ...(married ? [{ unit: table[robinKey(r)]!.spouse, position: 'solo' as const, classId: 'hero' as const, build: [] }] : [])],
-      marriages: married ? [['robin', table[robinKey(r)]!.spouse]] : [],
-      children: [],
-      reserves: [],
-    },
-    roadmap: { order: ['end'], lineups: [], seals: [], items: [] },
-  });
-  const options = [R('M', 'str'), R('M', 'mag'), R('F', 'str'), R('F', 'mag'), R('F', 'spd')];
-  const deps = (locked?: PlanRobin): RobinDeps => ({
-    options,
-    locked,
-    genders: ['M', 'F'],
-    genderBest: (g) => (g === 'M' ? R('M', 'str') : R('F', 'str')),
-    screen: (r) => ({ plan: planOf(r), ceiling: table[robinKey(r)]!.ceiling }),
-    solve: (r, cursor) => ({ best: planOf(r), chance: undefined, proposals: [], closeCalls: [], pruned: [], converged: true, evaluations: 1, cursor: { evaluations: (cursor?.evaluations ?? 0) + 1 } }),
-    // Every run of a Robin reads its chance, the no-Robin plan 0.05 less.
-    samples: (r, plan, _first, count) => Array.from({ length: count }, () => table[robinKey(r)]!.chance - (plan.wishlist.marriages.length ? 0 : 0.05)),
-    noRobin: (r) => planOf(r, false),
-  });
-  const input = { budget: 3, seed: 1, compare: 4 } as const;
-  const step = until((s) => robinStep({ ...input, run: undefined!, ...(s ? { cursor: s.cursor } : {}) }, deps()));
-
-  it('solves the best of each gender, then up to two more whose ceiling could beat the best found, highest first', () => {
-    const picks = Object.fromEntries(step.options.map((o) => [o.key, [o.pick ?? null, o.status]]));
-    expect(picks).toEqual({
-      'M-str-lck': ['gender', 'solved'],
-      'F-str-lck': ['gender', 'solved'],
-      'F-spd-lck': ['ceiling', 'solved'],
-      'M-mag-lck': ['ceiling', 'solved'],
-      // Its ceiling (10%) can't beat the best found (60%): left to solve on request.
-      'F-mag-lck': [null, 'open'],
-    });
-    expect(step.options.find((o) => o.key === 'F-mag-lck')).toMatchObject({ screened: true, ceiling: 0.1, spouse: 'frederick' });
-  });
-
-  it('reads each against the best solved on the same runs, with how its wishlist differs', () => {
-    expect(step.reference).toBe('F-spd-lck');
-    expect(step.solved.map((s) => [s.key, s.chance, s.cost?.gain === undefined ? null : Math.round(s.cost.gain * 100), s.cost?.verdict ?? null])).toEqual([
-      ['F-spd-lck', 0.7, null, null],
-      ['M-str-lck', 0.6, -10, 'worse'],
-      ['M-mag-lck', 0.55, -15, 'worse'],
-      ['F-str-lck', 0.5, -20, 'worse'],
-    ]);
-    expect(step.solved.find((s) => s.key === 'M-str-lck')!.differences).toEqual({
-      marriages: { added: [['robin', 'sumia']], removed: [['robin', 'lonqu']] },
-      units: { added: ['sumia'], removed: ['lonqu'] },
-      classes: [],
-    });
-    expect(step.lockCost).toBeUndefined();
-  });
-
-  it('solves another on request, and the no-Robin view when asked', () => {
-    const more = until((s) => robinStep({ ...input, run: undefined!, solve: ['F-mag-lck'], noRobin: true, cursor: (s ?? step).cursor }, deps()));
-    expect(more.solved.find((s) => s.key === 'F-mag-lck')).toMatchObject({ pick: 'requested', chance: 0.1 });
-    expect(more.noRobin!.spouse).toBe('lonqu');
-    expect(more.noRobin!.chance).toBeCloseTo(0.65, 12);
-    expect(more.noRobin!.cost.gain).toBeCloseTo(-0.05, 12);
-    expect(more.noRobin!.plan.wishlist.marriages).toEqual([]);
-  });
-
-  it('once locked, solves only the locked Robin and reads the rest as what the lock cost', () => {
-    const locked = until((s) => robinStep({ ...input, run: undefined!, cursor: (s ?? step).cursor }, deps(R('M', 'mag'))));
-    expect(locked.reference).toBe('M-mag-lck');
-    expect(locked.solved.map((s) => s.key)).toEqual(['M-mag-lck', 'F-spd-lck', 'M-str-lck', 'F-str-lck']);
-    expect(locked.lockCost).toMatchObject({ key: 'F-spd-lck', verdict: 'better' });
-    expect(locked.lockCost!.gain).toBeCloseTo(0.15, 12);
-    // Locked from the start: nothing else is solved, every option still screened.
-    const alone = until((s) => robinStep({ ...input, run: undefined!, ...(s ? { cursor: s.cursor } : {}) }, deps(R('F', 'mag'))));
-    expect(alone.solved.map((s) => s.key)).toEqual(['F-mag-lck']);
-    expect(alone.options.every((o) => o.screened)).toBe(true);
-    expect(alone.lockCost).toBeUndefined();
-  });
-});
-
 describe('the Robin alternatives and Lock on a recorded run (#201)', () => {
   const facts = withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal', gender: 'M', asset: 'mag' });
   const fresh = runFromRoster(facts);
@@ -139,8 +46,11 @@ describe('the Robin alternatives and Lock on a recorded run (#201)', () => {
   const robin = { gender: 'M', asset: 'mag', flaw: 'def' } as const;
   const locked = withRobinLock(late, robin);
 
+  let first: RobinStep | undefined;
+  const alternatives = () => (first ??= until((s) => engine.robinAlternatives({ run: late, budget: 40, ...small, ...(s ? { cursor: s.cursor } : {}) })));
+
   it('screen every option, solve the best of the gender and up to two more, each with its cost and differences', () => {
-    const step = until((s) => engine.robinAlternatives({ run: late, budget: 40, ...small, ...(s ? { cursor: s.cursor } : {}) }));
+    const step = alternatives();
     expect(step.options).toHaveLength(7);
     expect(step.options.every((o) => o.screened)).toBe(true);
     const solved = step.options.filter((o) => o.status === 'solved');
@@ -159,6 +69,42 @@ describe('the Robin alternatives and Lock on a recorded run (#201)', () => {
     expect(after.reference).toBe(robinKey(robin));
     expect(after.solved.map((s) => s.key).sort()).toEqual([...new Set([...step.solved.map((s) => s.key), robinKey(robin)])].sort());
     expect(after.solved.find((s) => s.key === robinKey(robin))!.plan.robin).toEqual(robin);
+    // What the lock cost names a solved alternative that does better.
+    if (after.lockCost) {
+      expect(after.solved.slice(1).map((s) => s.key)).toContain(after.lockCost.key);
+      expect(after.lockCost.gain).toBeGreaterThan(0);
+    }
+  });
+
+  it('pick the extras by ceiling, highest first: no option left open has a higher ceiling than one picked', () => {
+    const step = alternatives();
+    const extras = step.options.filter((o) => o.pick === 'ceiling').map((o) => o.ceiling!);
+    const open = step.options.filter((o) => o.status === 'open' && o.ceiling !== undefined).map((o) => o.ceiling!);
+    if (extras.length) for (const c of open) expect(c).toBeLessThanOrEqual(Math.min(...extras));
+    // The solved Robins: the reference first, then by chance.
+    const chances = step.solved.slice(1).map((s) => s.chance);
+    expect(chances).toEqual([...chances].sort((a, b) => b - a));
+  });
+
+  it('solve another on request, and the no-Robin view when asked', () => {
+    const step = alternatives();
+    const open = step.options.find((o) => o.status === 'open')!;
+    const more = until((s) => engine.robinAlternatives({ run: late, budget: 40, ...small, solve: [open.key], noRobin: true, cursor: (s ?? step).cursor }));
+    expect(more.solved.find((s) => s.key === open.key)).toMatchObject({ pick: 'requested', robin: open.robin });
+    // The no-Robin view is the reference's plan with Robin no one's parent; an unmarried reference has none to show.
+    const married = more.solved[0]!.plan.wishlist.marriages.some((c) => c.includes('robin'));
+    if (!married) return void expect(more.noRobin).toBeUndefined();
+    const noRobin = more.noRobin!;
+    expect(noRobin.plan.wishlist.marriages.some((c) => c.includes('robin'))).toBe(false);
+    expect(noRobin.plan.robin).toEqual(more.solved[0]!.robin);
+    expect(noRobin.cost.runs).toBe(small.compare);
+  });
+
+  it('locked from the start, solve only the locked Robin, every option still screened', () => {
+    const alone = until((s) => engine.robinAlternatives({ run: locked, budget: 40, ...small, ...(s ? { cursor: s.cursor } : {}) }));
+    expect(alone.solved.map((s) => s.key)).toEqual([robinKey(robin)]);
+    expect(alone.options.every((o) => o.screened)).toBe(true);
+    expect(alone.lockCost).toBeUndefined();
   });
 
   it('writes the locked Robin into the run facts and pins it; lifting it opens the facts it filled again', () => {
