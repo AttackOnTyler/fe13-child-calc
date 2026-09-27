@@ -50,7 +50,7 @@ export type StartClass = { readonly startClass: ClassId; readonly assumptionsUse
  * is Lord, Dancer or Conqueror. With a child partner, "default base class" is taken to be the child's own
  * starting class; that is an assumption, flagged only where the alternative (Tactician) gives a different class.
  */
-export function startClass(child: ChildUnitData, variable: ParentProfile, assumptions: Assumptions): StartClass {
+export function startClass(child: ChildUnitData, variable: Pick<ParentProfile, 'baseClass' | 'secondGen'>, assumptions: Assumptions): StartClass {
   const own = child.defaultClassSet[0];
   if (!own) throw new Error(`${child.name} has no default class`);
   if (!isMorgan(child)) return { startClass: own, assumptionsUsed: [] };

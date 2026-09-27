@@ -9,7 +9,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 s = open(os.path.join(sys.argv[1], 'classbases.html'), encoding='utf-8', errors='replace').read()
 cls = io.open(os.path.join(ROOT, 'src', 'game-data', 'classes.ts'), encoding='utf-8').read()
 ids = {}
-for cid, name in re.findall(r"^\s+'?([a-z-]+)'?: \{ name: (\{[^}]*\}|'[^']+')", cls, re.M):
+for cid, name in re.findall(r"^\s+'?([a-z-]+)'?: \{\s*name: (\{[^}]*\}|'[^']+')", cls, re.M):
     for n in re.findall(r"'([^']+)'", name):
         ids.setdefault(n, cid)
 out, missing = {}, []
@@ -17,7 +17,10 @@ for r in re.findall(r'<tr[^>]*>(.*?)</tr>', s, re.S):
     c = [re.sub(r'\s+', ' ', html.unescape(re.sub(r'<[^>]+>', ' ', x))).strip() for x in re.findall(r'<t[hd][^>]*>(.*?)</t[hd]>', r, re.S)]
     if len(c) < 10 or c[0] == 'Class':
         continue
-    m = re.match(r'(.*?)(?: \((M|F)\))?$', c[0])
+    # Taguel and Manakete: the starred row is the real base (SF's footnote); the shifted row is the class roll.
+    if c[0].endswith('(shifted)'):
+        continue
+    m = re.match(r'(.*?)(?: \((M|F)\))?$', c[0].removesuffix(' *'))
     name, g = m.group(1), m.group(2)
     names = [x.strip() for x in re.split(r'[/,]', name)]
     cid = next((ids[n] for n in names if n in ids), None)

@@ -27,6 +27,9 @@ import {
   JP_PK_CHILDREN,
   RESEARCH_CHILD_RECRUITMENT,
   SF_CHILDREN,
+  SF_BASES,
+  SF_CLASS_CAPS,
+  SFF_CHILD_BASES,
   type Assumed,
   type Citation,
 } from '../game-data/citations';
@@ -53,6 +56,12 @@ type AssumptionValues = {
   'inherit-last-skill': 'bottom-slot' | 'most-recent';
   /** A parent dying after the S-support still leaves the child recruitable. */
   'child-after-parent-death': boolean;
+  /** A child's join stat when the sum inside its formula is negative: floor, or truncation toward zero (1 higher). */
+  'child-join-rounding': 'floor' | 'toward-zero';
+  /** A child's join stats past its start class's caps: left as the formula gives them, or clamped to the caps. */
+  'child-join-cap': 'none' | 'start-class-caps';
+  /** The Maiden's side of Lucina's join stats: her stats above her class base. */
+  'maiden-join-stats': Growths;
 };
 
 export type AssumptionId = keyof AssumptionValues;
@@ -263,6 +272,49 @@ export const ASSUMPTION_REGISTRY: { readonly [K in AssumptionId]: AssumptionDef<
     format: (v) => (v ? 'Yes: the child still comes' : 'No: the child is lost'),
     parse: (raw) => (typeof raw === 'boolean' ? raw : undefined),
     affects: 'blocked pairings on the Roster',
+  }),
+  'child-join-rounding': entry({
+    id: 'child-join-rounding',
+    label: 'A child’s join stats when the sum is negative',
+    why:
+      'A child’s join stat is ((each parent’s stat above its class base) + the child’s absolute base) / 3, rounded down, plus its class base. ' +
+      'An in-game Lucina settles rounding down for a positive sum. The guidebook’s form (“drop any fractions”) gives 1 more when the sum is negative, ' +
+      'which only an early recruit with a high absolute base can reach (Cynthia’s Lck, Yarne’s HP); nobody has tested it.',
+    sources: [SF_BASES, SFF_CHILD_BASES, RESEARCH_CHILD_RECRUITMENT],
+    default: 'floor',
+    alternatives: [{ label: 'Toward zero (the guidebook’s “drop any fractions”, 1 higher)', value: 'toward-zero' }],
+    input: 'choice',
+    format: (v) => (v === 'floor' ? 'Round down' : 'Round toward zero'),
+    parse: (raw) => (raw === 'floor' || raw === 'toward-zero' ? raw : undefined),
+    affects: 'a child’s stats filled in by Record results',
+  }),
+  'child-join-cap': entry({
+    id: 'child-join-cap',
+    label: 'A child’s join stats past its caps',
+    why:
+      'FEW’s child stat ranges clamp a child’s join stats at its start class’s caps, but no source tests it, and a question on SF’s forum about ' +
+      'what happens past the cap went unanswered. The formula alone doesn’t clamp.',
+    sources: [FEW_LUCINA_STATS, SFF_CHILD_BASES, SF_CLASS_CAPS, RESEARCH_CHILD_RECRUITMENT],
+    default: 'none',
+    alternatives: [{ label: 'Clamped at the start class’s caps (FEW’s ranges)', value: 'start-class-caps' }],
+    input: 'choice',
+    format: (v) => (v === 'none' ? 'Not clamped' : 'Clamped at the start class’s caps'),
+    parse: (raw) => (raw === 'none' || raw === 'start-class-caps' ? raw : undefined),
+    affects: 'a child’s stats filled in by Record results',
+  }),
+  'maiden-join-stats': entry({
+    id: 'maiden-join-stats',
+    label: 'The Maiden’s side of Lucina’s join stats',
+    why:
+      'The Maiden (Chrom’s wife if he marries no one) has no published stats, so her side of Lucina’s join stats is unknown. ' +
+      'FEW’s Lucina + Maiden minimum counts it as 0.',
+    sources: [FEW_LUCINA_STATS, RESEARCH_CHILD_RECRUITMENT],
+    default: ZERO_GROWTHS,
+    alternatives: [],
+    input: 'growths',
+    format: (g) => (STATS.every((s) => g[s] === 0) ? '0 in every stat (placeholder)' : STATS.map((s) => g[s]).join('/')),
+    parse: parseGrowths,
+    affects: 'Lucina’s stats filled in by Record results when Chrom marries no one',
   }),
 };
 

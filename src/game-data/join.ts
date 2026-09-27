@@ -11,6 +11,7 @@
  * Starting skills can fall outside a unit's class set: Walhart (Conquest), Aversa (Shadowgift), Emmeryn (Magic +2,
  * Focus) and Priam (Swordbreaker, Lancebreaker, Luna). A unit keeps every skill it learns, so these are reachable too.
  */
+import type { ChildId } from './children';
 import type { ClassId } from './classes';
 import type { SkillId } from './skills';
 import type { Stat } from './stats';
@@ -82,3 +83,33 @@ export const JOIN_DATA: Readonly<Record<Exclude<UnitId, 'maiden'> | 'robin', Joi
 /** A unit's bases on a difficulty. */
 export const basesOn = (d: JoinData, difficulty: 'normal' | 'hard' | 'lunatic'): BaseStats =>
   difficulty === 'normal' ? d.normal : difficulty === 'hard' ? (d.hard ?? d.normal) : (d.lunatic ?? d.hard ?? d.normal);
+
+/**
+ * A child's join data (#155): its absolute (personal) bases, which its join stats are worked out from with its parents'
+ * stats (engine/child-join.ts). Every child joins at level 10, in its default set's first class (Morgan: its partner's
+ * starting class).
+ *
+ * Sources: SF base stats (main story), "Children Characters"; FEW `CharStats FE13` `{{Personal|…}}` rows; the guidebook
+ * table Remnant Sage posted to SF forums topic 33434 (https://forums.serenesforest.net/topic/33434-calculating-childrens-base-stats/).
+ * The three agree on all 104 values (research/child-recruitment §4.4). Morgan has one row for both genders.
+ */
+export type ChildJoinData = { readonly level: number; readonly absoluteBases: BaseStats };
+
+const MORGAN_JOIN: ChildJoinData = { level: 10, absoluteBases: { hp: 9, str: 6, mag: 8, skl: 7, spd: 6, lck: 7, def: 3, res: 7 } };
+
+export const CHILD_JOIN_DATA: Readonly<Record<ChildId, ChildJoinData>> = {
+  lucina: { level: 10, absoluteBases: { hp: 12, str: 5, mag: 1, skl: 8, spd: 4, lck: 13, def: 3, res: 3 } },
+  owain: { level: 10, absoluteBases: { hp: 10, str: 4, mag: 4, skl: 5, spd: 6, lck: 9, def: 6, res: 5 } },
+  inigo: { level: 10, absoluteBases: { hp: 11, str: 5, mag: 2, skl: 4, spd: 9, lck: 12, def: 4, res: 4 } },
+  brady: { level: 10, absoluteBases: { hp: 9, str: 6, mag: 5, skl: 4, spd: 2, lck: 10, def: 7, res: 4 } },
+  kjelle: { level: 10, absoluteBases: { hp: 10, str: 6, mag: 2, skl: 6, spd: 5, lck: 11, def: 3, res: 3 } },
+  cynthia: { level: 10, absoluteBases: { hp: 7, str: 5, mag: 2, skl: 4, spd: 10, lck: 17, def: 6, res: 6 } },
+  severa: { level: 10, absoluteBases: { hp: 8, str: 6, mag: 1, skl: 7, spd: 6, lck: 6, def: 6, res: 5 } },
+  gerome: { level: 10, absoluteBases: { hp: 13, str: 8, mag: 0, skl: 4, spd: 8, lck: 5, def: 5, res: 1 } },
+  'morgan-m': MORGAN_JOIN,
+  'morgan-f': MORGAN_JOIN,
+  yarne: { level: 10, absoluteBases: { hp: 16, str: 9, mag: 1, skl: 4, spd: 4, lck: 13, def: 6, res: 1 } },
+  laurent: { level: 10, absoluteBases: { hp: 10, str: 3, mag: 7, skl: 7, spd: 4, lck: 11, def: 4, res: 5 } },
+  noire: { level: 10, absoluteBases: { hp: 8, str: 5, mag: 3, skl: 4, spd: 7, lck: 10, def: 4, res: 6 } },
+  nah: { level: 10, absoluteBases: { hp: 5, str: 3, mag: 3, skl: 5, spd: 6, lck: 8, def: 3, res: 3 } },
+};

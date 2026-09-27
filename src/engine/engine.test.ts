@@ -411,6 +411,7 @@ describe('assumption overrides', () => {
       'spd-breakpoints', 'main-story-target-breakpoint',
       'inherit-duplicate-skill', 'inherit-same-skill', 'inherit-ineligible-bottom', 'inherit-last-skill',
       'child-after-parent-death',
+      'child-join-rounding', 'child-join-cap', 'maiden-join-stats',
     ]);
     expect(engine.assumptions().every((a) => a.sources.length > 0 && a.why.length > 0)).toBe(true);
     expect(status(engine, 'maiden-growths')).toMatchObject({ isDefault: true, pairingsAffected: 1 + ASSET_FLAWS });
