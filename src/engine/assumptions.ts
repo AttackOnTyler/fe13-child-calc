@@ -563,7 +563,14 @@ export type BlindSpotId =
   | 'door-keys';
 
 /** The run simulation's own blind spots (#186): how it walks the army from one map to the next. */
-export type RunBlindSpotId = 'class-change-at-cap' | 'exp-from-likely-play' | 'supports-from-pair-combats' | 'kit-as-recorded' | 'side-goal-actions' | 'kit-by-matchups-won';
+export type RunBlindSpotId =
+  | 'class-change-at-cap'
+  | 'exp-from-likely-play'
+  | 'supports-from-pair-combats'
+  | 'kit-as-recorded'
+  | 'side-goal-actions'
+  | 'kit-by-matchups-won'
+  | 'arms-on-the-way';
 
 export type BlindSpot = {
   readonly id: BlindSpotId | RunBlindSpotId;
@@ -699,6 +706,18 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
       'Each kit piece (a weapon the open armories sell, its forge to +5 Mt, a Vulnerary) is worth the endpoint matchups it wins: foes its ' +
       'lead one-rounds and rounds it survives, by count; a Vulnerary counts as one. A run short of gold drops the pieces that win fewest ' +
       'per gold, after its rebuys and seals. Scoring each piece by flawless points (the full solve, #199) may keep a different set.',
+    lean: 'either',
+    touches: ['flawless'],
+  },
+  {
+    id: 'arms-on-the-way',
+    label: 'Weapons bought on the way, within ranks read from level',
+    why:
+      'At each armory stop on the way a run buys the weapons that win its lineup more of that map’s matchups (off the shelf, never forged) and a ' +
+      'Vulnerary each, keeping the gold its planned seals still need; a weapon running dry that the armory doesn’t sell is replaced by the ' +
+      'nearest one of its kind that it does. The simulation keeps no weapon EXP, so a unit is taken to wield the best rank it holds in a kind, ' +
+      'or what its level suggests when that’s higher (a base class D, C from Lv 10; an advanced or special class B, A from Lv 10). A player ' +
+      'may train ranks faster, forge along the way, or hold gold back for the endpoint.',
     lean: 'either',
     touches: ['flawless'],
   },

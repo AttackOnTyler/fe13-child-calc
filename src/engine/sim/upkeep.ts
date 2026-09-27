@@ -244,7 +244,12 @@ export function endpointKit(input: {
   readonly deployed: readonly { readonly unit: string; readonly items: readonly SimItem[] }[];
   readonly foes: readonly Foe[];
   readonly stock: readonly StockItem[];
+  /** Forges the weapons it buys (the endpoint's kit); off, a stop on the way re-arms with weapons off the shelf. */
+  readonly forge?: boolean;
+  /** Whether a unit can wield a weapon sold (its weapon rank, `weapon-rank-by-level`); absent: any of its kinds. */
+  readonly wields?: (unit: string, item: GameItem) => boolean;
 }): KitPiece[] {
+  const forging = input.forge ?? true;
   const pieces: KitPiece[] = [];
   const score = (l: (typeof input.leads)[number], weapons: readonly Weapon[]) =>
     input.foes.reduce((n, foe) => {
@@ -262,9 +267,10 @@ export function endpointKit(input: {
     let buy: { weapon: Weapon; cost: number; gain: number; forge: number | undefined; forged: number } | undefined;
     for (const s of sold) {
       if (!kinds.has(s.item.kind) && !l.weapons.some((w) => w.item.kind === s.item.kind)) continue;
+      if (input.wields && !input.wields(l.unit, s.item)) continue;
       const weapon = freshWeapon(s.item);
       const gain = score(l, [...l.weapons, weapon]) - base;
-      const forge = kitForgeCost(weapon);
+      const forge = forging ? kitForgeCost(weapon) : undefined;
       const forged = forge === undefined ? gain : score(l, [...l.weapons, forgedWeapon(weapon)]) - base;
       const better = !buy || forged > buy.forged || (forged === buy.forged && (gain > buy.gain || (gain === buy.gain && s.cost < buy.cost)));
       if (forged > 0 && better) buy = { weapon, cost: s.cost, gain, forge, forged };
@@ -275,6 +281,7 @@ export function endpointKit(input: {
       continue;
     }
     // Nothing sold beats what it owns: forge the owned weapon that wins most.
+    if (!forging) continue;
     let forge: { item: GameItem; cost: number; gain: number } | undefined;
     for (const w of l.weapons) {
       const cost = kitForgeCost(w);
