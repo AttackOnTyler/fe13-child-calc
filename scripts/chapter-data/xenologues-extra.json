@@ -128,7 +128,16 @@
   "kind": "xenologue",
   "order": 3020,
   "label": "Roster Rescue",
-  "unlocks": []
+  "unlocks": [],
+  "play": [
+   {
+    "how": "Dropped by enemy Revenant",
+    "play": {
+     "kind": "escape",
+     "note": "Each Revenant that escapes takes its Bullion."
+    }
+   }
+  ]
  },
  "the-future-past-1": {
   "kind": "xenologue",

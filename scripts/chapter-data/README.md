@@ -12,6 +12,12 @@ Regenerates `src/game-data/chapters/*.ts` from Fire Emblem Wiki chapter pages at
 
 `<group>-extra.json` holds what the pages don't: each map's kind, list order, label and unlocks, and forced units a
 page's ChapChars leaves out (`FORCED` in `build.py`, #132).
+It also holds the fixes the gold research found in the pages (`FIXES`: price typos, P18's disputed Lunatic drops) and
+what play can lose of each map's items (`PLAY`: escaping carriers, looting Thieves, burnable villages, Chapter 18's
+collapsing floor, result-paid rewards, either-or picks, and Paralogue 13's gold as numbers) (#180). `gents.py` applies
+them and fails if one no longer matches its page.
+
+Paralogues 3, 8 and 10 list their items as `ChapItemsCell FE13` templates, one per item, rather than one `ChapItems` (#180).
 
 A page without ChapChars (Premonition) takes its units from the Character data tabs, with their stats: a setup used
 only on that map, which never joins the army (#131).

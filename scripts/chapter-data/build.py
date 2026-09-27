@@ -27,6 +27,78 @@ GRIND = {'the-golden-gaffe', 'exponential-growth', 'infinite-regalia'}
 # Forced units the page's ChapChars leaves out (#132): Apotheosis's own strategy says "Chrom must be fielded as usual".
 FORCED = {'apotheosis': ['Chrom']}
 
+# Fixes the gold research found in the pages (#180; research/gold-economy §5-§6), applied by gents.py, which fails when one
+# no longer matches the page. `prices`: FEW price typos, by the item's worth on every other source (C2-C5). `noDrop`:
+# P18's Lunatic tab flags ten weapons as drops that no other source has, FEW's own P18 item list included (C13).
+FIXES = {
+    'prologue': {'prices': [{'list': 'armory', 'item': 'Bronze Lance', 'cost': 350}, {'list': 'armory', 'item': 'Bronze Axe', 'cost': 400}]},
+    'chapter-8': {'prices': [{'list': 'merchant', 'item': 'Ward', 'cost': 2100}]},
+    'chapter-18': {'prices': [{'list': 'merchant', 'item': 'Thoron', 'cost': 2200}]},
+    'paralogue-18': {
+        'prices': [{'list': 'armory', 'item': 'Dragonstone+', 'cost': 3780}, {'list': 'armory', 'item': 'Beaststone+', 'cost': 3220}],
+        'noDrop': [{'difficulty': 'lunatic', 'enemy': 'Ruffian', 'items': ['Tomahawk', 'Hammer', 'Silver Sword', 'Silver Bow', 'Rexcalibur']}],
+    },
+}
+
+
+def play(kind, note, **more):
+    return {'kind': kind, 'note': note, **more}
+
+
+# What play can lose, which the pages hold only as text (#180; research/gold-economy §1.4). Each entry marks the item
+# rows whose `item` (when given) matches and whose `how` starts with `how` (when given). Kinds: `escape` (an enemy can
+# leave the map with it: a carrier, or a Thief that loots the chest), `village` (Barbarians or Berserkers can burn the
+# village, C10), `collapse` (the floor takes the chest on a set turn), `result` (paid by how the map went; `tier` is the
+# kills or survivors needed), `choice` (one of two outcomes the player picks). `gold` is numeric gold (P13, C8).
+THIEF = 'Carried by an escaping Thief: lost if it gets off the map.'
+LOOTER = 'A Thief can loot this chest and escape with it; kill it before it leaves to get the item back.'
+BURN = 'Barbarians and Berserkers can burn the village, and its reward is lost.'
+MIRAGE = 'Mirage villages, visited in order; none appears if any village is burned.'
+RECRUIT = 'The unit’s own weapon: dropped only if the unit is killed rather than recruited.'
+P13 = 'Backing a side makes its leader allied (no Bullion) and closes two villages; backing neither pays 10,000G.'
+PLAY = {
+    'chapter-6': [{'how': 'Dropped by Gaius if killed', 'play': play('choice', RECRUIT)}],
+    'chapter-9': [{'how': 'Dropped by Tharja if killed', 'play': play('choice', RECRUIT)}],
+    'chapter-10': [{'how': 'Dropped by enemy Thief', 'play': play('escape', THIEF)}],
+    'chapter-11': [{'item': 'Bullion (L)', 'how': 'Open western chest', 'play': play('escape', LOOTER)}],
+    'chapter-16': [{'how': 'Dropped by enemy Thief', 'play': play('escape', THIEF)}],
+    'chapter-17': [{'item': 'Seraph Robe', 'how': 'Open eastern chest', 'play': play('escape', LOOTER)}],
+    'chapter-18': [
+        {'item': 'Second Seal', 'play': play('collapse', 'The floor collapses under the chest on turn 11 enemy phase.', lostOn={'turn': 11, 'phase': 'enemy'})},
+        {'item': 'Energy Drop', 'how': 'Open', 'play': play('collapse', 'The floor collapses under the chest on turn 10 enemy phase.', lostOn={'turn': 10, 'phase': 'enemy'})},
+        {'item': 'Rescue', 'play': play('collapse', 'The floor collapses under the chest on turn 11 player phase.', lostOn={'turn': 11, 'phase': 'player'})},
+        {'item': 'Bullion (M)', 'play': play('collapse', 'The floor collapses under the chest on turn 7 enemy phase.', lostOn={'turn': 7, 'phase': 'enemy'})},
+    ],
+    'chapter-20': [{'item': 'Spirit Dust', 'how': 'Open', 'play': play('escape', LOOTER)}],
+    'paralogue-1': [{'item': 'Killer Lance', 'play': play('escape', LOOTER)}],
+    'paralogue-2': [{'item': 'Physic', 'how': 'Visit', 'play': play('village', BURN)}],
+    'paralogue-3': [
+        {'item': 'Seraph Robe', 'play': play('result', 'At the end if at least one NPC Villager survives.', tier=1)},
+        {'item': 'Log', 'play': play('result', 'At the end if at least two NPC Villagers survive.', tier=2)},
+        {'item': 'Ladle', 'play': play('result', 'At the end if all three NPC Villagers survive.', tier=3)},
+    ],
+    'paralogue-4': [{'item': 'Arms Scroll', 'play': play('escape', LOOTER)}],
+    'paralogue-5': [{'item': 'Missiletainn', 'play': play('choice', 'Speak to the southeastern Sage with Owain; anyone else gets the Speed Tonic.')},
+                    {'item': 'Speed Tonic', 'play': play('choice', 'Speak to the southeastern Sage with anyone but Owain; Owain gets Missiletainn.')}],
+    'paralogue-6': [{'item': it, 'how': 'At chapter', 'play': play('result', f'At the end if Inigo got at least {n} kill{"s" if n > 1 else ""}.', tier=n)}
+                    for n, it in enumerate(['Elixir', 'Killing Edge', 'Speedwing', 'Bullion (M)', 'Hammerne'], 1)],
+    'paralogue-7': [{'item': it, 'how': 'At chapter', 'play': play('result', f'At the end if at least {n} NPC Villager{"s survive" if n > 1 else " survives"}.', tier=n)}
+                    for n, it in enumerate(['Mend', 'Blessed Lance', 'Bullion (M)', 'Seraph Robe', 'Fortify'], 1)],
+    'paralogue-9': [{'item': 'Bullion (L)', 'how': 'Dropped by Ruger', 'play': play('escape', 'Ruger escapes with it if he gets off the map.')}],
+    'paralogue-11': [{'item': it, 'how': 'At chapter', 'play': play('result', f'At the end if at least {n} NPC Villager{"s survive" if n > 1 else " survives"}.', tier=n)}
+                     for n, it in enumerate(['Wyrmslayer', 'Arms Scroll', 'Recover', 'Bullion (M)', 'Seraph Robe'], 1)],
+    'paralogue-12': [{'how': 'Open', 'play': play('escape', 'Two Thieves loot chests here and escape (which chests isn’t published); kill them before they leave.')}],
+    'paralogue-13': [
+        {'how': 'Dropped by', 'play': play('result', P13)},
+        {'how': 'Visit', 'play': play('result', P13)},
+        {'item': '500G', 'play': play('result', 'Paid when you back a side: 500G for each allied NPC that survives.'), 'gold': {'amount': 500, 'per': 'surviving allied NPC'}},
+        {'item': '10,000G', 'play': play('result', 'Paid when you back neither side.'), 'gold': {'amount': 10000}},
+    ],
+    'paralogue-14': [{'how': 'Visit', 'play': play('village', MIRAGE)}, {'item': 'Goddess Staff', 'play': play('village', MIRAGE)}],
+    'paralogue-18': [{'how': 'Dropped by Gangrel if killed', 'play': play('choice', RECRUIT)}],
+    'roster-rescue': [{'how': 'Dropped by enemy Revenant', 'play': play('escape', 'Each Revenant that escapes takes its Bullion.')}],
+}
+
 
 def order(m):
     """List order: story maps by hundreds, each paralogue just after the chapter that unlocks it, then the xenologues."""
@@ -74,7 +146,7 @@ for i in ids:
     m = ALL[i]
     f = fetch(f"https://fireemblemwiki.org/w/index.php?oldid={m['oldid']}&action=raw", os.path.join(cache, f"{i}.wiki"))
     maps.append({'id': i, 'file': f, 'page': m['page'], 'oldid': m['oldid']})
-    extra[i] = {'kind': m['kind'], 'order': order(m), 'label': m['label'], 'unlocks': unlocks(m), **({'grind': True} if i in GRIND else {}), **({'forced': FORCED[i]} if i in FORCED else {})}
+    extra[i] = {'kind': m['kind'], 'order': order(m), 'label': m['label'], 'unlocks': unlocks(m), **({'grind': True} if i in GRIND else {}), **({'forced': FORCED[i]} if i in FORCED else {}), **({'fixes': FIXES[i]} if i in FIXES else {}), **({'play': PLAY[i]} if i in PLAY else {})}
 
 parsed = os.path.join(cache, f'{group}.json')
 subprocess.run([sys.executable, os.path.join(HERE, 'fewparse.py'), json.dumps(maps), parsed], check=True)

@@ -4,9 +4,35 @@ import sys
 
 src, out, const, extra = sys.argv[1], sys.argv[2], sys.argv[3], json.loads(sys.argv[4])
 data = json.load(open(src, encoding='utf-8'))
+def apply_fixes(r, fixes, plays):
+    """The extra file's fixes and play-dependence flags (#180), each failing loudly when it no longer matches the page."""
+    for f in fixes.get('prices', []):
+        rows = [x for x in r['shop'][f['list']] if x['item'] == f['item']]
+        assert rows, f"{r['id']}: no {f['list']} {f['item']}"
+        for x in rows:
+            x['cost'] = f['cost']
+    for f in fixes.get('noDrop', []):
+        hit = 0
+        for g in r['enemies'][f['difficulty']]:
+            if g['name'] != f['enemy']:
+                continue
+            for it in g['items']:
+                if it['name'] in f['items'] and it.pop('drop', False):
+                    hit += 1
+        assert hit, f"{r['id']}: no {f['enemy']} drops to clear"
+    for p in plays:
+        rows = [x for x in r['items'] if ('item' not in p or x['item'] == p['item']) and ('how' not in p or x['how'].startswith(p['how']))]
+        assert rows, f"{r['id']}: no item row for {p}"
+        for x in rows:
+            x['play'] = p['play']
+            if 'gold' in p:
+                x['gold'] = p['gold']
+
+
 recs = []
 for r in data:
     e = extra[r['id']]
+    apply_fixes(r, e.get('fixes', {}), e.get('play', []))
     rec = {
         'id': r['id'],
         'kind': e['kind'],

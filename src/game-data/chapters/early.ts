@@ -65,7 +65,7 @@ export const EARLY_MAPS: readonly ChapterData[] = [
     ],
     forced: [],
     items: [],
-    shop: {"location": "Southtown", "opensAfter": "chapter 3", "armory": [{"item": "Bronze Sword", "cost": 350}, {"item": "Bronze Lance", "cost": 400}, {"item": "Bronze Axe", "cost": 350}, {"item": "Bronze Bow", "cost": 350}, {"item": "Fire", "cost": 540}], "merchant": [{"item": "Iron Sword", "cost": 520}, {"item": "Iron Lance", "cost": 560}, {"item": "Iron Axe", "cost": 600}, {"item": "Iron Bow", "cost": 560}, {"item": "Wyrmslayer", "cost": 1500}, {"item": "Hammer", "cost": 1850}, {"item": "Concoction", "cost": 600}, {"item": "Master Seal", "cost": 2500}, {"item": "Second Seal", "cost": 2500}]},
+    shop: {"location": "Southtown", "opensAfter": "chapter 3", "armory": [{"item": "Bronze Sword", "cost": 350}, {"item": "Bronze Lance", "cost": 350}, {"item": "Bronze Axe", "cost": 400}, {"item": "Bronze Bow", "cost": 350}, {"item": "Fire", "cost": 540}], "merchant": [{"item": "Iron Sword", "cost": 520}, {"item": "Iron Lance", "cost": 560}, {"item": "Iron Axe", "cost": 600}, {"item": "Iron Bow", "cost": 560}, {"item": "Wyrmslayer", "cost": 1500}, {"item": "Hammer", "cost": 1850}, {"item": "Concoction", "cost": 600}, {"item": "Master Seal", "cost": 2500}, {"item": "Second Seal", "cost": 2500}]},
     eventTiles: 2,
     enemies: {
       normal: [
@@ -446,7 +446,7 @@ export const EARLY_MAPS: readonly ChapterData[] = [
     forced: ["Chrom"],
     items: [
       {"item": "Heal", "how": "Dropped by Validar"},
-      {"item": "Iron Sword", "how": "Dropped by Gaius if killed as an enemy"},
+      {"item": "Iron Sword", "how": "Dropped by Gaius if killed as an enemy", "play": {"kind": "choice", "note": "The unit’s own weapon: dropped only if the unit is killed rather than recruited."}},
       {"item": "Iron Lance", "how": "Dropped by enemy Cavalier"},
       {"item": "Wind", "how": "Dropped by enemy Dark Mage"},
       {"item": "Secret Book", "how": "Open chest in Emmeryn's room"},

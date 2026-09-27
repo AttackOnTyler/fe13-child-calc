@@ -22,6 +22,9 @@ import {
   RESEARCH_FIXTURES_SPEED,
   RESEARCH_SKILL_INHERITANCE,
   RESEARCH_DEATH_AFTER_MARRIAGE,
+  RESEARCH_GOLD,
+  FEW_RENOWN,
+  SF_RENOWN,
   JP_CHILDREN,
   JP_CHILDREN_MIRROR,
   JP_PK_CHILDREN,
@@ -62,6 +65,8 @@ type AssumptionValues = {
   'child-join-cap': 'none' | 'start-class-caps';
   /** The Maiden's side of Lucina's join stats: her stats above her class base. */
   'maiden-join-stats': Growths;
+  /** Renown for clearing a paralogue or DLC map (a story map gives 10). */
+  'paralogue-renown': number;
 };
 
 export type AssumptionId = keyof AssumptionValues;
@@ -315,6 +320,20 @@ export const ASSUMPTION_REGISTRY: { readonly [K in AssumptionId]: AssumptionDef<
     format: (g) => (STATS.every((s) => g[s] === 0) ? '0 in every stat (placeholder)' : STATS.map((s) => g[s]).join('/')),
     parse: parseGrowths,
     affects: 'Lucina’s stats filled in by Record results when Chrom marries no one',
+  }),
+  'paralogue-renown': entry({
+    id: 'paralogue-renown',
+    label: 'Renown for a paralogue or DLC map',
+    why:
+      'Every source gives +10 renown per story map, whatever the difficulty, but none says whether a paralogue gives any; a GameFAQs thread ' +
+      'and a 2013 pegasusknight comment say DLC maps give none. Counting none keeps the renown rewards from arriving earlier than they may.',
+    sources: [SF_RENOWN, FEW_RENOWN, RESEARCH_GOLD],
+    default: 0,
+    alternatives: [{ label: '+10, like a story map', value: 10 }],
+    input: 'choice',
+    format: (v) => (v ? `+${v} each` : 'None'),
+    parse: (raw) => (raw === 0 || raw === 10 ? raw : undefined),
+    affects: 'when renown rewards arrive',
   }),
 };
 

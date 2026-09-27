@@ -26,7 +26,7 @@ export const CHAPTERS_20_END: readonly ChapterData[] = [
       {"item": "Second Seal", "how": "Open left chest in western treasure room"},
       {"item": "Dragonstone+", "how": "Open right chest in western treasure room"},
       {"item": "Beaststone+", "how": "Open left chest in eastern treasure room"},
-      {"item": "Spirit Dust", "how": "Open right chest in eastern treasure room"},
+      {"item": "Spirit Dust", "how": "Open right chest in eastern treasure room", "play": {"kind": "escape", "note": "A Thief can loot this chest and escape with it; kill it before it leaves to get the item back."}},
     ],
     shop: {"location": "Valm Castle", "opensAfter": "this chapter", "armory": [{"item": "Silver Lance", "cost": 1560}, {"item": "Killer Lance", "cost": 1680}, {"item": "Silver Axe", "cost": 1740}, {"item": "Killer Axe", "cost": 1860}], "merchant": [{"item": "Brave Sword", "cost": 2100}, {"item": "Brave Lance", "cost": 2220}, {"item": "Brave Axe", "cost": 2400}, {"item": "Brave Bow", "cost": 2220}, {"item": "Waste", "cost": 2160}, {"item": "Levin Sword", "cost": 1600}, {"item": "Beast Killer", "cost": 1650}, {"item": "Tomahawk", "cost": 2550}, {"item": "Killer Bow", "cost": 1680}]},
     eventTiles: 2,
