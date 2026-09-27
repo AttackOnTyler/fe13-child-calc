@@ -46,6 +46,8 @@ import { matchup, type Fighter, type Foe, type Matchup } from '../solver';
 import { classWeaponKinds, openStock } from '../supply';
 import { ceilingArmy, effectiveCaps, fullClass } from '../sim/ceiling';
 import type { RunSimInput } from '../sim/run-sim';
+import type { SimMap } from '../sim/map-play';
+import { tierOfClass } from '../exp';
 import { forgedWeapon, freshWeapon, kitForgeCost } from '../sim/upkeep';
 import { plannedSeals } from '../sim/class-changes';
 import { milestones, type SupportMilestone } from '../milestones';
@@ -281,6 +283,9 @@ export function seedPlan(run: Run, ctx: SeedContext, options: SeedOptions = {}):
 /** Rounds of re-matching the seed spends on non-starters. */
 const SEED_FIXES = 4;
 
+/** How many times `placedForSupports` moves one paralogue at most. */
+const MOVES_EACH = 3;
+
 /** A couple as a key, either order. */
 export const coupleKey = ([a, b]: readonly [RosterUnit, RosterUnit]) => (a < b ? `${a}+${b}` : `${b}+${a}`);
 
@@ -297,14 +302,14 @@ export function nonStarters(run: Run, assumptions: Assumptions, plan: Plan): (re
 export function placedForSupports(run: Run, assumptions: Assumptions, plan: Plan): Plan {
   const movable = new Set(remainingMapOrder(run).steps.filter((st) => st.movable).map((st) => st.key));
   // A move can push another paralogue back ahead of its pair: each may move again, a few times at most.
-  const tried = new Set<string>();
-  for (let n = 0; n < 2 * movable.size + 2; n++) {
+  const moves = new Map<string, number>();
+  for (let n = 0; n < 4 * movable.size + 2; n++) {
     const m = milestones(run, plan, assumptions).find(
-      (x): x is SupportMilestone => x.kind === 'support' && x.nonStarter && !x.fixed && x.window.earliest !== undefined && movable.has(x.window.deadline.key) && !tried.has(`${x.window.deadline.key}@${x.window.deadline.index}`),
+      (x): x is SupportMilestone => x.kind === 'support' && x.nonStarter && !x.fixed && x.window.earliest !== undefined && movable.has(x.window.deadline.key) && (moves.get(x.window.deadline.key) ?? 0) < MOVES_EACH,
     );
     if (!m) return plan;
     const key = m.window.deadline.key;
-    tried.add(`${key}@${m.window.deadline.index}`);
+    moves.set(key, (moves.get(key) ?? 0) + 1);
     const order = plan.roadmap.order.filter((k) => k !== key);
     // Entered at the start of the map at `at`: the pair needs `maps` maps together from its earliest.
     const at = Math.min(m.window.earliest!.index + m.window.maps, order.length - 1);
@@ -456,8 +461,52 @@ export function planFor(run: Run, ctx: SeedContext, options: SeedOptions, robin:
   return {
     robin,
     wishlist: { endpoint, units, marriages: marriages.map(([a, b]) => [a, b] as const), children, reserves: [] },
-    roadmap: { order: input.maps.map((m) => m.key), lineups, seals: plannedSeals(input, (u) => classOf.get(u), endpoint), items: seedItems(input, sources, army, options.pins ?? [], ctx.assumptions) },
+    roadmap: { order: placedByStrength(input.maps, movableKeys(run)), lineups, seals: plannedSeals(input, (u) => classOf.get(u), endpoint), items: seedItems(input, sources, army, options.pins ?? [], ctx.assumptions) },
   };
+}
+
+/** The maps the solve places on the order (the child paralogues still to play). */
+const movableKeys = (run: Run): ReadonlySet<string> => new Set(remainingMapOrder(run).steps.filter((st) => st.movable).map((st) => st.key));
+
+/** A map's foe strength: its foes' mean level, internal (+20 in an advanced class), by count; 0 with no foes. */
+export function foeStrength(map: SimMap): number {
+  let n = 0;
+  let sum = 0;
+  for (const g of [...map.foes, ...map.waves.flatMap((w) => w.groups)]) {
+    const level = (g.foe.level ?? 1) + (tierOfClass(g.foe.className) === 'advanced' ? 20 : 0);
+    sum += level * g.foe.count;
+    n += g.foe.count;
+  }
+  return n ? sum / n : 0;
+}
+
+/**
+ * The seed's map order (the realism pass): the route's template, with each map the solve places (a child paralogue)
+ * moved later, to just after the first map it can't move, from its template place on, whose foes are at least as strong
+ * as its own (`foeStrength`), before the endpoint at the latest. A careful player takes on a paralogue once the story
+ * has brought the army up to its foes (Paralogue 6's promoted Lv 8 foes come after Chapter 13's Lv 16 Risen), not all
+ * of them the moment they open.
+ */
+export function placedByStrength(maps: readonly { readonly key: string; readonly map: SimMap }[], movable: ReadonlySet<string>): string[] {
+  const fixed = maps.filter((m) => !movable.has(m.key));
+  const at = new Map<number, string[]>();
+  let before = 0;
+  for (const m of maps) {
+    if (!movable.has(m.key)) {
+      before++;
+      continue;
+    }
+    const s = foeStrength(m.map);
+    let p = Math.max(1, before);
+    while (p < fixed.length - 1 && foeStrength(fixed[p - 1]!.map) < s) p++;
+    at.set(p, [...(at.get(p) ?? []), m.key]);
+  }
+  const out: string[] = [];
+  fixed.forEach((m, i) => {
+    out.push(...(at.get(i) ?? []));
+    out.push(m.key);
+  });
+  return out;
 }
 
 /**

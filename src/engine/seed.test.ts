@@ -47,6 +47,18 @@ describe('endpoint coverage (#198)', () => {
 describe('the seed (#198)', () => {
   const seed = engine.seedPlan(fresh);
 
+  it('takes on each child paralogue once the story’s foes are as strong as its own (realism pass)', () => {
+    const order = seed.roadmap.order;
+    const at = (k: string) => order.indexOf(k);
+    const children = engine.mapOrder(fresh).steps.filter((s) => s.movable).map((s) => s.key);
+    expect(children.length).toBeGreaterThan(5);
+    for (const k of children) expect(at(k), k).toBeGreaterThan(at('chapter-13'));
+    // Paralogue 6's promoted Lv 8 foes come after Chapter 20's; Paralogue 8's unpromoted ones well before.
+    expect(at('paralogue-6')).toBeGreaterThan(at('chapter-20'));
+    expect(at('paralogue-8')).toBeLessThan(at('chapter-20'));
+    expect(order.at(-1)).toBe('endgame');
+  });
+
   it('marries each unit once, and keeps the run facts’ Robin', () => {
     expect(seed.robin).toEqual(robin);
     const married = seed.wishlist.marriages.flat();
