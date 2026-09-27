@@ -149,16 +149,17 @@ describe('the flawless chance of a recorded run (#186)', () => {
     expect(engine.flawlessChance(promoted, { runs: 1 }).unknownHistory).toEqual(['chrom']);
   });
 
-  it('brings a child in when the plan or the log marries its fixed parent, and Lucina always (#187)', () => {
+  it('brings a child in when the plan, the log or Chrom’s wedding can marry its fixed parent, and Lucina always (#187, #188)', () => {
     const start = played([]);
     const children = (r: ReturnType<typeof engine.flawlessChance>) => r.notSimulated.filter((n) => n.why === 'child').map((n) => n.unit);
     const none = engine.flawlessChance(start, { runs: 1, marriages: [] });
-    expect(children(none)).toContain('kjelle');
-    // Chrom marries the Maiden when nobody else is named: Lucina still joins.
+    expect(children(none)).toContain('owain');
+    // Sully can still marry Chrom at the end of Chapter 11, and Chrom marries the Maiden when no rank decides: Lucina joins.
+    expect(children(none)).not.toContain('kjelle');
     expect(children(none)).not.toContain('lucina');
-    const planned = engine.flawlessChance(start, { runs: 1, marriages: [['stahl', 'sully']] });
-    expect(children(planned)).not.toContain('kjelle');
-    expect(planned.blindSpots).toContain('plan-marriages-made');
+    const planned = engine.flawlessChance(start, { runs: 1, marriages: [['lonqu', 'lissa']] });
+    expect(children(planned)).not.toContain('owain');
+    expect(planned.blindSpots).toContain('supports-from-pair-combats');
   });
 });
 
@@ -189,9 +190,11 @@ describe('children join at paralogue entry (#187)', () => {
     role: 'lead',
   };
   const lucinaOf = (r: ReturnType<typeof sim>) => r.units.find((u) => u.id === 'lucina');
+  /** Chrom and Sumia married on the log. */
+  const married = (army: ArmyUnit[], maps: RunSimMap[]) => engine.simulateRuns({ army, maps, difficulty: 'normal', married: [['chrom', 'sumia']] }, 1, 1);
 
   it('joins Lucina with the in-game stats from her parents at the start of Chapter 13, after it', () => {
-    const r = sim([chrom(), sumia], [step(rout('chapter-12', [])), step(rout('chapter-13', []), { children: [lucina] }), step(rout('end', []), { deploy: 3 })]);
+    const r = married([chrom(), sumia], [step(rout('chapter-12', [])), step(rout('chapter-13', []), { children: [lucina] }), step(rout('end', []), { deploy: 3 })]);
     const u = lucinaOf(r)!;
     expect(u).toMatchObject({ className: 'Lord', level: { median: 10 } });
     expect(STATS.map((s) => u.stats[s].median)).toEqual([38, 18, 7, 25, 25, 23, 13, 11]);
@@ -206,7 +209,7 @@ describe('children join at paralogue entry (#187)', () => {
   it('reads her parents’ stats as simulated in the run by then', () => {
     // Ten level-ups for Chrom before Chapter 13 with HP growing every time: HP 62, a third of 10 more for Lucina.
     const grower = chrom({ level: 1, bonus: 0, growths: Object.fromEntries(STATS.map((s) => [s, (s === 'hp' ? 100 : 0) - greatLord[s]])) as Record<Stat, number> });
-    const r = sim([grower, sumia], [step(rout('chapter-12', [dummy(50, 10)]), { forced: ['chrom'] }), step(rout('chapter-13', []), { children: [lucina] }), empty]);
+    const r = married([grower, sumia], [step(rout('chapter-12', [dummy(50, 10)]), { forced: ['chrom'] }), step(rout('chapter-13', []), { children: [lucina] }), empty]);
     expect(r.units.find((u) => u.id === 'chrom')!.stats.hp.median).toBe(62);
     expect(lucinaOf(r)!.stats.hp.median).toBe(Math.floor((62 - 23 + (46 - 19) + 12) / 3) + 16);
   });
@@ -217,14 +220,14 @@ describe('children join at paralogue entry (#187)', () => {
     const kjelle: ChildRecruit = { id: 'kjelle', name: 'Kjelle', parents: ['sully', 'stahl'], growths: totals({}), modifiers: zero, weapons: [{ item: itemByName('Iron Lance')! }], role: 'lead' };
     const maps = [step(rout('paralogue-8', []), { children: [kjelle] }), step(rout('end', []), { deploy: 3 })];
     const run = (more: Partial<RunSimInput>) => engine.simulateRuns({ army: [sully, stahl], maps, difficulty: 'normal', ...more }, 1, 1);
-    const open = run({ cleared: ['chapter-13'], married: ['sully', 'stahl'] });
+    const open = run({ cleared: ['chapter-13'], married: [['sully', 'stahl']] });
     expect(open.maps[0]).toMatchObject({ reach: 1, noDeath: 1 });
     const k = open.units.find((u) => u.id === 'kjelle')!;
     expect(k.className).toBe('Knight');
     // Both would pass Outdoor Fighter: Sully keeps it, Stahl passes his next skill up.
     expect(k.skills).toEqual(['Defence +2', 'Indoor Fighter', 'Outdoor Fighter', 'Discipline']);
     // Sully unmarried, or Chapter 13 not cleared: the paralogue isn't open, isn't played, and Kjelle never joins.
-    for (const closed of [run({ cleared: ['chapter-13'] }), run({ married: ['sully', 'stahl'] })]) {
+    for (const closed of [run({ cleared: ['chapter-13'] }), run({ married: [['sully', 'stahl']] })]) {
       expect(closed.maps[0]).toMatchObject({ reach: 0, noDeath: undefined, lineup: undefined });
       expect(closed.units.map((u) => u.id)).not.toContain('kjelle');
     }
@@ -232,7 +235,7 @@ describe('children join at paralogue entry (#187)', () => {
     const lissa = hero({ id: 'lissa', name: 'Lissa', gender: 'F', classId: 'priest', stats: stats(20, 2, 8, 6, 8, 12, 3, 8), weapons: [] });
     const owain: ChildRecruit = { id: 'owain', name: 'Owain', parents: ['lissa', 'lonqu'], growths: totals({}), modifiers: zero, weapons: [{ item: itemByName('Steel Sword')! }], role: 'lead' };
     const p5 = [step(rout('paralogue-5', []), { children: [owain] }), empty];
-    const withLissa = (cleared: string[]) => engine.simulateRuns({ army: [lissa, hero()], maps: p5, difficulty: 'normal', cleared, married: ['lissa', 'lonqu'] }, 1, 1);
+    const withLissa = (cleared: string[]) => engine.simulateRuns({ army: [lissa, hero()], maps: p5, difficulty: 'normal', cleared, married: [['lissa', 'lonqu']] }, 1, 1);
     expect(withLissa(['chapter-13']).units.map((u) => u.id)).not.toContain('owain');
     expect(withLissa(['chapter-13', 'chapter-14']).units.map((u) => u.id)).toContain('owain');
   });

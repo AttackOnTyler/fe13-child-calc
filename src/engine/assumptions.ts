@@ -38,6 +38,9 @@ import {
   SPEC_MAP_SIMULATION,
   SF_STAVES,
   SF_CLASS_BASES,
+  RESEARCH_SUPPORT_GROWTH,
+  SF_SUPPORT_BASICS,
+  JP_SUPPORTS,
   type Assumed,
   type Citation,
 } from '../game-data/citations';
@@ -82,6 +85,12 @@ type AssumptionValues = {
    * of them. A staff reaches a pair with the share of them within its user's Mov + range.
    */
   'army-spread': readonly number[];
+  /** Support points past a rank whose conversation isn't viewed yet: they stop at its threshold (one rank a map), or carry. */
+  'support-past-threshold': 'clamp' | 'bank';
+  /** What an unmarried Chrom needs with Olivia, with no C with anyone, to marry her at the end of Chapter 11. */
+  'chrom-wedding-olivia': 'two-points' | 'rank-c';
+  /** Chrom's end-of-Chapter 11 tie order, after the fewest points to the next rank. */
+  'chrom-wedding-tie-order': 'sf' | 'jp';
 };
 
 export type AssumptionId = keyof AssumptionValues;
@@ -391,6 +400,51 @@ export const ASSUMPTION_REGISTRY: { readonly [K in AssumptionId]: AssumptionDef<
     parse: parseDistances,
     affects: 'whether a staff reaches a pair in the map simulation (each map’s no-death chance)',
   }),
+  'support-past-threshold': entry({
+    id: 'support-past-threshold',
+    label: 'Support points past an unviewed rank',
+    why:
+      'A rank rises only when its conversation is viewed between maps. No source says whether points earned past its threshold before then ' +
+      'are kept, but four point to the clamp: the Seed of Trust can’t be used when it would have no effect, the save stores a pending rank ' +
+      'as exactly its threshold, and players report a map’s gain stopping at the next rank. So a pair rises at most one rank a map, and a ' +
+      'slow pair takes 8 maps together to S (fast or medium 7). The bank carries the excess over (a slow pair 6 maps).',
+    sources: [RESEARCH_SUPPORT_GROWTH, SF_SUPPORT_BASICS],
+    default: 'clamp',
+    alternatives: [{ label: 'Bank: the excess carries past the threshold', value: 'bank' }],
+    input: 'choice',
+    format: (v) => (v === 'clamp' ? 'Stop at the threshold (one rank a map at most)' : 'Carry over (several ranks a map)'),
+    parse: (raw) => (raw === 'clamp' || raw === 'bank' ? raw : undefined),
+    affects: 'support growth in the simulated runs, and how many maps together each rank takes',
+  }),
+  'chrom-wedding-olivia': entry({
+    id: 'chrom-wedding-olivia',
+    label: 'Chrom marrying Olivia at the end of Chapter 11',
+    why:
+      'An unmarried Chrom marries the candidate he has the highest rank with at the end of Chapter 11. Olivia joins in Chapter 11 itself, ' +
+      'so she rarely has a rank. SF says he marries her with at least 2 points with her and no C with anyone else; the JP 2ch wiki says ' +
+      'she needs a C like the others. The app records ranks, not points, so only the simulation reads it.',
+    sources: [SF_SUPPORT_BASICS, JP_SUPPORTS, RESEARCH_SUPPORT_GROWTH],
+    default: 'two-points',
+    alternatives: [{ label: 'A C with her (JP 2ch wiki)', value: 'rank-c' }],
+    input: 'choice',
+    format: (v) => (v === 'two-points' ? '2 points with her and no C with anyone (SF)' : 'A C with her (JP 2ch wiki)'),
+    parse: (raw) => (raw === 'two-points' || raw === 'rank-c' ? raw : undefined),
+    affects: 'who Chrom marries at the end of Chapter 11 in the simulated runs',
+  }),
+  'chrom-wedding-tie-order': entry({
+    id: 'chrom-wedding-tie-order',
+    label: 'Chrom’s end-of-Chapter 11 tie order',
+    why:
+      'When Chrom’s highest rank is shared, SF gives it to the candidate with the fewest points to the next rank, then Sumia > Sully > ' +
+      'Maribelle > Robin > Olivia; the JP 2ch wiki’s mirror gives, probably, Sumia > Maribelle > Sully > Olivia > Robin (F).',
+    sources: [SF_SUPPORT_BASICS, JP_CHILDREN_MIRROR, RESEARCH_SUPPORT_GROWTH],
+    default: 'sf',
+    alternatives: [{ label: 'Sumia > Maribelle > Sully > Olivia > Robin (JP 2ch wiki)', value: 'jp' }],
+    input: 'choice',
+    format: (v) => (v === 'sf' ? 'Sumia > Sully > Maribelle > Robin > Olivia (SF)' : 'Sumia > Maribelle > Sully > Olivia > Robin (JP 2ch wiki)'),
+    parse: (raw) => (raw === 'sf' || raw === 'jp' ? raw : undefined),
+    affects: 'who Chrom marries at the end of Chapter 11 in the simulated runs',
+  }),
 };
 
 export const ASSUMPTION_IDS = Object.keys(ASSUMPTION_REGISTRY) as AssumptionId[];
@@ -425,7 +479,7 @@ export const isDefaultValue = (id: AssumptionId, value: unknown) =>
 export type BlindSpotId = 'one-worst-attacker' | 'equal-share-of-actions' | 'rally-reaches-every-pair' | 'likely-result' | 'bosses-hold';
 
 /** The run simulation's own blind spots (#186): how it walks the army from one map to the next. */
-export type RunBlindSpotId = 'promotes-at-cap' | 'lead-takes-exp' | 'plan-marriages-made' | 'kit-as-recorded';
+export type RunBlindSpotId = 'promotes-at-cap' | 'lead-takes-exp' | 'supports-from-pair-combats' | 'kit-as-recorded';
 
 export type BlindSpot = {
   readonly id: BlindSpotId | RunBlindSpotId;
@@ -501,12 +555,14 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
     touches: ['flawless'],
   },
   {
-    id: 'plan-marriages-made',
-    label: 'The plan’s marriages are made in time',
+    id: 'supports-from-pair-combats',
+    label: 'Supports grow only from combats paired',
     why:
-      'A child joins at its paralogue once its fixed parent is married. Supports aren’t simulated yet, so a marriage the plan makes counts as made ' +
-      'by the time the paralogue is reached, and a child whose fixed parent the plan leaves unmarried never joins.',
-    lean: 'high',
+      'A pair’s support points come from the exchanges it fights paired up, and the plan pairs each couple it marries until they marry. ' +
+      'Fighting beside an ally, Dual Strikes and Guards, staves and Dances on the partner, Seeds of Trust, event tiles and Barracks talks ' +
+      'add nothing, and a unit’s tied pairs go by combats, then name, not by its support list. A marriage is made when the pair reaches S; a ' +
+      'child whose fixed parent isn’t married by its paralogue doesn’t join.',
+    lean: 'low',
     touches: ['flawless'],
   },
   {
