@@ -146,8 +146,9 @@ export function simulateCeiling(input: RunSimInput, seed: number, runs: number, 
   const army = new Map<RosterUnit, ArmyUnit>();
   const before = input.maps.slice(0, last);
   for (const a of [...input.army, ...before.flatMap((m) => [...m.joining, ...m.later]), ...end.joining, ...end.mapOnly]) if (!army.has(a.id)) army.set(a.id, a);
-  // Children read on a map before the endpoint have joined by then; one read on the endpoint joins after it.
-  const children = before.flatMap((m) => m.children ?? []);
+  // Children read on a map before the endpoint have joined by then; one read on the endpoint joins after it. A map lists
+  // one recruit per spouse the fixed parent can have (#188): the ceiling takes the plan's (recorded or planned) couple.
+  const children = planChildren(before.flatMap((m) => m.children ?? []), [...(input.married ?? []), ...(input.couples ?? [])]);
   for (const c of children) {
     const u = army.has(c.id) ? undefined : childUnit(c, army, assumptions);
     if (u) army.set(u.id, u);
@@ -175,7 +176,7 @@ export function simulateCeiling(input: RunSimInput, seed: number, runs: number, 
     chance = sum / n;
   }
   blindSpots.add('kit-as-recorded');
-  if (children.length) blindSpots.add('plan-marriages-made');
+  if (children.length) blindSpots.add('supports-from-pair-combats');
   return {
     key: end.key,
     label: end.label,
@@ -186,4 +187,12 @@ export function simulateCeiling(input: RunSimInput, seed: number, runs: number, 
     unarmed: input.maps.filter((m) => !armed(m.map)).map((m) => m.label),
     blindSpots: [...blindSpots],
   };
+}
+
+/** Each child once, as the recruit whose parents are a couple of the plan; otherwise its first listed recruit. */
+function planChildren(recruits: readonly ChildRecruit[], couples: readonly (readonly [RosterUnit, RosterUnit | 'maiden'])[]): ChildRecruit[] {
+  const wed = (a: RosterUnit, b: RosterUnit | 'maiden') => couples.some(([x, y]) => (x === a && y === b) || (x === b && y === a));
+  const byChild = new Map<ChildRecruit['id'], ChildRecruit>();
+  for (const r of recruits) if (!byChild.has(r.id) || (wed(...r.parents) && !wed(...byChild.get(r.id)!.parents))) byChild.set(r.id, r);
+  return [...byChild.values()];
 }
