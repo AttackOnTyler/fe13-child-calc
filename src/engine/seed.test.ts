@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, addEntry, createEngine, rescoreSeed, runFromRoster, withRun, withSpouse, type Plan, type RosterUnit } from './index';
+import { EMPTY_ROSTER, addEntry, createEngine, editEntry, latestEntry, rescoreSeed, runFromRoster, withRun, withSpouse, type Plan, type RosterUnit } from './index';
 import { SKILLS } from '../game-data/skills';
 
 /**
@@ -173,7 +173,7 @@ describe('a plan’s roadmap (#198)', () => {
 });
 
 describe('the stepping call (#198, #199)', () => {
-  // Two maps left: each run is cheap. Small run counts: the search's logic is tested on a made-up objective (search.test.ts).
+  // Two maps left: each run is cheap. Small run counts: a full search to convergence takes minutes even here.
   const all = engine.mapOrder(fresh).steps.map((s) => s.map);
   const late = all.slice(0, -2).reduce((r, m, i) => addEntry(r, m, i + 1), fresh);
   const small = { seed: 3, runs: 2, cap: 4, display: 3 } as const;
@@ -222,8 +222,15 @@ describe('the stepping call (#198, #199)', () => {
     expect(adopted).toEqual(frozen);
     for (const p of s.proposals) {
       expect(p.gain).toBeGreaterThan(0);
+      // Kept only when the gain beats twice the paired standard error (the ± is 95%: 1.96 of them).
+      expect(p.gain).toBeGreaterThan((2 * p.margin) / 1.96);
+      expect(p.edits.length).toBeGreaterThan(0);
       expect(p.plan).not.toEqual(adopted);
     }
+    // Best first.
+    expect(s.proposals.map((p) => p.gain)).toEqual([...s.proposals.map((p) => p.gain)].sort((a, b) => b - a));
+    // A set of marriages is pruned only when its ceiling is below the best found.
+    for (const p of s.pruned) expect(p.ceiling).toBeLessThan(p.best);
     // A search on another adopted plan starts again from it.
     const other = s.closeCalls[0]?.plan ?? adopted;
     expect(step(0, { plan: other, cursor: s.cursor }).best).toBe(other);
@@ -236,6 +243,31 @@ describe('the stepping call (#198, #199)', () => {
     expect(provisional).toMatchObject({ runs: 2, settled: false });
     const settled = engine.editCost({ run: late, plan: adopted, edited, seed: 3, budget: 8, runs: 2, cap: 4 });
     expect(settled).toMatchObject({ runs: 4, settled: true, verdict: 'close' });
+  });
+
+  it('re-scores the best plan’s chance only on a step that changed it', () => {
+    let s = step(4);
+    expect(s.chance).toBeDefined();
+    for (let i = 0; i < 4; i++) {
+      const next = step(4, { cursor: s.cursor });
+      expect(next.chance !== undefined).toBe(JSON.stringify(next.best) !== JSON.stringify(s.best));
+      s = next;
+    }
+  });
+
+  it('resumes from a plain-JSON cursor exactly as from the live one', () => {
+    const first = step(4);
+    expect(step(4, { cursor: JSON.parse(JSON.stringify(first.cursor)) })).toEqual(step(4, { cursor: first.cursor }));
+  });
+
+  it('settles a clearly worse edit’s cost: the endpoint fought by Chrom and Robin alone', () => {
+    // Every unit recorded at Lv 10 with the same fair stats, so the plan's chance isn't nil.
+    const fair = { hp: 50, str: 26, mag: 26, skl: 28, spd: 28, lck: 22, def: 22, res: 20 };
+    const run = editEntry(late, latestEntry(late)!.id, (s) => ({ ...s, units: Object.fromEntries(Object.entries(s.units).map(([u, x]) => [u, { ...x!, level: 10, stats: x!.stats && fair }])) }), 1);
+    const plan = engine.seedPlan(run);
+    const endpoint = plan.roadmap.order.at(-1)!;
+    const thin = { ...plan, roadmap: { ...plan.roadmap, lineups: [...plan.roadmap.lineups.filter((l) => l.key !== endpoint), { key: endpoint, pairs: [], solo: ['chrom', 'robin'] as RosterUnit[] }] } };
+    expect(engine.editCost({ run, plan, edited: thin, seed: 3, budget: 32, runs: 2, cap: 16 })).toMatchObject({ verdict: 'worse', settled: true });
   });
 });
 
