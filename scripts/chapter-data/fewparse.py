@@ -118,18 +118,24 @@ def all_tabs(text):
     return res
 
 
+def marked(text, found):
+    """Unit rows after FEW's `{{ChapUnitReinf}}` divider are its reinforcements (#184): flagged `__reinf`."""
+    m = re.search(r'\{\{\s*ChapUnitReinf', text)
+    return [{**p, '__reinf': True} if m and span[0] > m.start() else p for p, span in found]
+
+
 def by_difficulty(text, name):
     """Templates named `name`, per difficulty: from a Tab, or one untabbed set for every difficulty."""
     out = {}
     t = tabs(text)
     if t:
         for label, content in t:
-            found = templates(content, name)
+            found = marked(content, templates(content, name))
             for d in diffs_of(label):
                 if found:
-                    out.setdefault(d, []).extend(p for p, _ in found)
+                    out.setdefault(d, []).extend(found)
     if not out:
-        found = [p for p, _ in templates(text, name)]
+        found = marked(text, templates(text, name))
         if found:
             for d in DIFFS:
                 out[d] = found
@@ -235,6 +241,8 @@ def enemy_group(p):
     notes = clean(p.get('notes'))
     if notes:
         g['notes'] = notes
+    if p.get('__reinf'):
+        g['reinforcement'] = True
     return g
 
 
@@ -332,6 +340,9 @@ def parse(path, meta):
         for d, v in by_difficulty(fsec.split('Lunatic+ mode')[0], 'ChapUnitCellFE13').items():
             rec['enemies'].setdefault(d, []).extend({**enemy_group(p), 'faction': clean(faction)} for p in v)
             enemy_sec += fsec
+    # NPCs (#184): the third party's units, each difficulty's rows as FEW lists them.
+    npcs = by_difficulty(section(text, 'NPC data', 3), 'ChapUnitCellFE13')
+    rec['npcs'] = {d: [enemy_group(p) for p in v] for d, v in npcs.items()}
     reinf = section(text, 'Reinforcements', 4) or section(text, 'Reinforcements', 3)
     rec['reinforcements'] = bullets(reinf)
     pool = re.search(r'Lunatic\+ mode([\s\S]*?)(?:\n=|\{\{div col end\}\}|\Z)', text)
