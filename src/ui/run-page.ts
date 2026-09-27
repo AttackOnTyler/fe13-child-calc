@@ -980,7 +980,7 @@ export function flawlessSection(ctx: HeadlineContext, inInbox = false): HTMLElem
           solving = undefined;
           // The worker is free: the Robin alternatives (#201) may start, and the stress tests (#211).
           setTimeout(() => {
-            whenIdle?.();
+            whenIdle.free();
             askStress(ctx, run, (p) => show(solvedReadout(ctx.engine, run, p, pins)));
           }, 0);
         }
@@ -1155,8 +1155,30 @@ export function robinReadout(engine: Engine, run: Run, step: RobinStep | undefin
  * keeps them, recording a map starts them again.
  */
 let robinState: { key: string; step?: RobinStep; cursor?: RobinCursor; asked: string[]; noRobin: boolean; running: boolean } | undefined;
-/** Called when the worker is free (the headline's search is done): the Robin alternatives wait for it. */
-let whenIdle: (() => void) | undefined;
+/**
+ * What waits for the worker to be free (the headline's search done): the Robin alternatives. One-shot: `free` hands
+ * the worker over once, so a start that ran from it no longer reads as waiting.
+ */
+export const whenIdle = {
+  next: undefined as (() => void) | undefined,
+  wait(fn: (() => void) | undefined) {
+    this.next = fn;
+  },
+  waiting(fn: () => void) {
+    return this.next === fn;
+  },
+  free() {
+    const fn = this.next;
+    this.next = undefined;
+    fn?.();
+  },
+};
+
+/** The Robin section's Compare button: its words, and whether it's disabled (comparing, done, or waiting its turn). */
+export function robinButton(s: { readonly running: boolean; readonly waiting: boolean; readonly step?: Pick<RobinStep, 'converged'> }): { text: string; disabled: boolean } {
+  const text = s.running ? 'Comparing…' : s.waiting ? 'Waiting for the search…' : s.step ? 'Carry on' : 'Compare Robins';
+  return { text, disabled: s.running || !!s.step?.converged || s.waiting };
+}
 /** The Robin section on the page now, and how to draw it again: the worker's replies land on it, whichever render drew it. */
 let robinView: { el: HTMLElement; draw: () => HTMLElement } | undefined;
 const redraw = () => {
@@ -1213,9 +1235,8 @@ function robinSection(ctx: RunContext, inInbox = false): HTMLElement | null {
     redraw();
   };
   const ask = () => {
-    whenIdle = undefined;
-    if (solving) whenIdle = start;
-    else start();
+    whenIdle.wait(solving ? start : undefined);
+    if (!solving) start();
     redraw();
   };
   const draw = () => {
@@ -1223,6 +1244,7 @@ function robinSection(ctx: RunContext, inInbox = false): HTMLElement | null {
     for (const c of r.marks?.comparisons ?? []) setComparison(c.key, c.comparison, c.plans);
     const locked = robinLock(run);
     const chosen = robinToLock(run, solveState(run)?.progress);
+    const button = robinButton({ running: state.running, waiting: whenIdle.waiting(start), ...(state.step ? { step: state.step } : {}) });
     return h(
       'details',
       // Kept open or closed across redraws; in the inbox it starts open (Robin is the first decision).
@@ -1232,7 +1254,7 @@ function robinSection(ctx: RunContext, inInbox = false): HTMLElement | null {
         'div',
         { class: 'row small' },
         h('span', { class: 'muted' }, r.status),
-        h('button', { class: 'mini', title: 'Work out the Robin alternatives in the background (after the headline’s search)', disabled: !!(state.running || state.step?.converged || whenIdle === start), onclick: ask }, state.running ? 'Comparing…' : whenIdle === start ? 'Waiting for the search…' : state.step ? 'Carry on' : 'Compare Robins'),
+        h('button', { class: 'mini', title: 'Work out the Robin alternatives in the background (after the headline’s search)', disabled: button.disabled, onclick: ask }, button.text),
         locked ? h('button', { class: 'mini ghost', title: 'Unlock Robin: every option is solved again', onclick: () => ctx.setRun(withoutPins(run, [locked])) }, 'Unlock') : null,
       ),
       r.lock ? h('p', { class: 'small' }, h('b', {}, ...whyText(r.lock, r.marks?.lock ?? []))) : null,
@@ -1282,7 +1304,7 @@ function robinSection(ctx: RunContext, inInbox = false): HTMLElement | null {
   // The headline's search took the worker (one request at a time): carry on from the cursor once it's free.
   if (state.running && solving) {
     state.running = false;
-    whenIdle = start;
+    whenIdle.wait(start);
   }
   // In the inbox, Robin is the first decision: the alternatives start on their own once the worker is free.
   if (inInbox && !state.step && !state.running) ask();
