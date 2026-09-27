@@ -563,7 +563,7 @@ export type BlindSpotId =
   | 'door-keys';
 
 /** The run simulation's own blind spots (#186): how it walks the army from one map to the next. */
-export type RunBlindSpotId = 'class-change-at-cap' | 'lead-takes-exp' | 'supports-from-pair-combats' | 'kit-as-recorded' | 'side-goal-actions' | 'kit-by-matchups-won';
+export type RunBlindSpotId = 'class-change-at-cap' | 'exp-from-likely-play' | 'supports-from-pair-combats' | 'kit-as-recorded' | 'side-goal-actions' | 'kit-by-matchups-won';
 
 export type BlindSpot = {
   readonly id: BlindSpotId | RunBlindSpotId;
@@ -631,12 +631,14 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
     touches: ['flawless'],
   },
   {
-    id: 'lead-takes-exp',
-    label: 'Each fight’s EXP goes to its lead',
+    id: 'exp-from-likely-play',
+    label: 'Each fight’s EXP from its likely play',
     why:
-      'A fight gives its lead kill EXP when the foe falls and damage EXP otherwise. A back’s Dual Strike EXP, the Lunatic cut for a foe ' +
-      'fought again and again, and staff and Dance EXP aren’t counted yet, so backs and healers grow slower than in play.',
-    lean: 'low',
+      'Each fight gives EXP as it plays at its likely result: kill EXP when the foe more likely falls than not, damage EXP when it lives ' +
+      'through the front’s strikes (the Lunatic cut from its 4th engagement included). A paired back gets its half damage EXP weighted by ' +
+      'the chance it lands a Dual Strike, never a kill; a partner beside the front in Attack Stance earns none, and Rally none. The EXP ' +
+      'priority decides who lands kills, with every foe in reach of every unit: a unit set to wait can always chip instead.',
+    lean: 'either',
     touches: ['flawless'],
   },
   {

@@ -42,7 +42,7 @@ describe('the flawless chance readout (#186)', () => {
     expect(r.detail).toContain('from Chapter 25 to Endgame (2 maps)');
     expect(r.detail).toContain('over 3 simulated runs; the ± is the simulation error (95%)');
     expect(r.detail).toContain('Rests on: one worst attacker per pair (may read high)');
-    expect(r.detail).toContain('class changes at the level cap or when needed (either way), each fight’s EXP goes to its lead (may read low)');
+    expect(r.detail).toContain('class changes at the level cap or when needed (either way), each fight’s EXP from its likely play (either way)');
     expect(r.rows).toHaveLength(2);
     expect(r.rows[0]).toMatch(/^Chapter 25: /);
     expect(r.roadmap?.title).toMatch(/^Roadmap: [0-9]+ milestones?/);

@@ -62,8 +62,9 @@ import { editCost, solveStep, type EditCost, type EditCostInput, type PinCost, t
 import { keptPins, planEdits } from './solve/edits';
 import { brokenPins, livePins, pinKey, runPins, withPin, withoutPins } from './solve/pins';
 import { FORCED_UNITS, childrenOf, coveredLineup, hasUtility, planWithout, reservesStep, withoutUnits, worthStep, type ReservesInput, type ReservesStep, type WorthInput, type WorthStep, type WorthVariant } from './solve/worth';
-import type { Plan, PlanLineup, PlanPin, PlanRobin } from './solve/plan';
+import type { Plan, PlanLineup, PlanPin, PlanPriority, PlanRobin } from './solve/plan';
 import { beforeMapItems, itemPlanOf, type BeforeMapItem, type ItemPlan, type ItemUsed } from './item-plan';
+import { defaultPriorities, expForecast, suggestChanges, suggestedChanges, type ExpForecast, type ExpForecastOptions, type SuggestedChange } from './exp-forecast';
 import { BLIND_SPOTS, type BlindSpot } from './assumptions';
 import { matchBuilds, matchTemplate, shownMatch, templateSummary, templatesFor } from './builds';
 import type { SkillId } from '../game-data/skills';
@@ -137,9 +138,9 @@ export { coverage, deployCount, deployMax, deployRoleOf, forcedOn, suggestDeploy
 export { childParalogueGates, isChildParalogue, type ChildParalogueGate, type ParalogueGateState } from './child-paralogues';
 export { type MapWaves, type Wave, type WaveGroup } from './waves';
 export { type ArmySpread, type SimItem } from './sim/sustain';
-export { EXPOSURE_RISK, MAX_TURNS, type MapPlay, type MapPlayInput, type SimAct, type SimChase, type SimFight, type SimFoeGroup, type SimGroup, type SimMap, type SimStance, type SimTurn, type SimUnit, type SimUnitTally, type SimWave } from './sim/map-play';
+export { EXPOSURE_RISK, MAX_TURNS, type ExpPriority, type MapPlay, type MapPlayInput, type SimAct, type SimChase, type SimFight, type SimFoeGroup, type SimGroup, type SimMap, type SimStance, type SimTurn, type SimUnit, type SimUnitTally, type SimWave } from './sim/map-play';
 export { simLineup, type SimMapOptions } from './sim/sim-map';
-export { levelCap, type ArmyUnit, type ChildRecruit, type GoldSpread, type RunSim, type RunSimInput, type RunSimMap, type RunSimMapResult, type ShoppingLine, type ShoppingStop, type StatSpread, type UnitForecast, type SupportForecast, type MarriageForecast, type RunSimSideGoal, type SideGoalForecast, type ItemSource, type ItemFind, type SimItemUse, type ItemUseForecast } from './sim/run-sim';
+export { levelCap, type ArmyUnit, type ChildRecruit, type GoldSpread, type RunSim, type RunSimInput, type RunSimMap, type RunSimMapResult, type ShoppingLine, type ShoppingStop, type StatSpread, type UnitForecast, type SupportForecast, type MarriageForecast, type RunSimSideGoal, type SideGoalForecast, type ItemSource, type ItemFind, type SimItemUse, type ItemUseForecast, type MapExp, type UnitExp, type MilestoneCheck, type MilestoneChance } from './sim/run-sim';
 export { KIT_FORGE_MT, VULNERARY_VALUE, type MapUpkeep } from './sim/upkeep';
 export { SIDE_GOAL_IDS, chaseByDefault, sideGoalById, withSideGoalPin, withSideGoalSecured, type SideGoal, type SideGoalChoice, type SideGoalDecision, type SideGoalId, type SideGoalPart, type SideGoalPlan, type SideGoalRecord } from './side-goals';
 export { rewardsValue, withRenown, type RenownAhead, type RenownStop, type RunRenown } from './renown';
@@ -153,7 +154,8 @@ export type { KeepPin, MarriagePin, SideGoalPin, SpanPin, SpanPosition } from '.
 export { NO_PREPARATIONS } from '../game-data/chapters';
 export { STAT_BOOSTERS, TONICS, statItemGain } from '../game-data/items';
 export { hasPreparations, heldKind, statOfItem, runItemPins, withItemPin, withItemsUsed, type BeforeMapItem, type HeldKind, type ItemIdle, type ItemPlan, type ItemPlanRow, type ItemUsed, type PlanSource, type TonicBuys } from './item-plan';
-export type { CloseCall, ItemPin, Plan, PlanItem, PlanLineup, PlanPin, PlanProposal, PlanRobin, PlanSeal, Position, PrunedComp, Roadmap, SolveCursor, Wishlist, WishlistChild, WishlistReserve, WishlistUnit } from './solve/plan';
+export type { CloseCall, ItemPin, Plan, PlanItem, PlanLineup, PlanPin, PlanPriority, PlanProposal, PlanRobin, PlanSeal, Position, PrunedComp, Roadmap, SolveCursor, Wishlist, WishlistChild, WishlistReserve, WishlistUnit } from './solve/plan';
+export { ON_TRACK, milestoneCheck, type ExpForecast, type ExpForecastOptions, type SuggestedChange, type SuggestedPin } from './exp-forecast';
 export type { EndpointCoverage, SeedOptions } from './solve/seed';
 export type { ClassMilestone, Milestone, MilestonePoint, RecruitMilestone, SealSource, SkillMilestone, SupportMilestone, SupportWindow } from './milestones';
 export { EDIT_COST_BUDGET, EDIT_KINDS, SEARCH_RUNS, rescoreSeed, SOLVE_SECONDS, STEP_BUDGET, type EditCost, type EditCostInput, type EditKind, type PinCost, type PinCostInput, type SolveStep, type SolveStepInput } from './solve/step';
@@ -680,6 +682,23 @@ export type Engine = {
    * this map" list of `plan`: the plan as it stood before the entry (the seed of the run up to the entry before it).
    */
   itemsUsed(run: Run, entry: string, plan: Plan | undefined): { readonly recorded: boolean; readonly items: readonly ItemUsed[] };
+  /**
+   * A plan's EXP forecast (#195), from its flawless chance's own simulation with the EXP priorities played (the
+   * plan's, `options.priorities`, or the default from its milestones): per map, each unit's expected EXP, level range
+   * and kills per foe group (`exp`), and each milestone's chance with the median level there (`milestones`, by id).
+   * Costs one flawless chance.
+   */
+  expForecast(run: Run, plan: Plan, options?: ExpForecastOptions): ExpForecast;
+  /** The default EXP priorities (#195): high from the join map to the deadline of a milestone that needs levels before the endpoint. */
+  defaultPriorities(run: Run, plan: Plan): readonly PlanPriority[];
+  /**
+   * The suggested changes for one of a plan's milestones (#195), by id: one span pin each from the unit's join map to
+   * the deadline, ranked (reaching 80% without breaking another milestone, fewest extra turns first; then those that
+   * break one, flagged; then those that fall short). Costs one flawless chance per candidate.
+   */
+  suggestedChanges(run: Run, plan: Plan, milestone: string, options?: ExpForecastOptions): readonly SuggestedChange[];
+  /** `suggestedChanges` over a simulation input whose `milestones` include the one named. */
+  suggestChanges(input: RunSimInput, milestone: string, seed: number, runs: number): readonly SuggestedChange[];
 };
 
 /** One combat for `Engine.combatExp`. */
@@ -2019,5 +2038,9 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       return { pins: lifting, cost: c.gain, margin: c.margin, runs: c.runs, verdict: c.verdict, settled: c.settled };
     },
     roadmapLineups: (run, plan, options = {}) => lineupsOf(run, plan, options.seed ?? FLAWLESS_SEED, options.roleOf),
+    expForecast: (run, plan, options) => expForecast(run, plan, assumptions, options),
+    defaultPriorities: (run, plan) => defaultPriorities(milestones(run, plan, assumptions), flawlessInput(run, assumptions, undefined, undefined, plan).input),
+    suggestedChanges: (run, plan, milestone, options) => suggestedChanges(run, plan, milestone, assumptions, options),
+    suggestChanges: (input, milestone, seed, runs) => suggestChanges(input, milestone, seed, runs, assumptions),
   };
 }

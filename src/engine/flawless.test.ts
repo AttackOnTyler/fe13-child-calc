@@ -159,7 +159,7 @@ expect(r.maps.map((x) => x.key)).toEqual(['a', 'b']);    for (const x of r.maps)
     expect(few.margin).toBeGreaterThan(0);
     expect(many.margin).toBeLessThan(few.margin);
     expect(Math.abs(many.chance - few.chance)).toBeLessThan(few.margin + many.margin);
-    expect(many.blindSpots).toEqual(expect.arrayContaining(['one-worst-attacker', 'class-change-at-cap', 'lead-takes-exp']));
+    expect(many.blindSpots).toEqual(expect.arrayContaining(['one-worst-attacker', 'class-change-at-cap', 'exp-from-likely-play']));
   });
 
   it('keeps a couple the plan still has to marry fighting together, so its support grows (#184)', () => {

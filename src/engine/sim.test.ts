@@ -499,3 +499,52 @@ describe('the third party, forced units and joins (#184)', () => {
     expect(play.noDeath).toBeGreaterThan(0.5);
   });
 });
+
+describe('the EXP priority (#195)', () => {
+  // A foe that never fights back: the hero's round (10 twice) fells it; a squire (10 once, no double) only halves it.
+  const dummy: Foe = { ...brute, name: 'Dummy', stats: { ...brute.stats, hp: 20 }, weapon: undefined };
+  const squire = (name: string): Fighter => ({ ...hero, name, stats: { ...hero.stats, spd: 0 } });
+  const kills = (play: ReturnType<typeof engine.playMap>) => Object.fromEntries(Object.entries(play.units).map(([id, t]) => [id, t.kills.Dummy ?? 0]));
+  const playerFights = (play: ReturnType<typeof engine.playMap>) => play.log.map((t) => t.fights.filter((f) => f.phase === 'player').map((f) => f.lead));
+
+  it('has a lower unit chip the foe into a higher unit’s kill range, so the higher lands the kills', () => {
+    const map = rout([group({ ...dummy, count: 3 })]);
+    const lineup = [solo(squire('First')), solo(squire('Second'))];
+    // Normal priority: the first squire chips, the second finishes each foe.
+    expect(kills(engine.playMap({ map, lineup }, 1))).toEqual({ first: 0, second: 3 });
+    const ranked = engine.playMap({ map, lineup, priority: { first: 'high' } }, 1);
+    expect(kills(ranked)).toEqual({ first: 3, second: 0 });
+    expect(playerFights(ranked)).toEqual([['second', 'first'], ['second', 'first'], ['second', 'first']]);
+  });
+
+  it('leaves a kill a higher unit still to act can take: the lower unit waits', () => {
+    const map = rout([group({ ...dummy, count: 2 })]);
+    const lineup = [solo(hero), solo(squire('Squire'))];
+    expect(kills(engine.playMap({ map, lineup }, 1))).toEqual({ hero: 2, squire: 0 });
+    const ranked = engine.playMap({ map, lineup, priority: { squire: 'high' } }, 1);
+    // Turn 1 the hero takes the foe the squire can't fell and the squire halves the other; turn 2 the hero waits.
+    expect(kills(ranked)).toEqual({ hero: 1, squire: 1 });
+    expect(playerFights(ranked)).toEqual([['hero', 'squire'], ['squire']]);
+  });
+
+  it('never buys a unit an extra action: one fight a turn on player phase, whatever its priority', () => {
+    const map = rout([group({ ...dummy, count: 6 })]);
+    const lineup = [solo(hero), solo(squire('Squire')), solo(squire('Page'))];
+    const priorities: Readonly<Partial<Record<string, 'high' | 'low'>>>[] = [{}, { squire: 'high' }, { hero: 'low', page: 'high' }];
+    for (const priority of priorities) {
+      const play = engine.playMap({ map, lineup, priority }, 1);
+      for (const turn of playerFights(play)) expect(new Set(turn).size).toBe(turn.length);
+      expect(play.ended).toBe('rout');
+    }
+  });
+
+  it('records what EXP reads from each fight: whether the front dealt damage, the foe’s engagements, a back’s Dual Strike chance', () => {
+    const tough: Foe = { ...dummy, stats: { ...dummy.stats, hp: 50 } };
+    const play = engine.playMap({ map: rout([group(tough)]), lineup: [{ lead: unit(squire('Squire')), back: unit(hero), support: 'C' }], bonds: [['squire', 'hero']] }, 1);
+    const fights = play.log.flatMap((t) => t.fights);
+    expect(fights.map((f) => f.engagement)).toEqual(fights.map((_, i) => i + 1));
+    expect(fights.every((f) => f.dealt)).toBe(true);
+    expect(fights[0]!.dualStrike).toBeGreaterThan(0);
+    expect(fights[0]!.dualStrike).toBeLessThan(1);
+  });
+});
