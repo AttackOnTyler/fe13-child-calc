@@ -34,8 +34,11 @@
  * can lose, sold at the next armory, and Paralogue 13's; nothing else is sold) and sure free seals. At an armory stop (a
  * map whose preparations have an open armory) it buys down the shopping list in priority order: rebuys (an item whose
  * uses left are below what the plan's projection spends of it before the next stop: the last stop before it would run
- * dry), seals (a Master Seal at its armory price only when a promotion needs one and the run holds none), then at the
- * endpoint the endpoint kit (`endpointKit`, trimmed by `buyDown` when gold is short). A purchase the run can't afford is
+ * dry; the nearest weapon of its kind sold when the item itself isn't), seals (a Master Seal at its armory price only
+ * when a promotion needs one and the run holds none), then on the way the weapons and Vulneraries that arm the map's
+ * lineup better (the projection's `kitFor` off the shelf, within the ranks `wields` reads, keeping the gold the plan's
+ * seals still need: `arms-on-the-way`), and at the endpoint the endpoint kit (`endpointKit`, trimmed by `buyDown` when
+ * gold is short). A purchase the run can't afford is
  * skipped; a weapon at 0 uses is gone, a rebuy restores it unforged. Each stop's purchases are reported with the share of
  * runs that made them (`shopping`), and each map's gold at its end as a spread.
  *
@@ -81,7 +84,7 @@ import { addPoints, mapSupportGains, pairThresholds, pointsOfRank, rankOf } from
 import { playMap, type ExpPriority, type MapPlay, type MapPlayInput, type SimChase, type SimFoeGroup, type SimGroup, type SimMap, type SimUnit } from './map-play';
 import { createRng, runSeed, type Rng } from './random';
 import type { SimItem } from './sustain';
-import { STAT_BOOSTERS, TONICS, statItemGain, type GameItem } from '../../game-data/items';
+import { STAT_BOOSTERS, TONICS, itemByName, statItemGain, type GameItem } from '../../game-data/items';
 import type { StockItem } from '../supply';
 import { buyDown, endpointKit, forgedWeapon, freshWeapon, mapUpkeep, type KitPiece, type MapUpkeep } from './upkeep';
 
@@ -436,8 +439,12 @@ export type GoldSpread = { readonly low: number; readonly median: number; readon
 
 /** One purchase at an armory stop (#190), over the runs that reach the stop with nobody lost. */
 export type ShoppingLine = {
-  /** Why: a rebuy of an item running dry, a seal a promotion needs, a tonic the item plan drinks (#193), or a piece of the endpoint kit. */
-  readonly kind: 'rebuy' | 'seal' | 'tonic' | 'kit';
+  /**
+   * Why: a rebuy of an item running dry (or the nearest weapon of its kind sold, when it isn't), a seal a promotion
+   * needs, a tonic the item plan drinks (#193), a weapon or Vulnerary re-arming the lineup for this map on the way
+   * (`arms`), or a piece of the endpoint kit.
+   */
+  readonly kind: 'rebuy' | 'seal' | 'tonic' | 'arms' | 'kit';
   readonly action: 'buy' | 'forge';
   readonly item: string;
   /** Who it's for (its id and name). */
@@ -514,7 +521,7 @@ export type RunSim = {
 };
 
 /** The run simulation's own blind spots (see BLIND_SPOTS): what it simplifies between maps. */
-const RUN_BLIND_SPOTS: readonly RunBlindSpotId[] = ['class-change-at-cap', 'exp-from-likely-play', 'supports-from-pair-combats', 'side-goal-actions', 'kit-by-matchups-won'];
+const RUN_BLIND_SPOTS: readonly RunBlindSpotId[] = ['class-change-at-cap', 'exp-from-likely-play', 'supports-from-pair-combats', 'side-goal-actions', 'kit-by-matchups-won', 'arms-on-the-way'];
 
 /** Special classes (Dancer, Villager, Taguel, Manakete, the DLC classes) level to 30; base and advanced to 20. */
 export const levelCap = (tier: ClassTier): number => (tier === 'special' ? 30 : 20);
@@ -613,6 +620,23 @@ const weaponId = (w: Weapon) => WEAPON_IDS.get(w) ?? (WEAPON_IDS.set(w, ++nextWe
 
 /** An item's full uses: none (unbreakable) is endless. */
 const fullUses = (item: GameItem) => item.uses ?? Infinity;
+
+/** Weapon ranks, lowest first (the item data's `rank`). */
+const RANKS = ['E', 'D', 'C', 'B', 'A', 'S'];
+
+/**
+ * Whether a unit can wield a weapon off the shelf (`weapon-rank-by-level`): the simulation keeps no weapon EXP, so a
+ * unit's rank in a kind is read as the best it holds there, or what its level and tier suggest when that's higher
+ * (a base class D, C from Lv 10; an advanced or special class B, A from Lv 10).
+ */
+function wields(u: Live, item: GameItem): boolean {
+  const need = RANKS.indexOf(item.rank ?? '');
+  if (need < 0 || item.only) return false;
+  const byLevel = (u.tier === 'base' ? 1 : 3) + (u.level >= 10 ? 1 : 0);
+  let held = -1;
+  for (const g of u.gear) if (g.weapon.item.kind === item.kind) held = Math.max(held, RANKS.indexOf(g.weapon.item.rank ?? ''));
+  return need <= Math.max(held, byLevel);
+}
 
 /** Its fighting weapons and items from its gear and stock (#190). */
 function refresh(u: Live) {
@@ -916,23 +940,41 @@ function childOf(state: RunState, c: ChildRecruit, assumptions: Assumptions): Li
  * A run's shopping at an armory stop besides seals (#190): `need` is what the plan's projection spends of a unit's item
  * from this map to the next stop, `kit` the endpoint kit when this is the endpoint's stop.
  */
-type Shop = { readonly need: (unit: RosterUnit, item: string) => number; readonly kit?: () => readonly KitPiece[] };
+type Shop = {
+  readonly need: (unit: RosterUnit, item: string) => number;
+  /** This stop's kit: the endpoint's (forged, every gold piece it can use), or a stop's on the way (off the shelf). */
+  readonly kit?: () => readonly KitPiece[];
+  readonly endpoint?: boolean;
+};
 
 /** Rebuys: an item whose uses left are below what it will spend before the next stop, when sold here. */
 function rebuy(state: RunState, step: RunSimMap, shop: Shop) {
   for (const u of state.army.values()) {
     let changed = false;
     const receipt = (item: GameItem, cost: number): Receipt => ({ kind: 'rebuy', action: 'buy', item: item.name, unit: u.base.id, name: u.base.name, cost });
+    const substitutes: { weapon: Weapon; uses: number }[] = [];
     for (const g of u.gear) {
       const item = g.weapon.item;
       const need = shop.need(u.base.id, item.name);
-      const price = item.uses && need > 0 && g.uses < need ? priceIn(step, item.name) : undefined;
-      if (price === undefined || !pay(state, receipt(item, price))) continue;
+      if (!item.uses || need <= 0 || g.uses >= need) continue;
+      const price = priceIn(step, item.name);
+      if (price === undefined) {
+        // Not sold here (a Killing Edge, a Silver Lance early on): a careful player buys the nearest weapon of its kind
+        // the armory sells and the unit can wield, rather than field it unarmed.
+        const sub = substituteFor(u, item, step);
+        if (sub && !u.gear.some((x) => x.uses > 0 && x.weapon.item === sub.item) && pay(state, receipt(sub.item, sub.cost))) {
+          substitutes.push({ weapon: freshWeapon(sub.item), uses: fullUses(sub.item) });
+          changed = true;
+        }
+        continue;
+      }
+      if (!pay(state, receipt(item, price))) continue;
       // A copy bought joins the one held (the convoy merges them); a broken one comes back unforged.
       if (g.uses <= 0) g.weapon = freshWeapon(item);
       g.uses += item.uses!;
       changed = true;
     }
+    u.gear.push(...substitutes);
     for (const s of u.stock) {
       const need = shop.need(u.base.id, s.item.name);
       const price = s.item.uses && need > 0 && s.uses < need ? priceIn(step, s.item.name) : undefined;
@@ -944,17 +986,36 @@ function rebuy(state: RunState, step: RunSimMap, shop: Shop) {
   }
 }
 
-/** The endpoint kit, bought down with the gold left (`buyDown`): pieces for units the run has, forges of weapons it holds. */
-function buyKit(state: RunState, pieces: readonly KitPiece[]) {
+/**
+ * The weapon a unit gets for one running dry that no armory here sells: of the same kind, one it can wield, the closest
+ * in Mt at or below the one it replaces (else the weakest above it), the cheaper on a tie.
+ */
+function substituteFor(u: Live, item: GameItem, step: RunSimMap): { item: GameItem; cost: number } | undefined {
+  let best: { item: GameItem; cost: number } | undefined;
+  const mt = item.mt ?? 0;
+  const rank = (x: GameItem) => ((x.mt ?? 0) <= mt ? 1000 + (x.mt ?? 0) : -(x.mt ?? 0));
+  for (const s of step.armory ?? []) {
+    const it = itemByName(s.item);
+    if (!it || it.kind !== item.kind || s.cost === null || !it.uses || !wields(u, it)) continue;
+    if (!best || rank(it) > rank(best.item) || (rank(it) === rank(best.item) && s.cost < best.cost)) best = { item: it, cost: s.cost };
+  }
+  return best;
+}
+
+/**
+ * A kit bought down with the gold left above `reserve` (`buyDown`): pieces for units the run has, forges of weapons it
+ * holds.
+ */
+function buyKit(state: RunState, pieces: readonly KitPiece[], reserve = 0, kind: 'arms' | 'kit' = 'kit') {
   const holds = (u: Live, p: KitPiece) => p.action === 'buy' || p.after !== undefined || u.gear.some((g) => g.uses > 0 && g.weapon.item === p.item);
   const usable = pieces.map((p) => {
     const u = state.army.get(p.unit as RosterUnit);
     return u && holds(u, p) ? p : { ...p, cost: Infinity };
   });
-  for (const i of buyDown(usable, state.gold)) {
+  for (const i of buyDown(usable, Math.max(0, state.gold - reserve))) {
     const p = usable[i]!;
     const u = state.army.get(p.unit as RosterUnit)!;
-    pay(state, { kind: 'kit', action: p.action, item: p.item.name, unit: u.base.id, name: u.base.name, cost: p.cost });
+    pay(state, { kind, action: p.action, item: p.item.name, unit: u.base.id, name: u.base.name, cost: p.cost });
     if (p.action === 'buy' && p.item.kind === 'item') u.stock.push({ item: p.item, uses: p.item.uses ?? 1 });
     else if (p.action === 'buy') u.gear.push({ weapon: freshWeapon(p.item), uses: fullUses(p.item) });
     else {
@@ -1089,8 +1150,15 @@ function beforeMap(state: RunState, step: RunSimMap, at: number, assumptions: As
   if (shop && stop) rebuy(state, step, shop);
   changeClasses(state, step, at, assumptions['class-change-internal-level']);
   if (prep) drinkTonics(state, step, assumptions);
-  if (shop?.kit && stop) buyKit(state, shop.kit());
+  // On the way, the gold the plan's seals still to buy need stays in hand.
+  if (shop?.kit && stop) buyKit(state, shop.kit(), shop.endpoint ? 0 : sealReserve(state), shop.endpoint ? 'kit' : 'arms');
   return new Map(step.mapOnly.map((a) => [a.id, liveOf(a)]));
+}
+
+/** The gold kept for the plan's class changes still to make that the seals held don't cover. */
+function sealReserve(state: RunState): number {
+  const left = state.classChanges.length - state.changed.size;
+  return Math.max(0, left - state.masterSealsHeld - state.secondSealsHeld) * SEAL_PRICE;
 }
 
 /**
@@ -1313,7 +1381,8 @@ const NOBODY: Deployment = { max: 0, deployed: [], pairs: [], solo: [], forced: 
 type Plan = {
   readonly lineup: (i: number) => Deployment;
   readonly wear: (i: number) => MapUpkeep;
-  readonly kit: () => readonly KitPiece[];
+  /** The kit an armory stop buys (the endpoint's, or a stop's on the way); empty elsewhere. */
+  readonly kit: (i: number) => readonly KitPiece[];
 };
 
 const NO_WEAR: MapUpkeep = new Map();
@@ -1322,8 +1391,12 @@ const NO_WEAR: MapUpkeep = new Map();
  * The endpoint kit over the projection's army and the plan's endpoint lineup (`endpointKit`): its leads' weapons and
  * forges, and a Vulnerary for each unit it fields.
  */
-function kitFor(state: RunState, step: RunSimMap, d: Deployment): KitPiece[] {
-  const leads = [...d.pairs.map((p) => [p.lead, p.back] as const), ...d.solo.map((u) => [u, undefined] as const)].flatMap(([lead, back]) => {
+function kitFor(state: RunState, step: RunSimMap, d: Deployment, endpoint = true): KitPiece[] {
+  // On the way, every unit fielded is armed for the map (a back may fight alone), off the shelf and within its ranks.
+  const fronts = endpoint
+    ? [...d.pairs.map((p) => [p.lead, p.back] as const), ...d.solo.map((u) => [u, undefined] as const)]
+    : [...d.pairs.flatMap((p) => [[p.lead, p.back] as const, ...(p.back ? [[p.back, undefined] as const] : [])]), ...d.solo.map((u) => [u, undefined] as const)];
+  const leads = fronts.flatMap(([lead, back]) => {
     const u = state.army.get(lead);
     if (!u) return [];
     const b = back ? state.army.get(back) : undefined;
@@ -1334,7 +1407,8 @@ function kitFor(state: RunState, step: RunSimMap, d: Deployment): KitPiece[] {
     return u ? [{ unit: id as string, items: u.items }] : [];
   });
   const foes = [...step.map.foes, ...step.map.waves.flatMap((w) => w.groups)].map((g) => g.foe);
-  return endpointKit({ leads, deployed, foes, stock: step.armory ?? [] });
+  if (endpoint) return endpointKit({ leads, deployed, foes, stock: step.armory ?? [] });
+  return endpointKit({ leads, deployed, foes, stock: step.armory ?? [], forge: false, wields: (unit, item) => { const u = state.army.get(unit as RosterUnit); return !!u && wields(u, item); } });
 }
 
 /**
@@ -1350,7 +1424,7 @@ function planner(input: RunSimInput, seed: number, assumptions: Assumptions): Pl
   const done: Deployment[] = [];
   const wear: MapUpkeep[] = [];
   const last = input.maps.length - 1;
-  let kit: KitPiece[] = [];
+  const kits: (readonly KitPiece[])[] = [];
   const walk = (i: number) => {
     while (done.length <= i) {
       const k = done.length;
@@ -1359,6 +1433,7 @@ function planner(input: RunSimInput, seed: number, assumptions: Assumptions): Pl
       if (!extra) {
         done.push(NOBODY);
         wear.push(NO_WEAR);
+        kits.push([]);
         continue;
       }
       const pools = new Map<Foe, readonly string[]>(step.map.foes.map((g) => [g.foe, g.pool ?? []]));
@@ -1391,7 +1466,10 @@ function planner(input: RunSimInput, seed: number, assumptions: Assumptions): Pl
         const fixed = pinnedLineup(greedy, rules, kept);
         if (rulesBroken(greedy, rules, step.forced, here) > 0) d = plannedDeployment(fixed, step.forced, max, here, rank);
       }
-      if (k === last && step.armory?.length) kit = kitFor(state, step, d);
+      // An armory stop's kit (#190; on the way, the realism pass): the projection buys it all (its gold is unlimited),
+      // so the lineups after it are worked out armed as the runs will be.
+      kits[k] = step.armory?.length ? kitFor(state, step, d, k === last) : [];
+      if (k !== last && kits[k]!.length) buyKit(state, kits[k]!);
       const lineup = lineupOf(state, d, extra, interner);
       const play = playMap(playInput(state, input, k, lineup), runSeed(seed, k));
       wear.push(mapUpkeep(step.map, play, lineup, null, assumptions['tome-miss-use']));
@@ -1402,7 +1480,7 @@ function planner(input: RunSimInput, seed: number, assumptions: Assumptions): Pl
   return {
     lineup: (i) => (walk(i), done[i]!),
     wear: (i) => (walk(i), wear[i]!),
-    kit: () => (walk(last), kit),
+    kit: (i) => (walk(i), kits[i]!),
   };
 }
 
@@ -1535,7 +1613,7 @@ function recordStop(s: StopTally, gold: number, receipts: readonly Receipt[] | n
   }
 }
 
-const KIND_ORDER: Readonly<Record<ShoppingLine['kind'], number>> = { rebuy: 0, seal: 1, tonic: 2, kit: 3 };
+const KIND_ORDER: Readonly<Record<ShoppingLine['kind'], number>> = { rebuy: 0, seal: 1, tonic: 2, arms: 3, kit: 4 };
 
 /** A stop's shopping list: its lines in priority order (rebuys, seals, kit), the likeliest first within each. */
 function shoppingStop(step: RunSimMap, s: StopTally): ShoppingStop {
@@ -1648,7 +1726,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
       const step = input.maps[i]!;
       const arriving = state.gold;
       state.receipts = [];
-      const extra = beforeMap(state, step, i, assumptions, { need: need(i), ...(i === last ? { kit: plan.kit } : {}) });
+      const extra = beforeMap(state, step, i, assumptions, { need: need(i), kit: () => plan.kit(i), endpoint: i === last });
       const receipts = state.receipts;
       state.receipts = null;
       check(state, i, 'start');

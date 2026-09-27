@@ -149,6 +149,37 @@ describe('gold and the shopping list in the simulated runs (#190)', () => {
     expect(sim([worn], maps(), 500).shopping[1]!.lines).toEqual([]);
   });
 
+  it('replaces a weapon running dry that the armory doesn’t sell with the nearest one of its kind it does (realism pass)', () => {
+    // A Killing Edge (Mt 9) with five uses; the armory sells swords but no Killing Edge: the Steel Sword (Mt 8, rank C
+    // like the Edge) rather than the Silver Sword (rank B, past what a Lv 5 Myrmidon holding a C sword can wield).
+    const worn = hero({ weapons: [{ item: item('Killing Edge') }], weaponUses: [5] });
+    const armory = sells(['Iron Sword', 520], ['Steel Sword', 1000], ['Silver Sword', 1410]);
+    const maps = [step(rout('a', [dummy(4)])), step(rout('b', [dummy(4)]), { armory }), step(rout('c', [dummy(4)]))];
+    const r = sim([worn], maps, 3000);
+    expect(r.shopping[0]!.lines.filter((l) => l.kind === 'rebuy')).toEqual([{ kind: 'rebuy', action: 'buy', item: 'Steel Sword', unit: 'lonqu', name: 'Hero', cost: 1000, share: 1 }]);
+    // Armed on map c: it routs it.
+    expect(r.maps[2]!.turns).toBe(4);
+  });
+
+  it('arms the lineup on the way with weapons off the shelf within its rank, keeping gold for the plan’s seals (realism pass)', () => {
+    // 44 HP: an Iron Sword's round (20 a hit, doubled) leaves it standing; a Steel Sword's (23, doubled) fells it.
+    const tough = dummy(2, 44);
+    const armory = sells(['Steel Sword', 1000], ['Silver Sword', 1410], ['Vulnerary', 300]);
+    const maps = [step(rout('a', [tough]), { armory }), step(rout('end', []))];
+    const veteran = hero({ level: 10 });
+    const lines = sim([veteran], maps, 5000).shopping[0]!.lines;
+    expect(lines.map((l) => [l.kind, l.action, l.item])).toEqual(
+      expect.arrayContaining([
+        ['arms', 'buy', 'Steel Sword'],
+        ['arms', 'buy', 'Vulnerary'],
+      ]),
+    );
+    // A Lv 10 base class holding a D sword wields up to C: no Silver Sword, and nothing forged on the way.
+    expect(lines.some((l) => l.item === 'Silver Sword' || l.action === 'forge')).toBe(false);
+    // The Myrmidon's promotion still needs a Master Seal (2,500G): with 3,000G only the Vulnerary fits under it.
+    expect(sim([veteran], maps, 3000).shopping[0]!.lines.map((l) => l.item)).toEqual(['Vulnerary']);
+  });
+
   it('buys a Master Seal at its price only when the run holds none, where an armory sells it, with gold enough', () => {
     const capped = hero({ level: 20 });
     const maps = (armory = sells(['Master Seal', 2500])) => [step(rout('a', []), { armory }), step(rout('end', []))];

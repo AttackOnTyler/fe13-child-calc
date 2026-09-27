@@ -11,12 +11,13 @@ describe('the shopping list (#190)', () => {
   const chrom = { class: 'Great Lord', level: 15, promoted: true, reclassed: false, exp: 0, stats: { hp: 60, str: 35, mag: 5, skl: 35, spd: 35, lck: 35, def: 30, res: 20 }, skills: [], supports: [] };
 
   it('lists the next armory stop’s buys, with why, what they cost and the chance a run makes each', () => {
-    // One use left on Chrom’s only weapon: it runs dry on Chapter 25, whose armory sells another.
+    // One use left on Chrom’s only weapon: it runs dry on Chapter 25, whose armory sells a Silver Lance that wins the
+    // Great Lord more matchups there (the realism pass re-arms the lineup on the way), so that's what the runs buy.
     const run = atLatest(played(all.slice(0, -2)), (s) => ({ ...s, gold: 3000, units: { chrom: { ...chrom, inventory: [{ item: 'Iron Sword', uses: 1 }] } } }));
     const s = shoppingReadout(engine, run, { runs: 2 });
     expect(s.title).toBe('Shopping list: Chapter 25');
     expect(s.note).toMatch(/^Gold on arrival: 3,000G\. What the simulated runs buy here, in priority order: rebuys/);
-    expect(s.rows[0]).toEqual(['Chrom', 'Buy Iron Sword (runs dry before the next armory)', '520G', '100%']);
+    expect(s.rows[0]).toEqual(['Chrom', 'Buy Silver Lance (arms the lineup for this map)', '1,560G', '100%']);
   });
 
   it('says when nothing is to be bought: no gold, or nothing left to play', () => {

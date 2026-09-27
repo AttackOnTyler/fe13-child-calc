@@ -256,7 +256,7 @@ const levelText = (x: number) => `Lv ${Math.floor(x + 1e-9)}${Math.round((x % 1)
 /** A small chance of a death, as the threats read it: "0.4%", "under 0.1%", "0%". */
 const riskText = (p: number) => (p <= 0 ? '0%' : p < 0.001 ? 'under 0.1%' : `${(p * 100).toFixed(1)}%`);
 
-const WHY: Readonly<Record<ShoppingLine['kind'], string>> = { rebuy: 'runs dry before the next armory', seal: 'for a promotion', tonic: 'the item plan’s tonic for this map', kit: 'endpoint kit' };
+const WHY: Readonly<Record<ShoppingLine['kind'], string>> = { rebuy: 'runs dry before the next armory', seal: 'for a promotion', tonic: 'the item plan’s tonic for this map', arms: 'arms the lineup for this map', kit: 'endpoint kit' };
 
 const listOf = (xs: readonly string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
@@ -266,7 +266,7 @@ function shoppingOf(r: RunSim & { readonly goldUnrecorded?: boolean }): { readon
   if (!stop) return { title: 'Shopping list', note: r.maps.length ? 'No simulated run reaches an open armory with nobody lost.' : 'The endpoint is recorded: nothing left to buy for.', rows: [] };
   const note =
     `Gold on arrival: ${goldRange(stop.gold)}${r.goldUnrecorded ? ' (your latest entry records no gold, read as none)' : ''}. ` +
-    'What the simulated runs buy here, in priority order: rebuys for items that would run dry before the next armory, a seal when a promotion needs one and none is held, the item plan’s tonics for this map, then at the endpoint the endpoint kit, dropping what wins fewest matchups per gold when gold runs short. Only Bullion is sold; merchants are random, so their stock isn’t counted.';
+    'What the simulated runs buy here, in priority order: rebuys for items that would run dry before the next armory, a seal when a promotion needs one and none is held, the item plan’s tonics for this map, the weapons (off the shelf, within each unit’s rank) and Vulneraries that arm this map’s lineup better, keeping the gold the plan’s seals still need, then at the endpoint the endpoint kit, dropping what wins fewest matchups per gold when gold runs short. Only Bullion is sold; merchants are random, so their stock isn’t counted.';
   const rows = stop.lines.map((l) => [l.name, `${l.action === 'forge' ? `Forge ${l.item} to +${KIT_FORGE_MT} Mt` : `Buy ${l.item}`} (${WHY[l.kind]})`, goldText(l.cost), chanceText(l.share, { miss: 'skipped', make: 'made' })]);
   return { title: `Shopping list: ${stop.label}`, note, rows };
 }
