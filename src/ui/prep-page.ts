@@ -79,6 +79,8 @@ import { chanceText } from './chance';
 import { lossText, mapChecks } from './inbox';
 import { adoptedOf, openLosses } from '../engine';
 import { goldRange, goldText, milestoneShort, pinText, solveState } from './run-page';
+import { startSolve } from './solve-client';
+import { FLAWLESS_SEED, type Assumptions } from '../engine';
 import { CHILD_UNITS } from '../game-data/children';
 import { ROBIN_GROWTHS } from '../game-data/robin';
 import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
@@ -97,6 +99,8 @@ export type PrepContext = {
   readonly setFoe: (i: number) => void;
   /** The adopted plan (#204; the seed until one is adopted), as the Run view's flawless chance reads it. */
   readonly plan?: () => Plan;
+  /** The resolved assumptions the engine was built with: with them, the solve's worker works the forecast out. */
+  readonly assumptions?: Assumptions;
 };
 
 /** A recorded unit as a fighter (the engine's: the flawless chance builds its army the same way). */
@@ -1080,13 +1084,39 @@ function body(ctx: PrepContext, plan: Plan, forecast: ExpForecast): HTMLElement 
   return h('div', { class: 'prep-cols' }, main, aside);
 }
 
+/** The run whose forecast the worker is working out, and the page waiting for it (the latest drawn). */
+let forecastAsked: Run | undefined;
+let waiting: { run: Run; ctx: PrepContext; slot: HTMLElement } | undefined;
+
 export function prepPage(ctx: PrepContext): HTMLElement[] {
   const { engine, run } = ctx;
   const m = engine.maps().find((x) => x.id === ctx.map)!;
   const difficulty = run.roster.run.difficulty ?? 'normal';
   const done = FORECASTS.get(run);
   const slot = done ? body(ctx, done.plan, done.forecast) : h('p', { class: 'muted' }, 'Playing the plan’s lineup for this map…');
-  if (!done)
+  // The forecast is a full run of simulations (seconds on the Main story): the worker works it out, off the page, from
+  // the adopted plan the Run view's solve started from (else the worker adopts one), and the page draws it when it lands.
+  // Asked once per run: a redraw while it's worked out (a foe picked) only moves where it lands.
+  if (!done) waiting = { run, ctx, slot };
+  const held = solveState(run)?.plan;
+  const asked =
+    !done &&
+    ctx.assumptions &&
+    (forecastAsked === run ||
+      startSolve(
+        { kind: 'forecast', assumptions: ctx.assumptions, run, seed: FLAWLESS_SEED, ...(held ? { plan: held } : {}), pins: run.pins ?? [] },
+        (reply) => {
+          if (reply.kind !== 'forecast') return;
+          const f = { plan: reply.plan, forecast: reply.forecast };
+          FORECASTS.set(run, f);
+          if (forecastAsked === run) forecastAsked = undefined;
+          const w = waiting;
+          if (w?.run === run && w.slot.isConnected) w.slot.replaceWith(body(w.ctx, f.plan, f.forecast));
+        },
+        'prep',
+      ));
+  if (asked) forecastAsked = run;
+  if (!done && !asked)
     setTimeout(() => {
       if (!slot.isConnected) return;
       let f = FORECASTS.get(run);

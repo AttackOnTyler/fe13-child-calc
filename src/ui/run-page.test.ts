@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, addEntry, createEngine, dismissMigrationNote, editEntry, exportRun, latestEntry, migrateRun, recordMarriage, runFromRoster, withPin, withRenown, withRun, withShopLine, withSideGoalPin, withSideGoalSecured, withSpouse, withItemPin, withItemsUsed, unitName, readUnits, withRobinLock, type Plan, type PlanRobin, type RobinStep, type Route, type RosterUnit, type Run, type Snapshot, type UnitSnapshot } from '../engine';
+import { EMPTY_ROSTER, addEntry, createEngine, dismissMigrationNote, editEntry, exportRun, latestEntry, migrateRun, recordMarriage, runFromRoster, withPin, withRenown, withRun, withShopLine, withSideGoalPin, withSideGoalSecured, withSpouse, withItemPin, withItemsUsed, unitName, readUnits, withRobinLock, type Ceiling, type Engine, type Plan, type PlanRobin, type RobinStep, type Route, type RosterUnit, type Run, type Snapshot, type UnitSnapshot } from '../engine';
 import { childStatsNote, flawlessReadout, robinReadout, heldText, itemPlanReadout, itemsUsedReadout, mapOrderReadout, migrationNoteReadout, solvedReadout, parseHeldText, parseSupportsText, roadmapReadout, shoppingReadout, sideGoalPlanReadout, sideGoalsReadout, supportsText } from './run-page';
 import { chanceText } from './chance';
 
@@ -126,6 +126,28 @@ describe('the flawless chance readout (#186)', () => {
     expect(r.text).toMatch(new RegExp(` · ceiling ${chanceText(ceiling.chance!).replace(/[.()]/g, '\\$&')}$`));
     expect(r.detail).toContain('The ceiling is the chance no unit dies on Apotheosis (secret route)');
     expect(r.detail).not.toContain('simulated yet');
+  });
+
+  it('draws the solve’s replies without simulating on the page: the ceiling comes with the reply (fresh Full route, Lunatic+)', () => {
+    // A fresh visitor's run: Full route, Lunatic+ Classic, Robin not picked. The worker replied every ~30 ms and each
+    // reply's readout worked out the ceiling again on the page (~0.4 s): the page blocked for minutes.
+    const run = runFromRoster(withRun(EMPTY_ROSTER, { route: 'full-route', difficulty: 'lunatic-plus', mode: 'classic' }));
+    const best = engine.seedPlan(run);
+    const chance = engine.flawlessChance(run, { runs: 1, plan: best, seed: 9 });
+    const ceiling = { label: 'Apotheosis (secret route)', chance: 0.25, unarmed: [] } as unknown as Ceiling;
+    const SIMULATES = ['ceiling', 'seedPlan', 'adoptedPlan', 'flawlessChance', 'expForecast', 'readings', 'solveStep'];
+    const called: string[] = [];
+    const page = new Proxy(engine, { get: (e, k) => (SIMULATES.includes(k as string) ? () => void called.push(k as string) : e[k as keyof Engine]) });
+    const progress = { best, start: best, chance, ceiling, proposals: [], closeCalls: [], pruned: [], done: false, converged: false };
+    const at = performance.now();
+    const r = solvedReadout(page, run, progress, []);
+    expect(performance.now() - at).toBeLessThan(500);
+    expect(called).toEqual([]);
+    expect(r.text).toMatch(/ · ceiling 25\.0% · searching…$/);
+    // Before the worker has one, there's no ceiling yet: the page doesn't work it out.
+    const { ceiling: _, ...none } = progress;
+    expect(solvedReadout(page, run, none, []).text).toMatch(/ · no ceiling yet · searching…$/);
+    expect(called).toEqual([]);
   });
 });
 

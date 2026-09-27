@@ -13,8 +13,9 @@
  * the headline's plan under each stressed blind spot's bad case (#211). It holds no logic: the search,
  * its state (the cursor) and its budgets are the engine's. Started by `solve-client.ts`, which terminates it to stop a solve.
  */
-import { EDIT_COST_BUDGET, READING_SECONDS, SOLVE_SECONDS, SUGGEST_RUNS, createEngine, type Assumptions, type Engine, type Plan, type RuleStake, type Run, type SolveCursor, type SuggestedChange, type UnitEdit } from '../engine';
+import { EDIT_COST_BUDGET, READING_SECONDS, SOLVE_SECONDS, SUGGEST_RUNS, createEngine, type Assumptions, type Ceiling, type Engine, type FlawlessChance, type Plan, type RuleStake, type Run, type SolveCursor, type SuggestedChange, type UnitEdit } from '../engine';
 import type { SolveReply, SolveRequest } from './solve-client';
+import { pacer } from './pace';
 
 const scope = self as unknown as { onmessage: ((e: MessageEvent<SolveRequest>) => void) | null; postMessage(m: SolveReply): void };
 let built: { key: string; engine: Engine } | undefined;
@@ -30,11 +31,26 @@ scope.onmessage = ({ data: m }) => {
     const pinned = engine.pins(m.run, m.pins).length > 0;
     const end = performance.now() + m.seconds * 1000;
     let cursor = m.cursor;
+    const post = pacer();
+    // Steps between posts aren't posted: the chance is carried from the last step that worked one out.
+    let chance: FlawlessChance | undefined;
+    // The best plan's ceiling, worked out here once per best plan (by content: a step hands back an equal copy) and run
+    // count: the page never works it out.
+    let ceiling: { key: string; value: Ceiling | undefined } | undefined;
+    const ceilingOf = (plan: Plan, runs: number) => {
+      const key = `${runs}:${JSON.stringify(plan)}`;
+      if (ceiling?.key !== key) ceiling = { key, value: engine.ceiling(m.run, { runs, plan }) };
+      return ceiling.value;
+    };
     for (;;) {
       const step = engine.solveStep({ run: m.run, ...(m.plan ? { plan: m.plan } : {}), ...(m.pins ? { pins: m.pins } : {}), budget: m.budget, seed: m.seed, ...(cursor ? { cursor } : {}) });
       cursor = step.cursor;
+      chance = step.chance ?? chance;
       const searched = step.converged || performance.now() >= end;
-      scope.postMessage({ id: m.id, kind: 'step', step, searched, done: false });
+      if (post(searched)) {
+        const c = chance && chance.maps.length ? ceilingOf(step.best, chance.runs) : undefined;
+        scope.postMessage({ id: m.id, kind: 'step', step: { ...step, chance }, ...(c ? { ceiling: c } : {}), searched, done: false });
+      }
       if (!searched) continue;
       // The readings are the adopted plan's (#206): the plan the search started from, which proposals never replace.
       const adopted = step.cursor.search?.start ?? step.best;
@@ -62,9 +78,10 @@ scope.onmessage = ({ data: m }) => {
     const common = { run: m.run, plan: m.plan, ...(m.pins ? { pins: m.pins } : {}), budget: m.budget, seed: m.seed };
     let worth = engine.unitWorth({ ...common, ...(m.worth ? { cursor: m.worth } : {}) });
     let reserves = m.reserves && engine.reserves({ ...common, budget: 0, cursor: m.reserves });
+    const post = pacer();
     for (;;) {
       const done = !!reserves?.converged || performance.now() >= end;
-      scope.postMessage({ id: m.id, kind: 'idle', worth, reserves, done });
+      if (post(done)) scope.postMessage({ id: m.id, kind: 'idle', worth, reserves, done });
       if (done) return;
       if (!worth.converged) worth = engine.unitWorth({ ...common, cursor: worth.cursor });
       else reserves = engine.reserves({ ...common, ...(reserves ? { cursor: reserves.cursor } : {}) });
@@ -75,11 +92,12 @@ scope.onmessage = ({ data: m }) => {
     const end = performance.now() + m.seconds * 1000;
     const common = { run: m.run, ...(m.pins ? { pins: m.pins } : {}), budget: m.budget, seed: m.seed, ...(m.solve ? { solve: m.solve } : {}), ...(m.noRobin ? { noRobin: true } : {}) };
     let cursor = m.cursor;
+    const post = pacer();
     for (;;) {
       const step = engine.robinAlternatives({ ...common, ...(cursor ? { cursor } : {}) });
       cursor = step.cursor;
       const done = step.converged || performance.now() >= end;
-      scope.postMessage({ id: m.id, kind: 'robin', step, done });
+      if (post(done)) scope.postMessage({ id: m.id, kind: 'robin', step, done });
       if (done) return;
     }
   }
@@ -99,6 +117,11 @@ scope.onmessage = ({ data: m }) => {
       scope.postMessage({ id: m.id, kind: 'stress', stress: c, chance: engine.stressChance(m.run, m.plan, c, { seed: m.seed, runs: m.runs }), done: i === m.cases.length - 1 }),
     );
     return;
+  }
+  // The preparation page's forecast (#207): the same call the page made, off the page.
+  if (m.kind === 'forecast') {
+    const plan = m.plan ?? engine.adoptedPlan(m.run, m.pins ? { pins: m.pins } : {});
+    return void scope.postMessage({ id: m.id, kind: 'forecast', plan, forecast: engine.expForecast(m.run, plan), done: true });
   }
   if (m.kind === 'edits') return unitEdits(engine, m);
   if (m.kind === 'checks') return checks(engine, m);
@@ -244,8 +267,9 @@ function readings(engine: Engine, m: { readonly id: number; readonly run: Run; r
   let read = engine.readings(m.run, plan, { ...options, forecast });
   const suggestions: Record<string, readonly SuggestedChange[]> = {};
   const end = performance.now() + READING_SECONDS * 1000;
+  const post = pacer();
   for (const id of read.pending) {
-    scope.postMessage({ id: m.id, kind: 'readings', readings: read, done: false });
+    if (post(false)) scope.postMessage({ id: m.id, kind: 'readings', readings: read, done: false });
     if (performance.now() >= end) break;
     suggestions[id] = engine.suggestedChanges(m.run, plan, id, { ...options, runs: SUGGEST_RUNS });
     read = engine.readings(m.run, plan, { ...options, forecast, suggestions, stats: read.stats });

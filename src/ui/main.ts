@@ -2334,6 +2334,7 @@ function renderParts(parts: readonly Part[]): void {
           : view === 'run' && preparing
           ? prepPage({
               engine,
+              assumptions,
               run,
               setRun,
               map: preparing,
