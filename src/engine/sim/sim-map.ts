@@ -7,13 +7,21 @@
  * one after another as the field clears, on the normal or the secret route. Waves set off by a talk or a first defeat
  * aren't played; their labels are kept. Lunatic+ reads Lunatic's tables, and each foe group without recorded skills
  * draws its two extra skills from the map's pool.
+ *
+ * The field at the start leaves out the reinforcements FEW lists in the same table (#184) and any foe it notes as gone
+ * before turn 1 (Chapter 9's Gangrel and Aversa); a foe that leaves on a later turn is marked with it. The third party
+ * and the recruits (#184, `thirdParty`): an NPC the army must keep alive (Chapter 6's Emmeryn), mid-map arrivals, talk
+ * recruits (Chapter 9's Libra and Tharja), NPCs who join if they survive, and a foe a talk sends away.
  */
-import { MAPS, lunaticPlusPoolFor, type ChapterData, type ChapterDifficulty } from '../../game-data/chapters';
+import { MAPS, lunaticPlusPoolFor, type ChapterData, type ChapterDifficulty, type EnemyGroup } from '../../game-data/chapters';
+import { STATS } from '../../game-data/stats';
 import type { Difficulty, RosterUnit } from '../roster';
-import { foeKey, foesOf, type Fighter, type Foe } from '../solver';
+import { foeKey, foeOf, foesOf, type Fighter, type Foe } from '../solver';
 import { mapWaves, type Wave } from '../waves';
 import type { Deployment } from '../deploy';
-import type { SimFoeGroup, SimGroup, SimMap, SimUnit, SimWave } from './map-play';
+import { unitNamed } from '../run';
+import type { BlindSpotId } from '../assumptions';
+import type { SimAlly, SimFoeGroup, SimGroup, SimMap, SimRecruit, SimUnit, SimWave } from './map-play';
 import type { SimItem } from './sustain';
 
 export type SimMapOptions = {
@@ -35,30 +43,42 @@ function keyer() {
   };
 }
 
+/** A foe FEW notes as gone before the army's first move (Chapter 9's Gangrel and Aversa). */
+const leavesAtStart = (g: EnemyGroup) => /Leaves the map before the start of turn 1/i.test(g.notes ?? '');
+/** The turn a foe leaves the map on its own (Death's Embrace's Algol: turn 10). */
+const leavesOn = (g: EnemyGroup): number | undefined => {
+  const m = /Leaves the map on turn (\d+)/i.exec(g.notes ?? '');
+  return m ? parseInt(m[1]!, 10) : undefined;
+};
+const sameName = (a: string | undefined, b: string | undefined) => !!a && !!b && a.replace(/[’']/g, "'") === b.replace(/[’']/g, "'");
+
 export function simMap(map: ChapterData, difficulty: Difficulty, options: SimMapOptions = {}): SimMap {
   const table = tableOf(difficulty);
   const lplus = difficulty === 'lunatic-plus';
   const pool = lplus ? lunaticPlusPoolFor(map) : [];
   const seen = options.seen ?? {};
   const key = keyer();
-  const group = (foe: Foe, where?: string): SimFoeGroup => {
+  const group = (foe: Foe, where?: string, more: Partial<SimFoeGroup> = {}): SimFoeGroup => {
     const recorded = seen[foeKey(foe)];
     const withSeen = recorded ? { ...foe, skills: [...new Set([...foe.skills, ...recorded])] } : foe;
-    return { key: key(`${foe.name}${where ? ` (${where})` : ''}`), foe: withSeen, ...(lplus && !recorded ? { pool } : {}) };
+    return { key: key(`${foe.name}${where ? ` (${where})` : ''}`), foe: withSeen, ...(lplus && !recorded ? { pool } : {}), ...more };
   };
-  // Apotheosis lists every wave in its tables; the field starts with Wave 1.
+  // The field at the start: not the reinforcements FEW lists in the same table (#184), nor a foe gone before the first
+  // turn; a boss whose row is one of those goes with it. Apotheosis lists every wave in its tables; it starts with Wave 1.
   const first = (w: string | undefined) => !w || w === 'Wave 1';
-  const start: ChapterData =
-    map.id === 'apotheosis'
-      ? {
-          ...map,
-          enemies: { [table]: (map.enemies[table] ?? []).filter((e) => first(e.wave)) },
-          bosses: Object.fromEntries(Object.entries(map.bosses).map(([d, rows]) => [d, (rows ?? []).filter((b) => first(b.wave))])),
-        }
-      : map;
+  const rows = map.enemies[table] ?? [];
+  const gone = rows.filter((e) => e.reinforcement || leavesAtStart(e) || (map.id === 'apotheosis' && !first(e.wave)));
+  const start: ChapterData = {
+    ...map,
+    enemies: { [table]: rows.filter((e) => !gone.includes(e)) },
+    bosses: Object.fromEntries(
+      Object.entries(map.bosses).map(([d, bs]) => [d, (bs ?? []).filter((b) => (map.id === 'apotheosis' ? first(b.wave) : !gone.some((e) => sameName(e.name, b.name))))]),
+    ),
+  };
   const victoryText = map.conditions[table]?.victory ?? 'Rout the enemy';
   const boss = /^Defeat\s+(?:the\s+(?:boss\s+)?)?(.+)$/i.exec(victoryText.trim());
-  const foes = foesOf(start, table, lplus).map((f) => group(f));
+  const leaving = new Map(rows.flatMap((e) => (leavesOn(e) !== undefined ? [[e.name, leavesOn(e)!] as const] : [])));
+  const foes = foesOf(start, table, lplus).map((f) => group(f, undefined, leaving.has(f.name) ? { leaves: leaving.get(f.name)! } : {}));
   if (boss) {
     const name = boss[1]!.trim().toLowerCase();
     const target = foes.find((g) => g.foe.boss && g.foe.name.toLowerCase() === name) ?? foes.find((g) => g.foe.boss && name.includes(g.foe.className.toLowerCase())) ?? foes.find((g) => g.foe.boss);
@@ -89,7 +109,81 @@ export function simMap(map: ChapterData, difficulty: Difficulty, options: SimMap
       else skipped.push(w.label);
     }
   }
-  return { id: options.route === 'secret' ? `${map.id}-secret` : map.id, victory: boss ? 'boss' : 'rout', foes, waves, skipped };
+  const { allies, recruits } = thirdParty(map, table, foes);
+  const blindSpots: BlindSpotId[] = /door key/i.test(map.conditions[table]?.defeat ?? '') ? ['door-keys'] : [];
+  return {
+    id: options.route === 'secret' ? `${map.id}-secret` : map.id,
+    victory: boss ? 'boss' : 'rout',
+    foes,
+    waves,
+    skipped,
+    ...(allies.length ? { allies } : {}),
+    ...(recruits.length ? { recruits } : {}),
+    ...(blindSpots.length ? { blindSpots } : {}),
+  };
+}
+
+/** A roster id from the chapter data's name (lower case where the roster has none: a talker the roster doesn't know). */
+const idOf = (name: string): string => unitNamed(name.trim()) ?? name.trim().toLowerCase();
+
+/** A unit from its chapter-data row (an NPC's, or a foe recruit's) as it joins; undefined when FEW prints no stats (a child's vary). */
+function unitOf(id: string, row: EnemyGroup | undefined): SimUnit | undefined {
+  if (!row || STATS.some((s) => !/\d/.test(row.stats[s]))) return undefined;
+  const foe = foeOf(row, false);
+  const fighter: Fighter = { name: row.name, className: row.class, stats: foe.stats, skills: foe.skills, weapon: foe.weapon ? { item: foe.weapon } : undefined };
+  return { id, fighter, weapons: fighter.weapon ? [fighter.weapon] : [] };
+}
+
+/**
+ * The third party and the recruits (#184), from the chapter data: an NPC whose death is a Game Over (Chapter 6's
+ * Emmeryn) is an ally the army keeps alive; each recruit who comes during the map is a mid-map arrival (`Automatically
+ * from turn N`), a talk recruit (`talk to with Chrom or Lissa`, a village visit likewise, `three times` for Gangrel),
+ * NPC or enemy until it joins, or an NPC who joins at the end if it survives. Recruits from turn 1 or after the map
+ * aren't played here: the run fields the first and adds the rest after the map.
+ */
+function thirdParty(map: ChapterData, table: ChapterDifficulty, foes: readonly SimFoeGroup[]): { allies: SimAlly[]; recruits: SimRecruit[] } {
+  const npcs = map.npcs?.[table] ?? [];
+  // The defeat condition names them (`Chrom, Robin, or the NPC Lucina dies`), or their own note does.
+  const defeat = map.conditions[table]?.defeat ?? '';
+  const allies: SimAlly[] = npcs.flatMap((r) => {
+    const named = new RegExp(`\\bNPC ${r.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(defeat);
+    const unit = !r.reinforcement && (named || /Death results in a Game Over/i.test(r.notes ?? '')) ? unitOf(idOf(r.name), r) : undefined;
+    return unit ? [{ unit }] : [];
+  });
+  const recruits: SimRecruit[] = [];
+  // A foe that leaves once a unit talks to it (The Future Past's masked boss, when Robin speaks with it): the talk
+  // takes it off the field, joining nobody.
+  for (const row of map.enemies[table] ?? []) {
+    const m = /Leaves the map if (\S+) (?:has a conversation with|talks to) (?:him|her)/i.exec(row.notes ?? '');
+    // Its group: by name, or the boss its row was merged into (the masked boss's row reads `???`).
+    const g = m && foes.find((f) => f.foe.className === row.class && f.foe.stats.hp === foeOf(row, false).stats.hp && (sameName(f.foe.name, row.name) || f.foe.boss));
+    if (m && g) recruits.push({ id: g.key, talk: { by: [idOf(m[1]!)], times: 1 }, foe: g.key, departs: true });
+  }
+  for (const r of map.recruits) {
+    const how = r.how ?? '';
+    const id = idOf(r.unit);
+    const npcRow = npcs.find((n) => sameName(n.name, r.unit));
+    const arrives = /^(?:NPC, automatically becomes playable|Automatically) (?:on|from) turn (\d+)/i.exec(how);
+    const talk = /(?:talk to|^Visit\b.*?) with (?:either )?(.+?)(?:\s+(two|three) times)?(?:[,;]|$)/i.exec(how);
+    const self = /^NPC, have (?:her|him) talk to/i.test(how);
+    if (arrives && parseInt(arrives[1]!, 10) > 1) {
+      const npc = /^NPC\b/i.test(how);
+      const unit = unitOf(id, npcRow);
+      recruits.push({ id, ...(unit ? { unit } : {}), arrives: parseInt(arrives[1]!, 10), ...(npc ? { npc } : {}) });
+    } else if (talk || self) {
+      const by = self ? [id] : talk![1]!.split(/\s+or\s+/).map(idOf);
+      const times = talk?.[2] === 'three' ? 3 : talk?.[2] === 'two' ? 2 : 1;
+      const enemy = /^Enemy,/i.test(how);
+      const foe = enemy ? foes.find((g) => sameName(g.foe.name, r.unit)) : undefined;
+      const row = enemy ? (map.enemies[table] ?? []).find((e) => sameName(e.name, r.unit)) : npcRow;
+      const unit = unitOf(id, row);
+      recruits.push({ id, ...(unit ? { unit } : {}), talk: { by, times }, ...(foe ? { foe: foe.key } : { npc: true }) });
+    } else if (/^Automatically at the end of the chapter if (?:she|he) survived/i.test(how) && npcRow) {
+      const unit = unitOf(id, npcRow);
+      if (unit) recruits.push({ id, unit, npc: true });
+    }
+  }
+  return { allies, recruits };
 }
 
 /** A map by id. */

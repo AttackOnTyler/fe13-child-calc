@@ -7,15 +7,18 @@
  *
  * The turn loop, and where later tickets plug in:
  * - Start of turn: `startTurn` (last turn's Rally and Rescues wear off; HP carries over from the turn before), then
- *   arrivals (`clearArrivals`, `arrivalsAt('turn-start')`). Mid-map recruits (#184) join here on their turn.
+ *   arrivals (`clearArrivals`, `arrivalsAt('turn-start')`). Foes that leave on their own go; mid-map arrivals (#184)
+ *   are on the field from their turn, with no action before it.
  * - Stances (#183, `chooseStances`): each pair picks how it plays the turn: together (either unit in front), or apart
  *   (each unit its own front with its own action; adjacent, in Attack Stance, at the rate the army spread allows).
  *   Pair Up and Separate cost the action the game charges; Switch is free. The turn's **fronts** follow from it.
  * - `playerPhase`: each front not spent has one action, an equal share (a stated blind spot); a Dance gives one more.
  *   `chooseAction` picks the next action by the policy's tiers (`POLICY`) and `apply` plays it. Actions are a union:
  *   #182 added sustain (a heal, Fortify, Rescue, a potion), Dance and Rally (`sustain.ts`); #183 added the bait (a
- *   front waits in reach); #195 (EXP priority: who lands kills, waiting) adds kinds and tiers, not a new loop. Ally
- *   phase (#184) goes between player and enemy phase.
+ *   front waits in reach); #195 (EXP priority: who lands kills, waiting) adds kinds and tiers, not a new loop. Talks
+ *   (#184) come first: a talker spends its action on the turn the solve sends it, and the recruit joins.
+ * - `allyPhase` (#184): the third party (an NPC the army must keep alive, a recruit before it joins) acts between player
+ *   and enemy phase. Its deaths count; its kills aren't played. Other NPCs are scenery and aren't played at all.
  * - **Exposure** is the player's choice (#183): a front that attacks, or baits, is in reach on enemy phase; one that
  *   holds back isn't. A careful player only exposes a front that very likely lives through it (`EXPOSURE_RISK`), and
  *   when nothing is that safe, engages once a turn with the least risk: the sturdiest front baits, or the safest attack.
@@ -63,6 +66,39 @@ export type SimFoeGroup = {
   readonly pool?: readonly string[];
   /** The boss whose defeat wins a boss map. */
   readonly target?: boolean;
+  /** Leaves the map on its own at the start of this turn, unfelled (Death's Embrace's Algol, #184). */
+  readonly leaves?: number;
+};
+
+/**
+ * A third-party unit whose death is a failure though it never joins (#184): Chapter 6's Emmeryn. It stands where the
+ * chapter puts it: an NPC with no weapon is out of the foes' reach while the army holds them off (a stated blind spot),
+ * and in it on a turn the army moves nothing.
+ */
+export type SimAlly = { readonly unit: SimUnit };
+
+/**
+ * A recruit on the map (#184): a mid-map arrival, on the field from its turn; a talk recruit, joining on the turn the
+ * solve sends a talker (`MapPlayInput.talks`, the first turn by default) and acting from the next; or an NPC who joins
+ * at the end if it survives. Until it joins, a talk recruit is an NPC (on the third party's side, its death a failure)
+ * or a foe (`foe`: never attacked, not needed for a rout, and gone from the enemy side once it joins). With no talker in
+ * the lineup it's never recruited: an NPC is scenery, a foe is a foe like any other.
+ */
+export type SimRecruit = {
+  /** The roster's id, the one the lineup uses. */
+  readonly id: string;
+  /** The unit as it joins (its fighter and weapons); absent, the recruit happens but isn't played as a unit. */
+  readonly unit?: SimUnit;
+  /** On the field from this turn (acting that turn), a mid-map arrival; an NPC until then when `npc`. */
+  readonly arrives?: number;
+  /** A talk: the units that can talk to it (itself, when it's the one who talks), and how many talks it takes. */
+  readonly talk?: { readonly by: readonly string[]; readonly times: number };
+  /** An NPC until it joins (or, with no talk and no arrival turn, the whole map: it joins at the end if it survives). */
+  readonly npc?: boolean;
+  /** A foe until it joins: its foe group's key. */
+  readonly foe?: string;
+  /** A foe that leaves the map once talked to, joining nobody (The Future Past's masked boss). */
+  readonly departs?: boolean;
 };
 
 /** Reinforcements: on Normal they join at the start of a turn; on Hard and up at the start of enemy phase, free to act. */
@@ -86,6 +122,12 @@ export type SimMap = {
   readonly waves: readonly SimWave[];
   /** Waves the play doesn't model (a talk or a first defeat sets them off), by label. */
   readonly skipped: readonly string[];
+  /** Third-party units the army must keep alive (#184). */
+  readonly allies?: readonly SimAlly[];
+  /** Units who join during the map (#184). */
+  readonly recruits?: readonly SimRecruit[];
+  /** What the map's own rules add that the play doesn't model (Chapter 3's door keys). */
+  readonly blindSpots?: readonly BlindSpotId[];
 };
 
 export type MapPlayInput = {
@@ -99,15 +141,18 @@ export type MapPlayInput = {
    * Absent: every staff reaches and every pair apart stays adjacent. The engine fills in the `army-spread` assumption.
    */
   readonly spread?: ArmySpread;
+  /** The turn the solve sends a talker to each talk recruit, by the recruit's id (#184); the first turn by default. */
+  readonly talks?: Readonly<Record<string, number>>;
 };
 
 /**
  * An action other than an attack (#182): a heal (one pair, or every pair in reach with Fortify), a Rescue out of
  * enemy phase, a potion on the unit's own lead, a Dance (the target acts again) or a Rally (every other pair's stats
- * up for the turn); and a bait (#183): the front waits in the foes' reach, to take their attack and counter.
+ * up for the turn); a bait (#183): the front waits in the foes' reach, to take their attack and counter; and a talk
+ * (#184) to a recruit (`target`), which spends the talker's action.
  */
 export type SimAct = {
-  readonly kind: 'heal' | 'rescue' | 'item' | 'dance' | 'rally' | 'bait';
+  readonly kind: 'heal' | 'rescue' | 'item' | 'dance' | 'rally' | 'bait' | 'talk';
   /** The acting unit (its front). */
   readonly unit: string;
   /** The front of the pair it's for (a heal or Fortify names each pair it heals, one act each). */
@@ -156,6 +201,8 @@ export type SimStance = {
 export type SimTurn = {
   readonly turn: number;
   readonly arrivals: readonly { readonly group: string; readonly count: number }[];
+  /** Units joining the army this turn (#184): mid-map arrivals, and talk recruits (acting from the next turn). */
+  readonly joins: readonly string[];
   /** Each pair's stance this turn (units alone have none). */
   readonly stances: readonly SimStance[];
   readonly fights: readonly SimFight[];
@@ -257,6 +304,15 @@ type Kit = {
   readonly dances: boolean;
   readonly rally: RallyBonus | undefined;
 };
+
+/** A unit alone, made once per unit so its combats are cached like any lineup group's (the third party, recruits). */
+const SOLO = new WeakMap<SimUnit, SimGroup>();
+
+function soloOf(u: SimUnit): SimGroup {
+  let g = SOLO.get(u);
+  if (!g) SOLO.set(u, (g = { lead: u, support: null }));
+  return g;
+}
 
 /** Groups whose back is an adjacent ally, not paired (Attack Stance): no pair-up stats in their matchups. */
 const ADJACENT = new WeakSet<SimGroup>();
@@ -383,6 +439,29 @@ type Pair = {
   readonly alone?: Actor;
   /** Together with `front` (0 the lineup's lead, 1 its back) in front, or apart. */
   stance: { readonly kind: 'together'; readonly front: 0 | 1 } | { readonly kind: 'apart' };
+  /** The turn it's on the field from (#184): 1 for the lineup, a mid-map arrival's turn; a foe recruit once it joins. */
+  from: number;
+  /** An NPC before this turn (#184): on the third party's side, acting in the ally phase (Infinity: until it joins, or all map). */
+  npcUntil: number;
+  /** Joined the army this map (a talk recruit): no longer the third party's. */
+  joined?: boolean;
+};
+
+/** A talk recruit's talks still to come (#184): who can talk, how many talks are left, and what it is until it joins. */
+type Talk = {
+  readonly id: string;
+  /** Unit indices that can talk to it; empty when it talks itself. */
+  readonly by: readonly number[];
+  left: number;
+  /** The first turn the solve sends a talker. */
+  readonly at: number;
+  /** Its unit's pair, when it's played. */
+  readonly pair?: Pair;
+  /** Its foe group while it's a foe. */
+  readonly group?: number;
+  /** It leaves the map once talked to, joining nobody. */
+  readonly departs?: boolean;
+  done: boolean;
 };
 
 class MapState {
@@ -454,6 +533,19 @@ class MapState {
   private readonly starting = new Set<number>();
   private clearQueue: SimWave[];
   private endless = 0;
+  /** Talk recruits' talks (#184), the foe groups that are recruits still to talk to, and the arrivals by turn. */
+  private readonly talks: Talk[] = [];
+  private readonly pending = new Set<number>();
+  private readonly arriving: [Pair, string, number][] = [];
+  /** This turn: the fronts that are NPCs (they act in the ally phase), and the units joining the army. */
+  private npcFronts = new Set<number>();
+  /** The units that are NPCs this turn: an NPC can't keep out of reach the way the army's units do. */
+  private npcUnits = new Set<number>();
+  /** Whether an NPC stood on the field this map (the ally-phase blind spots apply), and one with no weapon. */
+  npcAny = false;
+  npcUnarmed = false;
+  talked = false;
+  joins: string[] = [];
 
   constructor(
     readonly input: MapPlayInput,
@@ -474,7 +566,7 @@ class MapState {
     input.lineup.forEach((g, pi) => {
       const lead = unitIndex(g.lead);
       if (!g.back) {
-        this.pairs.push({ lead, alone: actor(pi, lead, g), stance: { kind: 'together', front: 0 } });
+        this.pairs.push({ lead, alone: actor(pi, lead, g), stance: { kind: 'together', front: 0 }, from: 1, npcUntil: 1 });
         return;
       }
       const back = unitIndex(g.back);
@@ -486,15 +578,42 @@ class MapState {
         together: [actor(pi, lead, g, back), actor(pi, back, v.switched, lead)],
         apart: [actor(pi, lead, v.alone[0], undefined, adj ? v.adjacent[0] : undefined), actor(pi, back, v.alone[1], undefined, adj ? v.adjacent[1] : undefined)],
         stance: { kind: 'together', front: 0 },
+        from: 1,
+        npcUntil: 1,
       });
     });
-    this.kits = this.units.map((u) => kitOf(u, input.spread));
-    this.uses = this.units.map((u) => (u.items ?? []).map((i) => i.uses));
+    // The third party and the recruits (#184): each a unit alone, on the field from its turn, an NPC until it joins.
+    const alone = (u: SimUnit, from: number, npcUntil: number): Pair => {
+      const i = unitIndex(u);
+      const p: Pair = { lead: i, alone: actor(this.pairs.length, i, soloOf(u)), stance: { kind: 'together', front: 0 }, from, npcUntil };
+      this.pairs.push(p);
+      return p;
+    };
+    for (const a of input.map.allies ?? []) alone(a.unit, 1, Infinity);
     for (const g of input.map.foes) {
       const i = this.groupIndex(g);
       this.starting.add(i);
       this.spawn(i, g.foe.count);
     }
+    const lineupIds = new Map(this.units.map((u, i) => [u.id, i]));
+    for (const r of input.map.recruits ?? []) {
+      const foeGroup = r.foe !== undefined ? input.map.foes.find((g) => g.key === r.foe) : undefined;
+      const group = foeGroup ? this.waveGroup.get(foeGroup)! : -1;
+      if (r.talk) {
+        const self = r.talk.by.includes(r.id);
+        const by = r.talk.by.flatMap((t) => (lineupIds.has(t) ? [lineupIds.get(t)!] : []));
+        // No one to talk to it: never recruited (an NPC is scenery, a foe stays a foe).
+        if (!self && !by.length) continue;
+        const pair = r.unit ? (group >= 0 ? alone(r.unit, Infinity, 1) : alone(r.unit, 1, Infinity)) : undefined;
+        if (group >= 0) this.pending.add(group);
+        this.talks.push({ id: r.id, by: self ? [] : by, left: Math.max(1, r.talk.times), at: input.talks?.[r.id] ?? 1, ...(pair ? { pair } : {}), ...(group >= 0 ? { group } : {}), ...(r.departs ? { departs: true } : {}), done: false });
+      } else if (r.unit && r.arrives !== undefined) {
+        const p = alone(r.unit, r.npc ? 1 : r.arrives, r.npc ? r.arrives : 1);
+        this.arriving.push([p, r.id, r.arrives]);
+      } else if (r.unit && r.npc) alone(r.unit, 1, Infinity);
+    }
+    this.kits = this.units.map((u) => kitOf(u, input.spread));
+    this.uses = this.units.map((u) => (u.items ?? []).map((i) => i.uses));
     this.clearQueue = input.map.waves.filter((w) => w.onClear);
   }
 
@@ -563,6 +682,92 @@ class MapState {
     this.dropSurvival();
     for (const c of this.claimed) c.length = 0;
     if (this.bonus.some((b) => b)) this.dropRallied();
+    this.leave();
+    for (const [, id, t] of this.arriving) if (t === this.turn && t > 1) this.joins.push(id);
+  }
+
+  /** Foes that leave the map on their own this turn go, unfelled (#184). */
+  private leave() {
+    for (let g = 0; g < this.groups.length; g++) {
+      const at = this.groups[g]!.leaves;
+      if (at === undefined || at > this.turn || !this.left[g]) continue;
+      this.removeGroup(g);
+    }
+  }
+
+  /** Takes every foe of group `g` off the field, unfelled: it left, or joined the army. */
+  private removeGroup(g: number) {
+    for (let i = this.foes.length - 1; i >= 0; i--) if (this.foes[i]!.g === g) this.foes.splice(i, 1);
+    this.left[g] = 0;
+    this.foeVersion++;
+    this.progress = true;
+  }
+
+  /**
+   * The talks this turn (#184), before anyone else acts: from the turn the solve sends a talker, the first talker on the
+   * field with its action left spends it; the recruit joins once its talks are done, acting from the next turn. A foe
+   * recruit felled before then never joins.
+   */
+  private talk(acted: Set<number>) {
+    for (const t of this.talks) {
+      if (t.done || this.turn < t.at) continue;
+      if (t.group !== undefined && !this.left[t.group]) {
+        t.done = true;
+        this.pending.delete(t.group);
+        continue;
+      }
+      if (t.by.length) {
+        let who: number | undefined;
+        const gi = this.front.findIndex((a, i) => {
+          if (acted.has(i) || this.npcFronts.has(i)) return false;
+          who = t.by.find((u) => u === a.unit || u === a.back);
+          return who !== undefined;
+        });
+        if (gi < 0) continue;
+        acted.add(gi);
+        this.acts.push({ kind: 'talk', unit: this.units[who!]!.id, target: t.id });
+      }
+      this.talked = true;
+      if (--t.left <= 0) this.recruit(t);
+    }
+  }
+
+  /** The units with a talk to make this turn: for each talk due, the first who can talk that's on the army's field. */
+  private dueTalkers(): Set<number> {
+    const out = new Set<number>();
+    for (const t of this.talks) {
+      if (t.done || this.turn < t.at || !t.by.length || (t.group !== undefined && !this.left[t.group])) continue;
+      const u = t.by.find((b) => this.pairs.some((p) => (p.lead === b || p.back === b) && this.turn >= p.from && (p.joined || this.turn >= p.npcUntil)));
+      if (u !== undefined) out.add(u);
+    }
+    return out;
+  }
+
+  /** A talk recruit joins: off the enemy side, out of the third party's, acting from the next turn. */
+  private recruit(t: Talk) {
+    t.done = true;
+    if (t.group !== undefined) {
+      this.pending.delete(t.group);
+      this.removeGroup(t.group);
+    }
+    if (t.pair) {
+      t.pair.joined = true;
+      t.pair.npcUntil = this.turn + 1;
+      if (t.pair.from === Infinity) t.pair.from = this.turn + 1;
+    }
+    if (!t.departs) this.joins.push(t.id);
+    this.progress = true;
+  }
+
+  /**
+   * The ally phase (#184), between player and enemy phase: each NPC with a weapon moves on the foes as its AI does, into
+   * their reach. Its own attacks aren't played (a stated blind spot); an NPC with none stays where the chapter puts it.
+   */
+  allyPhase() {
+    for (const gi of this.npcFronts) {
+      const a = this.front[gi]!;
+      if (!this.pairs[a.pair]!.joined && this.unitArmed(a.unit)) this.expose(gi);
+    }
   }
 
   /**
@@ -645,7 +850,7 @@ class MapState {
    * no weapon (a healer, a dancer) stays out of reach.
    */
   private reachable(a: Actor): boolean {
-    return this.unitArmed(a.unit) || (a.back !== undefined && this.unitArmed(a.back));
+    return this.unitArmed(a.unit) || (a.back !== undefined && this.unitArmed(a.back)) || this.npcUnits.has(a.unit);
   }
 
   private maxHp(gi: number): number {
@@ -722,7 +927,7 @@ class MapState {
    */
   private bossOpen(): boolean {
     if (this.input.bossTurn !== undefined) return this.turn >= this.input.bossTurn;
-    return this.foes.every((f) => this.groups[f.g]!.target || !this.starting.has(f.g));
+    return this.foes.every((f) => this.groups[f.g]!.target || !this.starting.has(f.g) || this.pending.has(f.g));
   }
 
   /** The policy's context for one choice. */
@@ -792,8 +997,19 @@ class MapState {
     this.stances = [];
     this.front = [];
     this.spent = new Set();
+    this.npcFronts = new Set();
+    this.npcUnits = new Set();
+    const talkers = this.dueTalkers();
     for (const p of this.pairs) {
+      // Not on the field yet (a mid-map arrival before its turn, a foe recruit before it joins): no action, out of reach.
+      if (this.turn < p.from) continue;
       if (p.alone) {
+        if (!p.joined && this.turn < p.npcUntil) {
+          this.npcFronts.add(this.front.length);
+          this.npcUnits.add(p.lead);
+          this.npcAny = true;
+          if (!this.unitArmed(p.lead)) this.npcUnarmed = true;
+        }
         this.front.push(p.alone);
         continue;
       }
@@ -807,15 +1023,20 @@ class MapState {
         if (v === undefined) safe.set(a, (v = this.unitArmed(a.unit) && this.hasSafeAttack(a, ctx)));
         return v;
       };
-      const togetherWork = p.together!.some(hasSafe) ? 1 : 0;
-      // Together, splitting needs more work apart than together; apart, as much. Stop counting once that's settled.
-      const needed = was.kind === 'together' ? togetherWork + 1 : togetherWork;
-      let apartWork = 0;
-      for (let k = 0; k < 2 && apartWork < needed && apartWork + 2 - k >= needed; k++) {
-        const u = units[k]!;
-        if (this.unitArmed(u) ? hasSafe(p.apart![k]!) : this.useful(u)) apartWork++;
-      }
-      const splits = apartWork >= needed;
+      const splitsForWork = () => {
+        const togetherWork = p.together!.some(hasSafe) ? 1 : 0;
+        // Together, splitting needs more work apart than together; apart, as much. Stop counting once that's settled.
+        const needed = was.kind === 'together' ? togetherWork + 1 : togetherWork;
+        let apartWork = 0;
+        for (let k = 0; k < 2 && apartWork < needed && apartWork + 2 - k >= needed; k++) {
+          const u = units[k]!;
+          if (this.unitArmed(u) ? hasSafe(p.apart![k]!) : this.useful(u)) apartWork++;
+        }
+        return apartWork >= needed;
+      };
+      // A unit with a talk to make this turn (#184) keeps its action: its pair stays as it is, the talker in front.
+      const talker: 0 | 1 | undefined = talkers.has(p.lead) ? 0 : talkers.has(p.back!) ? 1 : undefined;
+      const splits = talker !== undefined ? was.kind === 'apart' : splitsForWork();
       let change: SimStance['change'];
       if (splits) {
         p.stance = { kind: 'apart' };
@@ -832,7 +1053,7 @@ class MapState {
         };
         const cur: 0 | 1 = was.kind === 'together' ? was.front : 0;
         const other: 0 | 1 = cur === 0 ? 1 : 0;
-        const front = risk(other) < risk(cur) - EPS ? other : cur;
+        const front = talker ?? (risk(other) < risk(cur) - EPS ? other : cur);
         p.stance = { kind: 'together', front };
         if (was.kind === 'apart') change = 'pair-up';
         else if (front !== was.front) change = 'switch';
@@ -970,6 +1191,8 @@ class MapState {
     this.wornAt = this.foeVersion;
     const worn = new Map<number, FoeInstance>();
     for (const f of this.foes) {
+      // A recruit still to talk to is never attacked.
+      if (this.pending.has(f.g)) continue;
       const s = worn.get(f.g);
       if (!s || f.hp < s.hp) worn.set(f.g, f);
     }
@@ -991,10 +1214,11 @@ class MapState {
   /**
    * When nobody is in the foes' reach yet this turn and foes are left, the army engages once, with the least risk: the
    * safest attack by anyone (whatever its risk), or a bait (a front waits in reach, to take one attack and counter),
-   * whichever risks less. Otherwise holding back would never finish the map.
+   * whichever risks less. Otherwise holding back would never finish the map. A turn with a talk (#184) has moved the
+   * map on already: nobody needs to.
    */
   engage(ctx: PolicyContext): Action | undefined {
-    if (this.exposed.size || !this.foes.length) return undefined;
+    if (this.exposed.size || !this.foes.length || this.acts.some((a) => a.kind === 'talk')) return undefined;
     let best: { readonly action: Action; readonly risk: number } | undefined;
     const consider = (action: Action, risk: number) => {
       if (!best || risk < best.risk - EPS) best = { action, risk };
@@ -1049,7 +1273,7 @@ class MapState {
     for (let d = 0; d < this.front.length; d++) {
       if (ctx.acted.has(d) || !this.kitOf(d).dances) continue;
       for (const t of ctx.acted) {
-        if (t === d || this.kitOf(t).dances) continue;
+        if (t === d || this.kitOf(t).dances || this.npcFronts.has(t)) continue;
         const a = this.bestAttackOf(t, ctx);
         if (a && a.value > 0 && (!best || a.value > best.value)) best = { kind: 'dance', group: d, target: t, value: a.value };
       }
@@ -1287,7 +1511,11 @@ class MapState {
     if (this.input.map.victory === 'boss') {
       const target = this.groups.findIndex((g) => g.target);
       if (target >= 0 && this.felled[target]! > 0) this.ended = 'boss';
-    } else if (!this.alive().length && !this.clearQueue.length) this.ended = 'rout';
+    } else if (!this.clearQueue.length && this.foes.every((f) => this.pending.has(f.g))) {
+      // Only recruits still to talk to are left: the talks go ahead and the map is won.
+      for (const t of this.talks) if (!t.done && t.group !== undefined && this.pending.has(t.group)) this.recruit(t);
+      this.ended = 'rout';
+    }
     return !!this.ended;
   }
 
@@ -1304,8 +1532,10 @@ class MapState {
   }
 
   playerPhase() {
-    // Fronts spent by this turn's Separate have no action left.
-    const acted = new Set<number>(this.spent);
+    // Fronts spent by this turn's Separate have no action left; NPCs take none from the army. Talks go first.
+    const acted = new Set<number>([...this.spent, ...this.npcFronts]);
+    this.talk(acted);
+    if (this.checkVictory()) return;
     // Each front's best attack on each foe group, kept while that group's most worn-down foe and its own HP are unchanged.
     const memo = new Map<number, Attack | null>();
     for (;;) {
@@ -1355,8 +1585,9 @@ class MapState {
 
   endTurn() {
     const exposed = [...this.exposed].sort((a, b) => a - b).map((gi) => this.units[this.front[gi]!.unit]!.id);
-    this.log.push({ turn: this.turn, arrivals: this.arrivals, stances: this.stances, fights: this.fights, acts: this.acts, exposed, foesLeft: this.alive().length, noDeath: this.noDeath });
+    this.log.push({ turn: this.turn, arrivals: this.arrivals, joins: this.joins, stances: this.stances, fights: this.fights, acts: this.acts, exposed, foesLeft: this.alive().length, noDeath: this.noDeath });
     this.arrivals = [];
+    this.joins = [];
     this.stances = [];
     this.fights = [];
     this.acts = [];
@@ -1437,6 +1668,7 @@ export function playMap(input: MapPlayInput, seed: number): MapPlay {
     if (s.checkVictory()) break;
     s.playerPhase();
     if (!s.ended) {
+      s.allyPhase();
       s.arrivalsAt('enemy-phase');
       s.enemyPhase();
       s.checkVictory();
@@ -1448,6 +1680,10 @@ export function playMap(input: MapPlayInput, seed: number): MapPlay {
   const spots: BlindSpotId[] = [...BLIND_SPOTS];
   if (s.kits.some((k) => k.rally)) spots.push('rally-reaches-every-pair');
   if (s.splitAny) spots.push('attack-stance-adjacency');
+  if (s.npcAny) spots.push('npc-kills');
+  if (s.npcUnarmed) spots.push('npc-screened');
+  if (s.talked) spots.push('talk-reaches');
+  for (const b of input.map.blindSpots ?? []) if (!spots.includes(b)) spots.push(b);
   return {
     map: input.map.id,
     noDeath: s.noDeath,
