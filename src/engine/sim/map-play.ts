@@ -560,6 +560,8 @@ class MapState {
    * group.
    */
   private readonly claimed: number[][] = [];
+  /** Who holds each claim in `claimed` (the front's actor id, parallel to it): a front never counts its own. */
+  private readonly claimers: number[][] = [];
   private incomingCount = new Map<number, number>();
   private threatList: FoeInstance[] = [];
   private threatState = new Map<number, { readonly hp: number; readonly left: number }>();
@@ -706,6 +708,7 @@ class MapState {
     this.felled.push(0);
     this.left.push(0);
     this.claimed.push([]);
+    this.claimers.push([]);
     this.waveGroup.set(g, this.groups.length - 1);
     return this.groups.length - 1;
   }
@@ -758,6 +761,7 @@ class MapState {
     this.exposed.clear();
     this.dropSurvival();
     for (const c of this.claimed) c.length = 0;
+    for (const c of this.claimers) c.length = 0;
     if (this.bonus.some((b) => b)) this.dropRallied();
     this.leave();
     for (const [, id, t] of this.arriving) if (t === this.turn && t > 1) this.joins.push(id);
@@ -955,7 +959,11 @@ class MapState {
       this.foes.splice(this.foes.indexOf(f), 1);
       this.left[f.g]!--;
     }
-    if (phase === 'player') this.expose(gi);
+    // A front in reach already that fights again (a Dance) faces the enemy phase at its new HP: its claim moves.
+    if (phase === 'player') {
+      if (this.exposed.has(gi)) this.reclaim(gi);
+      else this.expose(gi);
+    }
     const t = this.tallies.get(lead.id)!;
     t.combats++;
     if (kill) {
@@ -990,27 +998,53 @@ class MapState {
   private expose(gi: number) {
     if (this.exposed.has(gi)) return;
     this.exposed.add(gi);
+    this.claim(gi);
+  }
+
+  /** Speaks for the foe front `gi` would face on enemy phase at its HP now (see `expose`). */
+  private claim(gi: number) {
     const a = this.front[gi]!;
     if (!this.reachable(a) || this.safe.has(gi)) return;
     let worst: { g: number; s: number } | undefined;
     this.refreshThreats();
     for (const f of this.threatList) {
       const s = this.exchangeOf(gi, f, 'enemy').survive;
-      if (this.free(f.g, s, -1) && (!worst || s < worst.s)) worst = { g: f.g, s };
+      if (this.free(f.g, s, -1, a.id) && (!worst || s < worst.s)) worst = { g: f.g, s };
     }
     if (worst) {
       this.claimed[worst.g]!.push(worst.s);
+      this.claimers[worst.g]!.push(a.id);
       this.dropSurvival([worst.g]);
     }
+  }
+
+  /**
+   * A front in reach whose HP moved (it fought again, or was healed): the foe it would face is worked out again at its
+   * HP now, so the fronts after it reckon with the claim as it stands.
+   */
+  private reclaim(gi: number) {
+    const id = this.front[gi]!.id;
+    for (let g = 0; g < this.claimers.length; g++) {
+      const k = this.claimers[g]!.indexOf(id);
+      if (k < 0) continue;
+      this.claimers[g]!.splice(k, 1);
+      this.claimed[g]!.splice(k, 1);
+      // A foe freed can lower any survival, not only those it set.
+      this.dropSurvival();
+    }
+    this.claim(gi);
   }
 
   /**
    * Whether a foe of group `g` is left to attack a front that survives it with `s` (one of group `without` about to
    * fall): the enemy phase pairs off the least survivable pairings first, so fronts that fare worse against it come first.
    */
-  private free(g: number, s: number, without: number): boolean {
+  private free(g: number, s: number, without: number, self: number): boolean {
     let before = g === without ? 1 : 0;
-    for (const c of this.claimed[g]!) if (c <= s) before++;
+    const claims = this.claimed[g]!;
+    const by = this.claimers[g]!;
+    // A front already in reach doesn't stand in its own way: the foe it spoke for is still the one it faces.
+    for (let k = 0; k < claims.length; k++) if (claims[k]! <= s && by[k] !== self) before++;
     return before < this.left[g]! + (this.incomingCount.get(g) ?? 0);
   }
 
@@ -1315,7 +1349,13 @@ class MapState {
     if (a.at === this.riskVersion && (a.exact || bound)) return;
     const { ex } = a;
     if (this.exposed.has(a.group)) {
-      a.risk = 1 - ex.survive;
+      // In reach already (it fights again after a Dance): the enemy phase it faced is taken, but at the HP this
+      // exchange leaves it, the risk it adds is what it loses against the survival it has now.
+      const front = this.front[a.group]!;
+      const bonus = this.bonus[a.group];
+      const now = this.safe.has(a.group) ? 1 : this.survivalOf(front, bonus, this.hp[front.unit]!, ctx, -1);
+      const after = this.safe.has(a.group) ? 1 : this.survivalOf(front, bonus, ex.leadHp, ctx, ex.foeHp <= 0 ? a.foe.g : -1);
+      a.risk = now > 0 ? Math.max(0, 1 - (ex.survive * after) / now) : 1;
       a.exact = true;
     } else if (bound && 1 - ex.survive > EXPOSURE_RISK) {
       a.risk = 1 - ex.survive;
@@ -1490,7 +1530,7 @@ class MapState {
     let worst = -1;
     for (const f of ctx.threats) {
       const x = this.exchangeFor(a, bonus, f, 'enemy', hp).survive;
-      if (x < s && this.free(f.g, x, without)) {
+      if (x < s && this.free(f.g, x, without, a.id)) {
         s = x;
         worst = f.g;
         // Below the floor: that's all the caller needs to know (kept as a bound, not the survival).
@@ -1605,6 +1645,7 @@ class MapState {
         for (const h of a.heals) {
           this.hp[this.front[h.group]!.unit]! += h.hp;
           if (h.hp > 0) this.progress = true;
+          if (h.hp > 0 && this.exposed.has(h.group)) this.reclaim(h.group);
           forget(h.group);
           this.acts.push({ kind: 'heal', unit: lead.id, target: idOf(h.group), item, reach: a.reach, hp: h.hp });
         }
@@ -1620,6 +1661,7 @@ class MapState {
         const item = spend(a.item);
         this.hp[unit]! += a.hp;
         if (a.hp > 0) this.progress = true;
+        if (a.hp > 0 && this.exposed.has(a.group)) this.reclaim(a.group);
         forget(a.group);
         this.acts.push({ kind: 'item', unit: lead.id, item, hp: a.hp });
         return;
