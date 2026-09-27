@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, addEntry, createEngine, editEntry, latestEntry, recordMarriage, runFromRoster, withRun, withShopLine, type Route, type RosterUnit, type Run, type Snapshot, type UnitSnapshot } from '../engine';
-import { childStatsNote, flawlessReadout, heldText, mapOrderReadout, parseHeldText, parseSupportsText, shoppingReadout, supportsText } from './run-page';
+import { EMPTY_ROSTER, addEntry, createEngine, editEntry, latestEntry, recordMarriage, runFromRoster, withRenown, withRun, withShopLine, withSideGoalPin, withSideGoalSecured, type Route, type RosterUnit, type Run, type Snapshot, type UnitSnapshot } from '../engine';
+import { childStatsNote, flawlessReadout, heldText, mapOrderReadout, parseHeldText, parseSupportsText, shoppingReadout, sideGoalPlanReadout, sideGoalsReadout, supportsText } from './run-page';
 import { chanceText } from './chance';
 
 describe('the map order readout (#179)', () => {
@@ -68,7 +68,9 @@ describe('the flawless chance readout (#186)', () => {
     const g = sim.maps[0]!.gold!;
     expect(g.low).toBeLessThanOrEqual(g.high);
     const range = g.low === g.high ? `${g.low.toLocaleString('en-US')}G` : `${g.low.toLocaleString('en-US')}–${g.high.toLocaleString('en-US')}G`;
-    expect(r.rows[0]).toBe(`Chapter 25: ${chanceText(sim.maps[0]!.noDeath!)} · ${range}`);
+    // Renown's rewards arriving on the map follow it (#191).
+    const rewards = engine.renown(run).stops[0]!.rewards;
+    expect(r.rows[0]).toBe(`Chapter 25: ${chanceText(sim.maps[0]!.noDeath!)} · ${range}${rewards.length ? ` · renown: ${rewards.join(', ')}` : ''}`);
     expect(r.detail).toContain('Gold per map is each run’s gold at the map’s end, 10th to 90th percentile');
     expect(r.detail).not.toContain('records no gold');
     expect(flawlessReadout(engine, played(all.slice(0, -2)), { runs: 1 }).detail).toContain('Your latest entry records no gold, so the runs start with none');
@@ -153,5 +155,42 @@ describe('Record results’ shopping step (#192)', () => {
     expect(next.gold).toBe('Gold at the map’s end 240G → after shopping 240G');
     expect(next.used).toBe('Uses spent on this map: Iron Sword 5');
     expect(next.found).toBe('Found on this map: Elixir (random find)');
+  });
+});
+
+describe('side goals and renown on the Run view (#191)', () => {
+  const engine = createEngine();
+  const facts = withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal', gender: 'M', asset: 'mag', flaw: 'hp' });
+  const played = (maps: readonly string[]) => maps.reduce((r, m, i) => addEntry(r, m, i + 1), runFromRoster(facts));
+  const all = engine.mapOrder(played([])).steps.map((s) => s.map);
+
+  it('lists the side goals ahead with the plan’s decision, and a pin overrides it', () => {
+    const run = played(all.slice(0, all.indexOf('chapter-16')));
+    expect(sideGoalPlanReadout(engine, run).map((r) => r.text)).toEqual(['Chapter 16: Thieves: chase (at most one action a turn)', 'Chapter 18: Falling chests: chase (at most one action a turn)']);
+    const pinned = withSideGoalPin(run, 'chapter-18-chests', 'skip');
+    expect(sideGoalPlanReadout(engine, pinned)[1]).toMatchObject({ text: 'Chapter 18: Falling chests: always skip (pinned)', pin: 'skip' });
+  });
+
+  it('shows each chased goal’s share of runs on its map’s row, and says renown isn’t recorded', () => {
+    const run = played(all.slice(0, all.indexOf('chapter-18')));
+    const r = flawlessReadout(engine, run, { runs: 1 });
+    const goal = engine.flawlessChance(run, { runs: 1 }).sideGoals.find((g) => g.id === 'chapter-18-chests')!;
+    expect(r.rows[0]).toMatch(/^Chapter 18: /);
+    expect(r.rows[0]).toContain(` · Falling chests ${goal.secured === undefined ? 'chased' : `secured ${chanceText(goal.secured)}`}`);
+    expect(r.detail).toContain('A side goal the plan chases costs actions on its map');
+    expect(r.detail).toContain('Renown isn’t recorded: it reads as 10 per story map logged');
+    expect(flawlessReadout(engine, withRenown(run, { start: 0, claimed: [] }), { runs: 1 }).detail).toContain('Renown is ');
+  });
+
+  it('pre-fills Record results’ side goals from the map’s finds, and asks for renown once', () => {
+    let run = played(['chapter-10']);
+    run = editEntry(run, 'e2', (s) => ({ ...s, convoy: ['Bullion (M)', 'Wyrmslayer', 'Master Seal', 'Seraph Robe'].map((item) => ({ item, uses: null })) }), 1);
+    const r = sideGoalsReadout(engine, run, 'e2');
+    expect(r.goals).toEqual([{ id: 'chapter-10-thieves', label: 'Chapter 10: Thieves', what: 'Kill the four Ruffian Thieves before they escape', secured: true, note: 'pre-filled from the map’s finds: Bullion (M), Wyrmslayer, Master Seal and Seraph Robe' }]);
+    expect(r.renown).toBe('Renown isn’t recorded yet: enter the renown this file started with, then the rewards already claimed (asked once for the run).');
+    const recorded = withSideGoalSecured(withRenown(run, { start: 45, claimed: [] }), 'e2', 'chapter-10-thieves', false, 2);
+    const after = sideGoalsReadout(engine, recorded, 'e2');
+    expect(after.goals[0]).toMatchObject({ secured: false, note: 'as you recorded it' });
+    expect(after.renown).toBe('Renown after this map: 55 (reached: Glass Sword).');
   });
 });
