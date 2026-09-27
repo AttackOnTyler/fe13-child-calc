@@ -3,7 +3,7 @@
  * from its start (#131), paired with its back (its highest support by default), with its best weapon from its
  * inventory, against one foe at a time on the run's difficulty. Lunatic+ assumes the pool's worst case.
  */
-import type { ChapterDifficulty, Difficulty, Engine, Fighter, Foe, Matchup, PrepUnits, RosterUnit, Run, SimGroup, Snapshot, UnitSnapshot } from '../engine';
+import type { ChapterDifficulty, Difficulty, Engine, Fighter, Foe, Matchup, PrepUnits, RosterUnit, Run, SimGroup, SimItem, Snapshot, UnitSnapshot } from '../engine';
 import { EMPTY_SNAPSHOT, REINFORCEMENT_RULE, bestWeapon, dangerFlags, deployCount, foeKey, foesOf, forcedOn, itemByName, latestEntry, openStock, prepUnits, promotionAdvice, sealAvailability, sealsHeld, simLineup, suggestDeployment, suggestLoadout, supplyList, unitName, withSeenSkills, type DeployCandidate, type DeploymentRole } from '../engine';
 import { chanceText } from './chance';
 import { CHILD_UNITS } from '../game-data/children';
@@ -36,14 +36,22 @@ export type PrepContext = {
 
 const WEAPON_KINDS = new Set(['sword', 'lance', 'axe', 'bow', 'tome', 'stone', 'beaststone']);
 
-/** A recorded unit as a fighter: its first weapon (the one it would equip) and its weapons to choose from. */
-export function fighterOf(name: string, u: UnitSnapshot): { fighter: Fighter; weapons: NonNullable<Fighter['weapon']>[] } | undefined {
+/**
+ * A recorded unit as a fighter: its first weapon (the one it would equip), its weapons to choose from, and the staves
+ * and other items it can spend uses of on the map (#182; the simulation uses the ones that heal or Rescue).
+ */
+export function fighterOf(name: string, u: UnitSnapshot): { fighter: Fighter; weapons: NonNullable<Fighter['weapon']>[]; items: SimItem[] } | undefined {
   if (!u.stats) return undefined;
   const weapons = u.inventory.flatMap((h) => {
     const item = itemByName(h.item);
     return item && WEAPON_KINDS.has(item.kind) ? [{ item, ...(h.forge ? { forge: { mt: h.forge.mt, hit: h.forge.hit, crit: h.forge.crit } } : {}) }] : [];
   });
-  return { fighter: { name, className: u.class, stats: u.stats, skills: u.skills, weapon: weapons[0] }, weapons };
+  const items = u.inventory.flatMap((h) => {
+    const item = itemByName(h.item);
+    const uses = h.uses ?? item?.uses ?? 0;
+    return item && (item.kind === 'staff' || item.kind === 'item') && uses > 0 ? [{ item, uses }] : [];
+  });
+  return { fighter: { name, className: u.class, stats: u.stats, skills: u.skills, weapon: weapons[0] }, weapons, items };
 }
 
 /** The seed the preparation page plays the map with: the same page always shows the same chance. */
@@ -424,7 +432,7 @@ export function prepPage(ctx: PrepContext): HTMLElement[] {
   // Deployment (#121): the solver's pick within the deploy count, the player's backs and drops kept.
   const candidates: DeployCandidate[] = units.flatMap(([unit, u]) => {
     const f = fighterOf(unitName(unit, gender), u);
-    return f ? [{ unit, role: ctx.roleOf(unit), fighter: f.fighter, weapons: f.weapons, supports: u.supports }] : [];
+    return f ? [{ unit, role: ctx.roleOf(unit), fighter: f.fighter, weapons: f.weapons, items: f.items, supports: u.supports }] : [];
   });
   const byUnit = new Map(candidates.map((c) => [c.unit, c]));
   const pinned = (Object.entries(ctx.backs) as [RosterUnit, RosterUnit | 'none'][]).map(([lead, back]) => ({ lead, back: back === 'none' ? undefined : back }));

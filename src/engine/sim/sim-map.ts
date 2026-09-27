@@ -14,6 +14,7 @@ import { foeKey, foesOf, type Fighter, type Foe } from '../solver';
 import { mapWaves, type Wave } from '../waves';
 import type { Deployment } from '../deploy';
 import type { SimFoeGroup, SimGroup, SimMap, SimUnit, SimWave } from './map-play';
+import type { SimItem } from './sustain';
 
 export type SimMapOptions = {
   /** Lunatic+ skills recorded on a foe (by `foeKey`): they replace its draw. */
@@ -102,10 +103,13 @@ export function simMapById(id: string, difficulty: Difficulty, options?: SimMapO
  * A deployment as the simulation's lineup: each pair (lead + back), then each unit alone, with the fighter and weapons
  * of its candidate. Units with no fighter (no recorded stats) are left out.
  */
-export function simLineup(d: Deployment, fighters: ReadonlyMap<RosterUnit, { readonly fighter: Fighter; readonly weapons: readonly NonNullable<Fighter['weapon']>[] }>): SimGroup[] {
+export function simLineup(
+  d: Deployment,
+  fighters: ReadonlyMap<RosterUnit, { readonly fighter: Fighter; readonly weapons: readonly NonNullable<Fighter['weapon']>[]; readonly items?: readonly SimItem[] }>,
+): SimGroup[] {
   const unit = (u: RosterUnit): SimUnit | undefined => {
     const c = fighters.get(u);
-    return c ? { id: u, fighter: c.fighter, weapons: c.weapons } : undefined;
+    return c ? { id: u, fighter: c.fighter, weapons: c.weapons, ...(c.items?.length ? { items: c.items } : {}) } : undefined;
   };
   const out: SimGroup[] = [];
   for (const p of d.pairs) {

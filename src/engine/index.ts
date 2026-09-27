@@ -47,7 +47,8 @@ import { CHAPTER_DISAGREEMENTS, MAPS, lunaticPlusPoolFor, type ChapterData, type
 import { mapWaves, type MapWaves } from './waves';
 import type { RenownReward } from '../game-data/gold';
 import { mapGold, renownGain, renownRewards, type GoldRow } from './gold';
-import { meanNoDeath, playMap, type MapPlay, type MapPlayInput, type SimMap } from './sim/map-play';
+import { meanNoDeath, playMap, staffReach, type MapPlay, type MapPlayInput, type SimMap, type SimUnit } from './sim/map-play';
+import { itemByName } from '../game-data/items';
 import { simMapById, type SimMapOptions } from './sim/sim-map';
 import { runSeed } from './sim/random';
 import { BLIND_SPOTS, type BlindSpot } from './assumptions';
@@ -118,7 +119,8 @@ export { classIdByName, classWeaponKinds, openStock, promotionAdvice, sealAvaila
 export { coverage, deployCount, deployMax, deployRoleOf, forcedOn, suggestDeployment, suggestLoadout, type DeployCandidate, type Deployment, type Loadout, type Pair } from './deploy';
 export { childParalogueGates, isChildParalogue, type ChildParalogueGate, type ParalogueGateState } from './child-paralogues';
 export { type MapWaves, type Wave, type WaveGroup } from './waves';
-export { MAX_TURNS, type MapPlay, type MapPlayInput, type SimFight, type SimFoeGroup, type SimGroup, type SimMap, type SimTurn, type SimUnit, type SimUnitTally, type SimWave } from './sim/map-play';
+export { type ArmySpread, type SimItem } from './sim/sustain';
+export { MAX_TURNS, type MapPlay, type MapPlayInput, type SimAct, type SimFight, type SimFoeGroup, type SimGroup, type SimMap, type SimTurn, type SimUnit, type SimUnitTally, type SimWave } from './sim/map-play';
 export { simLineup, type SimMapOptions } from './sim/sim-map';
 export { BLIND_SPOTS, type BlindSpot, type BlindSpotId } from './assumptions';
 export { bestWeapon, classTypes, dangerFlags, foeKey, foeOf, foesOf, matchup, pairUpBonus, statValue, type DangerFlag, type Fighter, type Foe, type Matchup } from './solver';
@@ -390,6 +392,12 @@ export type Engine = {
   playMap(input: MapPlayInput, seed: number): MapPlay;
   /** The no-death chance averaged over `runs` plays from `seed` (Lunatic+ skills drawn anew each run). */
   mapNoDeath(input: MapPlayInput, seed: number, runs?: number): number;
+  /**
+   * The chance a unit's staff reaches a pair (#182): its Mov plus the staff's range (Mag ÷ 2 for Physic, Fortify and
+   * Rescue) against the assumed army spread (`army-spread`, unless `spread` gives a map's distances). 0 for an item
+   * that isn't a healing or Rescue staff. Both play calls above fill in the assumed spread when the input has none.
+   */
+  staffReach(unit: SimUnit, staff: string, spread?: readonly number[]): number;
   /** The stated blind spots, each with its lean (may read high, low, or either way). */
   blindSpots(): readonly BlindSpot[];
   /** A map's chapter-guide entries (#123), grouped by source, each with its source's name and link. */
@@ -695,6 +703,8 @@ function mapById(id: string): ChapterData {
 }
 
 export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): Engine {
+  // The map simulation's staff reach (#182): the assumed army spread, unless the input gives the map's distances.
+  const spreadIn = (input: MapPlayInput): MapPlayInput => (input.spread ? input : { ...input, spread: assumptions['army-spread'] });
   // Parent profiles, memoised by parent (Robin's gender included).
   const profiles = new Map<string, ResolvedParent>();
   const profileOf = (ref: ParentRef): ResolvedParent => {
@@ -1493,8 +1503,12 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       return wavesCache.get(k)!;
     },
     simMap: simMapById,
-    playMap,
-    mapNoDeath: (input, seed, runs = 1) => meanNoDeath(input, Array.from({ length: Math.max(1, runs) }, (_, i) => (i === 0 ? seed : runSeed(seed, i)))),
+    playMap: (input, seed) => playMap(spreadIn(input), seed),
+    mapNoDeath: (input, seed, runs = 1) => meanNoDeath(spreadIn(input), Array.from({ length: Math.max(1, runs) }, (_, i) => (i === 0 ? seed : runSeed(seed, i)))),
+    staffReach: (unit, staff, spread = assumptions['army-spread']) => {
+      const item = unit.items?.find((i) => i.item.name === staff)?.item ?? itemByName(staff);
+      return item ? staffReach(unit, item, spread) : 0;
+    },
     blindSpots: () => BLIND_SPOTS,
     chapterGuide: (map) => {
       const entries = CHAPTER_GUIDE.filter((e) => e.map === map);
