@@ -42,7 +42,7 @@
  */
 import type { GameItem } from '../../game-data/items';
 import { bestWeapon, matchup, type Fighter, type Foe, type Matchup, type SupportLevel } from '../solver';
-import { exchange, type Exchange, type Initiator } from './exchange';
+import { exchange, leadHpAfter, type Exchange, type Initiator } from './exchange';
 import { createRng, type Rng } from './random';
 import type { BlindSpotId } from '../assumptions';
 import { dances, mergeRally, potionHeal, rallied, rallyKey, rallyOf, reachChance, staffEffect, type ArmySpread, type RallyBonus, type SimItem, type StaffEffect } from './sustain';
@@ -319,6 +319,8 @@ export const MAX_TURNS = 50;
  * risk and the enemy phase after it. Riskier engagements wait, unless nothing safer moves the map on that turn.
  */
 export const EXPOSURE_RISK = 0.01;
+/** The most foes that come at one wall on an enemy phase: the four tiles next to it (see ). */
+export const WALL_REACH = 4;
 const LUNATIC_PLUS_DRAWS = 2;
 const BLIND_SPOTS: readonly BlindSpotId[] = ['one-worst-attacker', 'held-back-out-of-reach', 'equal-share-of-actions', 'likely-result', 'bosses-hold', 'skills-in-combat'];
 /** A heal's small worth beyond the danger it lifts: HP topped up now is HP in hand for the turns to come. */
@@ -425,7 +427,7 @@ function variantsOf(grp: SimGroup): Variants {
 }
 
 /** A lead's matchup against one foe (its best weapon for it), and the exchanges worked out from it, by HPs. */
-type Combat = { readonly m: Matchup; readonly weapon: GameItem | undefined; readonly exchanges: Map<number, Exchange> };
+type Combat = { readonly m: Matchup; readonly weapon: GameItem | undefined; readonly exchanges: Map<number, Exchange>; dists?: Map<number, Map<number, number>> };
 
 /**
  * Combats outlive a play: a solve plays the same lineup on the same map many times, so each (group, foe, drawn
@@ -553,6 +555,19 @@ class MapState {
   progress = false;
   /** The fronts whose Rally was weighed this turn (see `bestRally`). */
   private rallyWeighed = new Set<number>();
+  /** This enemy phase, by front: its HP before the first attack on it, and each attacker's group and HP (see `drawToWalls`). */
+  private readonly phaseSurvival = new Map<number, { readonly start: number; readonly hits: { readonly g: number; readonly hp: number }[] }>();
+  /** Whether a wall drew more than one foe this map (the `walls-draw-foes` blind spot applies). */
+  walled = false;
+  /** This turn, the front kept out of the fighting to press the boss (see `keepPresser`); -1 none, undefined not decided. */
+  private reserved: number | undefined;
+  /** Foes on the field at the start of the first turn, and whether this turn starts with as many or more (`pressing`). */
+  private fieldBefore = Infinity;
+  private filling = false;
+  /** The least risk of an attack on the boss seen on earlier turns, and this turn (see `pressBoss`). */
+  private pressSeen = Infinity;
+  private pressSeenNow = Infinity;
+  private pressWeighed = false;
   /** Whether the target boss was attacked on this turn's player phase (see `pressBoss`). */
   bossHit = false;
   /** Whether any pair stood apart (the Attack Stance blind spot applies). */
@@ -792,6 +807,7 @@ class MapState {
   /** The start of a turn: last turn's Rally and Rescues wear off. HP carries over: only actions buy it back (#182). */
   startTurn() {
     this.bossHit = false;
+    this.phaseSurvival.clear();
     this.safe.clear();
     this.exposed.clear();
     this.dropSurvival();
@@ -1243,6 +1259,12 @@ class MapState {
     }
     this.bonus = this.front.map(() => undefined);
     this.rallyWeighed = new Set();
+    this.reserved = undefined;
+    if (this.turn === 1) this.fieldBefore = this.foes.length;
+    this.filling = this.turn > 1 && this.foes.length >= this.fieldBefore;
+    this.pressSeen = this.pressSeenNow;
+    this.pressSeenNow = Infinity;
+    this.pressWeighed = false;
   }
 
   /** Whether an unarmed unit has something to do apart: a staff with uses, a Dance or a Rally. */
@@ -1272,9 +1294,9 @@ class MapState {
    * can't strike, the boss isn't open, or it more likely dies than not. With `bound`, a risk over `EXPOSURE_RISK` may
    * be a low estimate (`exact` false): enough to tell it's not safe.
    */
-  private attackRisk(a: Actor, bonus: RallyBonus | undefined, exposed: boolean, f: FoeInstance, ctx: PolicyContext, bound = false): { ex: Exchange; risk: number; exact: boolean } | null {
+  private attackRisk(a: Actor, bonus: RallyBonus | undefined, exposed: boolean, f: FoeInstance, ctx: PolicyContext, bound = false, hp = this.hp[a.unit]!): { ex: Exchange; risk: number; exact: boolean } | null {
     if (this.groups[f.g]!.target && !ctx.open) return null;
-    const ex = this.exchangeFor(a, bonus, f, 'player', this.hp[a.unit]!);
+    const ex = this.exchangeFor(a, bonus, f, 'player', hp);
     if (!ex.leadStrikes || ex.survive < 0.5 || (ex.foeHp >= f.hp && ex.kill <= 0)) return null;
     if (exposed) return { ex, risk: 1 - ex.survive, exact: true };
     if (bound && 1 - ex.survive > EXPOSURE_RISK) return { ex, risk: 1 - ex.survive, exact: false };
@@ -1337,7 +1359,7 @@ class MapState {
     if (this.ranked) return this.rankedAttack(ctx, all, maxRisk);
     let best: Attack | undefined;
     for (let gi = 0; gi < this.front.length; gi++) {
-      if (ctx.acted.has(gi) || (!all && ctx.held?.has(gi))) continue;
+      if (ctx.acted.has(gi) || gi === this.reserved || (!all && ctx.held?.has(gi))) continue;
       const a = this.bestAttackOf(gi, ctx, maxRisk);
       if (a && (!best || a.value > best.value)) best = a;
     }
@@ -1354,7 +1376,7 @@ class MapState {
    */
   private rankedAttack(ctx: PolicyContext, all: boolean, maxRisk: number): Attack | undefined {
     const open: number[] = [];
-    for (let gi = 0; gi < this.front.length; gi++) if (!ctx.acted.has(gi) && (all || !ctx.held?.has(gi))) open.push(gi);
+    for (let gi = 0; gi < this.front.length; gi++) if (!ctx.acted.has(gi) && gi !== this.reserved && (all || !ctx.held?.has(gi))) open.push(gi);
     const rank = (gi: number) => this.ranks[this.front[gi]!.unit]!;
     const kills: Attack[] = [];
     const chips: Attack[] = [];
@@ -1476,10 +1498,45 @@ class MapState {
   }
 
   /**
+   * Whether this turn must press the boss (see `pressBoss`): reinforcements never stop, the field is filling (as many
+   * foes at this turn's start as at the first turn's, or more: the stream outpaces the army), and the boss is open and
+   * not yet hit this turn.
+   */
+  private pressing(ctx: PolicyContext): boolean {
+    return this.endless && this.input.map.victory === 'boss' && !this.bossHit && ctx.open && this.filling;
+  }
+
+  /**
+   * Keeps a presser for the boss (see `pressBoss`), before anyone fights: when no front has a safe attack on it this
+   * turn, the front whose attack on it would be least risky at full HP stays out of the fighting (a hurt one is healed
+   * first), so it presses after the rest have drawn the foes' attacks. Never an action itself.
+   */
+  keepPresser(ctx: PolicyContext): undefined {
+    if (this.reserved !== undefined || !this.pressing(ctx)) return undefined;
+    let rested: { gi: number; risk: number } | undefined;
+    for (let gi = 0; gi < this.front.length; gi++) {
+      if (ctx.acted.has(gi) || this.npcFronts.has(gi) || !this.armed(gi)) continue;
+      for (const f of ctx.worn) {
+        if (!this.groups[f.g]!.target) continue;
+        // A safe attack on the boss now: the fighting tier takes it (boss damage is worth the victory), nobody waits.
+        const now = this.attackRisk(this.front[gi]!, this.bonus[gi], false, f, ctx);
+        if (now && now.risk <= EXPOSURE_RISK) return (this.reserved = -1), undefined;
+        const r = this.attackRisk(this.front[gi]!, this.bonus[gi], false, f, ctx, false, this.maxHp(gi));
+        if (r && (!rested || r.risk < rested.risk)) rested = { gi, risk: r.risk };
+      }
+    }
+    this.reserved = rested?.gi ?? -1;
+    return undefined;
+  }
+
+  /**
    * Reinforcements that never stop (Endgame's) and a target boss that fights back (the second realism pass): a turn
-   * that doesn't hurt the boss only lets the field fill, however safely the army fells the stream, so each turn the
-   * least risky attack on the boss goes ahead, whatever its risk, before the rest fight. The model reads waiting as free
-   * (each exposed pair still meets one attacker as the field fills), so without this the army farms the stream forever.
+   * that doesn't hurt the boss only lets the field fill, however safely the army fells the stream. The model reads
+   * waiting as free (each exposed pair still meets one attacker as the field fills), so an army with no safe attack on
+   * the boss farmed the stream to the turn cap. Once the field fills (`pressing`) and the rest have fought and healed, a
+   * turn that hasn't hurt the boss yet sends the least risky attack on it (the presser kept back, usually), over the 1%
+   * a careful player takes for free: when that risk has stopped falling since last turn, and never a death more likely
+   * than not. A turn it waits, the presser fights like anyone else.
    */
   pressBoss(ctx: PolicyContext): Action | undefined {
     if (!this.endless || this.input.map.victory !== 'boss' || this.bossHit || !ctx.open) return undefined;
@@ -1491,6 +1548,17 @@ class MapState {
         this.exposure(a, ctx, false);
         if (!best || a.risk < best.risk - EPS || (a.risk <= best.risk + EPS && a.value > best.value)) best = a;
       }
+    }
+    if (!best) return undefined;
+    // Weighed once a turn. Waiting is free in the model, so the press waits while its risk is falling turn on turn (the
+    // field thinning, the presser healing), and never takes a death more likely than not.
+    if (this.pressWeighed) return undefined;
+    this.pressWeighed = true;
+    this.pressSeenNow = best.risk;
+    if (!this.pressing(ctx) || best.risk >= 0.5 || best.risk < this.pressSeen - EPS) {
+      // Not this turn: the presser kept back fights like anyone else.
+      this.reserved = -1;
+      return undefined;
     }
     return best;
   }
@@ -1511,7 +1579,7 @@ class MapState {
       if (!best || risk < best.risk - EPS) best = { action, risk };
     };
     for (let gi = 0; gi < this.front.length; gi++) {
-      if (ctx.acted.has(gi) || !this.armed(gi)) continue;
+      if (ctx.acted.has(gi) || gi === this.reserved || !this.armed(gi)) continue;
       // Its least risky attack, then waiting in reach.
       for (const a of this.attacksOf(gi, ctx)) {
         this.exposure(a, ctx, false);
@@ -1534,7 +1602,7 @@ class MapState {
     if (!ctx.threats.length) return undefined;
     let best: { readonly action: Action; readonly risk: number } | undefined;
     for (let gi = 0; gi < this.front.length; gi++) {
-      if (ctx.acted.has(gi) || this.exposed.has(gi) || this.safe.has(gi) || !this.armed(gi) || this.npcFronts.has(gi)) continue;
+      if (ctx.acted.has(gi) || gi === this.reserved || this.exposed.has(gi) || this.safe.has(gi) || !this.armed(gi) || this.npcFronts.has(gi)) continue;
       const risk = 1 - this.survival(gi, this.hp[this.front[gi]!.unit]!, ctx);
       if (risk > EXPOSURE_RISK || (best && risk >= best.risk - EPS) || !this.counters(gi, ctx)) continue;
       best = { action: { kind: 'bait', group: gi, risk, value: 0 }, risk };
@@ -1902,10 +1970,104 @@ class MapState {
         if (!f) continue;
         list.splice(list.indexOf(f), 1);
         hit.add(o.gi);
-        this.fight(o.gi, f, this.exchangeOf(o.gi, f, 'enemy'), 'enemy');
+        this.enemyAttack(o.gi, f, this.exchangeOf(o.gi, f, 'enemy'));
         if (this.checkVictory()) return;
       }
     }
+    this.drawToWalls(fronts, byGroup);
+  }
+
+  /**
+   * Foe `f` attacks front `gi` on enemy phase. A front's first attack plays as any exchange; a later one in the same
+   * enemy phase (the stress case's second attacker, a wall's) is worked out over every HP the attacks before it can
+   * leave (`phaseChain`), not from their likely result: the chance multiplied in is this attack's given the ones
+   * before, and the play goes on from the expected HP given it lived through them all.
+   */
+  private enemyAttack(gi: number, f: FoeInstance, ex: Exchange) {
+    let w = this.phaseSurvival.get(gi);
+    if (!w) this.phaseSurvival.set(gi, (w = { start: this.hp[this.front[gi]!.unit]!, hits: [] }));
+    if (!w.hits.length) {
+      w.hits.push({ g: f.g, hp: f.hp });
+      this.fight(gi, f, ex, 'enemy');
+      return;
+    }
+    const before = this.phaseChain(gi, w);
+    const s = total(before);
+    const next = this.hpAfter(gi, f, before);
+    const after = total(next);
+    w.hits.push({ g: f.g, hp: f.hp });
+    let sum = 0;
+    for (const [hp, p] of next) sum += hp * p;
+    this.fight(gi, f, after > 0 ? { ...ex, survive: s > 0 ? after / s : 0, leadHp: Math.round(sum / after) } : { ...ex, survive: 0 }, 'enemy');
+  }
+
+  /** Front `gi`'s HP over its endings after the attacks it took so far this enemy phase (see `enemyAttack`). */
+  private phaseChain(gi: number, w: { readonly start: number; readonly hits: readonly { readonly g: number; readonly hp: number }[] }): Map<number, number> {
+    let dist = new Map([[w.start, 1]]);
+    for (const h of w.hits) dist = this.hpAfter(gi, h, dist);
+    return dist;
+  }
+
+  /**
+   * Walls (the second realism pass): after every exposed front's attacks, a front that can take more draws the foes
+   * still free, one at a time, the worst left for it first: a careful player stands a sturdy unit where the foes come,
+   * so each counters in turn. It draws another only while its chance of living through every attack this enemy phase
+   * stays within `EXPOSURE_RISK` (worked out exactly over the HP each attack can leave, not from the likely result), its
+   * counter hurts the foe, and fewer than `WALL_REACH` foes have come at it. Every foe still attacks once. Where the
+   * map lets a wall stand, and how many foes really come, are the stated blind spot `walls-draw-foes`.
+   */
+  private drawToWalls(fronts: readonly number[], byGroup: Map<number, FoeInstance[]>) {
+    for (const gi of fronts) {
+      const w = this.phaseSurvival.get(gi);
+      // Not reached at all: no foe was left for it.
+      if (!w?.hits.length) continue;
+      let dist = this.phaseChain(gi, w);
+      if (total(dist) < 1 - EXPOSURE_RISK) continue;
+      while (w.hits.length < WALL_REACH) {
+        let best: { f: FoeInstance; ex: Exchange } | undefined;
+        for (const list of byGroup.values()) {
+          const f = list.find((x) => x.hp > 0);
+          if (!f) continue;
+          const ex = this.exchangeOf(gi, f, 'enemy');
+          if (!best || ex.survive < best.ex.survive) best = { f, ex };
+        }
+        if (!best || !best.ex.leadStrikes || best.ex.foeHp >= best.f.hp) break;
+        const next = this.hpAfter(gi, best.f, dist);
+        const after = total(next);
+        if (after < 1 - EXPOSURE_RISK) break;
+        const list = byGroup.get(best.f.g)!;
+        list.splice(list.indexOf(best.f), 1);
+        this.walled = true;
+        this.enemyAttack(gi, best.f, best.ex);
+        dist = next;
+        if (this.checkVictory()) return;
+      }
+    }
+  }
+
+  /**
+   * The lead's HP over its endings after foe `f` attacks front `gi`, from each HP in `from` (with its chance): the
+   * endings it lives through, weighted by `from`'s chances. Apart, the Attack Stance mix at the spread's rate.
+   */
+  private hpAfter(gi: number, f: { readonly g: number; readonly hp: number }, from: ReadonlyMap<number, number>): Map<number, number> {
+    const a = this.front[gi]!;
+    const bonus = this.bonus[gi];
+    const out = new Map<number, number>();
+    const add = (grp: SimGroup, slot: 0 | 2, share: number, hp: number, p: number) => {
+      if (share <= 0) return;
+      const c = this.combatWith(bonus ? ralliedGroup(grp, bonus) : grp, a.rows, slot + (bonus ? 1 : 0), f);
+      const k = hp * 1024 + f.hp;
+      let d = (c.dists ??= new Map()).get(k);
+      if (!d) c.dists.set(k, (d = leadHpAfter(c.m, c.weapon, hp, f.hp, 'enemy')));
+      for (const [h, q] of d) out.set(h, (out.get(h) ?? 0) + p * share * q);
+    };
+    for (const [hp, p] of from) {
+      if (a.adj) {
+        add(a.adj, 2, this.adjacency, hp, p);
+        add(a.grp, 0, 1 - this.adjacency, hp, p);
+      } else add(a.grp, 0, 1, hp, p);
+    }
+    return out;
   }
 
   endTurn() {
@@ -1938,11 +2100,14 @@ type PolicyContext = {
 /**
  * The action policy, tier by tier: the first tier with an action worth taking acts, then the policy starts over.
  * 1. A planned Rally, before anyone fights (its bonus is assumed to reach every pair: a stated blind spot).
- * 1b. With reinforcements that never stop, the least risky attack on the target boss, once a turn (`pressBoss`).
+ * 1b. With reinforcements that never stop and no safe attack on the target boss, a presser is kept out of the fighting
+ *     (`keepPresser`; never an action).
  * 2. Safe fighting (within `EXPOSURE_RISK`), by fronts not held back (dancers, and fronts whose own sustain is worth
  *    more than their attack).
  * 3. A Dance for the front with the best safe attack left, which then acts in tier 2.
  * 4. Sustain: a heal, Fortify, Rescue or potion, by the enemy-phase survival it buys.
+ * 4b. With reinforcements that never stop, a turn that hasn't hurt the boss yet presses it: the least risky attack on
+ *     it, whatever its risk (`pressBoss`).
  * 5. Safe fighting by anyone left, held back or not.
  * 6. A safe bait (the realism pass): a front that lives through the enemy phase in reach and counters waits there.
  * 7. Engaging (#183): nobody is in reach yet, so the least risky attack or bait goes ahead; the rest hold back.
@@ -1950,14 +2115,22 @@ type PolicyContext = {
  */
 const POLICY: readonly ((s: MapState, ctx: PolicyContext) => Action | undefined)[] = [
   (s, ctx) => s.bestRally(ctx),
-  (s, ctx) => s.pressBoss(ctx),
+  (s, ctx) => s.keepPresser(ctx),
   (s, ctx) => s.bestAttack(ctx),
   (s, ctx) => s.bestDance(ctx),
   (s, ctx) => s.bestSustain(ctx),
+  (s, ctx) => s.pressBoss(ctx),
   (s, ctx) => s.bestAttack(ctx, true),
   (s, ctx) => s.safeBait(ctx),
   (s, ctx) => s.engage(ctx),
 ];
+
+/** The total chance over an HP distribution's endings. */
+function total(dist: ReadonlyMap<number, number>): number {
+  let s = 0;
+  for (const p of dist.values()) s += p;
+  return Math.min(1, s);
+}
 
 /** A unit's kit: its staves (with each one's reach chance against the spread), potions, Dance and Rally. */
 function kitOf(u: SimUnit, spread: ArmySpread | undefined): Kit {
@@ -2013,6 +2186,7 @@ export function playMap(input: MapPlayInput, seed: number): MapPlay {
   const spots: BlindSpotId[] = [...BLIND_SPOTS];
   if (s.kits.some((k) => k.rally)) spots.push('rally-reaches-every-pair');
   if (s.splitAny) spots.push('attack-stance-adjacency');
+  if (s.walled) spots.push('walls-draw-foes');
   if (s.npcAny) spots.push('npc-kills');
   if (s.npcUnarmed) spots.push('npc-screened');
   if (s.talked) spots.push('talk-reaches');

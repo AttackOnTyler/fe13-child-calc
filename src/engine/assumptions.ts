@@ -615,7 +615,8 @@ export type BlindSpotId =
   | 'npc-screened'
   | 'talk-reaches'
   | 'door-keys'
-  | 'skills-in-combat';
+  | 'skills-in-combat'
+  | 'walls-draw-foes';
 
 /** The run simulation's own blind spots (#186): how it walks the army from one map to the next. */
 export type RunBlindSpotId =
@@ -656,6 +657,17 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
     touches: ['map', 'fight'],
   },
   {
+    id: 'walls-draw-foes',
+    label: 'Walls draw the foes they can take',
+    why:
+      'After every exposed pair’s one attack, a pair that can take more draws the foes still free, one at a time, the worst for it first, ' +
+      'while its chance of living through the whole enemy phase stays within the 1% a careful player risks and its counter hurts each: a ' +
+      'sturdy unit stood where the foes come, up to four (the tiles next to it). With no map positions, the play can’t know whether the ' +
+      'map offers such ground, or whether the foes come at all: fewer attackers mean fewer counter kills and longer maps.',
+    lean: 'high',
+    touches: ['map', 'fight'],
+  },
+  {
     id: 'equal-share-of-actions',
     label: 'An equal share of actions per turn',
     why:
@@ -668,8 +680,9 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
     id: 'rally-reaches-every-pair',
     label: 'Rally reaches every pair',
     why:
-      'A unit with a Rally skill equipped rallies first each turn, with its own action, and the bonus is taken to reach every other pair for ' +
-      'that turn’s fights. In play a Rally reaches only the units within 3 tiles.',
+      'A unit with a Rally skill equipped rallies before anyone fights, with its own action, when the bonus on the others’ fights is worth ' +
+      'more than what it would do instead (always, with nothing else to do), and the bonus is taken to reach every other pair for that ' +
+      'turn’s fights. In play a Rally reaches only the units within 3 tiles.',
     lean: 'high',
     touches: ['map', 'fight'],
   },
@@ -749,9 +762,10 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
       'Exposure is the player’s choice (#183): a front that attacks, or waits as bait, is in the foes’ reach on enemy phase, and one that holds ' +
       'back is not, however fast the foes or small the map. A careful player only exposes a front that very likely lives through it (1% risk at ' +
       'most): it attacks, or waits in reach as bait when it would live through the enemy phase there and counter; when nothing is that safe it ' +
-      'engages once a turn with the least risk. With reinforcements that never stop it goes for the boss from the start, and a map it can’t ' +
-      'win in 50 turns counts as lost. In play, foes that move every turn can reach a unit that ' +
-      'hangs back.',
+      'engages once a turn with the least risk. With reinforcements that never stop it goes for the boss from the start, and once the ' +
+      'stream outpaces it, presses a boss it has no safe attack on with its least risky attacker (kept back and healed for it) when that ' +
+      'risk stops falling, never at worse than even odds. A map it can’t win in 50 turns counts as lost. In play, foes that move every ' +
+      'turn can reach a unit that hangs back, and waiting as the field fills costs more than the play counts.',
     lean: 'high',
     touches: ['map'],
   },

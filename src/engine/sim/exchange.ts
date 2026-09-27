@@ -77,6 +77,57 @@ function grow(k: number) {
  * Dual Guard included); `leadWeapon`/`foeWeapon` decide who reaches whom.
  */
 export function exchange(m: Matchup, leadWeapon: GameItem | undefined, leadHp: number, foeHp: number, initiator: Initiator): Exchange {
+  const { keys, probs, leadCan, foeCan } = endings(m, leadWeapon, leadHp, foeHp, initiator);
+  let survive = 0;
+  let kill = 0;
+  let lSum = 0;
+  let fAlive = 0;
+  let fSum = 0;
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i]!;
+    const p = probs[i]!;
+    const l = Math.floor(k / K);
+    const f = k % K;
+    if (l <= 0) continue;
+    survive += p;
+    lSum += l * p;
+    if (f <= 0) kill += p;
+    else {
+      fAlive += p;
+      fSum += f * p;
+    }
+  }
+  if (survive <= 0) return { survive: 0, kill: 0, leadHp, foeHp, leadStrikes: leadCan, foeStrikes: foeCan };
+  const killGiven = kill / survive;
+  return {
+    survive: Math.min(1, survive),
+    kill: killGiven,
+    leadHp: Math.round(lSum / survive),
+    foeHp: killGiven >= 0.5 || fAlive <= 0 ? 0 : Math.max(1, Math.round(fSum / fAlive)),
+    leadStrikes: leadCan,
+    foeStrikes: foeCan,
+  };
+}
+
+/**
+ * The lead's HP after the exchange, over the endings it lives through: each HP with its chance (summing to the
+ * exchange's `survive`). A wall's enemy phase chains these (see map-play's `drawToWalls`).
+ */
+export function leadHpAfter(m: Matchup, leadWeapon: GameItem | undefined, leadHp: number, foeHp: number, initiator: Initiator): Map<number, number> {
+  const { keys, probs } = endings(m, leadWeapon, leadHp, foeHp, initiator);
+  const out = new Map<number, number>();
+  for (let i = 0; i < keys.length; i++) {
+    const l = Math.floor(keys[i]! / K);
+    if (l > 0) out.set(l, (out.get(l) ?? 0) + probs[i]!);
+  }
+  return out;
+}
+
+/** States: lead HP × K + foe HP. */
+const K = 1024;
+
+/** Every ending of the exchange (state keys, see `K`) with its chance. */
+function endings(m: Matchup, leadWeapon: GameItem | undefined, leadHp: number, foeHp: number, initiator: Initiator): { keys: number[]; probs: number[]; leadCan: boolean; foeCan: boolean } {
   const foeWeapon = m.foe.weapon;
   const leadCan = initiator === 'player' ? !!leadWeapon && !!rangeOf(leadWeapon) : counters(foeWeapon, leadWeapon);
   const foeCan = initiator === 'enemy' ? !!foeWeapon && m.foeStrikes > 0 : counters(leadWeapon, foeWeapon);
@@ -93,9 +144,8 @@ export function exchange(m: Matchup, leadWeapon: GameItem | undefined, leadHp: n
   if (m.doubles) attack('lead');
   else if (m.doubled) attack('foe');
 
-  // States: lead HP × 1024 + foe HP → chance, in the order each state was first reached (a strike's outcomes are
+  // States: lead HP × K + foe HP → chance, in the order each state was first reached (a strike's outcomes are
   // summed into the next states in that order: the arithmetic is the same whatever holds them).
-  const K = 1024;
   // Stats are whole numbers in the game; a fractional one (hand-built input) is rounded down so the state key holds.
   const dmg = Math.floor(m.damage);
   const backDmg = Math.floor(m.backDamage);
@@ -162,34 +212,6 @@ export function exchange(m: Matchup, leadWeapon: GameItem | undefined, leadHp: n
     keys = nextKeys;
     probs = nextProbs;
   }
-  let survive = 0;
-  let kill = 0;
-  let lSum = 0;
-  let fAlive = 0;
-  let fSum = 0;
-  for (let i = 0; i < keys.length; i++) {
-    const k = keys[i]!;
-    const p = probs[i]!;
-    const l = Math.floor(k / K);
-    const f = k % K;
-    if (l <= 0) continue;
-    survive += p;
-    lSum += l * p;
-    if (f <= 0) kill += p;
-    else {
-      fAlive += p;
-      fSum += f * p;
-    }
-  }
-  if (survive <= 0) return { survive: 0, kill: 0, leadHp, foeHp, leadStrikes: leadCan, foeStrikes: foeCan };
-  const killGiven = kill / survive;
-  return {
-    survive: Math.min(1, survive),
-    kill: killGiven,
-    leadHp: Math.round(lSum / survive),
-    foeHp: killGiven >= 0.5 || fAlive <= 0 ? 0 : Math.max(1, Math.round(fSum / fAlive)),
-    leadStrikes: leadCan,
-    foeStrikes: foeCan,
-  };
+  return { keys, probs, leadCan, foeCan };
 }
 
