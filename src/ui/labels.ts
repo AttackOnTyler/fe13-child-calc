@@ -54,7 +54,7 @@ export const STATE_UI: Readonly<Record<UnitState, { icon: string; label: string;
 /** The explorer's scoring roles: a Lead preset scores a unit's own stats, a Support preset the pair-up bonus it gives. */
 export const SCORING_ROLE_UI: Readonly<Record<ScoringRole, { readonly label: string; readonly hint: string }>> = {
   lead: { label: 'Lead', hint: 'Lead: scored on its own stats' },
-  support: { label: 'Battery', hint: 'Battery: scored on the pair-up bonus it gives its lead' },
+  support: { label: 'Support', hint: 'Support: scored on the pair-up bonus it gives its lead' },
 };
 
 /** A child's status on the children ledger (#212: from the run and the adopted plan, never a score). */

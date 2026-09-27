@@ -931,8 +931,8 @@ function heatmapRow(child: ChildId, line: Line, gender: Gender, sc: Scoring, nco
       h('span', { class: 'af' }, engine.robinLabel(line.result.pairing) ?? ''),
       line.pinned ? h('span', {}, ' (pinned; click it again to go back to best) ', h('button', { class: 'ghost', onclick: () => togglePin(child, g, shownKey) }, 'Unpin')) : line.planned ? ' (the one you opened)' : ' (best)',
     ),
-    map.spread ? h('div', {}, `Colour: red = worst, green = best combo for this parent (${fmt(map.spread.lo)}–${fmt(map.spread.hi)}).`) : null,
-    h('div', {}, 'Click a cell to pin that combo into the row. Outline = best, ring = shown.'),
+    map.spread ? h('div', {}, `Colour: red = worst, green = best pairing for this parent (${fmt(map.spread.lo)}–${fmt(map.spread.hi)}).`) : null,
+    h('div', {}, 'Click a cell to pin that pairing into the row. Outline = best, ring = shown.'),
     morgan ? h('div', {}, 'This is the fixed Robin’s asset/flaw.') : null,
   );
   return h('tr', { class: 'heat-row' }, h('td', { colspan: String(ncols) }, h('div', { class: 'heatwrap' }, grid, note)));
@@ -1273,7 +1273,7 @@ function lineRows(child: ChildId, line: Line, gender: Gender, sc: Scoring, ncols
         ...guide('robin-heatmap'),
         class: 'expander',
         'aria-expanded': String(open),
-        title: `${open ? 'Hide' : 'Show'} the asset × flaw heatmap of Robin’s ${g.results.length} combos`,
+        title: `${open ? 'Hide' : 'Show'} the asset × flaw heatmap of Robin’s ${g.results.length} pairings`,
         onclick: () => {
           if (open) expanded.delete(id);
           else expanded.add(id);
@@ -1819,13 +1819,13 @@ const RANK_CHOICE_NAMES: Record<SupportRank, string> = { none: '—', C: 'C/B', 
 /** The rank input's choice for a rank: C/B and A/S each give the same bonus. */
 const rankChoice = (r: SupportRank): SupportRank => (r === 'B' ? 'C' : r === 'S' ? 'A' : r);
 
-/** Lead/Battery (the Lead/Support scoring role), set by the preset; picking the other one overrides it until ↺ or a new preset. */
+/** Lead/Support (the scoring role), set by the preset; picking the other one overrides it until ↺ or a new preset. */
 function roleControl(): HTMLElement {
   // The role applies globally: following the global preset's role is 'preset'.
   const fromPreset = presetOf(prefs).role ?? 'lead';
   const names = { lead: SCORING_ROLE_UI.lead.label, support: SCORING_ROLE_UI.support.label };
   const hints = { lead: SCORING_ROLE_UI.lead.hint, support: SCORING_ROLE_UI.support.hint };
-  const el = segmented('Role', ROLES, role(), names, (r) => setPrefs({ role: r === fromPreset ? 'preset' : r }), undefined, hints);
+  const el = segmented('Scoring role', ROLES, role(), names, (r) => setPrefs({ role: r === fromPreset ? 'preset' : r }), undefined, hints);
   if (viewPrefs().role !== 'preset') {
     el.append(h('button', { class: 'ghost', title: 'Follow the preset’s role', onclick: () => setPrefs({ role: 'preset' }) }, '↺'));
   }
