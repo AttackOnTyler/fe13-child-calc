@@ -7,6 +7,7 @@ import type { Assumptions, ChildId, Couple, DeploymentRole, Engine, FlawlessOpti
 import { chanceText } from './chance';
 import { EMPTY_SNAPSHOT, SUPPORT_LEVELS, addEntry, childJoinFrom, chromWedding, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, withUnit } from '../engine';
 import { removeClassChange, tierOfClass, withClassChange, withCountOverride, type Seal } from '../engine';
+import { entryAfterShopping, goldAfterShopping, removeShopLine, shopPrice, withShopLine, type ShopKind, type ShopLine } from '../engine';
 import { CHILD_UNITS } from '../game-data/children';
 import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
 import { h } from './dom';
@@ -38,7 +39,7 @@ export type RunContext = {
   readonly marriages?: () => readonly Couple[];
 };
 
-const RECORD_STEPS = ['Deployed units', 'Recruits', 'Deaths and marriages', 'Convoy and gold'] as const;
+const RECORD_STEPS = ['Deployed units', 'Recruits', 'Deaths and marriages', 'Convoy and gold', 'Shopping'] as const;
 
 export function runView(ctx: RunContext): HTMLElement[] {
   if (ctx.showingMaps || ctx.maps.map) {
@@ -138,7 +139,7 @@ export function flawlessReadout(engine: Engine, run: Run, options?: FlawlessOpti
       ? `${names(r.unknownHistory)} ${r.unknownHistory.length === 1 ? 'was' : 'were'} first logged in a class ${r.unknownHistory.length === 1 ? 'it' : 'they'} can’t join in: the Second Seal count before the log is read as 0 (set it on the chapter log if it isn’t).`
       : '',
     blank.length ? `Not simulated, no stats recorded: ${names(blank)}.` : '',
-    `Gold per map is each run’s gold at the map’s end, 10th to 90th percentile: what it held, plus Bullion no play can lose (sold at the next armory), less its rebuys, seals and endpoint kit.`,
+    `Gold per map is each run’s gold at the map’s end, 10th to 90th percentile: what it held (from your latest entry after its recorded shopping), plus Bullion no play can lose (sold at the next armory), less its rebuys, seals and endpoint kit.`,
     r.goldUnrecorded ? 'Your latest entry records no gold, so the runs start with none: record it in the chapter log.' : '',
     children.length ? `Children who don’t join the simulated army (their fixed parent isn’t married in the log or the plan, or a parent isn’t simulated): ${names(children)}.` : '',
     `Rests on: ${spots.map((b) => `${b.label[0]!.toLowerCase()}${b.label.slice(1)} (${LEAN[b.lean]})`).join(', ')}.`,
@@ -222,7 +223,7 @@ export function childStatsNote(run: Run, e: RunEntry, u: RosterUnit, assumptions
 
 /**
  * Record results (#118): the entry is already a copy of the last, so every step only records changes: deployed units,
- * the map's recruits (pre-filled), deaths and marriages, then convoy and gold.
+ * the map's recruits (pre-filled), deaths and marriages, convoy and gold at the map's end, then shopping (#192).
  */
 function recordResults(ctx: RunContext, e: RunEntry, step: number): HTMLElement {
   const i = ctx.run.entries.findIndex((x) => x.id === e.id);
@@ -279,8 +280,10 @@ function recordResults(ctx: RunContext, e: RunEntry, step: number): HTMLElement 
             ].join(', ') || 'nothing yet',
           ),
         ];
+      case 3:
+        return [h('p', { class: 'muted small' }, 'Gold and items as the map ended, before any shopping.'), goldAndConvoy(ctx, e), problems(e.snapshot)];
       default:
-        return [goldAndConvoy(ctx, e), problems(e.snapshot)];
+        return [shoppingSection(ctx, e)];
     }
   })();
   const last = step === RECORD_STEPS.length - 1;
@@ -464,7 +467,7 @@ function entryBlock(ctx: RunContext, e: RunEntry, latest: boolean, flagged: bool
       'div',
       { class: 'row' },
       h('button', { class: 'linkish', 'aria-expanded': String(open), onclick: () => ctx.setOpenEntry(open ? undefined : e.id) }, `${open ? '▾' : '▸'} ${mapLabel(ctx.engine, e)}`),
-      h('span', { class: 'muted small' }, `${units} units${e.snapshot.gold !== null ? ` · ${e.snapshot.gold}G` : ''}${latest ? ' · latest' : ''}`),
+      h('span', { class: 'muted small' }, `${units} units${e.snapshot.gold !== null ? ` · ${goldText(e.snapshot.gold)}${e.shopping?.length ? ` → ${goldText(goldAfterShopping(e)!)} after shopping` : ''}` : ''}${latest ? ' · latest' : ''}`),
       flagged ? h('span', { class: 'chip small warn', title: 'An earlier entry was edited after this one was copied from it: check whether the fix applies here too' }, '⚠ earlier entry edited') : null,
       ctx.engine.classChangeProposals(ctx.run).some((p) => p.entry === e.id)
         ? h('span', { class: 'chip small warn', title: 'A unit’s level reset here: open the entry to record the class change' }, '⚠ class change to record')
@@ -607,8 +610,92 @@ function goldAndConvoy(ctx: RunContext, e: RunEntry): HTMLElement {
   return h(
     'div',
     { class: 'row' },
-    h('label', {}, 'Gold ', input(e.snapshot.gold ?? '', (v) => edit((sn) => ({ ...sn, gold: numOrNull(v) })), { class: 'num-in' })),
+    h('label', { title: 'Gold as the map ended; shopping after it is recorded in the Shopping step' }, 'Gold at the map’s end ', input(e.snapshot.gold ?? '', (v) => edit((sn) => ({ ...sn, gold: numOrNull(v) })), { class: 'num-in' })),
     h('label', {}, 'Convoy ', input(heldText(e.snapshot.convoy), (v) => edit((sn) => ({ ...sn, convoy: parseHeldText(v) })), { class: 'wide-in', placeholder: 'Iron Sword 40; Vulnerary 3' })),
+  );
+}
+
+const SHOP_VERBS = { buy: 'Bought', sell: 'Sold', forge: 'Forged' } as const;
+
+/**
+ * The shopping step as the Run view writes it (#192): the gold at the map's end and after shopping with what went on
+ * upkeep, seals and the kit, each recorded line, and what the map used and found against the entry before.
+ */
+export function shoppingReadout(engine: Engine, run: Run, entry: string): { readonly gold: string; readonly lines: readonly string[]; readonly used: string; readonly found: string } {
+  const s = engine.shopping(run, entry)!;
+  const name = (u?: RosterUnit) => (u ? unitName(u, run.roster.run.gender) : 'the convoy');
+  const lines = s.lines.map((l) => {
+    const what = `${l.count && l.count > 1 ? `${l.count} × ` : ''}${l.item}${l.forge ? ` [${l.forge.name} +${l.forge.mt}/+${l.forge.hit}/+${l.forge.crit}]` : ''}`;
+    return `${SHOP_VERBS[l.kind]} ${what} ${l.kind === 'sell' ? 'from' : 'for'} ${name(l.unit)}: ${l.kind === 'sell' ? '+' : '−'}${goldText(l.gold)}`;
+  });
+  const { upkeep, seals, kit, sold } = s.spend;
+  const parts = [upkeep ? `upkeep ${goldText(upkeep)}` : '', seals ? `seals ${goldText(seals)}` : '', kit ? `kit ${goldText(kit)}` : '', sold ? `sold ${goldText(sold)}` : ''].filter(Boolean);
+  const gold =
+    s.goldAtEnd === null
+      ? 'Gold at the map’s end isn’t recorded: record it in Convoy and gold.'
+      : `Gold at the map’s end ${goldText(s.goldAtEnd)} → after shopping ${goldText(s.goldAfter!)}${parts.length ? ` (${parts.join(', ')})` : ''}`;
+  const i = run.entries.findIndex((e) => e.id === entry);
+  const first = i <= 0;
+  return {
+    gold,
+    lines,
+    used: first ? '' : `Uses spent on this map: ${s.used.map((u) => `${u.item} ${u.uses}`).join(', ') || 'none'}`,
+    found: first
+      ? ''
+      : `Found on this map: ${s.found.map((f) => `${f.count > 1 ? `${f.count} × ` : ''}${f.item}${f.from === 'random' ? ' (random find)' : ''}`).join(', ') || 'nothing'}`,
+  };
+}
+
+/**
+ * The shopping step (#192): buys, sales and forges after the map, each with its gold, pre-filled at the game's price
+ * (blank keeps it). A buy joins its holder at full uses; a sale leaves it; a forge sets the held weapon's forge.
+ */
+function shoppingSection(ctx: RunContext, e: RunEntry): HTMLElement {
+  const r = shoppingReadout(ctx.engine, ctx.run, e.id);
+  const name = (u: RosterUnit) => unitName(u, ctx.run.roster.run.gender);
+  const holders = Object.keys(e.snapshot.units) as RosterUnit[];
+  let kind: ShopKind = 'buy';
+  let item = '';
+  let unit: RosterUnit | '' = '';
+  let count = 1;
+  let gold = '';
+  const forge = { name: '', mt: 0, hit: 0, crit: 0 };
+  const record = () => {
+    if (!item.trim()) return;
+    const after = entryAfterShopping(e);
+    const list = unit ? (after.units[unit]?.inventory ?? []) : after.convoy;
+    const held = list.find((x) => x.item.trim().toLowerCase() === item.trim().toLowerCase());
+    const line: Omit<ShopLine, 'gold'> = {
+      kind,
+      item: item.trim(),
+      ...(unit ? { unit } : {}),
+      ...(kind !== 'forge' && count > 1 ? { count } : {}),
+      ...(kind === 'forge' ? { forge: { ...forge, name: forge.name || held?.forge?.name || item.trim() } } : {}),
+    };
+    const price = gold.trim() === '' ? shopPrice(line, held) : Math.max(0, Number(gold) || 0);
+    ctx.setRun(withShopLine(ctx.run, e.id, { ...line, gold: price }, ctx.now()));
+  };
+  const num = (label: string, set: (n: number) => void, value = 0) => input(value, (v) => set(Number(v) || 0), { class: 'num-in', 'aria-label': label });
+  return h(
+    'div',
+    { class: 'banner shopping' },
+    h('b', {}, 'Shopping after the map'),
+    h('div', { class: 'small' }, r.gold),
+    ...r.lines.map((t, k) => h('div', { class: 'row small' }, `✓ ${t}`, h('button', { class: 'mini', title: 'Remove this line', onclick: () => ctx.setRun(removeShopLine(ctx.run, e.id, k, ctx.now())) }, '✕'))),
+    h(
+      'div',
+      { class: 'row' },
+      h('select', { 'aria-label': 'Buy, sell or forge', onchange: (ev) => (kind = (ev.target as HTMLSelectElement).value as ShopKind) }, ...(['buy', 'sell', 'forge'] as const).map((k) => h('option', { value: k }, k[0]!.toUpperCase() + k.slice(1)))),
+      input('', (v) => (item = v), { 'aria-label': 'Item', placeholder: 'Steel Sword' }),
+      h('select', { 'aria-label': 'Held by', onchange: (ev) => (unit = (ev.target as HTMLSelectElement).value as RosterUnit) }, h('option', { value: '' }, 'Convoy'), ...holders.map((u) => h('option', { value: u }, name(u)))),
+      h('label', { class: 'small', title: 'How many bought or sold' }, '× ', num('Count', (n) => (count = Math.max(1, Math.floor(n))), 1)),
+      h('label', { class: 'small', title: 'A forge: its name and bonuses after it' }, 'forge ', input('', (v) => (forge.name = v), { class: 'num-in', 'aria-label': 'Forge name' }), ' +', num('Forge Mt', (n) => (forge.mt = n)), '/+', num('Forge Hit', (n) => (forge.hit = n)), '/+', num('Forge Crit', (n) => (forge.crit = n))),
+      h('label', { class: 'small', title: 'Blank: the game’s price (worth for a buy, by uses left for a sale, by forge steps for a forge)' }, 'gold ', input('', (v) => (gold = v), { class: 'num-in', 'aria-label': 'Gold', placeholder: 'price' })),
+      h('button', { class: 'mini', onclick: record }, 'Record'),
+    ),
+    r.used ? h('div', { class: 'muted small' }, r.used) : null,
+    r.found ? h('div', { class: 'muted small', title: 'Items gained with no buy or map item (a chest, a village, a drop, a side goal) behind them are random finds' }, r.found) : null,
+    h('span', { class: 'muted small' }, 'The next entry starts from the army as it left the shop, and so do the flawless chance’s runs.'),
   );
 }
 
@@ -619,6 +706,7 @@ function snapshotEditor(ctx: RunContext, e: RunEntry): HTMLElement {
     'div',
     { ...guide('log-snapshot'), class: 'snapshot small' },
     goldAndConvoy(ctx, e),
+    shoppingSection(ctx, e),
     unitTable(ctx, e, units.map(([u]) => u)),
     classChanges(ctx, e),
     units.some(([, u]) => !u.stats) ? h('div', { class: 'muted' }, 'Blank stats: a child’s stats depend on its parents, so record them from the game.') : null,
