@@ -16,7 +16,8 @@
  *   `chooseAction` picks the next action by the policy's tiers (`POLICY`) and `apply` plays it. Actions are a union:
  *   #182 added sustain (a heal, Fortify, Rescue, a potion), Dance and Rally (`sustain.ts`); #183 added the bait (a
  *   front waits in reach); #195 (EXP priority: who lands kills, waiting) adds kinds and tiers, not a new loop. Talks
- *   (#184) come first: a talker spends its action on the turn the solve sends it, and the recruit joins.
+ *   (#184) come first: a talker spends its action on the turn the solve sends it, and the recruit joins. Then the side
+ *   goals chased (#191, `MapPlayInput.chase`): each costs actions by a turn, and the play reports whether it was met.
  * - `allyPhase` (#184): the third party (an NPC the army must keep alive, a recruit before it joins) acts between player
  *   and enemy phase. Its deaths count; its kills aren't played. Other NPCs are scenery and aren't played at all.
  * - **Exposure** is the player's choice (#183): a front that attacks, or baits, is in reach on enemy phase; one that
@@ -149,16 +150,29 @@ export type MapPlayInput = {
    * only when together it has none and apart it has; Pair Up brings it back once together is safe again.
    */
   readonly bonds?: readonly (readonly [string, string])[];
+  /**
+   * The side goals the plan chases on this map (#191), each as the actions it costs (a Thief killed, a village visited,
+   * a chest opened, a villager guarded) by a turn. Those actions come first, after the talks.
+   */
+  readonly chase?: readonly SimChase[];
 };
+
+/**
+ * A side goal's cost in the play (#191): `actions` actions spent by the end of turn `by`'s player phase, paced from the
+ * first turn (ceil(actions / by) a turn, so a map won early rarely leaves one owed), each by a front with its action
+ * left, the last in the lineup first. The chaser isn't put in the foes' reach for it: the play has no map positions (a
+ * stated blind spot). A map won with actions still owed misses it.
+ */
+export type SimChase = { readonly id: string; readonly actions: number; readonly by: number };
 
 /**
  * An action other than an attack (#182): a heal (one pair, or every pair in reach with Fortify), a Rescue out of
  * enemy phase, a potion on the unit's own lead, a Dance (the target acts again) or a Rally (every other pair's stats
- * up for the turn); a bait (#183): the front waits in the foes' reach, to take their attack and counter; and a talk
- * (#184) to a recruit (`target`), which spends the talker's action.
+ * up for the turn); a bait (#183): the front waits in the foes' reach, to take their attack and counter; a talk
+ * (#184) to a recruit (`target`), which spends the talker's action; and a side goal's action (#191, `target` its id).
  */
 export type SimAct = {
-  readonly kind: 'heal' | 'rescue' | 'item' | 'dance' | 'rally' | 'bait' | 'talk';
+  readonly kind: 'heal' | 'rescue' | 'item' | 'dance' | 'rally' | 'bait' | 'talk' | 'chase';
   /** The acting unit (its front). */
   readonly unit: string;
   /** The front of the pair it's for (a heal or Fortify names each pair it heals, one act each). */
@@ -250,6 +264,8 @@ export type MapPlay = {
   readonly skills: Readonly<Record<string, readonly string[]>>;
   /** The stated blind spots this number rests on. */
   readonly blindSpots: readonly BlindSpotId[];
+  /** Each chased side goal (`MapPlayInput.chase`, #191): whether all its actions were spent by its turn. Absent with no chase. */
+  readonly chased?: Readonly<Record<string, boolean>>;
 };
 
 /** A map that runs this long without victory is stalled: the army can't finish it. */
@@ -554,6 +570,8 @@ class MapState {
   npcUnarmed = false;
   talked = false;
   joins: string[] = [];
+  /** The side goals chased (#191), with the actions spent on each so far. */
+  readonly chases: { readonly c: SimChase; spent: number }[];
 
   constructor(
     readonly input: MapPlayInput,
@@ -624,6 +642,25 @@ class MapState {
     this.kits = this.units.map((u) => kitOf(u, input.spread));
     this.uses = this.units.map((u) => (u.items ?? []).map((i) => i.uses));
     this.clearQueue = input.map.waves.filter((w) => w.onClear);
+    this.chases = (input.chase ?? []).map((c) => ({ c, spent: 0 }));
+  }
+
+  /** The side goals' actions due this turn (#191, see `SimChase`), after the talks. */
+  private chase(acted: Set<number>) {
+    for (const ch of this.chases) {
+      const { id, actions, by } = ch.c;
+      if (this.turn > by) continue;
+      let due = Math.min(actions, Math.ceil(actions / Math.max(1, by)) * this.turn) - ch.spent;
+      for (let gi = this.front.length - 1; gi >= 0 && due > 0; gi--) {
+        if (acted.has(gi) || this.npcFronts.has(gi)) continue;
+        acted.add(gi);
+        ch.spent++;
+        due--;
+        // The army moved something on: a turn spent chasing isn't a stall.
+        this.progress = true;
+        this.acts.push({ kind: 'chase', unit: this.units[this.front[gi]!.unit]!.id, target: id });
+      }
+    }
   }
 
   /** A foe group's index, its Lunatic+ skills drawn the first time it's seen. */
@@ -1548,6 +1585,7 @@ class MapState {
     // Fronts spent by this turn's Separate have no action left; NPCs take none from the army. Talks go first.
     const acted = new Set<number>([...this.spent, ...this.npcFronts]);
     this.talk(acted);
+    this.chase(acted);
     if (this.checkVictory()) return;
     // Each front's best attack on each foe group, kept while that group's most worn-down foe and its own HP are unchanged.
     const memo = new Map<number, Attack | null>();
@@ -1707,6 +1745,7 @@ export function playMap(input: MapPlayInput, seed: number): MapPlay {
     log: s.log,
     skills: s.skills,
     blindSpots: spots,
+    ...(input.chase ? { chased: Object.fromEntries(s.chases.map(({ c, spent }) => [c.id, spent >= c.actions])) } : {}),
   };
 }
 

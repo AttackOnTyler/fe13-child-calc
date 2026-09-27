@@ -73,6 +73,8 @@ import type { Difficulty, SavedPlan } from './roster';
 import { combatExp, type CombatOutcome, type ExpFoe } from './exp';
 import { classChangeProposals, internalLevels, type ProposedClassChange, type UnitInternalLevel } from './internal-level';
 import { entryShopping, type EntryShopping } from './shopping';
+import { sideGoalChoices, sideGoalsSecured, type SideGoalChoice, type SideGoalRecord } from './side-goals';
+import { renownAhead, type RenownAhead } from './renown';
 import { deploymentRoleOf, inPlay } from './composition';
 import { ARMY_FIT_PASS_CAP, armyFit, type RoleAssignment } from './army-fit';
 import { deriveRoles, type Derivation, type RobinGain, type RobinGainSide } from './derive';
@@ -130,10 +132,12 @@ export { coverage, deployCount, deployMax, deployRoleOf, forcedOn, suggestDeploy
 export { childParalogueGates, isChildParalogue, type ChildParalogueGate, type ParalogueGateState } from './child-paralogues';
 export { type MapWaves, type Wave, type WaveGroup } from './waves';
 export { type ArmySpread, type SimItem } from './sim/sustain';
-export { EXPOSURE_RISK, MAX_TURNS, type MapPlay, type MapPlayInput, type SimAct, type SimFight, type SimFoeGroup, type SimGroup, type SimMap, type SimStance, type SimTurn, type SimUnit, type SimUnitTally, type SimWave } from './sim/map-play';
+export { EXPOSURE_RISK, MAX_TURNS, type MapPlay, type MapPlayInput, type SimAct, type SimChase, type SimFight, type SimFoeGroup, type SimGroup, type SimMap, type SimStance, type SimTurn, type SimUnit, type SimUnitTally, type SimWave } from './sim/map-play';
 export { simLineup, type SimMapOptions } from './sim/sim-map';
-export { PROMOTION_RULE, levelCap, type ArmyUnit, type ChildRecruit, type GoldSpread, type RunSim, type RunSimInput, type RunSimMap, type RunSimMapResult, type ShoppingLine, type ShoppingStop, type StatSpread, type UnitForecast, type SupportForecast, type MarriageForecast } from './sim/run-sim';
+export { PROMOTION_RULE, levelCap, type ArmyUnit, type ChildRecruit, type GoldSpread, type RunSim, type RunSimInput, type RunSimMap, type RunSimMapResult, type ShoppingLine, type ShoppingStop, type StatSpread, type UnitForecast, type SupportForecast, type MarriageForecast, type RunSimSideGoal, type SideGoalForecast } from './sim/run-sim';
 export { KIT_FORGE_MT, VULNERARY_VALUE, type MapUpkeep } from './sim/upkeep';
+export { SIDE_GOAL_IDS, chaseByDefault, sideGoalById, withSideGoalPin, withSideGoalSecured, type SideGoal, type SideGoalChoice, type SideGoalDecision, type SideGoalId, type SideGoalPart, type SideGoalPlan, type SideGoalRecord } from './side-goals';
+export { rewardsValue, withRenown, type RenownAhead, type RenownStop, type RunRenown } from './renown';
 export { TOP_PAIR_POINTS, combatPoints, mapSupportGains, type SupportGain, type Together } from './sim/support-growth';
 export { FLAWLESS_RUNS, FLAWLESS_SEED, fighterOf, type FlawlessChance, type FlawlessOptions, type NotSimulated } from './flawless';
 export { effectiveCaps, type Ceiling, type CeilingUnit } from './sim/ceiling';
@@ -541,6 +545,19 @@ export type Engine = {
    * one's shopping) and found (the map's items, or random finds with no buy or map item behind them).
    */
   shopping(run: Run, entry: string): EntryShopping | undefined;
+  /**
+   * The side goals (#191), in map order, each with the plan's decision: the run's pin (always take or skip), else the
+   * default rule (`chaseByDefault`: chase when it costs at most one action a turn until its deadline).
+   */
+  sideGoals(run: Run): readonly SideGoalChoice[];
+  /** The side goals on an entry's map, secured as Record results set them, else pre-filled from the items the map gave. */
+  sideGoalsSecured(run: Run, entry: string): readonly SideGoalRecord[];
+  /**
+   * Renown (#191): now (the recorded start plus each map logged; unrecorded, 0 with every reward so far claimed) and,
+   * over the map order still to play, renown after each map and the rewards arriving on it (the menu opens after
+   * Chapter 3). Paralogue and DLC maps give the `paralogue-renown` assumption's renown.
+   */
+  renown(run: Run): RenownAhead;
   /**
    * The flawless chance of today's plan (#186): every map from the next one to the endpoint played by its suggested
    * deployment, each unit's EXP and level-ups sampled along the way, over `runs` simulated runs from `seed` (defaults
@@ -1668,6 +1685,9 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     internalLevels: (run, entry) => internalLevels(run, assumptions['class-change-internal-level'], entry),
     classChangeProposals: (run) => classChangeProposals(run),
     shopping: (run, entry) => entryShopping(run, entry),
+    sideGoals: (run) => sideGoalChoices(run.sideGoals),
+    sideGoalsSecured: (run, entry) => sideGoalsSecured(run, entry),
+    renown: (run) => renownAhead(run, remainingMapOrder(run).steps, assumptions['paralogue-renown']),
     flawlessChance: (run, options) => flawlessChance(run, assumptions, options),
     simulateRuns: (input, seed, runs) => simulateRuns(input, seed, runs, assumptions),
     ceiling: (run, options) => flawlessCeiling(run, assumptions, options),

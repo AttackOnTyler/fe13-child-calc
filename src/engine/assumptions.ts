@@ -508,7 +508,7 @@ export type BlindSpotId =
   | 'door-keys';
 
 /** The run simulation's own blind spots (#186): how it walks the army from one map to the next. */
-export type RunBlindSpotId = 'promotes-at-cap' | 'lead-takes-exp' | 'supports-from-pair-combats' | 'kit-as-recorded' | 'sure-income-only' | 'kit-by-matchups-won' | 'passes-as-planned';
+export type RunBlindSpotId = 'promotes-at-cap' | 'lead-takes-exp' | 'supports-from-pair-combats' | 'kit-as-recorded' | 'side-goal-actions' | 'kit-by-matchups-won' | 'passes-as-planned';
 
 export type BlindSpot = {
   readonly id: BlindSpotId | RunBlindSpotId;
@@ -623,13 +623,15 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
     touches: ['map'],
   },
   {
-    id: 'sure-income-only',
-    label: 'Only sure income is counted',
+    id: 'side-goal-actions',
+    label: 'Side goals cost actions by a turn',
     why:
-      'A run’s gold is the gold held plus the Bullion (and Paralogue 13’s gold) no play can lose, sold at the next armory. Bullion an ' +
-      'escaping Thief carries, a village that can burn, Chapter 18’s falling floor and paralogue results aren’t counted until the side ' +
-      'goals are chased (#191), nor renown’s Bullion, nor free seals play can lose. Nothing else is ever sold.',
-    lean: 'low',
+      'A side goal the plan chases (escaping Thieves, burnable villages, Chapter 18’s falling chests, paralogue results) costs one action ' +
+      'for each Thief, village, chest or villager, spent by the turn it would be lost (a reading of each map; Chapter 18’s are the ' +
+      'floor’s turns); the chaser isn’t put in the foes’ reach for it, and a Thief chased is also still fought as a foe. With no map ' +
+      'positions, the play can’t know how far each one is. Loseable rows that aren’t side goals (one looted chest, Paralogue 3’s ' +
+      'villagers, Roster Rescue’s Revenants) are never counted, and only Bullion is sold.',
+    lean: 'either',
     touches: ['flawless'],
   },
   {
