@@ -13,17 +13,22 @@
  * 7. the wishlist in one collapsed line;
  * 8. Lock Robin and start, last: it locks only Robin, and the Run view carries on below.
  *
- * `inboxReadout` is what the page draws, from the solve's progress and the costs the worker has read (tested);
- * `inboxView` draws it and wires the worker's `edits` slot. After the Lock the Run view is today's (the inbox titled
- * "Before <map>" is #206: `afterLockInbox` is its hook).
+ * After the Lock (#206) the same inbox is titled "Before <map>: what needs you" (`afterLockReadout`): the headline,
+ * units at risk (each with the one-click change that restores it), units behind (each with its re-solve proposal),
+ * the re-solve's proposals (required once the adopted plan can no longer be met), this map's actions and checks (#209),
+ * anything else and your edits; Next map below counts its open items as a nudge (`inboxNudge`), never a gate. What
+ * changed (`whatChangedReadout`) sits above it after each recorded map until "got it".
+ *
+ * `inboxReadout` and `afterLockReadout` are what the page draws, from the solve's progress and the costs the worker has
+ * read (tested); `inboxView` draws them and wires the worker's `edits` slot.
  */
-import type { EditCost, PinCost, Plan, PlanPin, PlanProposal, PlanRobin, RosterUnit, Run, CloseCall } from '../engine';
-import { EDIT_COST_BUDGET, FLAWLESS_SEED, STEP_BUDGET, pinKey, proposalId, robinLock, rosterUnits, unitName, withDismissedProposal, withEdit, withRobinLock, withoutEdit } from '../engine';
+import type { EditCost, Engine, Milestone, MilestoneMoves, MilestonePoint, MovedProposal, NewEdit, PinCost, Plan, PlanBreak, PlanPin, PlanProposal, PlanRobin, Reading, RosterUnit, Run, CloseCall } from '../engine';
+import { EDIT_COST_BUDGET, FLAWLESS_SEED, STEP_BUDGET, adoptedOf, behindFixes, pinKey, proposalId, robinLock, rosterUnits, unitName, whatChanged, withDismissedChange, withDismissedProposal, withEdit, withRobinLock, withoutEdit } from '../engine';
 import { STAT_LABELS } from '../game-data/stats';
-import { differenceText } from './chance';
+import { chanceText, differenceText } from './chance';
 import { h } from './dom';
 import { startSolve, type UnitEditView } from './solve-client';
-import type { RunContext, SolveProgress } from './run-page';
+import { milestoneShort, pinText, type RunContext, type SolveProgress } from './run-page';
 
 /** A Robin option as the page writes it: "Female, +Spd −Lck". */
 export const robinName = (r: PlanRobin) => `${r.gender === 'M' ? 'Male' : 'Female'}, +${STAT_LABELS[r.asset]} −${STAT_LABELS[r.flaw]}`;
@@ -88,8 +93,11 @@ export function costText(c: EditCost | undefined): string {
 /** An edit's pins as one key: its own cost is read and kept by it. */
 export const editPinsKey = (pins: readonly PlanPin[]) => pins.map(pinKey).join(',');
 
-/** The plan the player holds: the adopted plan, else the one the solve started from (the seed), else its best. */
-export const heldPlan = (run: Run, progress: SolveProgress | undefined): Plan | undefined => run.adopted ?? progress?.start ?? progress?.best;
+/**
+ * The plan the player holds: the adopted plan (none when its Robin contradicts the run facts, `adoptedOf`), else the
+ * one the solve started from (the seed), else its best.
+ */
+export const heldPlan = (run: Run, progress: SolveProgress | undefined): Plan | undefined => adoptedOf(run) ?? progress?.start ?? progress?.best;
 
 /** The Robin "Lock Robin and start" locks: the run facts' when all set, else the held plan's. */
 export function robinToLock(run: Run, progress: SolveProgress | undefined): PlanRobin | undefined {
@@ -134,45 +142,7 @@ export function inboxReadout(run: Run, state: InboxState): Inbox {
       rows: calls.map((c) => ({ key: c.key, text: `${c.label}: ${differenceText(c.gain, c.margin, true)}`, call: c })),
     });
 
-  const q = state.query.trim();
-  const all = state.choices ? state.choices.filter((c) => matches(q, c.label)) : [];
-  const shown = all.slice(0, SHOWN_MATCHES);
-  items.push({
-    kind: 'anything-else',
-    title: 'Anything else you want different?',
-    placeholder: 'a unit, a marriage, a skill… (try: Frederick, Olivia, Luna)',
-    rows: shown.map((c) => ({ key: c.key, label: c.label, text: c.label, cost: costText(state.costs.get(c.key)), apply: c.pins.length ? 'pin' : 'edit', ready: !!c.pins.length || state.costs.has(c.key) })),
-    note: !state.choices
-      ? 'Listing every edit: once the search has read the plan.'
-      : !q
-        ? `Search every edit (${state.choices.length}): a unit, a marriage, a skill, keep someone in or out, a side goal. Each is costed against your plan.`
-        : !all.length
-          ? 'No edits match.'
-          : all.length > shown.length
-            ? `${all.length - shown.length} more: narrow the search.`
-            : '',
-  });
-
-  const edits = run.edits ?? [];
-  const pc = progress?.pinCost;
-  items.push({
-    kind: 'your-edits',
-    title: 'Your edits',
-    rows: edits.map((e, index) => {
-      const own = e.pins?.length ? state.pinCosts.get(editPinsKey(e.pins)) : undefined;
-      const cost = own
-        ? `costs ${differenceText(own.cost, own.margin, own.verdict === 'close' || own.verdict === 'unclear')}`
-        : e.cost
-          ? `${e.accepted ? 'gained' : 'cost when made'} ${e.cost.verdict === 'unclear' ? '≈ ' : ''}${differenceText(e.cost.gain, e.cost.margin, e.cost.verdict === 'close')}`
-          : undefined;
-      const how = e.accepted ? 'accepted' : e.pins?.length ? (e.pins.length === 1 ? 'pin' : `${e.pins.length} pins`) : 'plan edit';
-      return { index, text: `${e.label} (${how})`, cost, ask: !!e.pins?.length && !own };
-    }),
-    pinCost: pc?.pins.length
-      ? `Your ${pc.pins.length === 1 ? 'pin costs' : `${pc.pins.length} pins cost`} ${differenceText(pc.cost, pc.margin, pc.verdict === 'close' || pc.verdict === 'unclear')}: the best plan found with ${pc.pins.length === 1 ? 'it' : 'them'} lifted, less the best found with ${pc.pins.length === 1 ? 'it' : 'them'}`
-      : undefined,
-    note: edits.length ? 'Undo lifts an edit’s pins, or goes back to the plan before it.' : 'No edits yet. Everything is the tool’s proposal.',
-  });
+  items.push(anythingElseItem(state), yourEditsItem(run, state));
 
   const units = plan?.wishlist.units ?? [];
   // One line per pair (the Lead's), or per unit alone.
@@ -192,9 +162,329 @@ export function inboxReadout(run: Run, state: InboxState): Inbox {
   return { title: 'Before the run: what needs you', items };
 }
 
-/** After the Lock (#206): the inbox titled "Before <map>: what needs you". Today's Run view carries on until then. */
-export function afterLockInbox(_ctx: RunContext): HTMLElement | null {
-  return null;
+/** "Anything else you want different?" (#204): the search over every edit, the matches shown each with its cost. */
+function anythingElseItem(state: InboxState): Extract<InboxItem, { kind: 'anything-else' }> {
+  const q = state.query.trim();
+  const all = state.choices ? state.choices.filter((c) => matches(q, c.label)) : [];
+  const shown = all.slice(0, SHOWN_MATCHES);
+  return {
+    kind: 'anything-else',
+    title: 'Anything else you want different?',
+    placeholder: 'a unit, a marriage, a skill… (try: Frederick, Olivia, Luna)',
+    rows: shown.map((c) => ({ key: c.key, label: c.label, text: c.label, cost: costText(state.costs.get(c.key)), apply: c.pins.length ? 'pin' : 'edit', ready: !!c.pins.length || state.costs.has(c.key) })),
+    note: !state.choices
+      ? 'Listing every edit: once the search has read the plan.'
+      : !q
+        ? `Search every edit (${state.choices.length}): a unit, a marriage, a skill, keep someone in or out, a side goal. Each is costed against your plan.`
+        : !all.length
+          ? 'No edits match.'
+          : all.length > shown.length
+            ? `${all.length - shown.length} more: narrow the search.`
+            : '',
+  };
+}
+
+/** Your edits (#204): each with its cost and undo, and the pins' cost together. */
+function yourEditsItem(run: Run, state: InboxState): Extract<InboxItem, { kind: 'your-edits' }> {
+  const edits = run.edits ?? [];
+  const pc = state.progress?.pinCost;
+  return {
+    kind: 'your-edits',
+    title: 'Your edits',
+    rows: edits.map((e, index) => {
+      const own = e.pins?.length ? state.pinCosts.get(editPinsKey(e.pins)) : undefined;
+      const cost = own
+        ? `costs ${differenceText(own.cost, own.margin, own.verdict === 'close' || own.verdict === 'unclear')}`
+        : e.cost
+          ? `${e.accepted ? 'gained' : 'cost when made'} ${e.cost.verdict === 'unclear' ? '≈ ' : ''}${differenceText(e.cost.gain, e.cost.margin, e.cost.verdict === 'close')}`
+          : undefined;
+      const how = e.accepted ? 'accepted' : e.pins?.length ? (e.pins.length === 1 ? 'pin' : `${e.pins.length} pins`) : 'plan edit';
+      return { index, text: `${e.label} (${how})`, cost, ask: !!e.pins?.length && !own };
+    }),
+    pinCost: pc?.pins.length
+      ? `Your ${pc.pins.length === 1 ? 'pin costs' : `${pc.pins.length} pins cost`} ${differenceText(pc.cost, pc.margin, pc.verdict === 'close' || pc.verdict === 'unclear')}: the best plan found with ${pc.pins.length === 1 ? 'it' : 'them'} lifted, less the best found with ${pc.pins.length === 1 ? 'it' : 'them'}`
+      : undefined,
+    note: edits.length ? 'Undo lifts an edit’s pins, or goes back to the plan before it.' : 'No edits yet. Everything is the tool’s proposal.',
+  };
+}
+
+// ---- after the Lock (#206) ----
+
+/** A row of the inbox after the Lock that the player acts on: an edit to make, or a proposal to accept or dismiss. */
+export type FixRow = InboxRow & {
+  /** A re-solve proposal to accept (its plan adopted) or dismiss. */
+  readonly proposal?: PlanProposal;
+  /** An edit to make in one click (a suggested change's span pin, or a plan edit), with its words. */
+  readonly edit?: NewEdit;
+  /** Marked required: the adopted roadmap can no longer be met. */
+  readonly required?: boolean;
+};
+
+export type AfterLockItem =
+  | { readonly kind: 'headline' }
+  | { readonly kind: 'at-risk'; readonly title: string; readonly rows: readonly (InboxRow & { readonly fix: FixRow | undefined })[] }
+  | { readonly kind: 'behind'; readonly title: string; readonly rows: readonly (InboxRow & { readonly fixes: readonly FixRow[]; readonly note: string })[] }
+  | { readonly kind: 'resolve'; readonly title: string; readonly required: boolean; readonly reasons: readonly string[]; readonly rows: readonly FixRow[]; readonly note: string; readonly fresh: boolean }
+  | { readonly kind: 'actions'; readonly title: string; readonly rows: readonly InboxRow[] }
+  | { readonly kind: 'checks'; readonly title: string; readonly rows: readonly InboxRow[] }
+  | Extract<InboxItem, { kind: 'anything-else' | 'your-edits' }>;
+
+export type AfterLockInbox = {
+  readonly title: string;
+  readonly items: readonly AfterLockItem[];
+  /** Items above still open (at risk, behind, proposals), and Next map's nudge for them: never a gate. */
+  readonly open: number;
+  readonly nudge: string | undefined;
+};
+
+/**
+ * The checks the map offers (#209 fills it; spec: "this map's actions and checks"): each a situation that settles an
+ * open rule. None yet.
+ */
+export function mapChecks(_engine: Engine, _run: Run, _key: string): readonly InboxRow[] {
+  return [];
+}
+
+/** Each map key on the map order with its short label ("Chapter 5", "Apotheosis (secret route)"). */
+function mapLabels(engine: Engine, run: Run): Map<string, string> {
+  const maps = new Map(engine.maps().map((m) => [m.id, m.label]));
+  return new Map(engine.mapOrder(run).steps.map((s) => [s.key, `${maps.get(s.map) ?? s.map}${s.secret ? ' (secret route)' : ''}`]));
+}
+
+/**
+ * What the inbox reads of a plan on a run (its milestones, breaks, a proposal's moves), worked out once: it redraws on
+ * every reply, and a run or plan is replaced, never edited.
+ */
+const MEMO = new WeakMap<Run, WeakMap<Plan, Map<string, unknown>>>();
+function memo<T>(run: Run, plan: Plan, key: string, work: () => T): T {
+  let byPlan = MEMO.get(run);
+  if (!byPlan) MEMO.set(run, (byPlan = new WeakMap()));
+  let m = byPlan.get(plan);
+  if (!m) byPlan.set(plan, (m = new Map()));
+  if (!m.has(key)) m.set(key, work());
+  return m.get(key) as T;
+}
+const milestonesOf = (engine: Engine, run: Run, plan: Plan) => memo(run, plan, 'milestones', () => engine.milestones(run, plan));
+const MOVES = new WeakMap<Run, WeakMap<Plan, WeakMap<Plan, MilestoneMoves>>>();
+const movesOf = (engine: Engine, run: Run, from: Plan, to: Plan): MilestoneMoves => {
+  let byFrom = MOVES.get(run);
+  if (!byFrom) MOVES.set(run, (byFrom = new WeakMap()));
+  let byTo = byFrom.get(from);
+  if (!byTo) byFrom.set(from, (byTo = new WeakMap()));
+  let m = byTo.get(to);
+  if (!m) byTo.set(to, (m = engine.milestoneMoves(run, from, to)));
+  return m;
+};
+
+/** A milestone in a few words for the moves list: "Lissa's Luna before Chapter 9". */
+function milestoneWords(m: Milestone, name: (u: RosterUnit | 'maiden') => string, at = m.at): string {
+  const when = at.when === 'end' ? `by the end of ${at.label}` : `before ${at.label}`;
+  switch (m.kind) {
+    case 'support':
+      return `${name(m.pair[0])} and ${name(m.pair[1])} at ${m.rank} ${when}`;
+    case 'skill':
+      return `${name(m.unit)}’s ${m.name} ${when}`;
+    case 'recruit':
+      return `${name(m.child)} recruited on ${at.label}`;
+    case 'class':
+      return `${name(m.unit)} as ${m.className} ${when}`;
+  }
+}
+
+/** What a proposal does to the adopted plan's milestones: "adds …; drops …; moves …". */
+function movesText(moves: MilestoneMoves, name: (u: RosterUnit | 'maiden') => string): string {
+  const list = (ms: readonly string[]) => (ms.length < 2 ? ms.join('') : `${ms.slice(0, -1).join(', ')} and ${ms[ms.length - 1]}`);
+  return [
+    moves.added.length ? `adds ${list(moves.added.map((m) => milestoneWords(m, name)))}` : '',
+    moves.dropped.length ? `drops ${list(moves.dropped.map((m) => milestoneWords(m, name)))}` : '',
+    moves.moved.length ? `moves ${list(moves.moved.map((x) => `${milestoneWords(x.milestone, name)} (was ${x.from.label})`))}` : '',
+  ]
+    .filter(Boolean)
+    .join('; ');
+}
+
+const capital = (s: string) => `${s[0]!.toUpperCase()}${s.slice(1)}`;
+
+/**
+ * This map's actions (spec: "a support's earliest start, a skill to equip, a seal to carry"): the adopted plan's
+ * milestones whose step falls on the next map, each in the game's words.
+ */
+function mapActions(ms: readonly Milestone[], name: (u: RosterUnit | 'maiden') => string): InboxRow[] {
+  const here = (p: MilestonePoint | undefined) => p?.index === 0;
+  return ms.flatMap((m): InboxRow[] => {
+    switch (m.kind) {
+      case 'support': {
+        const pair = `${name(m.pair[0])} and ${name(m.pair[1])}`;
+        const goal = m.wedding ? `for Chrom’s wedding at the end of ${m.at.label}` : `for ${m.rank} ${m.at.when === 'end' ? 'by the end of' : 'before'} ${m.at.label}`;
+        if (m.nonStarter) return [];
+        if (here(m.window.latest)) return [{ key: `${m.id}:latest`, text: `Field ${pair} together from this map: it’s their last start ${goal}` }];
+        if (here(m.window.earliest)) return [{ key: `${m.id}:earliest`, text: `${pair} can start fighting together here: their earliest start ${goal}${m.window.latest ? ` (latest ${m.window.latest.label})` : ''}` }];
+        return [];
+      }
+      case 'skill':
+        if (m.wasted || !here(m.at)) return [];
+        return m.for.kind === 'pass'
+          ? [{ key: m.id, text: `Equip ${m.name} on ${name(m.unit)} in the last active slot before entering: ${name(m.for.child)} inherits it` }]
+          : [{ key: m.id, text: `${name(m.unit)} needs ${m.name} equipped for this map` }];
+      case 'recruit':
+        return here(m.at) ? [{ key: m.id, text: `Recruit ${name(m.child)} on this map` }] : [];
+      case 'class': {
+        const seal = m.seal === 'master' ? 'Master Seal' : 'Second Seal';
+        const rows: InboxRow[] = [];
+        if (m.source.how === 'found' && here(m.source.at)) rows.push({ key: `${m.id}:found`, text: `Carry away the ${seal} on this map (${m.source.note}): ${name(m.unit)} needs it for ${m.className}` });
+        if (m.source.how === 'armory' && here(m.source.at)) rows.push({ key: `${m.id}:buy`, text: `Buy a ${seal} in this map’s preparations for ${name(m.unit)}’s change to ${m.className}` });
+        if (here(m.at) && m.at.when === 'start') rows.push({ key: m.id, text: `Change ${name(m.unit)} to ${m.className} with a ${seal} before this map` });
+        return rows;
+      }
+    }
+  });
+}
+
+/** Why the adopted roadmap can no longer be met, in words. */
+function breakText(b: PlanBreak, name: (u: RosterUnit | 'maiden') => string): string {
+  switch (b.kind) {
+    case 'lost':
+      return `${name(b.unit)} ${b.state === 'dead' ? 'died' : 'was missed'}`;
+    case 'married':
+      return `${name(b.couple[0])} married ${name(b.couple[1])}, off the plan`;
+    case 'non-starter':
+      return `${name(b.pair[0])} and ${name(b.pair[1])} can’t reach their support in the maps left`;
+  }
+}
+
+/**
+ * The inbox after the Lock (#206; spec #175, The inbox, Run view and Wishlist tab), titled "Before <map>: what needs
+ * you", item by item in the order it's drawn: the headline; the units at risk, each with its milestone, chance and the
+ * one-click change that restores it; the units behind, each with its re-solve proposal (roadmap-only first, a wishlist
+ * change only when it beats that); the re-solve's proposals (after the last recorded map), each with the milestones it
+ * adds, drops or moves, marked required once the adopted roadmap can no longer be met; this map's actions; the checks
+ * it offers (#209); anything else; your edits. Open items (at risk, behind, proposals) read as a nudge on Next map.
+ */
+export function afterLockReadout(engine: Engine, run: Run, state: InboxState): AfterLockInbox {
+  const { progress } = state;
+  const plan = heldPlan(run, progress);
+  const gender = run.roster.run.gender ?? plan?.robin.gender;
+  const name = (u: RosterUnit | 'maiden') => unitName(u, gender);
+  const labels = mapLabels(engine, run);
+  const next = engine.mapOrder(run).steps[0];
+  const title = next ? `Before ${labels.get(next.key)}: what needs you` : 'The run: what needs you';
+  const items: AfterLockItem[] = [{ kind: 'headline' }];
+  const ms = plan ? milestonesOf(engine, run, plan) : [];
+  const readings = progress?.readings?.readings ?? [];
+  const dismissed = new Set(run.dismissedProposals ?? []);
+  const proposals = (progress?.proposals ?? []).filter((p) => !dismissed.has(proposalId(p)));
+  const moved: MovedProposal[] = plan ? proposals.map((p) => ({ proposal: p, moves: movesOf(engine, run, plan, p.plan) })) : [];
+  const breaks = plan ? memo(run, plan, 'breaks', () => engine.planBreaks(run, plan)) : [];
+  const required = breaks.length > 0;
+  const proposalRow = (p: PlanProposal, how = ''): FixRow => ({
+    key: proposalId(p),
+    text: `${how}${p.edits.join('; ')}: ${differenceText(p.gain, p.margin)}`,
+    proposal: p,
+    ...(required ? { required: true } : {}),
+  });
+  const worstOf = (r: Reading) => {
+    const m = r.worst && ms.find((x) => x.id === r.worst!.id);
+    return !r.worst ? 'no milestones left' : `${m ? milestoneShort(m, r.unit, gender) : r.worst.id} ${r.worst.reached ? chanceText(r.worst.chance) : '(no run reaches it with nobody lost)'}`;
+  };
+
+  const atRisk = readings.filter((r) => r.reading === 'at-risk');
+  if (atRisk.length)
+    items.push({
+      kind: 'at-risk',
+      title: 'At risk: one change brings each back to 80%',
+      rows: atRisk.map((r) => {
+        const c = r.change;
+        const words = c && pinText(c.pin, gender, labels);
+        const made = c && plan ? memo(run, plan, `fix:${JSON.stringify(c.pin)}`, () => engine.suggestedEdit(run, plan, c.pin)) : undefined;
+        const edit: NewEdit | undefined = made && words ? { label: capital(words), ...made } : undefined;
+        return {
+          key: `at-risk:${r.unit}`,
+          text: `${name(r.unit)}: ${worstOf(r)}`,
+          fix: c && edit ? { key: `fix:${r.unit}`, text: `${capital(words!)}: ${chanceText(c.chance)}${c.flawless ? `, flawless chance ${signed(c.flawless)}` : ''}`, edit } : r.pending ? { key: `fix:${r.unit}`, text: 'Reading the changes that could bring it back…' } : undefined,
+        };
+      }),
+    });
+
+  const behind = readings.filter((r) => r.reading === 'behind');
+  if (behind.length && plan)
+    items.push({
+      kind: 'behind',
+      title: 'Behind: a re-solve, the roadmap first',
+      rows: behind.map((r) => {
+        const f = behindFixes(r.unit, plan, moved);
+        const fixes = [...(f.roadmap ? [proposalRow(f.roadmap, 'Roadmap: ')] : []), ...(f.wishlist ? [proposalRow(f.wishlist, 'Wishlist change: ')] : [])];
+        const why = r.why === 'non-starter' ? 'a non-starter in the maps left' : r.why === 'deadline' ? 'its deadline map has started' : 'no single change brings it back to 80%';
+        const note = fixes.length ? '' : !progress?.done ? 'Re-solving: its proposal comes when the search finds one.' : 'The re-solve found no plan that moves its milestones and does better.';
+        return { key: `behind:${r.unit}`, text: `${name(r.unit)}: ${worstOf(r)} · ${why}`, fixes, note };
+      }),
+    });
+
+  const after = [...run.entries].reverse().find((e) => e.map !== 'other');
+  const afterLabel = after && engine.maps().find((m) => m.id === after.map)?.label;
+  if (proposals.length || required)
+    items.push({
+      kind: 'resolve',
+      title: `${afterLabel ? `The re-solve after ${afterLabel}` : 'The search'} found better${required ? ': required before the next map' : ''}`,
+      required,
+      reasons: breaks.map((b) => breakText(b, name)),
+      rows: moved.map(({ proposal, moves }) => {
+        const m = movesText(moves, name);
+        return { ...proposalRow(proposal), text: `${proposalRow(proposal).text}${m ? ` · ${m}` : ''}` };
+      }),
+      note: required
+        ? `Your plan can no longer be met (${breakText(breaks[0]!, name)}${breaks.length > 1 ? `, and ${breaks.length - 1} more` : ''}): accept a re-solve before you play on.${!proposals.length ? (progress?.done ? ' The search found none: take a fresh plan for the run as it stands.' : ' Re-solving…') : ''}`
+        : 'Nothing changes until you accept one.',
+      fresh: required && !proposals.length && !!progress?.done,
+    });
+
+  if (next && plan) {
+    const actions = mapActions(ms, name);
+    if (actions.length) items.push({ kind: 'actions', title: `On ${labels.get(next.key)}`, rows: actions });
+    const checks = mapChecks(engine, run, next.key);
+    if (checks.length) items.push({ kind: 'checks', title: `Checks ${labels.get(next.key)} offers`, rows: checks });
+  }
+
+  items.push(anythingElseItem(state), yourEditsItem(run, state));
+  const open = atRisk.length + behind.length + proposals.length;
+  return { title, items, open, nudge: open ? `${open} item${open === 1 ? '' : 's'} above still need${open === 1 ? 's' : ''} you (you can play anyway)` : undefined };
+}
+
+/** Points of chance with a sign: "+1.2", "−0.4". */
+const signed = (p: number) => `${p < 0 ? '−' : '+'}${Math.abs(p * 100).toFixed(1)}`;
+
+/** A chance with its ±: "42.0% ±5.0". */
+const withMargin = (c: { readonly chance: number; readonly margin: number }) => `${chanceText(c.chance)} ±${(c.margin * 100).toFixed(1)}`;
+
+const READING_WORDS = { 'on-track': 'on track', 'at-risk': 'at risk', behind: 'behind' } as const;
+
+export type WhatChangedReadout = { readonly entry: string; readonly title: string; readonly chance: string; readonly exp: readonly string[]; readonly readings: readonly string[]; readonly improvements: string };
+
+/**
+ * What changed (#206), as the card above the inbox writes it after a recorded map: the flawless chance before (kept when
+ * the map was recorded) and after (the re-solve's headline), each unit's EXP against the forecast, the readings that
+ * moved, and the improvements the re-solve found. Undefined once dismissed ("got it"), or with no map recorded.
+ */
+export function whatChangedReadout(engine: Engine, run: Run, progress: SolveProgress | undefined): WhatChangedReadout | undefined {
+  const w = whatChanged(run, { ...(progress ? { chance: progress.chance } : {}), ...(progress?.readings ? { readings: progress.readings } : {}) });
+  if (!w || w.dismissed) return undefined;
+  const e = run.entries.find((x) => x.id === w.entry)!;
+  const label = e.map === 'other' ? (e.label ?? 'the map logged') : (engine.maps().find((m) => m.id === w.map)?.label ?? w.map);
+  const gender = run.roster.run.gender;
+  const name = (u: RosterUnit) => unitName(u, gender);
+  const lv = (x: number) => x.toFixed(1);
+  const now = w.after ? `${withMargin(w.after)} now` : 'working it out…';
+  const chance = w.before
+    ? `Flawless chance: ${withMargin(w.before)} before → ${now}${w.after ? ` (${signed(w.after.chance - w.before.chance)} points)` : ''}`
+    : `Flawless chance: ${now} (not worked out before the map was recorded)`;
+  const exp = w.exp.map(
+    (x) =>
+      `${name(x.unit)}: ${x.earned === undefined ? 'EXP not comparable (a class change)' : `${x.earned} EXP`} against ${Math.round(x.forecast)} forecast; level ${lv(x.level)}, ${x.against === 'inside' ? 'inside' : x.against === 'below' ? 'below' : 'above'} the forecast’s ${lv(x.spread.low)}–${lv(x.spread.high)}`,
+  );
+  const readings = w.readings.map((r) => `${name(r.unit)}: ${READING_WORDS[r.before]} → ${READING_WORDS[r.after]}${r.pending ? '?' : ''}`);
+  const dismissed = new Set(run.dismissedProposals ?? []);
+  const found = (progress?.proposals ?? []).filter((p) => !dismissed.has(proposalId(p))).length;
+  const improvements = !progress ? 'Re-solving from your plan…' : found ? `The re-solve found ${found} improvement${found === 1 ? '' : 's'}: in the inbox below.` : progress.done ? 'The re-solve found no improvement on your plan.' : 'Re-solving from your plan…';
+  return { entry: w.entry, title: `What changed on ${label}`, chance, exp, readings, improvements };
 }
 
 // ---- the page ----
@@ -222,7 +512,11 @@ let live: { run: Run; ctx: RunContext; parts: { el: HTMLElement; draw: () => HTM
 
 const stateKey = (run: Run) => JSON.stringify([run.roster.run, run.entries.map((e) => e.id), run.pins ?? [], run.sideGoals ?? {}, run.adopted ?? null]);
 
+/** Bumped on every redraw: the inbox is read once per redraw, whichever parts draw it. */
+let version = 0;
+
 function redraw(): void {
+  version++;
   if (!live) return;
   for (const p of live.parts) {
     if (!p.el.isConnected) continue;
@@ -313,18 +607,107 @@ function askPinCost(ctx: RunContext, pins: readonly PlanPin[]): void {
   );
 }
 
+type AnyItem = InboxItem | AfterLockItem;
+
 /**
- * The inbox before the Lock, drawn: `headline` (the flawless section) and `robin` (the Robin alternatives' card) are
- * the page's own live sections; the rest is drawn here from `inboxReadout` and redrawn as the worker replies.
+ * The inbox, drawn: `headline` (the flawless section) and `robin` (the Robin alternatives' card, before the Lock) are
+ * the page's own live sections; the rest is drawn here from `inboxReadout` before the Lock, `afterLockReadout` after it
+ * (What changed above it, #206), and redrawn as the worker replies.
  */
 export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLElement | null): HTMLElement {
   const { run } = ctx;
   const key = stateKey(run);
   if (page?.key !== key) page = { key, costs: new Map(), edited: new Map(), pinCosts: new Map(), asked: new Set(), listing: false };
   const s = page;
-  const read = () => inboxReadout(run, { progress: progressOf.get(run), choices: s.choices, costs: s.costs, query, pinCosts: s.pinCosts });
-  const item = <K extends InboxItem['kind']>(kind: K) => read().items.find((i): i is Extract<InboxItem, { kind: K }> => i.kind === kind);
+  const after = !beforeTheLock(run);
+  const state = (): InboxState => ({ progress: progressOf.get(run), choices: s.choices, costs: s.costs, query, pinCosts: s.pinCosts });
+  const readAfter = () => afterLockReadout(ctx.engine, run, state());
+  let cached: { readonly version: number; readonly inbox: { readonly title: string; readonly items: readonly AnyItem[] } } | undefined;
+  const read = () => {
+    if (cached?.version !== version) cached = { version, inbox: after ? readAfter() : inboxReadout(run, state()) };
+    return cached.inbox;
+  };
+  const item = <K extends AnyItem['kind']>(kind: K) => read().items.find((i): i is Extract<AnyItem, { kind: K }> => i.kind === kind);
   const set = (next: Run) => ctx.setRun(next);
+  const accept = (p: PlanProposal) => set(withEdit(run, { label: p.edits.join('; '), plan: p.plan, accepted: true, cost: { gain: p.gain, margin: p.margin, verdict: 'better' } }));
+  /** A re-solve proposal's or one-click fix's row: Accept (or the fix's button) and Dismiss. */
+  const fixRow = (r: FixRow, action = 'Accept'): HTMLElement =>
+    h(
+      'div',
+      { class: `row small${r.required ? ' required' : ''}` },
+      r.required ? h('span', { class: 'chip warn small' }, 'required') : null,
+      h('span', {}, r.text),
+      r.proposal ? h('button', { class: 'mini', title: 'Adopt this plan: the search carries on from it', onclick: () => accept(r.proposal!) }, action) : null,
+      r.proposal ? h('button', { class: 'mini ghost', title: 'Hide it: the plan stays as it is', onclick: () => set(withDismissedProposal(run, r.key)) }, 'Dismiss') : null,
+      r.proposal
+        ? null
+        : r.edit
+          ? h('button', { class: 'mini', title: r.edit.pins?.length ? 'Pin it: a span pin every plan keeps (undo it in Your edits)' : 'Make it: your plan with this EXP priority (undo it in Your edits)', onclick: () => set(withEdit(run, r.edit!)) }, r.edit.pins?.length ? 'Pin it' : 'Make it')
+          : null,
+    );
+
+  /** After the Lock: at risk, behind, the re-solve's proposals, this map's actions and checks. */
+  const needs = (): HTMLElement => {
+    const risk = item('at-risk');
+    const behind = item('behind');
+    const resolve = item('resolve');
+    const actions = item('actions');
+    const checks = item('checks');
+    const list = (i: { readonly title: string; readonly rows: readonly InboxRow[] } | undefined, cls: string) =>
+      i ? h('div', { class: `banner ${cls}` }, h('b', {}, i.title), h('ul', { class: 'small' }, ...i.rows.map((r) => h('li', {}, r.text)))) : null;
+    return h(
+      'div',
+      { class: 'inbox-decisions' },
+      resolve
+        ? h(
+            'div',
+            { class: `banner proposals${resolve.required ? ' required' : ''}` },
+            h('b', {}, resolve.title),
+            resolve.reasons.length ? h('div', { class: 'small' }, `Can no longer be met: ${resolve.reasons.join('; ')}.`) : null,
+            ...resolve.rows.map((r) => fixRow(r)),
+            h('span', { class: 'muted small' }, resolve.note),
+            resolve.fresh
+              ? h('button', { class: 'mini', title: 'Adopt the seed plan for the run as recorded: undo it in Your edits', onclick: () => set(withEdit(run, { label: 'A fresh plan for the run as recorded', plan: ctx.engine.adoptedPlan(withoutAdopted(run), freshOptions(ctx)), accepted: true })) }, 'Take a fresh plan')
+              : null,
+          )
+        : null,
+      risk
+        ? h(
+            'div',
+            { class: 'banner at-risk' },
+            h('b', {}, risk.title),
+            ...risk.rows.map((r) => h('div', { class: 'inbox-unit' }, h('div', { class: 'small' }, r.text), r.fix ? (r.fix.edit ? fixRow(r.fix) : h('div', { class: 'muted small' }, r.fix.text)) : null)),
+          )
+        : null,
+      behind
+        ? h(
+            'div',
+            { class: 'banner behind' },
+            h('b', {}, behind.title),
+            ...behind.rows.map((r) => h('div', { class: 'inbox-unit' }, h('div', { class: 'small' }, r.text), ...r.fixes.map((f) => fixRow(f)), r.note ? h('div', { class: 'muted small' }, r.note) : null)),
+          )
+        : null,
+      list(actions, 'map-actions'),
+      list(checks, 'map-checks'),
+    );
+  };
+
+  /** What changed (#206): above the inbox after each recorded map, until "got it". */
+  const changed = (): HTMLElement => {
+    const w = whatChangedReadout(ctx.engine, run, progressOf.get(run));
+    if (!w) return h('div', { class: 'what-changed-none' });
+    const block = (title: string, rows: readonly string[]) => (rows.length ? h('div', {}, h('b', { class: 'small' }, title), h('ul', { class: 'small' }, ...rows.map((x) => h('li', {}, x)))) : null);
+    return h(
+      'div',
+      { class: 'banner what-changed' },
+      h('b', {}, w.title),
+      h('div', { class: 'small' }, w.chance),
+      block('EXP against the forecast', w.exp),
+      block('Readings that moved', w.readings),
+      h('div', { class: 'small' }, w.improvements),
+      h('button', { class: 'mini', title: 'Dismiss this card', onclick: () => set(withDismissedChange(run, w.entry)) }, 'Got it'),
+    );
+  };
 
   const decisions = (): HTMLElement => {
     const p = item('proposals');
@@ -426,31 +809,36 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
     );
   };
 
-  const tail = (): HTMLElement => {
+  const yourEdits = (): HTMLElement => {
     const y = item('your-edits')!;
+    return h(
+      'div',
+      { class: 'banner your-edits' },
+      h('b', {}, y.title),
+      ...y.rows.map((r) => {
+        const e = run.edits![r.index]!;
+        return h(
+          'div',
+          { class: 'row small' },
+          h('span', {}, r.text),
+          r.cost ? h('span', { class: 'muted' }, r.cost) : null,
+          r.ask ? h('button', { class: 'mini ghost', title: 'Work out what this pin costs on its own', onclick: () => askPinCost(ctx, e.pins!) }, 'Cost?') : null,
+          h('button', { class: 'mini', title: 'Undo this edit', onclick: () => set(withoutEdit(run, r.index)) }, 'Undo'),
+        );
+      }),
+      y.pinCost ? h('div', { class: 'small' }, y.pinCost) : null,
+      h('span', { class: 'muted small' }, y.note),
+    );
+  };
+
+  const tail = (): HTMLElement => {
+    if (after) return h('div', { class: 'inbox-tail' }, yourEdits());
     const w = item('wishlist')!;
     const l = item('lock')!;
     return h(
       'div',
       { class: 'inbox-tail' },
-      h(
-        'div',
-        { class: 'banner your-edits' },
-        h('b', {}, y.title),
-        ...y.rows.map((r) => {
-          const e = run.edits![r.index]!;
-          return h(
-            'div',
-            { class: 'row small' },
-            h('span', {}, r.text),
-            r.cost ? h('span', { class: 'muted' }, r.cost) : null,
-            r.ask ? h('button', { class: 'mini ghost', title: 'Work out what this pin costs on its own', onclick: () => askPinCost(ctx, e.pins!) }, 'Cost?') : null,
-            h('button', { class: 'mini', title: 'Undo this edit', onclick: () => set(withoutEdit(run, r.index)) }, 'Undo'),
-          );
-        }),
-        y.pinCost ? h('div', { class: 'small' }, y.pinCost) : null,
-        h('span', { class: 'muted small' }, y.note),
-      ),
+      yourEdits(),
       h('details', { class: 'banner wishlist-line' }, h('summary', {}, h('b', {}, w.summary)), ...w.lines.map((x) => h('div', { class: 'small' }, x))),
       h(
         'div',
@@ -462,12 +850,43 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
   };
 
   const parts: { el: HTMLElement; draw: () => HTMLElement }[] = [];
-  const top = { el: decisions(), draw: decisions };
+  const card = after ? { el: changed(), draw: changed } : undefined;
+  if (card) parts.push(card);
+  const top = after ? { el: needs(), draw: needs } : { el: decisions(), draw: decisions };
   parts.push(top);
   const search = anything();
   const end = { el: tail(), draw: tail };
   parts.push(end);
+  const title = { el: h('h3', {}, read().title), draw: () => h('h3', {}, read().title) };
+  parts.push(title);
   live = { run, ctx, parts };
   listEdits(ctx, progressOf.get(run));
-  return h('section', { class: 'inbox' }, h('h3', {}, read().title), headline, robin, top.el, search, end.el);
+  return h('section', { class: 'inbox' }, card?.el ?? null, title.el, headline, robin, top.el, search, end.el);
 }
+
+/**
+ * Next map's nudge after the Lock (#206): "N items above still need you (you can play anyway)", redrawn with the
+ * inbox; never a gate. Draw it after `inboxView` for the same run.
+ */
+export function inboxNudge(ctx: RunContext): HTMLElement {
+  const draw = () => {
+    const s = page;
+    const r = s && afterLockReadout(ctx.engine, ctx.run, { progress: progressOf.get(ctx.run), choices: s.choices, costs: s.costs, query, pinCosts: s.pinCosts });
+    return r?.nudge ? h('span', { class: 'small nudge' }, r.nudge) : h('span', { class: 'nudge-none' });
+  };
+  const part = { el: draw(), draw };
+  if (live?.run === ctx.run) live.parts.push(part);
+  return part.el;
+}
+
+/** The run without an adopted plan: the seed is its plan (a fresh plan for the run as recorded). */
+function withoutAdopted(run: Run): Run {
+  const { adopted: _, ...rest } = run;
+  return rest;
+}
+
+/** What the seed reads besides the run: the player's pins and each unit's role (until #212). */
+const freshOptions = (ctx: RunContext) => {
+  const pins = ctx.pins?.();
+  return { ...(pins ? { pins } : {}), ...(ctx.roleOf ? { roleOf: ctx.roleOf } : {}) };
+};

@@ -2,8 +2,8 @@
  * The anytime solve's Web Worker (#199; spec #175, Engine interfaces): a thin shell that loops the facade's stepping
  * call against a time budget and posts each step back, or reads an edit's cost at each budget it's given. Once the
  * solve is done and the run has pins, the worker is idle, so it works out the pin cost (#200): a second search with the
- * pins lifted (`liftPins`), from the best plan found with them, then `pinCost`. Then it reads the best plan's readings
- * (#197): the EXP forecast's first pass, then each pending milestone's suggested changes, one milestone a reply, within
+ * pins lifted (`liftPins`), from the best plan found with them, then `pinCost`. Then it reads the adopted plan's readings
+ * (#197, #206: the plan the search started from, never its proposals): the EXP forecast's first pass, then each pending milestone's suggested changes, one milestone a reply, within
  * `READING_SECONDS`. The page may also hand it idle work (#202): the plan's unit worth and utility, then its reserves;
  * or, on request, the Robin alternatives (#201), after the search, pin cost and readings; and the Wishlist tab (#203) asks,
  * in a second worker, for a unit's edits, listed then costed one by one (`unitEdits`); the inbox (#204) asks there for
@@ -34,7 +34,9 @@ scope.onmessage = ({ data: m }) => {
       const searched = step.converged || performance.now() >= end;
       scope.postMessage({ id: m.id, kind: 'step', step, searched, done: false });
       if (!searched) continue;
-      if (!pinned) return readings(engine, m, step.best, roleOf);
+      // The readings are the adopted plan's (#206): the plan the search started from, which proposals never replace.
+      const adopted = step.cursor.search?.start ?? step.best;
+      if (!pinned) return readings(engine, m, adopted, roleOf);
       // Idle: the pin cost's second search, with the pins lifted, from the best plan found with them.
       const lifted = engine.liftPins(m.run, m.pins ? { pins: m.pins } : {});
       const stop = performance.now() + SOLVE_SECONDS.resolve * 1000;
@@ -48,7 +50,7 @@ scope.onmessage = ({ data: m }) => {
       }
       const cost = engine.pinCost({ run: m.run, ...(m.pins ? { pins: m.pins } : {}), plan: step.best, lifted: free, seed: m.seed, budget: EDIT_COST_BUDGET.settled, ...(roleOf ? { roleOf } : {}) });
       scope.postMessage({ id: m.id, kind: 'pin-cost', cost, done: false });
-      return readings(engine, m, step.best, roleOf);
+      return readings(engine, m, adopted, roleOf);
     }
   }
   if (m.kind === 'idle') {

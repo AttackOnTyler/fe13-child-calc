@@ -548,4 +548,12 @@ button.gd-deeper-head:hover { background: var(--hover); }
 .wl-edit .cost { font-variant-numeric: tabular-nums; }
 .wl-edit .cost.costing { color: var(--muted); font-style: italic; }
 .wl-edit .cost.provisional { color: var(--warn); }
+
+/* The inbox after the Lock (#206): What changed above it, required re-solves, units at risk or behind, Next map's nudge. */
+.inbox .what-changed { border-color: var(--accent); }
+.inbox .what-changed ul { margin: 2px 0 4px; }
+.inbox .banner.required { border-color: var(--neg); }
+.inbox .chip.warn { color: var(--neg); border-color: var(--neg); margin-right: 4px; }
+.inbox .inbox-unit { margin: 4px 0; }
+.next-map .nudge { display: block; color: var(--warn); margin: 2px 0 4px; }
 .rail-item .num.warn { color: var(--warn); }

@@ -81,6 +81,26 @@ export type RunEntry = {
   readonly sideGoals?: Readonly<Partial<Record<SideGoalId, boolean>>>;
   /** The items used in this map's preparations, as Record results set them (#193); absent: pre-filled from the plan. */
   readonly itemsUsed?: readonly ItemUsed[];
+  /**
+   * What the plan forecast before this map was recorded (#206): the headline and the EXP forecast for the map it
+   * expected next, and each unit's reading. What changed reads it against the headline after; absent: not worked out
+   * when the map was recorded.
+   */
+  readonly forecast?: EntryForecast;
+};
+
+/**
+ * The plan's forecast as it stood when a map was recorded (#206; What changed): the headline flawless chance with its ±,
+ * the map it expected next (its key on the map order, and the map), each unit's forecast EXP there (mean, and its level
+ * at the map's end, 10th percentile to 90th, EXP as the fraction), and each unit's reading (`pending`: "at risk?").
+ */
+export type EntryForecast = {
+  readonly chance: number;
+  readonly margin: number;
+  readonly key: string;
+  readonly map: string;
+  readonly exp: readonly { readonly unit: RosterUnit; readonly exp: number; readonly level: { readonly low: number; readonly median: number; readonly high: number } }[];
+  readonly readings: readonly { readonly unit: RosterUnit; readonly reading: 'on-track' | 'at-risk' | 'behind'; readonly pending?: true }[];
 };
 
 /**
@@ -656,6 +676,25 @@ function parseMigrationNote(v: unknown): MigrationNote | undefined {
  * whatever the version: what `parseRun` and the migration from `run:v1` read. The roster keeps its v1 fields
  * (rule-outs, saved plan, deploy flags) for the migration to turn into pins or drop.
  */
+const READING_KINDS = ['on-track', 'at-risk', 'behind'] as const;
+
+/** A stored entry forecast (#206), its rows that don't read dropped; undefined when it has no headline. */
+function parseEntryForecast(v: unknown): EntryForecast | undefined {
+  if (!isObject(v) || typeof v.chance !== 'number' || typeof v.margin !== 'number' || !isText(v.key) || !isText(v.map)) return undefined;
+  const n = (x: unknown) => typeof x === 'number' && Number.isFinite(x);
+  const exp = (Array.isArray(v.exp) ? v.exp : []).flatMap((x): EntryForecast['exp'][number][] =>
+    isObject(x) && isText(x.unit) && n(x.exp) && isObject(x.level) && n(x.level.low) && n(x.level.median) && n(x.level.high)
+      ? [{ unit: x.unit as RosterUnit, exp: x.exp as number, level: { low: x.level.low as number, median: x.level.median as number, high: x.level.high as number } }]
+      : [],
+  );
+  const readings = (Array.isArray(v.readings) ? v.readings : []).flatMap((x): EntryForecast['readings'][number][] =>
+    isObject(x) && isText(x.unit) && READING_KINDS.includes(x.reading as (typeof READING_KINDS)[number])
+      ? [{ unit: x.unit as RosterUnit, reading: x.reading as (typeof READING_KINDS)[number], ...(x.pending === true ? { pending: true as const } : {}) }]
+      : [],
+  );
+  return { chance: v.chance, margin: v.margin, key: v.key, map: v.map, exp, readings };
+}
+
 export function parseRunFields(raw: Record<string, unknown>): Run {
   const roster = parseRoster(raw.roster);
   const entries = (Array.isArray(raw.entries) ? raw.entries : []).flatMap((e, i): RunEntry[] => {
@@ -665,6 +704,7 @@ export function parseRunFields(raw: Record<string, unknown>): Run {
     const shopping = parseShopLines(e.shopping);
     const sideGoals = parseSideGoalsSecured(e.sideGoals);
     const itemsUsed = parseItemsUsed(e.itemsUsed);
+    const forecast = parseEntryForecast(e.forecast);
     return [
       {
         id: typeof e.id === 'string' && e.id ? e.id : `e${i + 1}`,
@@ -677,6 +717,7 @@ export function parseRunFields(raw: Record<string, unknown>): Run {
         ...(shopping.length ? { shopping } : {}),
         ...(Object.keys(sideGoals).length ? { sideGoals } : {}),
         ...(itemsUsed ? { itemsUsed } : {}),
+        ...(forecast ? { forecast } : {}),
       },
     ];
   });
