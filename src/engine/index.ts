@@ -91,8 +91,57 @@ import { entryShopping, type EntryShopping } from './shopping';
 import { sideGoalChoices, sideGoalsSecured, type SideGoalChoice, type SideGoalRecord } from './side-goals';
 import { renownAhead, type RenownAhead } from './renown';
 import { FIXED_INHERITANCE } from '../game-data/skills';
-import { remainingMapOrder, type MapOrder } from './map-order';
-import type { Run } from './run';
+import { remainingMapOrder, routeMapOrder, type MapOrder } from './map-order';
+import { EMPTY_SNAPSHOT, latestEntry, type Run } from './run';
+import { entryAfterShopping } from './shopping';
+import { learnCorrections } from './corrections';
+import { paired } from './solve/paired';
+import {
+  CORRECTION_FLAG,
+  EMPTY_CHECKED_RULES,
+  freeChecks,
+  nameIn,
+  openRule,
+  ruleStatuses,
+  rulesTouching,
+  settleCheck,
+  setupChecks,
+  type CheckOutcome,
+  type CheckedRules,
+  type MapCheck,
+  type Observation,
+  type OpenRule,
+  type RuleEvidence,
+  type RuleStake,
+  type RuleStatus,
+  type SetupCheck,
+  type SetupContext,
+} from './checks';
+export {
+  CORRECTION_FLAG,
+  EMPTY_CHECKED_RULES,
+  OPEN_RULES,
+  SETUP_STAKES,
+  answerRule,
+  modelChanged,
+  openRule,
+  readingOf,
+  reopenRule,
+  type CheckAsk,
+  type CheckOutcome,
+  type CheckedRules,
+  type MapCheck,
+  type ModelMismatch,
+  type Observation,
+  type OpenRule,
+  type RuleAnswer,
+  type RuleEvidence,
+  type RuleStake,
+  type RuleState,
+  type RuleStatus,
+  type SetupCheck,
+  type UnexpectedObservation,
+} from './checks';
 export { dismissMigrationNote, importRun, migrateRun } from './run-migration';
 import type {
   AssumptionStatus,
@@ -205,6 +254,9 @@ export {
   withRoster,
   withSeenSkills,
   withUnit,
+  withCheckObserved,
+  withEntryChecks,
+  type EntryCheck,
   type ChildJoin,
   type HeldItem,
   type LaterRecruit,
@@ -740,6 +792,44 @@ export type Engine = {
     unit: RosterUnit,
     options?: { readonly seed?: number; readonly runs?: number; readonly idle?: boolean; readonly pins?: readonly PlanPin[] },
   ): RunSim;
+  /** The open game rules (#209) and where each stands under the checked rules: open, checked, answered by hand, a mismatch. */
+  openRules(rules: CheckedRules): readonly RuleStatus[];
+  /**
+   * A rule's stakes (#209): the plan's runs under the rule's other reading against the same runs under the reading the
+   * model uses now (paired, ±95%), in flawless points. A rule the model doesn't read has none (`modelled: false`). The
+   * one background re-run a rule costs; seeded (the headline's seed and runs by default).
+   */
+  ruleStakes(run: Run, plan: Plan, rule: string, options?: { readonly seed?: number; readonly runs?: number }): RuleStake;
+  /**
+   * The free checks a map offers (#209): each open rule whose situation the plan's roadmap sets up on the map with key
+   * `key` (its lineup, seals, items, children, the army's kit), in words, by stakes. `lineup`: the map's lineup when the
+   * caller has it (else the roadmap's, worked out once per run and plan).
+   */
+  mapChecks(run: Run, plan: Plan, key: string, options?: ChecksOptions & { readonly lineup?: PlanLineup }): readonly MapCheck[];
+  /**
+   * The setup checks (#209): each open rule the model reads whose stakes pass about 1 point (`SETUP_STAKES`) and that no
+   * map left sets up, with the edit that sets it up (an edited plan) where a single one does. Low or unknown stakes make none.
+   */
+  setupChecks(run: Run, plan: Plan, options: ChecksOptions & { readonly stakes: readonly RuleStake[] }): readonly SetupCheck[];
+  /**
+   * Record results' Checks step (#209): the checked rules after the raw observation for a rule (see `settleCheck` in
+   * checks.ts): checked on the best reading, switched on the other (the model reads it at once), unexpected on neither,
+   * a model mismatch on the same unexpected value twice; "didn't happen" changes nothing.
+   */
+  settleCheck(rules: CheckedRules, rule: string, observed: Observation, evidence: RuleEvidence | undefined, now: number): { readonly rules: CheckedRules; readonly outcome: CheckOutcome };
+  /**
+   * The learned corrections beyond about ×1.3 or ×0.77 (#209) on a unit an open EXP rule touches, each naming the rules
+   * whose checks could explain it.
+   */
+  correctionChecks(run: Run, plan: Plan | undefined, rules: CheckedRules): readonly { readonly unit: RosterUnit; readonly factor: number; readonly rules: readonly { readonly id: string; readonly label: string }[] }[];
+};
+
+/** What the checks read (#209): the checked rules, the stakes worked out so far, the roadmap's lineups if the caller has them. */
+export type ChecksOptions = {
+  readonly rules?: CheckedRules;
+  readonly stakes?: readonly RuleStake[];
+  readonly lineups?: readonly PlanLineup[];
+  readonly seed?: number;
 };
 
 /** One combat for `Engine.combatExp`. */
@@ -1731,7 +1821,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     },
     blocking: (r, roster) => evaluateBlocking(r.pairing, roster, assumptions),
     combatExp: (c) =>
-      combatExp(c.internalLevel, c.foe, c.outcome, c.pair === 'back', c.difficulty === 'lunatic' || c.difficulty === 'lunatic-plus', c.engagement ?? 1, c.pair === 'front' && c.veteran ? 1.5 : 1),
+      combatExp(c.internalLevel, c.foe, c.outcome, c.pair === 'back', c.difficulty === 'lunatic' || c.difficulty === 'lunatic-plus', c.engagement ?? 1, c.veteran && (c.pair === 'front' || (c.pair === 'back' && assumptions['veteran-as-back'] === 'paired')) ? 1.5 : 1),
     internalLevels: (run, entry) => internalLevels(run, assumptions['class-change-internal-level'], entry),
     classChangeProposals: (run) => classChangeProposals(run),
     shopping: (run, entry) => entryShopping(run, entry),
@@ -2082,6 +2172,90 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         },
       });
     },
+    openRules: (rules) => ruleStatuses(rules),
+    ruleStakes: (run, plan, id, options = {}) => {
+      const rule = openRule(id);
+      if (!rule?.assumption) return { rule: id, gain: 0, margin: 0, runs: 0, modelled: false };
+      const { seed = FLAWLESS_SEED, runs = FLAWLESS_RUNS } = options;
+      const base = baseRuns(run, plan, seed, runs);
+      const alt = otherReading(rule);
+      const other = simulateRuns(flawlessInput(run, alt, undefined, plan).input, seed, runs, alt);
+      const p = paired(base.samples, other.samples);
+      return { rule: id, gain: p.gain, margin: Number.isFinite(p.margin) ? p.margin : 0, runs: p.runs, modelled: true };
+    },
+    mapChecks: (run, plan, key, options = {}) => {
+      const lineup = options.lineup ?? (options.lineups ?? checkLineups(run, plan, options)).find((l) => l.key === key);
+      return freeChecks(setupContext(run, plan, key, lineup, options), options.rules ?? EMPTY_CHECKED_RULES, options.stakes);
+    },
+    setupChecks: (run, plan, options) => {
+      const lineups = options.lineups ?? checkLineups(run, plan, options);
+      const keys = remainingKeys(run, plan);
+      const contexts = keys.map((k) => setupContext(run, plan, k, lineups.find((l) => l.key === k), { ...options, lineups }));
+      return setupChecks(plan, lineups.filter((l) => keys.includes(l.key)), run, options.rules ?? EMPTY_CHECKED_RULES, options.stakes, (rule) => contexts.some((c) => !!rule.setsUp?.(c)));
+    },
+    settleCheck: (rules, rule, observed, evidence, now) => settleCheck(rules, rule, observed, evidence, now),
+    correctionChecks: (run, plan, rules) =>
+      learnCorrections(run).flatMap((c) => {
+        if (c.factor <= CORRECTION_FLAG.high && c.factor >= CORRECTION_FLAG.low) return [];
+        const touching = rulesTouching(c.unit, run, plan, rules);
+        return touching.length ? [{ unit: c.unit, factor: c.factor, rules: touching.map((r) => ({ id: r.id, label: r.label })) }] : [];
+      }),
   };
+
+  // ---- in-play checks (#209) ----------------------------------------------------------------------------------------
+
+  /** Each open rule's other reading, as resolved assumptions (kept: the runs' caches are keyed on them). */
+  const alternatives = new Map<string, Assumptions>();
+  function otherReading(rule: OpenRule): Assumptions {
+    let a = alternatives.get(rule.id);
+    if (!a) {
+      const id = rule.assumption!;
+      const now = JSON.stringify(assumptions[id]) === JSON.stringify(rule.other.value) ? rule.best.value : rule.other.value;
+      alternatives.set(rule.id, (a = { ...assumptions, [id]: now } as Assumptions));
+    }
+    return a;
+  }
+  /** The plan's runs under the model as it is, by run, plan, seed and runs: every rule's stakes compare against them. */
+  const baseHeld = new WeakMap<Run, Map<string, RunSim>>();
+  function baseRuns(run: Run, plan: Plan, seed: number, runs: number): RunSim {
+    let held = baseHeld.get(run);
+    if (!held) baseHeld.set(run, (held = new Map()));
+    const k = `${seed}|${runs}|${JSON.stringify(plan)}`;
+    let sim = held.get(k);
+    if (!sim) {
+      if (held.size >= 4) held.delete(held.keys().next().value!);
+      held.set(k, (sim = simulateRuns(planInput(run, plan), seed, runs, assumptions)));
+    }
+    return sim;
+  }
+  /** The roadmap's lineup on every map left, worked out once per run and plan. */
+  const lineupsHeld = new WeakMap<Run, WeakMap<Plan, readonly PlanLineup[]>>();
+  function checkLineups(run: Run, plan: Plan, options: ChecksOptions): readonly PlanLineup[] {
+    let held = lineupsHeld.get(run);
+    if (!held) lineupsHeld.set(run, (held = new WeakMap()));
+    let l = held.get(plan);
+    if (!l) held.set(plan, (l = lineupsOf(run, plan, options.seed ?? FLAWLESS_SEED)));
+    return l;
+  }
+  const milestonesHeld = new WeakMap<Run, WeakMap<Plan, readonly Milestone[]>>();
+  function milestonesOf(run: Run, plan: Plan): readonly Milestone[] {
+    let held = milestonesHeld.get(run);
+    if (!held) milestonesHeld.set(run, (held = new WeakMap()));
+    let m = held.get(plan);
+    if (!m) held.set(plan, (m = milestones(run, plan, assumptions)));
+    return m;
+  }
+  /** The keys of the maps left: the plan's order, or the map order's. */
+  const remainingKeys = (run: Run, plan: Plan): string[] => (plan.roadmap.order.length ? [...plan.roadmap.order] : remainingMapOrder(run).steps.map((s) => s.key));
+  function setupContext(run: Run, plan: Plan, key: string, lineup: PlanLineup | undefined, options: ChecksOptions): SetupContext {
+    const steps = routeMapOrder(run.roster.run.route ?? 'main-story');
+    const map = steps.find((s) => s.key === key)?.map ?? key;
+    const order = remainingKeys(run, plan);
+    const prevKey = order[order.indexOf(key) - 1];
+    const before = prevKey ? (options.lineups ?? plan.roadmap.lineups).find((l) => l.key === prevKey) : undefined;
+    const last = latestEntry(run);
+    return { run, plan, key, map, lineup, before, snapshot: last ? entryAfterShopping(last) : EMPTY_SNAPSHOT, milestones: milestonesOf(run, plan), name: nameIn(run) };
+  }
+
   return engine;
 }

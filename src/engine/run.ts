@@ -26,6 +26,7 @@ import { parseRenown, type RunRenown } from './renown';
 import { parseItemsUsed, type ItemUsed } from './item-plan';
 import type { Plan, PlanPin } from './solve/plan';
 import { parsePins } from './solve/pins';
+import type { CheckOutcome, Observation } from './checks';
 import { EMPTY_ROSTER, parseRoster, withSpouse, withState, type Roster, type RosterUnit, type RunFacts } from './roster';
 
 export type SupportLevel = 'C' | 'B' | 'A' | 'S';
@@ -93,6 +94,19 @@ export type RunEntry = {
    * loss; the fall is logged for calibration (`falls`) and What it cost prices the rest of the map it missed.
    */
   readonly fell?: readonly RosterUnit[];
+  /**
+   * The checks this map offered (#209), kept when the map's entry is made (Record results' Checks step lists only these),
+   * each with the raw observation once taken and what it did to the rule.
+   */
+  readonly checks?: readonly EntryCheck[];
+};
+
+/** A check a map offered (#209): the rule, what to do and note, and, once Record results took it, the observation and its outcome. */
+export type EntryCheck = {
+  readonly rule: string;
+  readonly text: string;
+  readonly observed?: Observation;
+  readonly outcome?: CheckOutcome;
 };
 
 /**
@@ -784,6 +798,32 @@ function parseEntryForecast(v: unknown): EntryForecast | undefined {
   };
 }
 
+const OUTCOMES: readonly CheckOutcome[] = ['checked', 'switched', 'unexpected', 'mismatch', 'none'];
+
+/** An entry's checks as saved (#209): a rule and its words; an observation a number, yes/no or "didn't happen". */
+function parseEntryChecks(v: unknown): EntryCheck[] {
+  return (Array.isArray(v) ? v : []).flatMap((c): EntryCheck[] => {
+    if (!isObject(c) || !isText(c.rule) || typeof c.text !== 'string') return [];
+    const o = c.observed;
+    const observed = (typeof o === 'number' && Number.isFinite(o)) || typeof o === 'boolean' || o === 'didnt-happen' ? (o as Observation) : undefined;
+    const outcome = OUTCOMES.find((x) => x === c.outcome);
+    return [{ rule: c.rule, text: c.text, ...(observed !== undefined ? { observed } : {}), ...(outcome ? { outcome } : {}) }];
+  });
+}
+
+/** The run with the checks a map offered kept on its entry (#209), replacing any kept before. */
+export function withEntryChecks(run: Run, id: string, checks: readonly { readonly rule: string; readonly text: string }[]): Run {
+  return { ...run, entries: run.entries.map((e) => (e.id === id ? { ...e, checks: checks.map((c) => ({ rule: c.rule, text: c.text })) } : e)) };
+}
+
+/** The run with one of an entry's checks observed (#209): the raw observation and what it did to the rule. */
+export function withCheckObserved(run: Run, id: string, rule: string, observed: Observation, outcome: CheckOutcome): Run {
+  return {
+    ...run,
+    entries: run.entries.map((e) => (e.id === id ? { ...e, checks: (e.checks ?? []).map((c) => (c.rule === rule ? { ...c, observed, outcome } : c)) } : e)),
+  };
+}
+
 export function parseRunFields(raw: Record<string, unknown>): Run {
   const roster = parseRoster(raw.roster);
   const entries = (Array.isArray(raw.entries) ? raw.entries : []).flatMap((e, i): RunEntry[] => {
@@ -795,6 +835,7 @@ export function parseRunFields(raw: Record<string, unknown>): Run {
     const itemsUsed = parseItemsUsed(e.itemsUsed);
     const forecast = parseEntryForecast(e.forecast);
     const fell = Array.isArray(e.fell) ? [...new Set(e.fell.filter((u): u is RosterUnit => typeof u === 'string' && UNIT_BY_NAME_IDS.has(u)))] : [];
+    const checks = parseEntryChecks(e.checks);
     return [
       {
         id: typeof e.id === 'string' && e.id ? e.id : `e${i + 1}`,
@@ -809,6 +850,7 @@ export function parseRunFields(raw: Record<string, unknown>): Run {
         ...(itemsUsed ? { itemsUsed } : {}),
         ...(forecast ? { forecast } : {}),
         ...(fell.length ? { fell } : {}),
+        ...(checks.length ? { checks } : {}),
       },
     ];
   });

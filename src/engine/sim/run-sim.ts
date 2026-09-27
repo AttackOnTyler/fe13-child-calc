@@ -768,7 +768,7 @@ const SEAL_ITEM = { master: 'Master Seal', second: 'Second Seal' } as const;
  * gains; a Second Seal moves each stat by the difference in class bases. The unit restarts at Lv 1 and learns its new
  * class's Lv 1 skill.
  */
-function changeClasses(state: RunState, step: RunSimMap, at: number, reading: Assumptions['class-change-internal-level']) {
+function changeClasses(state: RunState, step: RunSimMap, at: number, reading: Assumptions['class-change-internal-level'], bar: Assumptions['seal-exp-bar'] = 'reset') {
   const next = new Map<RosterUnit, number>();
   state.classChanges.forEach((c, i) => {
     if (!state.changed.has(i) && !next.has(c.seal.unit)) next.set(c.seal.unit, i);
@@ -797,7 +797,8 @@ function changeClasses(state: RunState, step: RunSimMap, at: number, reading: As
     u.classId = seal.classId;
     u.tier = CLASSES[seal.classId].tier;
     u.level = 1;
-    u.exp = 0;
+    // The EXP bar through the seal (#209, open rule `seal-exp-bar`): reset with the level, or kept.
+    if (bar === 'reset') u.exp = 0;
     // Research: a Master Seal only adds the advanced tier's +20, a Second Seal adds to the count. +1 per class change:
     // the level at use carries on.
     if (reading === 'plus-one') u.count += levelAtUse;
@@ -848,6 +849,7 @@ function expFoes(map: SimMap): Map<string, ExpFoe | undefined> {
 function earn(state: RunState, map: SimMap, play: MapPlay, rng: Rng | null, difficulty: Difficulty, assumptions: Assumptions): Map<RosterUnit, number> {
   const foes = expFoes(map);
   const lunatic = difficulty === 'lunatic' || difficulty === 'lunatic-plus';
+  const veteranBack = assumptions['veteran-as-back'] === 'paired';
   const earned = new Map<RosterUnit, number>();
   const give = (u: Live, given: number) => {
     // The unit's learned correction (#196) scales everything it earns.
@@ -864,7 +866,8 @@ function earn(state: RunState, map: SimMap, play: MapPlay, rng: Rng | null, diff
       const u = state.army.get(f.lead as RosterUnit);
       if (u) give(u, combatExp(internalOf(u, difficulty), foe, f.kill ? 'kill' : f.dealt ? 'damage' : 'miss', false, lunatic, f.engagement, f.back && u.skills.includes('Veteran') ? 1.5 : 1));
       const b = f.back && f.dualStrike ? state.army.get(f.back as RosterUnit) : undefined;
-      if (b) give(b, Math.round(f.dualStrike! * combatExp(internalOf(b, difficulty), foe, 'damage', true, lunatic, f.engagement)));
+      // Veteran on the back (#209, open rule `veteran-as-back`): only while leading, or whenever paired.
+      if (b) give(b, Math.round(f.dualStrike! * combatExp(internalOf(b, difficulty), foe, 'damage', true, lunatic, f.engagement, veteranBack && b.skills.includes('Veteran') ? 1.5 : 1)));
     }
   }
   for (const [id, t] of Object.entries(play.units)) {
@@ -1223,7 +1226,7 @@ function beforeMap(state: RunState, step: RunSimMap, at: number, assumptions: As
   }
   const stop = !!step.armory?.length;
   if (shop && stop) rebuy(state, step, shop);
-  changeClasses(state, step, at, assumptions['class-change-internal-level']);
+  changeClasses(state, step, at, assumptions['class-change-internal-level'], assumptions['seal-exp-bar']);
   // The plan's build skills learned by now are equipped (a skill is equipped in the preparations, like a class change).
   if (state.builds) for (const u of state.army.values()) equip(u, state.builds[u.base.id]);
   if (prep) handOver(state);

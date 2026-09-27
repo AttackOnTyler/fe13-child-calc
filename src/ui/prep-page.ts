@@ -642,7 +642,7 @@ export function prepReadout(engine: Engine, run: Run, map: string, input: PrepIn
     threats,
     flags,
     shopping: noPrep ? undefined : shoppingOf(forecast),
-    checks: mapChecks(engine, run, key).map((c) => c.text),
+    checks: mapChecks(engine, run, key, plan, lineup).map((c) => c.text),
     assumptions: blind.map((b) => `${b.label} (${LEAN[b.lean]})`),
     lineup,
   };
@@ -1045,7 +1045,7 @@ function body(ctx: PrepContext, plan: Plan, forecast: ExpForecast): HTMLElement 
       'details',
       { class: 'prep-box' },
       h('summary', {}, h('b', {}, 'Checks and assumptions')),
-      r.checks.length ? h('ul', { class: 'small' }, ...r.checks.map((c) => h('li', {}, c))) : h('p', { class: 'muted small' }, 'No in-play check on this map yet.'),
+      r.checks.length ? h('div', {}, h('ul', { class: 'small' }, ...r.checks.map((c) => h('li', {}, c))), h('p', { class: 'muted small' }, 'Free checks: the plan already sets them up. Record results asks what you saw.')) : h('p',{ class: 'muted small' }, 'This map offers no check: nothing on it sets up an open rule’s situation.'),
       h('p', { class: 'muted small' }, 'The play rests on:'),
       h('ul', { class: 'muted small' }, ...r.assumptions.map((a) => h('li', {}, a))),
     ),

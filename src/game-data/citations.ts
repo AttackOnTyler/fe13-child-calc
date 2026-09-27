@@ -156,3 +156,8 @@ export const ITEM_PLAN_GRILLING: Citation = {
   url: 'https://github.com/AttackOnTyler/fe13-child-calc/issues/166',
 };
 export const SF_ITEMS: Citation = { label: 'SF items', url: 'https://serenesforest.net/awakening/inventory/items/' };
+/** The open EXP and support rules to check in play (#150): the checklist the in-play checks (#209) are seeded from. */
+export const CHECK_IN_PLAY: Citation = {
+  label: 'Check the open EXP and support rules in play (#150)',
+  url: 'https://github.com/AttackOnTyler/fe13-child-calc/issues/150',
+};

@@ -6,7 +6,7 @@
  * edit never stops the search.
  * Where there's no Worker (tests), `startSolve` returns undefined and the page works the chance out itself.
  */
-import type { Assumptions, EditCost, PinCost, Plan, PlanPin, Readings, ReservesCursor, ReservesStep, RobinCursor, RobinStep, RosterUnit, Run, RunSim, SolveCursor, SolveStep, UnitEdit, WhatItCost, WorthCursor, WorthStep } from '../engine';
+import type { Assumptions, CheckedRules, EditCost, RuleStake, SetupCheck, PinCost, Plan, PlanPin, Readings, ReservesCursor, ReservesStep, RobinCursor, RobinStep, RosterUnit, Run, RunSim, SolveCursor, SolveStep, UnitEdit, WhatItCost, WorthCursor, WorthStep } from '../engine';
 
 /** A unit's edit as the worker posts it (#203): its plan is built and costed in the worker. */
 export type UnitEditView = Pick<UnitEdit, 'kind' | 'key' | 'label' | 'pins'>;
@@ -117,6 +117,16 @@ export type SolveRequest =
       readonly unit?: RosterUnit;
       readonly pins?: readonly PlanPin[];
       readonly runs: number;
+    })
+  | (Common & {
+      /**
+       * The in-play checks (#209), in the `checks` slot: each open rule's stakes on the adopted plan (one re-run under its
+       * other reading), then the setup checks those stakes call for, each edit costed at each of `budgets` in turn.
+       */
+      readonly kind: 'checks';
+      readonly plan: Plan;
+      readonly rules: CheckedRules;
+      readonly budgets: readonly number[];
     });
 
 /**
@@ -136,10 +146,13 @@ export type SolveReply =
   | { readonly id: number; readonly kind: 'robin'; readonly step: RobinStep; readonly done: boolean }
   | { readonly id: number; readonly kind: 'edits'; readonly edits: readonly UnitEditView[]; readonly done: boolean }
   | { readonly id: number; readonly kind: 'edit-cost'; readonly key: string; readonly cost: EditCost; readonly done: boolean; /** The edited plan (#204's "anything else": a plan edit adopts it). */ readonly edited?: Plan }
+  | { readonly id: number; readonly kind: 'stake'; readonly stake: RuleStake; readonly done: boolean }
+  | { readonly id: number; readonly kind: 'setup'; readonly checks: readonly SetupCheck[]; readonly done: boolean }
+  | { readonly id: number; readonly kind: 'setup-cost'; readonly rule: string; readonly cost: EditCost; readonly done: boolean }
   | { readonly id: number; readonly kind: 'why'; readonly chance: RunSim; /** The plan compared against's runs (with a unit: the plan's own). */ readonly base?: RunSim; readonly done: boolean };
 
-/** Where a request runs: the solve and its idle work, a unit's edits beside it, or the Why panel's drill-down (#210). */
-export type SolveSlot = 'main' | 'edits' | 'why';
+/** Where a request runs: the solve and its idle work, a unit's edits beside it, the Why panel's drill-down (#210), or the checks' stakes (#209). */
+export type SolveSlot = 'main' | 'edits' | 'why' | 'checks';
 
 /** A request as the page makes it: the client numbers it. */
 export type NewSolveRequest = SolveRequest extends infer R ? (R extends SolveRequest ? Omit<R, 'id'> : never) : never;

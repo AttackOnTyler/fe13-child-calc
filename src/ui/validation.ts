@@ -14,6 +14,7 @@ import {
 } from '../engine';
 import { h } from './dom';
 import { LABELS } from './labels';
+import { openRulesSection, type RulesContext } from './checks-view';
 
 /** What the validation panel reads, and how it changes the assumption overrides. */
 export type ValidationContext = {
@@ -25,6 +26,8 @@ export type ValidationContext = {
   readonly resetAll: () => void;
   /** Re-renders, discarding an invalid edit. */
   readonly render: () => void;
+  /** The open rules (#209): answered by hand or reopened here. */
+  readonly rules?: RulesContext;
 };
 
 function sourceLinks(sources: readonly Citation[]): HTMLElement {
@@ -215,7 +218,7 @@ export function validationPanel(ctx: ValidationContext): HTMLElement {
     'section',
     { class: 'main' },
     h('div', { class: 'main-head' }, h('h2', {}, LABELS.validation)),
-    h('div', { class: 'scroll vpanel' }, selfTestSection(ctx.selfTest), assumptionsSection(ctx), disagreementsSection(ctx.engine)),
+    h('div', { class: 'scroll vpanel' }, selfTestSection(ctx.selfTest), ctx.rules ? openRulesSection(ctx.rules) : null, assumptionsSection(ctx), disagreementsSection(ctx.engine)),
   );
 }
 

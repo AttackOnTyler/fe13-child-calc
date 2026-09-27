@@ -8,10 +8,11 @@
  * when asked, it prices What it cost for the latest recorded map (#208). The page may also hand it idle work (#202): the plan's unit worth and utility, then its reserves;
  * or, on request, the Robin alternatives (#201), after the search, pin cost and readings; and the Wishlist tab (#203) asks,
  * in a second worker, for a unit's edits, listed then costed one by one (`unitEdits`); the inbox (#204) asks there for
- * every edit (`editChoices`), its matches costed with their edited plans, and for one pin's own cost. It holds no logic: the search,
+ * every edit (`editChoices`), its matches costed with their edited plans, and for one pin's own cost; after the Lock, a
+ * third worker works out the in-play checks' stakes and setup checks (#209). It holds no logic: the search,
  * its state (the cursor) and its budgets are the engine's. Started by `solve-client.ts`, which terminates it to stop a solve.
  */
-import { EDIT_COST_BUDGET, READING_SECONDS, SOLVE_SECONDS, SUGGEST_RUNS, createEngine, type Assumptions, type Engine, type Plan, type Run, type SolveCursor, type SuggestedChange, type UnitEdit } from '../engine';
+import { EDIT_COST_BUDGET, READING_SECONDS, SOLVE_SECONDS, SUGGEST_RUNS, createEngine, type Assumptions, type Engine, type Plan, type RuleStake, type Run, type SolveCursor, type SuggestedChange, type UnitEdit } from '../engine';
 import type { SolveReply, SolveRequest } from './solve-client';
 
 const scope = self as unknown as { onmessage: ((e: MessageEvent<SolveRequest>) => void) | null; postMessage(m: SolveReply): void };
@@ -92,6 +93,7 @@ scope.onmessage = ({ data: m }) => {
     return void scope.postMessage({ id: m.id, kind: 'why', chance: without, base: engine.flawlessChance(m.run, { ...options, plan: m.plan }), done: true });
   }
   if (m.kind === 'edits') return unitEdits(engine, m);
+  if (m.kind === 'checks') return checks(engine, m);
   if (m.kind === 'all-edits') return allEdits(engine, m);
   if (m.kind === 'one-pin-cost') {
     // One pin's own cost (#200, on request, #204): a search with it lifted from the adopted plan, then its cost.
@@ -113,6 +115,35 @@ scope.onmessage = ({ data: m }) => {
   for (const [i, budget] of m.budgets.entries())
     scope.postMessage({ id: m.id, kind: 'cost', cost: engine.editCost({ run: m.run, plan: m.plan, edited: m.edited, seed: m.seed, budget }), done: i === m.budgets.length - 1 });
 };
+
+/**
+ * The in-play checks (#209): each open rule's stakes on the adopted plan, one re-run under its other reading (a rule the
+ * model doesn't read has none, at once), the rules the model reads first; then the setup checks those stakes call for,
+ * each one's edit costed at each budget in turn.
+ */
+function checks(engine: Engine, m: Extract<SolveRequest, { kind: 'checks' }>) {
+  const open = engine.openRules(m.rules).filter((s) => s.state === 'open').map((s) => s.rule);
+  const order = [...open.filter((r) => !r.assumption), ...open.filter((r) => r.assumption)];
+  const stakes: RuleStake[] = [];
+  for (const r of order) {
+    const stake = engine.ruleStakes(m.run, m.plan, r.id, { seed: m.seed });
+    stakes.push(stake);
+    scope.postMessage({ id: m.id, kind: 'stake', stake, done: false });
+  }
+  const setup = engine.setupChecks(m.run, m.plan, { rules: m.rules, stakes, seed: m.seed });
+  const costed = setup.filter((c) => c.edit);
+  scope.postMessage({ id: m.id, kind: 'setup', checks: setup, done: !costed.length || !m.budgets.length });
+  const settled = new Set<string>();
+  if (!costed.length || !m.budgets.length) return;
+  for (const budget of m.budgets)
+    for (const c of costed) {
+      if (settled.has(c.rule)) continue;
+      const cost = engine.editCost({ run: m.run, plan: m.plan, edited: c.edit!.plan, seed: m.seed, budget });
+      if (cost.settled) settled.add(c.rule);
+      scope.postMessage({ id: m.id, kind: 'setup-cost', rule: c.rule, cost, done: false });
+    }
+  scope.postMessage({ id: m.id, kind: 'setup', checks: setup, done: true });
+}
 
 /** The order a unit's edits are costed in (#203): the likeliest choices first; a build skill costs nothing to read. */
 const COST_ORDER: readonly UnitEdit['kind'][] = ['keep', 'marriage', 'class', 'pass', 'lineup', 'pair', 'robin', 'priority', 'place', 'seal', 'item', 'build', 'side-goal'];
