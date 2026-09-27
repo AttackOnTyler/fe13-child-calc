@@ -29,8 +29,8 @@ import { assumed, isAssumed, type Assumptions } from './assumptions';
 import { deployCount, deployRoleOf, forcedOn } from './deploy';
 import { COUNT_CAP, tierBonus } from './exp';
 import { internalLevels } from './internal-level';
-import { remainingMapOrder } from './map-order';
-import { unitName, type Couple, type Difficulty, type RosterUnit } from './roster';
+import { remainingMapOrder, type MapOrder } from './map-order';
+import { unitName, withRun, type Couple, type Difficulty, type RosterUnit } from './roster';
 import { EMPTY_SNAPSHOT, latestEntry, morganStart, recruitSnapshot, unitNamed, type Run, type Snapshot, type UnitSnapshot } from './run';
 import { fixedPass } from './child-skills';
 import { entryAfterShopping } from './shopping';
@@ -42,6 +42,7 @@ import { simMapById } from './sim/sim-map';
 import type { SimMap, SimUnit } from './sim/map-play';
 import { simulateCeiling, type Ceiling } from './sim/ceiling';
 import { simulateRuns, type ArmyUnit, type ChildRecruit, type RunSim, type RunSimInput, type RunSimMap } from './sim/run-sim';
+import type { Plan } from './solve/plan';
 
 const WEAPON_KINDS = new Set(['sword', 'lance', 'axe', 'bow', 'tome', 'stone', 'beaststone']);
 
@@ -78,6 +79,12 @@ export type FlawlessOptions = {
    * default the adopted plan's, then the roster's pins.
    */
   readonly marriages?: readonly Couple[];
+  /**
+   * A plan to evaluate (#198): its marriages (in place of `marriages`), its Robin where the run facts leave Robin open,
+   * its roadmap's map order and lineups, and the skills its parents pass. Without one, the old path: the suggested
+   * deployment on every map and the given marriages (#212 retires it).
+   */
+  readonly plan?: Plan;
 };
 
 export type FlawlessChance = RunSim & {
@@ -140,19 +147,44 @@ function sideOf(run: Run, snap: Snapshot, u: RosterUnit, assumptions: Assumption
   };
 }
 
+/** The run with the plan's Robin where its facts leave Robin open (#198). */
+export function withPlanRobin(run: Run, plan: Plan): Run {
+  const facts = run.roster.run;
+  if (facts.gender && facts.asset && facts.flaw) return run;
+  const asset = facts.asset ?? plan.robin.asset;
+  const flaw = facts.flaw ?? (plan.robin.flaw !== asset ? plan.robin.flaw : STATS.find((s) => s !== asset)!);
+  return { ...run, roster: withRun(run.roster, { gender: facts.gender ?? plan.robin.gender, asset, flaw }) };
+}
+
+/**
+ * The map order as the plan plays it (#198): the roadmap's order when it holds exactly the maps still to play and ends
+ * at the endpoint; otherwise the map order's own.
+ */
+function plannedOrder(order: MapOrder, plan: Plan | undefined): MapOrder {
+  const keys = plan?.roadmap.order;
+  if (!keys || keys.length !== order.steps.length || keys[keys.length - 1] !== order.endpoint.key) return order;
+  const byKey = new Map(order.steps.map((s) => [s.key, s]));
+  const steps = keys.flatMap((k) => byKey.get(k) ?? []);
+  return new Set(keys).size === keys.length && steps.length === keys.length ? { ...order, steps } : order;
+}
+
 /**
  * The simulation's input for a run: the army, the maps still to play and the seals held. Units the simulation can't
- * play are listed in `notSimulated`; units whose seal history is unknown in `unknownHistory`.
+ * play are listed in `notSimulated`; units whose seal history is unknown in `unknownHistory`. With a plan (#198), its
+ * Robin, marriages, map order, lineups and passed skills.
  */
 export function flawlessInput(
-  run: Run,
+  given: Run,
   assumptions: Assumptions,
   roleOf?: (u: RosterUnit) => DeploymentRole,
-  marriages?: readonly Couple[],
+  givenMarriages?: readonly Couple[],
+  plan?: Plan,
 ): { readonly input: RunSimInput; readonly notSimulated: readonly NotSimulated[]; readonly unknownHistory: readonly RosterUnit[]; readonly endpoint: string; readonly goldUnrecorded: boolean } {
+  const run = plan ? withPlanRobin(given, plan) : given;
+  const marriages = plan ? (plan.wishlist.marriages as readonly Couple[]) : givenMarriages;
   const difficulty: Difficulty = run.roster.run.difficulty ?? 'normal';
   const table: ChapterDifficulty = difficulty === 'lunatic-plus' ? 'lunatic' : difficulty;
-  const order = remainingMapOrder(run);
+  const order = plannedOrder(remainingMapOrder(run), plan);
   // The runs start from the latest entry after its shopping (#192): its gold, items and seals as they left the armory.
   const last = latestEntry(run);
   const snap = last ? entryAfterShopping(last) : EMPTY_SNAPSHOT;
@@ -228,11 +260,16 @@ export function flawlessInput(
     if (startClass === null) return undefined;
     const f = fighterOf(child.name, { ...s, stats: s.stats ?? Object.fromEntries(STATS.map((x) => [x, 0])) as Record<(typeof STATS)[number], number> })!;
     const side = sideOf(run, snap, u, assumptions, spouse);
+    // The game's fixed passes first; else the skill the plan has each parent pass (#198).
+    const passes = plan?.wishlist.children.find((c) => c.child === u && c.parents[0] === fixed && c.parents[1] === spouse)?.passes;
     return {
       id: u,
       name: unitName(u, gender),
       parents: [fixed, spouse],
-      fixed: [fixedPass(fixed, child.gender, chromsChild(fixed)), spouse === 'maiden' ? undefined : fixedPass(spouse, child.gender, chromsChild(spouse))],
+      fixed: [
+        fixedPass(fixed, child.gender, chromsChild(fixed)) ?? passes?.[0] ?? undefined,
+        spouse === 'maiden' ? undefined : (fixedPass(spouse, child.gender, chromsChild(spouse)) ?? passes?.[1] ?? undefined),
+      ],
       ...(startClass ? { startClass } : {}),
       growths: side.growths,
       modifiers: side.modifiers,
@@ -322,8 +359,10 @@ export function flawlessInput(
   const fresh = run.entries.every((e) => e.map === 'other');
   const goldUnrecorded = snap.gold === null && !fresh;
   const gold = snap.gold ?? (fresh ? STARTING_GOLD : 0);
+  const decided = new Map(plan?.roadmap.lineups.map((l) => [l.key, l]) ?? []);
+  const lineups = decided.size ? { lineups: maps.map((m) => decided.get(m.key)) } : {};
   return {
-    input: { army, maps, difficulty, masterSealsHeld: held.master, secondSealsHeld: held.second, gold, cleared: recordedMaps, married: couplesOf(recorded), couples: couplesOf(spouseOf).filter(([a]) => !recorded.has(a)) },
+    input: { army, maps, difficulty, masterSealsHeld: held.master, secondSealsHeld: held.second, gold, cleared: recordedMaps, married: couplesOf(recorded), couples: couplesOf(spouseOf).filter(([a]) => !recorded.has(a)), ...lineups },
     notSimulated,
     unknownHistory,
     endpoint: order.endpoint.key,
@@ -372,9 +411,10 @@ const couplesOf = (spouses: ReadonlyMap<RosterUnit, RosterUnit>): [RosterUnit, R
 
 /** The flawless chance of a run from the next map to the endpoint (see `simulateRuns`). */
 export function flawlessChance(run: Run, assumptions: Assumptions, options: FlawlessOptions = {}): FlawlessChance {
-  const { input, notSimulated, unknownHistory, endpoint, goldUnrecorded } = flawlessInput(run, assumptions, options.roleOf, options.marriages);
+  const { input, notSimulated, unknownHistory, endpoint, goldUnrecorded } = flawlessInput(run, assumptions, options.roleOf, options.marriages, options.plan);
   const sim = simulateRuns(input, options.seed ?? FLAWLESS_SEED, options.runs ?? FLAWLESS_RUNS, assumptions);
-  return { ...sim, notSimulated, unknownHistory, endpoint, goldUnrecorded };
+  const passes = options.plan?.wishlist.children.some((c) => c.passes.some((p) => p !== null));
+  return { ...sim, ...(passes ? { blindSpots: [...sim.blindSpots, 'passes-as-planned' as const] } : {}), notSimulated, unknownHistory, endpoint, goldUnrecorded };
 }
 
 /**
@@ -382,7 +422,7 @@ export function flawlessChance(run: Run, assumptions: Assumptions, options: Flaw
  * its effective caps; undefined once the endpoint is recorded. Lunatic+ plays it on the flawless chance's seeds.
  */
 export function flawlessCeiling(run: Run, assumptions: Assumptions, options: FlawlessOptions = {}): Ceiling | undefined {
-  const { input } = flawlessInput(run, assumptions, options.roleOf, options.marriages);
+  const { input } = flawlessInput(run, assumptions, options.roleOf, options.marriages, options.plan);
   return simulateCeiling(input, options.seed ?? FLAWLESS_SEED, options.runs ?? FLAWLESS_RUNS, assumptions);
 }
 

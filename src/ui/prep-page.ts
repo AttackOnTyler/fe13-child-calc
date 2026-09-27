@@ -3,7 +3,7 @@
  * from its start (#131), paired with its back (its highest support by default), with its best weapon from its
  * inventory, against one foe at a time on the run's difficulty. Lunatic+ assumes the pool's worst case.
  */
-import type { ChapterDifficulty, Couple, Difficulty, Engine, FlawlessOptions, Foe, Matchup, PrepUnits, RosterUnit, Run, ShoppingLine, SimGroup, Snapshot } from '../engine';
+import type { ChapterDifficulty, Couple, Difficulty, Engine, FlawlessOptions, Foe, Matchup, Plan, PrepUnits, RosterUnit, Run, ShoppingLine, SimGroup, Snapshot } from '../engine';
 import { EMPTY_SNAPSHOT, KIT_FORGE_MT, REINFORCEMENT_RULE, bestWeapon, dangerFlags, deployCount, fighterOf, foeKey, foesOf, forcedOn, latestEntry, prepUnits, promotionAdvice, sealAvailability, sealsHeld, simLineup, suggestDeployment, suggestLoadout, unitName, withSeenSkills, type DeployCandidate, type DeploymentRole } from '../engine';
 import { chanceText } from './chance';
 import { goldRange, goldText } from './run-page';
@@ -30,8 +30,8 @@ export type PrepContext = {
   readonly setFoe: (i: number) => void;
   /** Each unit's deployment role: army fit's for children, the roster's tag otherwise (#121). */
   readonly roleOf: (u: RosterUnit) => DeploymentRole;
-  /** The plan's marriages, as the Run view passes them to the flawless chance: the shopping list runs the same simulation (#190). */
-  readonly marriages?: () => readonly Couple[];
+  /** The seed plan (#198) for these roles, as the Run view's flawless chance reads it: the shopping list runs the same simulation (#190). */
+  readonly plan?: (roleOf: (u: RosterUnit) => DeploymentRole) => Plan;
   /** Units the player took out of the deployment (view state). */
   readonly excluded: ReadonlySet<RosterUnit>;
   readonly setExcluded: (u: RosterUnit, out: boolean) => void;
@@ -349,7 +349,7 @@ function shopping(ctx: PrepContext): HTMLElement {
   const run = ctx.run;
   setTimeout(() => {
     if (!el.isConnected) return;
-    const s = SHOPPING.get(run) ?? shoppingReadout(ctx.engine, run, { roleOf: ctx.roleOf, ...(ctx.marriages ? { marriages: ctx.marriages() } : {}) });
+    const s = SHOPPING.get(run) ?? shoppingReadout(ctx.engine, run, { roleOf: ctx.roleOf, ...(ctx.plan ? { plan: ctx.plan(ctx.roleOf) } : {}) });
     SHOPPING.set(run, s);
     if (el.isConnected) el.replaceWith(draw(s));
   }, 0);

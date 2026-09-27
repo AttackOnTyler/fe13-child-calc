@@ -508,7 +508,7 @@ export type BlindSpotId =
   | 'door-keys';
 
 /** The run simulation's own blind spots (#186): how it walks the army from one map to the next. */
-export type RunBlindSpotId = 'promotes-at-cap' | 'lead-takes-exp' | 'supports-from-pair-combats' | 'kit-as-recorded' | 'sure-income-only' | 'kit-by-matchups-won';
+export type RunBlindSpotId = 'promotes-at-cap' | 'lead-takes-exp' | 'supports-from-pair-combats' | 'kit-as-recorded' | 'sure-income-only' | 'kit-by-matchups-won' | 'passes-as-planned';
 
 export type BlindSpot = {
   readonly id: BlindSpotId | RunBlindSpotId;
@@ -677,5 +677,15 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
       'Chapter 3 is also lost when both Door Keys are lost before a door is opened. The play has no doors or keys: the keys are assumed kept.',
     lean: 'high',
     touches: ['map'],
+  },
+  {
+    id: 'passes-as-planned',
+    label: 'Parents pass the skills the plan names',
+    why:
+      'A plan names the skill each parent passes at its child’s paralogue entry, and the runs take it as passed, as if the parent had ' +
+      'learned it and equipped it in its last slot by then. Nothing checks yet that the parent reaches that skill in time (the skill ' +
+      'milestones, #194).',
+    lean: 'high',
+    touches: ['flawless'],
   },
 ];

@@ -29,13 +29,14 @@ import type { RosterUnit } from '../roster';
 import type { Foe } from '../solver';
 import { playMap, type SimMap } from './map-play';
 import { runSeed } from './random';
-import type { ArmyUnit, ChildRecruit, RunSimInput } from './run-sim';
+import type { ArmyUnit, ChildRecruit, RunSimInput, RunSimMap } from './run-sim';
 import { simLineup } from './sim-map';
 
 /** A unit as the ceiling fields it: its class after promotion, and its stats at its effective caps. */
 export type CeilingUnit = {
   readonly id: RosterUnit;
   readonly name: string;
+  readonly classId: ClassId;
   readonly className: string;
   readonly stats: Readonly<Record<Stat, number>>;
   readonly skills: readonly string[];
@@ -64,7 +65,7 @@ export function effectiveCaps(classId: ClassId, gender: Gender, modifiers: Modif
 }
 
 /** The class a unit ends in: a base class's promotion raising its class bases most (first listed on a tie), else its own. */
-function fullClass(classId: ClassId, gender: Gender): ClassId {
+export function fullClass(classId: ClassId, gender: Gender): ClassId {
   if (CLASSES[classId].tier !== 'base') return classId;
   const from = classBaseStats(classId, gender);
   let best: { to: ClassId; total: number } | undefined;
@@ -90,7 +91,7 @@ function capped(a: ArmyUnit): DeployCandidate & { readonly shown: CeilingUnit } 
     weapons: a.weapons,
     ...(a.items?.length ? { items: a.items } : {}),
     supports: a.supports,
-    shown: { id: a.id, name: a.name, className: name, stats, skills: a.skills },
+    shown: { id: a.id, name: a.name, classId, className: name, stats, skills: a.skills },
   };
 }
 
@@ -141,6 +142,48 @@ const armed = (map: SimMap) => [...map.foes, ...map.waves.flatMap((w) => w.group
  */
 export function simulateCeiling(input: RunSimInput, seed: number, runs: number, assumptions: Assumptions): Ceiling | undefined {
   const last = input.maps.length - 1;
+  const at = ceilingArmy(input, assumptions);
+  if (!at) return undefined;
+  const { end, fielded, lineup, children } = at;
+  const n = input.difficulty === 'lunatic-plus' ? Math.max(1, Math.floor(runs)) : 1;
+  const blindSpots = new Set<BlindSpotId | RunBlindSpotId>();
+  let chance: number | undefined;
+  if (armed(end.map)) {
+    const play = { map: end.map, lineup: simLineup(lineup, new Map(fielded.map((c) => [c.unit, c]))) };
+    let sum = 0;
+    for (let r = 0; r < n; r++) {
+      const p = playMap(play, runSeed(runSeed(seed, r), last));
+      sum += p.noDeath;
+      for (const b of p.blindSpots) blindSpots.add(b);
+    }
+    chance = sum / n;
+  }
+  blindSpots.add('kit-as-recorded');
+  if (children) blindSpots.add('supports-from-pair-combats');
+  return {
+    key: end.key,
+    label: end.label,
+    chance,
+    runs: n,
+    lineup,
+    units: fielded.map((c) => c.shown),
+    unarmed: input.maps.filter((m) => !armed(m.map)).map((m) => m.label),
+    blindSpots: [...blindSpots],
+  };
+}
+
+/** A unit of the ceiling's army: a deployment candidate at its full build, and how the ceiling shows it. */
+export type CappedUnit = DeployCandidate & { readonly shown: CeilingUnit };
+
+/**
+ * The army the ceiling fields at the endpoint (see the module comment), each unit at its full build, and its suggested
+ * deployment there; undefined when there's no map left to play. The seed's wishlist (#198) is this lineup.
+ */
+export function ceilingArmy(
+  input: RunSimInput,
+  assumptions: Assumptions,
+): { readonly end: RunSimMap; readonly fielded: readonly CappedUnit[]; readonly lineup: Deployment; readonly children: boolean } | undefined {
+  const last = input.maps.length - 1;
   const end = input.maps[last];
   if (!end) return undefined;
   const army = new Map<RosterUnit, ArmyUnit>();
@@ -162,31 +205,7 @@ export function simulateCeiling(input: RunSimInput, seed: number, runs: number, 
     foes: end.map.foes.map((g) => g.foe),
     pool: (f) => pools.get(f) ?? [],
   });
-  const n = input.difficulty === 'lunatic-plus' ? Math.max(1, Math.floor(runs)) : 1;
-  const blindSpots = new Set<BlindSpotId | RunBlindSpotId>();
-  let chance: number | undefined;
-  if (armed(end.map)) {
-    const play = { map: end.map, lineup: simLineup(lineup, new Map(fielded.map((c) => [c.unit, c]))) };
-    let sum = 0;
-    for (let r = 0; r < n; r++) {
-      const p = playMap(play, runSeed(runSeed(seed, r), last));
-      sum += p.noDeath;
-      for (const b of p.blindSpots) blindSpots.add(b);
-    }
-    chance = sum / n;
-  }
-  blindSpots.add('kit-as-recorded');
-  if (children.length) blindSpots.add('supports-from-pair-combats');
-  return {
-    key: end.key,
-    label: end.label,
-    chance,
-    runs: n,
-    lineup,
-    units: fielded.map((c) => c.shown),
-    unarmed: input.maps.filter((m) => !armed(m.map)).map((m) => m.label),
-    blindSpots: [...blindSpots],
-  };
+  return { end, fielded, lineup, children: children.length > 0 };
 }
 
 /** Each child once, as the recruit whose parents are a couple of the plan; otherwise its first listed recruit. */

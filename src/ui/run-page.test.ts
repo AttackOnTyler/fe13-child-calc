@@ -35,8 +35,8 @@ describe('the flawless chance readout (#186)', () => {
   it('shows the chance with its ± and says what it covers', () => {
     const run = played(all.slice(0, -2));
     const r = flawlessReadout(engine, run, { runs: 3 });
-    const sim = engine.flawlessChance(run, { runs: 3 });
-    const ceiling = engine.ceiling(run, { runs: 3 })!;
+    const sim = engine.flawlessChance(run, { runs: 3, plan: engine.seedPlan(run) });
+    const ceiling = engine.ceiling(run, { runs: 3, plan: engine.seedPlan(run) })!;
     expect(r.text).toBe(`Flawless chance: ${chanceText(sim.chance)} ±${(sim.margin * 100).toFixed(1)} · ceiling ${chanceText(ceiling.chance!)}`);
     expect(r.detail).toContain('The ceiling is the chance no unit dies on Endgame with every unit at its effective caps');
     expect(r.detail).toContain('from Chapter 25 to Endgame (2 maps)');
@@ -47,11 +47,24 @@ describe('the flawless chance readout (#186)', () => {
     expect(r.rows[0]).toMatch(/^Chapter 25: /);
   });
 
+  it('reads the seed plan’s chance, keeping the marriages the player pinned (#198)', () => {
+    const run = played(all.slice(0, -2));
+    expect(flawlessReadout(engine, run, { runs: 1 }).detail).toContain('It’s the seed plan’s: marriages matched on how much of Endgame each child could beat at caps');
+    const pins = [{ kind: 'marriage', couple: ['vaike', 'sully'] }] as const;
+    const pinned = flawlessReadout(engine, run, { runs: 1, pins });
+    const sim = engine.flawlessChance(run, { runs: 1, plan: engine.seedPlan(run, { pins }) });
+    expect(pinned.text).toMatch(new RegExp(`^Flawless chance: ${chanceText(sim.chance).replace(/[.()]/g, '\\$&')} ±`));
+    expect(pinned.detail).toContain('your pinned marriages kept');
+    // Robin left open: the seed picks one.
+    const open = runFromRoster(withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal' }));
+    expect(flawlessReadout(engine, open, { runs: 1 }).detail).toContain('marriages and Robin matched');
+  });
+
   it('shows each map’s gold at its end as a range, and says when the log records none (#190)', () => {
     const atLatest = (run: Run, edit: (s: Snapshot) => Snapshot) => editEntry(run, latestEntry(run)!.id, edit, 1);
     const run = atLatest(played(all.slice(0, -2)), (s) => ({ ...s, gold: 12500 }));
     const r = flawlessReadout(engine, run, { runs: 2 });
-    const sim = engine.flawlessChance(run, { runs: 2 });
+    const sim = engine.flawlessChance(run, { runs: 2, plan: engine.seedPlan(run) });
     const g = sim.maps[0]!.gold!;
     expect(g.low).toBeLessThanOrEqual(g.high);
     const range = g.low === g.high ? `${g.low.toLocaleString('en-US')}G` : `${g.low.toLocaleString('en-US')}–${g.high.toLocaleString('en-US')}G`;
@@ -73,7 +86,7 @@ describe('the flawless chance readout (#186)', () => {
     // Played up to the last story chapter: Apotheosis (both routes) is what's left.
     const run = order.slice(0, order.indexOf('apotheosis')).reduce((r, m, i) => addEntry(r, m, i + 1), runFromRoster(full));
     const r = flawlessReadout(engine, run, { runs: 1 });
-    const ceiling = engine.ceiling(run, { runs: 1 })!;
+    const ceiling = engine.ceiling(run, { runs: 1, plan: engine.seedPlan(run) })!;
     expect(r.text).toMatch(new RegExp(` · ceiling ${chanceText(ceiling.chance!).replace(/[.()]/g, '\\$&')}$`));
     expect(r.detail).toContain('The ceiling is the chance no unit dies on Apotheosis (secret route)');
     expect(r.detail).not.toContain('simulated yet');
