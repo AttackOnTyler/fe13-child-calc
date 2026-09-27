@@ -131,6 +131,7 @@ describe('the map simulation’s no-death chance (#181)', () => {
     const draws = new Set(play.log.flatMap((t) => t.fights.map((f) => [...f.drawn!].sort().join(','))));
     expect(draws.size).toBeGreaterThan(1);
     expect(play.units.hero!.kills).toEqual({ Imp: 8 });
+    expect(play.blindSpots).toContain('lunatic-plus-draws');
   });
 });
 

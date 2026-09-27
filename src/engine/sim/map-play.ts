@@ -2335,6 +2335,7 @@ export function playMap(input: MapPlayInput, seed: number): MapPlay {
   if (s.splitAny) spots.push('attack-stance-adjacency');
   if (s.walled) spots.push('walls-draw-foes');
   if (s.traded) spots.push('potions-traded');
+  if (Object.keys(s.skills).length) spots.push('lunatic-plus-draws');
   if (s.npcAny) spots.push('npc-kills');
   if (s.npcUnarmed) spots.push('npc-screened');
   if (s.talked) spots.push('talk-reaches');
