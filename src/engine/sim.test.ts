@@ -629,6 +629,16 @@ describe('baits and bosses (realism pass)', () => {
     expect(play).toMatchObject({ ended: 'boss', turns: 1 });
   });
 
+  it('presses a boss that fights back when reinforcements never stop: waiting only lets the field fill', () => {
+    // The Brute's counter is a real risk (over the 1% a careful player takes for free), and the posts are free kills:
+    // a turn spent on posts is a turn more of the stream, so the boss is attacked every turn, at the least risk.
+    const chief: Foe = { ...brute, name: 'Chief', boss: true };
+    const play = engine.playMap({ map: endless(chief), lineup: [solo(hero)] }, 1);
+    expect(play.ended).toBe('boss');
+    expect(play.turns).toBe(2);
+    expect(play.log.map((t) => t.fights.filter((f) => f.phase === 'player').map((f) => f.foe))).toEqual([['Chief'], ['Chief']]);
+  });
+
   it('counts damage on the target boss as part of the victory: it chips the boss before felling posts', () => {
     // 60 HP, Def 10: the hero's round (5 a hit, doubled) takes 10 of it; posts fall to one strike.
     const chief: Foe = { ...brute, name: 'Chief', boss: true, weapon: undefined, stats: stats(60, 0, 0, 0, 0, 60, 10, 0) };

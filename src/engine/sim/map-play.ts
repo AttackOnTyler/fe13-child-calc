@@ -551,6 +551,8 @@ class MapState {
   ended: MapPlay['ended'] | undefined;
   /** Whether anything moved this turn: a foe hurt or felled, HP restored, or an arrival. A turn without is a stall. */
   progress = false;
+  /** Whether the target boss was attacked on this turn's player phase (see `pressBoss`). */
+  bossHit = false;
   /** Whether any pair stood apart (the Attack Stance blind spot applies). */
   splitAny = false;
   /** Each unit's staves, potions, Dance and Rally, and the uses left of each item (by [unit][item]). */
@@ -787,6 +789,7 @@ class MapState {
 
   /** The start of a turn: last turn's Rally and Rescues wear off. HP carries over: only actions buy it back (#182). */
   startTurn() {
+    this.bossHit = false;
     this.safe.clear();
     this.exposed.clear();
     this.dropSurvival();
@@ -985,6 +988,7 @@ class MapState {
       f.hp = ex.foeHp;
     }
     const kill = f.hp <= 0;
+    if (phase === 'player' && this.groups[f.g]!.target) this.bossHit = true;
     if (kill) {
       this.foes.splice(this.foes.indexOf(f), 1);
       this.left[f.g]!--;
@@ -1437,6 +1441,26 @@ class MapState {
   }
 
   /**
+   * Reinforcements that never stop (Endgame's) and a target boss that fights back (the second realism pass): a turn
+   * that doesn't hurt the boss only lets the field fill, however safely the army fells the stream, so each turn the
+   * least risky attack on the boss goes ahead, whatever its risk, before the rest fight. The model reads waiting as free
+   * (each exposed pair still meets one attacker as the field fills), so without this the army farms the stream forever.
+   */
+  pressBoss(ctx: PolicyContext): Action | undefined {
+    if (!this.endless || this.input.map.victory !== 'boss' || this.bossHit || !ctx.open) return undefined;
+    let best: Attack | undefined;
+    for (let gi = 0; gi < this.front.length; gi++) {
+      if (ctx.acted.has(gi) || this.npcFronts.has(gi)) continue;
+      for (const a of this.attacksOf(gi, ctx)) {
+        if (!this.groups[a.foe.g]!.target) continue;
+        this.exposure(a, ctx, false);
+        if (!best || a.risk < best.risk - EPS || (a.risk <= best.risk + EPS && a.value > best.value)) best = a;
+      }
+    }
+    return best;
+  }
+
+  /**
    * When nobody is in the foes' reach yet this turn and foes are left, the army engages once, with the least risk: the
    * safest attack by anyone (whatever its risk), or a bait (a front waits in reach, to take one attack and counter),
    * whichever risks less. Otherwise holding back would never finish the map. A turn with a talk (#184) has moved the
@@ -1879,6 +1903,7 @@ type PolicyContext = {
 /**
  * The action policy, tier by tier: the first tier with an action worth taking acts, then the policy starts over.
  * 1. A planned Rally, before anyone fights (its bonus is assumed to reach every pair: a stated blind spot).
+ * 1b. With reinforcements that never stop, the least risky attack on the target boss, once a turn (`pressBoss`).
  * 2. Safe fighting (within `EXPOSURE_RISK`), by fronts not held back (dancers, and fronts whose own sustain is worth
  *    more than their attack).
  * 3. A Dance for the front with the best safe attack left, which then acts in tier 2.
@@ -1890,6 +1915,7 @@ type PolicyContext = {
  */
 const POLICY: readonly ((s: MapState, ctx: PolicyContext) => Action | undefined)[] = [
   (s, ctx) => s.bestRally(ctx),
+  (s, ctx) => s.pressBoss(ctx),
   (s, ctx) => s.bestAttack(ctx),
   (s, ctx) => s.bestDance(ctx),
   (s, ctx) => s.bestSustain(ctx),
