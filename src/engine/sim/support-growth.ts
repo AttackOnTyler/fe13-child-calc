@@ -4,8 +4,9 @@
  *
  * A map's points per pair: combats together F give round(6F / 9), at most 3 (1, 1, 2, then 3 from 4 combats). Each
  * unit's pairs of the map are ranked by those points, and its top three keep up to 3, 2 and 1, the rest nothing; a pair
- * gets the lower of its two units' allowances. Only combats together count: adjacency alone earns nothing (and the map
- * simulation has none). Points then stop at the next rank's threshold (the `support-past-threshold` assumption: the
+ * gets the lower of its two units' allowances. Only combats paired count (the spec's "combats together"; `together`
+ * tallies a unit's combats paired, as front or back): adjacency alone earns nothing, and neither does a combat in
+ * Attack Stance beside the partner (#183), which the research credits at 2/9 (a stated blind spot). Points then stop at the next rank's threshold (the `support-past-threshold` assumption: the
  * clamp, at most one rank a map), or carry past it (the bank).
  */
 import { supportCurveOf, SUPPORT_CURVES, type SupportThresholds, type SupportUnit } from '../../game-data/supports';

@@ -4,7 +4,10 @@ import { combatPoints, createEngine, itemByName, mapSupportGains, resolveAssumpt
 /**
  * Support growth in the simulated runs (#188; research/support-growth): points from combats together, each unit's top
  * three pairs a map, one rank a map, marriages at S, and Chrom's wedding at the end of Chapter 11. Hand-built armies
- * fight dummies that never fight back, so a pair fights exactly one combat a turn, once per dummy.
+ * fight dummies that never fight back, one a turn. Only combats paired count (the spec's "combats together": Attack
+ * Stance beside a partner earns nothing here, though the research credits it), and a pair splits when both its units
+ * can attack safely apart (#183), so each woman here is unarmed: she stays her partner's back and shares each of his
+ * combats, one per dummy.
  */
 const engine = createEngine();
 const stats = (hp: number, str: number, mag: number, skl: number, spd: number, lck: number, def: number, res: number) => ({ hp, str, mag, skl, spd, lck, def, res });
@@ -30,6 +33,8 @@ const unit = (id: ArmyUnit['id'], gender: 'M' | 'F', more: Partial<ArmyUnit> = {
   role: 'lead',
   ...more,
 });
+/** A woman with no weapon: apart she has nothing safe to do, so she stays paired as the back. */
+const back = (id: ArmyUnit['id'], more: Partial<ArmyUnit> = {}): ArmyUnit => unit(id, 'F', { weapons: [], ...more });
 const dummies = (count: number): Foe => ({ name: 'Dummy', className: 'Fighter', count, stats: stats(20, 0, 0, 0, 0, 0, 0, 0), weapon: undefined, skills: [], boss: false, level: 1 });
 const rout = (id: string, count: number): SimMap => ({ id, victory: 'rout', foes: count ? [{ key: 'Dummy', foe: dummies(count) }] : [], waves: [], skipped: [] });
 const step = (id: string, combats: number, more: Partial<RunSimMap> = {}): RunSimMap => ({ key: id, label: id, map: rout(id, combats), deploy: 2, forced: [], joining: [], mapOnly: [], later: [], masterSeals: false, ...more });
@@ -56,7 +61,7 @@ describe('a map’s support points (#188)', () => {
 
 describe('supports in the simulated runs (#188)', () => {
   it('grows supports only from combats together, never from fighting on the same map apart', () => {
-    const army = [unit('lonqu', 'M'), unit('cordelia', 'F'), unit('stahl', 'M'), unit('sully', 'F')];
+    const army = [unit('lonqu', 'M'), back('cordelia'), unit('stahl', 'M'), back('sully')];
     const r = sim({ army, maps: [step('m1', 4, { deploy: 4 }), end], couples: [['lonqu', 'cordelia'], ['stahl', 'sully']] });
     expect(pair(r, 'lonqu', 'cordelia')!.points.median).toBeGreaterThan(0);
     expect(pair(r, 'stahl', 'sully')!.points.median).toBeGreaterThan(0);
@@ -67,8 +72,8 @@ describe('supports in the simulated runs (#188)', () => {
   it('takes a slow pair fighting together 4 times a map 8 maps to S, and a fast pair 7', () => {
     expect(engine.supportCurve('lonqu', 'sully')!.curve).toBe('slow');
     expect(engine.supportCurve('stahl', 'miriel')!.curve).toBe('fast');
-    const slow = (n: number) => sim({ army: [unit('lonqu', 'M'), unit('sully', 'F')], maps: [...maps(n), end], couples: [['lonqu', 'sully']] });
-    const fast = (n: number) => sim({ army: [unit('stahl', 'M'), unit('miriel', 'F')], maps: [...maps(n), end], couples: [['stahl', 'miriel']] });
+    const slow = (n: number) => sim({ army: [unit('lonqu', 'M'), back('sully')], maps: [...maps(n), end], couples: [['lonqu', 'sully']] });
+    const fast = (n: number) => sim({ army: [unit('stahl', 'M'), back('miriel')], maps: [...maps(n), end], couples: [['stahl', 'miriel']] });
     // One rank a map at most: the slow pair's 4, 8, 13 and 18 points take 2 maps each.
     expect(pair(slow(1), 'lonqu', 'sully')).toMatchObject({ points: { median: 3 }, rank: null });
     expect(pair(slow(2), 'lonqu', 'sully')).toMatchObject({ points: { median: 4 }, rank: 'C' });
@@ -83,20 +88,20 @@ describe('supports in the simulated runs (#188)', () => {
   it('carries points past a threshold under the bank assumption: a slow pair to S in 6 maps', () => {
     const bank = createEngine(resolveAssumptions({ 'support-past-threshold': 'bank' }));
     expect(bank.supportCurve('lonqu', 'sully')!.mapsToS).toBe(6);
-    const r = sim({ army: [unit('lonqu', 'M'), unit('sully', 'F')], maps: [...maps(6), end], couples: [['lonqu', 'sully']] }, bank);
+    const r = sim({ army: [unit('lonqu', 'M'), back('sully')], maps: [...maps(6), end], couples: [['lonqu', 'sully']] }, bank);
     expect(r.marriages).toEqual([{ a: 'lonqu', b: 'sully', share: 1, after: 'm6' }]);
   });
 
   it('seeds the points from the recorded ranks', () => {
     // Recorded at A (13 points): two more maps to S.
-    const r = sim({ army: [unit('lonqu', 'M', { supports: [{ partner: 'sully', rank: 'A' }] }), unit('sully', 'F')], maps: [...maps(2), end], couples: [['lonqu', 'sully']] });
+    const r = sim({ army: [unit('lonqu', 'M', { supports: [{ partner: 'sully', rank: 'A' }] }), back('sully')], maps: [...maps(2), end], couples: [['lonqu', 'sully']] });
     expect(r.marriages).toEqual([{ a: 'lonqu', b: 'sully', share: 1, after: 'm2' }]);
   });
 
   it('recruits a child only when its parents’ marriage is made by its paralogue', () => {
     const kjelle: ChildRecruit = { id: 'kjelle', name: 'Kjelle', parents: ['sully', 'stahl'], growths: zero, modifiers: noMods, weapons: [{ item: itemByName('Iron Lance')! }], role: 'lead' };
     const run = (n: number) =>
-      sim({ army: [unit('stahl', 'M'), unit('sully', 'F')], maps: [...maps(n), step('paralogue-8', 0, { children: [kjelle] }), end], cleared: ['chapter-13'], couples: [['sully', 'stahl']] });
+      sim({ army: [unit('stahl', 'M'), back('sully')], maps: [...maps(n), step('paralogue-8', 0, { children: [kjelle] }), end], cleared: ['chapter-13'], couples: [['sully', 'stahl']] });
     // Sully and Stahl are a medium pair: S in 7 maps together.
     const late = run(6);
     expect(late.maps.find((m) => m.key === 'paralogue-8')).toMatchObject({ reach: 0 });
@@ -109,7 +114,7 @@ describe('supports in the simulated runs (#188)', () => {
 
 describe('Chrom’s wedding at the end of Chapter 11 in the simulation (#188)', () => {
   const chrom = (supports: ArmyUnit['supports'] = []) => unit('chrom', 'M', { supports });
-  const women = ['sumia', 'sully', 'maribelle', 'olivia'].map((id) => unit(id as ArmyUnit['id'], 'F', { skills: ['Discipline', 'Outdoor Fighter'] }));
+  const women = ['sumia', 'sully', 'maribelle', 'olivia'].map((id) => back(id as ArmyUnit['id'], { skills: ['Discipline', 'Outdoor Fighter'] }));
   /** Chapter 11 with Chrom forced; `combats` fights for him and his partner when there's room for one. */
   const ch11 = (deploy: number, combats: number) => step('chapter-11', combats, { deploy, forced: ['chrom'] });
 
