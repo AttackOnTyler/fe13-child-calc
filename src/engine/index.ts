@@ -64,6 +64,7 @@ import { brokenPins, livePins, pinKey, runPins, withPin, withoutPins } from './s
 import { FORCED_UNITS, childrenOf, coveredLineup, hasUtility, planWithout, reservesStep, withoutUnits, worthStep, type ReservesInput, type ReservesStep, type WorthInput, type WorthStep, type WorthVariant } from './solve/worth';
 import type { Plan, PlanLineup, PlanPin, PlanPriority, PlanRobin } from './solve/plan';
 import { beforeMapItems, itemPlanOf, type BeforeMapItem, type ItemPlan, type ItemUsed } from './item-plan';
+import { readings, recordedStats, type Readings, type ReadingsOptions, type UnitStats } from './readings';
 import { defaultPriorities, expForecast, suggestChanges, suggestedChanges, type ExpForecast, type ExpForecastOptions, type SuggestedChange } from './exp-forecast';
 import { BLIND_SPOTS, type BlindSpot } from './assumptions';
 import { matchBuilds, matchTemplate, shownMatch, templateSummary, templatesFor } from './builds';
@@ -156,6 +157,7 @@ export { NO_PREPARATIONS } from '../game-data/chapters';
 export { STAT_BOOSTERS, TONICS, statItemGain } from '../game-data/items';
 export { hasPreparations, heldKind, statOfItem, runItemPins, withItemPin, withItemsUsed, type BeforeMapItem, type HeldKind, type ItemIdle, type ItemPlan, type ItemPlanRow, type ItemUsed, type PlanSource, type TonicBuys } from './item-plan';
 export type { CloseCall, ItemPin, Plan, PlanItem, PlanLineup, PlanPin, PlanPriority, PlanProposal, PlanRobin, PlanSeal, Position, PrunedComp, Roadmap, SolveCursor, Wishlist, WishlistChild, WishlistReserve, WishlistUnit } from './solve/plan';
+export { READING_SECONDS, SUGGEST_RUNS, growthPercentile, readUnits, type Reading, type ReadingKind, type Readings, type ReadingsOptions, type StatPercentile, type UnitStats } from './readings';
 export { ON_TRACK, milestoneCheck, type ExpForecast, type ExpForecastOptions, type SuggestedChange, type SuggestedPin } from './exp-forecast';
 export type { EndpointCoverage, SeedOptions } from './solve/seed';
 export type { ClassMilestone, Milestone, MilestonePoint, RecruitMilestone, SealSource, SkillMilestone, SupportMilestone, SupportWindow } from './milestones';
@@ -702,6 +704,16 @@ export type Engine = {
   suggestedChanges(run: Run, plan: Plan, milestone: string, options?: ExpForecastOptions): readonly SuggestedChange[];
   /** `suggestedChanges` over a simulation input whose `milestones` include the one named. */
   suggestChanges(input: RunSimInput, milestone: string, seed: number, runs: number): readonly SuggestedChange[];
+  /**
+   * Each unit's reading against a plan's milestones (#197): on track (worst open milestone at 80% or more, or none
+   * left), at risk (one suggested change restores 80% without breaking another), or behind; behind first, each kind by
+   * the flawless chance lost. Suggested changes are an input (`options.suggestions`, by milestone id): without them a
+   * unit below 80% reads at risk, pending, and `pending` lists the milestones to ask `suggestedChanges` for (a worker
+   * job). Pass `options.forecast` (`expForecast`) to reuse its simulation. Recorded stats come as percentiles.
+   */
+  readings(run: Run, plan: Plan, options?: ReadingsOptions): Readings;
+  /** The latest recorded map's stats as percentiles of the spread expected there (#197): "Str p12". */
+  recordedStats(run: Run, options?: Pick<FlawlessOptions, 'roleOf'>): readonly UnitStats[];
 };
 
 /** One combat for `Engine.combatExp`. */
@@ -2045,5 +2057,11 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     defaultPriorities: (run, plan) => defaultPriorities(milestones(run, plan, assumptions), flawlessInput(run, assumptions, undefined, undefined, plan).input),
     suggestedChanges: (run, plan, milestone, options) => suggestedChanges(run, plan, milestone, assumptions, options),
     suggestChanges: (input, milestone, seed, runs) => suggestChanges(input, milestone, seed, runs, assumptions),
+    readings: (run, plan, options = {}) => {
+      const { forecast, suggestions: _s, worth: _w, stats: _t, ...sim } = options;
+      const f = forecast ?? expForecast(run, plan, assumptions, sim);
+      return readings(run, plan, milestones(run, plan, assumptions), f, assumptions, options);
+    },
+    recordedStats: (run, options) => recordedStats(run, assumptions, options),
   };
 }

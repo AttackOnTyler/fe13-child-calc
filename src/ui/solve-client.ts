@@ -3,7 +3,7 @@
  * One worker per request: a new request, or `stop`, terminates the one before (a step can't be interrupted mid-way).
  * Where there's no Worker (tests), `startSolve` returns undefined and the page works the chance out itself.
  */
-import type { Assumptions, DeploymentRole, EditCost, PinCost, Plan, PlanPin, ReservesCursor, ReservesStep, Run, SolveCursor, SolveStep, WorthCursor, WorthStep } from '../engine';
+import type { Assumptions, DeploymentRole, EditCost, PinCost, Plan, PlanPin, Readings, ReservesCursor, ReservesStep, Run, SolveCursor, SolveStep, WorthCursor, WorthStep } from '../engine';
 
 type Common = {
   readonly id: number;
@@ -50,11 +50,13 @@ export type SolveRequest =
 
 /**
  * A reply; `done` marks the request's last. A solve's steps say when the search is over (`searched`); with pins, the
- * pin cost (#200) follows, worked out while the worker is idle.
+ * pin cost (#200) follows, worked out while the worker is idle; then the best plan's readings (#197), as they firm up
+ * (undefined once the endpoint is recorded).
  */
 export type SolveReply =
   | { readonly id: number; readonly kind: 'step'; readonly step: SolveStep; readonly searched: boolean; readonly done: boolean }
   | { readonly id: number; readonly kind: 'pin-cost'; readonly cost: PinCost; readonly done: boolean }
+  | { readonly id: number; readonly kind: 'readings'; readonly readings: Readings | undefined; readonly done: boolean }
   | { readonly id: number; readonly kind: 'cost'; readonly cost: EditCost; readonly done: boolean }
   | { readonly id: number; readonly kind: 'idle'; readonly worth: WorthStep; readonly reserves: ReservesStep | undefined; readonly done: boolean };
 

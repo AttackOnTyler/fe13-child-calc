@@ -3,7 +3,7 @@
  * holds a snapshot: every unit's class, level, EXP, stats, skills, inventory and supports, plus the convoy and gold.
  * A new entry copies the one before; editing a past entry never reaches later ones, which are flagged instead.
  */
-import type { Assumptions, ChildId, CloseCall, DeploymentRole, Engine, FlawlessChance, FlawlessOptions, GoldSpread, HeldItem, ItemPin, ItemPlanRow, ItemUsed, MapOrderStep, Milestone, MilestonePoint, PinCost, Plan, PlanPin, PlanProposal, PrunedComp, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
+import type { Assumptions, ChildId, CloseCall, Gender, Reading, Readings, SuggestedPin, DeploymentRole, Engine, FlawlessChance, FlawlessOptions, GoldSpread, HeldItem, ItemPin, ItemPlanRow, ItemUsed, MapOrderStep, Milestone, MilestonePoint, PinCost, Plan, PlanPin, PlanProposal, PrunedComp, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
 import { chanceText, differenceText } from './chance';
 import { startSolve } from './solve-client';
 import { SOLVE_SECONDS, STEP_BUDGET, rosterUnits } from '../engine';
@@ -109,12 +109,15 @@ export function mapOrderReadout(engine: Engine, run: Run): { readonly title: str
   };
 }
 
+/** The roadmap as the Run view writes it: its milestones, and each unit's reading (#197) once read. */
+export type RoadmapReadout = { readonly title: string; readonly rows: readonly string[]; readonly readings: readonly string[]; readonly note: string };
+
 /**
  * The plan's roadmap as the Run view lists it (#194): its milestones in order, one row each, naming what must be true
- * before which map, and flagging non-starters, wasted passes and seals that aren't sure. A plain list for now: the
- * milestone chances (#195) and readings (#197) come later.
+ * before which map, and flagging non-starters, wasted passes and seals that aren't sure. With the plan's readings
+ * (#197), each milestone's chance, and each unit's reading, behind first (`readingRow`).
  */
-export function roadmapReadout(engine: Engine, run: Run, plan: Plan): { readonly title: string; readonly rows: readonly string[] } {
+export function roadmapReadout(engine: Engine, run: Run, plan: Plan, readings?: Readings, labels?: ReadonlyMap<string, string>): RoadmapReadout {
   const ms = engine.milestones(run, plan);
   const gender = run.roster.run.gender;
   const name = (u: RosterUnit | 'maiden') => unitName(u, gender);
@@ -158,7 +161,76 @@ export function roadmapReadout(engine: Engine, run: Run, plan: Plan): { readonly
     }
   };
   const stuck = ms.filter((m) => m.kind === 'support' && m.nonStarter).length;
-  return { title: `Roadmap: ${ms.length} milestone${ms.length === 1 ? '' : 's'}${stuck ? ` · ${stuck} non-starter${stuck === 1 ? '' : 's'}` : ''}`, rows: ms.map(row) };
+  const chances = new Map(readings?.readings.flatMap((r) => r.milestones.map((m) => [m.id, m.chance] as const)) ?? []);
+  const withChance = (m: Milestone) => {
+    if (!readings || !chances.has(m.id)) return row(m);
+    const c = chances.get(m.id);
+    return `${row(m)} · ${c === undefined ? 'no run reaches it with nobody lost' : chanceText(c)}`;
+  };
+  const notOn = readings?.readings.filter((r) => r.reading !== 'on-track').length ?? 0;
+  const title = `Roadmap: ${ms.length} milestone${ms.length === 1 ? '' : 's'}${stuck ? ` · ${stuck} non-starter${stuck === 1 ? '' : 's'}` : ''}${readings ? ` · ${notOn ? `${notOn} unit${notOn === 1 ? '' : 's'} not on track` : 'every unit on track'}` : ''}`;
+  const note = readings
+    ? `A unit reads on track when its worst milestone’s chance is 80% or more, at risk when one suggested change brings it back to 80% without pushing another below (“at risk?” until the changes are read), and behind when none does or its deadline map has started. Behind first, each by the flawless chance lost (${readings.lostBy === 'worth' ? 'its worth times the share of runs missing it' : 'the share of runs missing its worst milestone'}). Recorded stats show as percentiles of the spread the level-ups since the entry before could roll; they never change a reading.`
+    : '';
+  return { title, rows: ms.map(withChance), readings: readings?.readings.map((r) => readingRow(r, ms, gender, labels)) ?? [], note };
+}
+
+const READING_TEXT = { 'on-track': 'on track', 'at-risk': 'at risk', behind: 'behind' } as const;
+
+/** A milestone in a few words, as a reading names it for `unit`. */
+function milestoneShort(m: Milestone, unit: RosterUnit, gender: Gender | null | undefined): string {
+  const name = (u: RosterUnit | 'maiden') => unitName(u, gender);
+  const by = m.at.when === 'end' ? `by the end of ${m.at.label}` : `before ${m.at.label}`;
+  switch (m.kind) {
+    case 'support': {
+      const other = m.pair[0] === unit ? m.pair[1] : m.pair[1] === unit ? m.pair[0] : undefined;
+      return other ? `${m.wedding ? 'marrying' : 'S with'} ${name(other)} ${by}` : `${name(m.pair[0])} and ${name(m.pair[1])} at S ${by}`;
+    }
+    case 'skill':
+      return `${m.name} ${by}${m.for.kind === 'pass' ? ` (for ${name(m.for.child)})` : ''}`;
+    case 'recruit':
+      return `recruited on ${m.at.label}`;
+    case 'class':
+      return `${m.className} ${by}`;
+  }
+}
+
+/** A suggested change's span pin in words: "raise Lissa's EXP priority from Ch 3 to Ch 7". */
+function pinText(pin: SuggestedPin, gender: Gender | null | undefined, labels?: ReadonlyMap<string, string>): string {
+  const name = (u: RosterUnit) => unitName(u, gender);
+  const span = pin.from === pin.to ? `on ${labels?.get(pin.from) ?? pin.from}` : `from ${labels?.get(pin.from) ?? pin.from} to ${labels?.get(pin.to) ?? pin.to}`;
+  switch (pin.kind) {
+    case 'priority':
+      return `${pin.value === 'high' ? 'raise' : 'lower'} ${name(pin.unit)}’s EXP priority ${span}`;
+    case 'pair':
+      return `pair ${name(pin.unit)} as Lead with ${name(pin.value)} as Back ${span}`;
+    case 'field':
+      return `field ${name(pin.unit)} ${span}${pin.benched.length ? `, benching ${listOf(pin.benched.map(name))}` : ''}`;
+  }
+}
+
+/**
+ * One unit's reading (#197) as the roadmap writes it: the reading, its worst milestone and chance, why it's behind or
+ * the change that restores it, and its recorded stats as percentiles.
+ */
+export function readingRow(r: Reading, ms: readonly Milestone[], gender: Gender | null | undefined, labels?: ReadonlyMap<string, string>): string {
+  const head = `${unitName(r.unit, gender)}: ${READING_TEXT[r.reading]}${r.pending ? '?' : ''}`;
+  const m = r.worst && ms.find((x) => x.id === r.worst!.id);
+  const worst = !r.worst ? 'no milestones left' : `${m ? milestoneShort(m, r.unit, gender) : r.worst.id} ${r.worst.reached ? chanceText(r.worst.chance) : '(no run reaches it with nobody lost)'}`;
+  const why =
+    r.why === 'non-starter'
+      ? 'a non-starter: the pair can’t reach it in the maps left'
+      : r.why === 'deadline'
+        ? 'its deadline map has started'
+        : r.why === 'no-change'
+          ? 'no single change brings it back to 80%'
+          : r.change
+            ? `${pinText(r.change.pin, gender, labels)}: ${chanceText(r.change.chance)}`
+            : r.pending
+              ? 'reading the changes that could bring it back'
+              : '';
+  const stats = r.stats.length ? `recorded ${r.stats.map((s) => `${STAT_LABELS[s.stat]} p${s.percentile}`).join(', ')}` : '';
+  return [head, worst, why, stats].filter(Boolean).join(' · ');
 }
 
 /** Points of chance, as the ± reads: 0.015 → "1.5". */
@@ -181,6 +253,8 @@ export type SolveProgress = {
   readonly converged: boolean;
   /** The pins' cost together (#200), worked out once the search is done, while the worker is idle. */
   readonly pinCost?: PinCost;
+  /** The best plan's readings (#197), worked out once the search is done, while the worker is idle. */
+  readonly readings?: Readings;
 };
 
 export type FlawlessReadout = {
@@ -190,7 +264,7 @@ export type FlawlessReadout = {
   /** The search's improvements, close calls and pruned marriages, one line each (#199; the inbox is #204). */
   readonly found: readonly string[];
   /** The plan's roadmap (#194); absent once the endpoint is recorded. */
-  readonly roadmap?: ReturnType<typeof roadmapReadout>;
+  readonly roadmap?: RoadmapReadout;
   /** The plan's item plan (#193), and the plan itself (its wishlist offers the item pins' units); absent once the endpoint is recorded. */
   readonly items?: ItemPlanReadout;
   readonly plan?: Plan;
@@ -206,7 +280,10 @@ export type FlawlessReadout = {
 export function flawlessReadout(engine: Engine, run: Run, options: FlawlessReadoutOptions = {}): FlawlessReadout {
   const { pins, ...sim } = options;
   const plan = engine.seedPlan(run, { ...(pins ? { pins } : {}), ...(sim.roleOf ? { roleOf: sim.roleOf } : {}) });
-  return readoutOf(engine, run, plan, engine.flawlessChance(run, { ...sim, plan }), pins, undefined, sim.roleOf);
+  // The EXP forecast is the flawless chance's own simulation with the milestones checked: the readings' first pass (#197).
+  const forecast = engine.expForecast(run, plan, sim);
+  const readings = forecast.maps.length ? engine.readings(run, plan, { ...sim, forecast }) : undefined;
+  return readoutOf(engine, run, plan, forecast, pins, undefined, sim.roleOf, readings);
 }
 
 /**
@@ -215,7 +292,7 @@ export function flawlessReadout(engine: Engine, run: Run, options: FlawlessReado
  * applied), close calls ("no measurable difference (−0.2 ±0.3)") and marriages pruned by their ceiling.
  */
 export function solvedReadout(engine: Engine, run: Run, progress: SolveProgress, pins?: readonly PlanPin[], roleOf?: (u: RosterUnit) => DeploymentRole): FlawlessReadout {
-  return readoutOf(engine, run, progress.best, progress.chance, pins, progress, roleOf);
+  return readoutOf(engine, run, progress.best, progress.chance, pins, progress, roleOf, progress.readings);
 }
 
 function readoutOf(
@@ -226,6 +303,7 @@ function readoutOf(
   pins: readonly PlanPin[] | undefined,
   progress: SolveProgress | undefined,
   roleOf: ((u: RosterUnit) => DeploymentRole) | undefined,
+  readings?: Readings,
 ): FlawlessReadout {
   if (!r.maps.length) return { text: 'Flawless chance: the endpoint is recorded, nothing left to simulate.', detail: '', rows: [], found: [] };
   const ceiling = engine.ceiling(run, { runs: r.runs, plan, ...(roleOf ? { roleOf } : {}) });
@@ -289,7 +367,7 @@ function readoutOf(
       const extra = [...goals, ...(rewards.length ? [`renown: ${listOf(rewards)}`] : [])].map((x) => ` · ${x}`).join('');
       return `${m.label}: ${m.noDeath === undefined ? 'no run gets here with nobody lost' : `${chanceText(m.noDeath)}${m.gold ? ` · ${goldRange(m.gold)}` : ''}`}${extra}`;
     }),
-    roadmap: roadmapReadout(engine, run, plan),
+    roadmap: roadmapReadout(engine, run, plan, readings, new Map(r.maps.map((m) => [m.key, m.label]))),
     found,
   };
 }
@@ -569,8 +647,15 @@ function flawlessSection(ctx: RunContext): HTMLElement {
       h('summary', {}, h('b', {}, r?.text ?? 'Flawless chance: working it out…')),
       r?.detail ? h('p', { class: 'muted small' }, r.detail) : null,
       r?.rows.length ? h('ol', { class: 'small' }, ...r.rows.map((x) => h('li', {}, x))) : null,
-      r?.roadmap?.rows.length
-        ? h('details', { class: 'roadmap' }, h('summary', {}, h('b', {}, r.roadmap.title)), h('ol', { class: 'small' }, ...r.roadmap.rows.map((x) => h('li', {}, x))))
+      r?.roadmap && (r.roadmap.rows.length || r.roadmap.readings.length)
+        ? h(
+            'details',
+            { class: 'roadmap' },
+            h('summary', {}, h('b', {}, r.roadmap.title)),
+            r.roadmap.readings.length ? h('ul', { class: 'small readings' }, ...r.roadmap.readings.map((x) => h('li', {}, x))) : null,
+            r.roadmap.note ? h('p', { class: 'muted small' }, r.roadmap.note) : null,
+            h('ol', { class: 'small' }, ...r.roadmap.rows.map((x) => h('li', {}, x))),
+          )
         : null,
       r?.found.length ? h('ul', { class: 'small solve-found' }, ...r.found.map((x) => h('li', {}, x))) : null,
       r?.items ? itemPlanSection(ctx, r.items, r.plan) : null,
@@ -598,16 +683,18 @@ function flawlessSection(ctx: RunContext): HTMLElement {
       { kind: 'solve', assumptions: ctx.assumptions, run, seed: FLAWLESS_SEED, budget: STEP_BUDGET, seconds: solvedOnce ? SOLVE_SECONDS.resolve : SOLVE_SECONDS.full, ...(pins ? { pins } : {}), ...(roles ? { roles } : {}) },
       (reply) => {
         if (reply.done && solving === run) solving = undefined;
-        // The pin cost (#200) comes once the search is done, while the worker is idle.
-        if (reply.kind === 'pin-cost') {
-          if (last) show(solvedReadout(ctx.engine, run, { ...last, pinCost: reply.cost }, pins, ctx.roleOf));
+        // The pin cost (#200) and then the readings (#197) come once the search is done, while the worker is idle.
+        if (reply.kind === 'pin-cost' || reply.kind === 'readings') {
+          if (!last) return;
+          last = reply.kind === 'pin-cost' ? { ...last, pinCost: reply.cost } : { ...last, ...(reply.readings ? { readings: reply.readings } : {}) };
+          show(solvedReadout(ctx.engine, run, last, pins, ctx.roleOf));
           return;
         }
         if (reply.kind !== 'step') return;
         const s = reply.step;
         chance = s.chance ?? chance;
         if (!chance) return;
-        last = { best: s.best, chance, proposals: s.proposals, closeCalls: s.closeCalls, pruned: s.pruned, done: reply.searched, converged: s.converged };
+        last = { ...(last?.readings && last.best === s.best ? { readings: last.readings } : {}), best: s.best, chance, proposals: s.proposals, closeCalls: s.closeCalls, pruned: s.pruned, done: reply.searched, converged: s.converged };
         show(solvedReadout(ctx.engine, run, last, pins, ctx.roleOf));
       },
     );

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, addEntry, createEngine, dismissMigrationNote, editEntry, exportRun, latestEntry, migrateRun, recordMarriage, runFromRoster, withPin, withRenown, withRun, withShopLine, withSideGoalPin, withSideGoalSecured, withSpouse, withItemPin, withItemsUsed, unitName, type Route, type RosterUnit, type Run, type Snapshot, type UnitSnapshot } from '../engine';
+import { EMPTY_ROSTER, addEntry, createEngine, dismissMigrationNote, editEntry, exportRun, latestEntry, migrateRun, recordMarriage, runFromRoster, withPin, withRenown, withRun, withShopLine, withSideGoalPin, withSideGoalSecured, withSpouse, withItemPin, withItemsUsed, unitName, readUnits, type Route, type RosterUnit, type Run, type Snapshot, type UnitSnapshot } from '../engine';
 import { childStatsNote, flawlessReadout, heldText, itemPlanReadout, itemsUsedReadout, mapOrderReadout, migrationNoteReadout, solvedReadout, parseHeldText, parseSupportsText, roadmapReadout, shoppingReadout, sideGoalPlanReadout, sideGoalsReadout, supportsText } from './run-page';
 import { chanceText } from './chance';
 
@@ -45,7 +45,8 @@ describe('the flawless chance readout (#186)', () => {
     expect(r.detail).toContain('class changes at the level cap or when needed (either way), each fight’s EXP from its likely play (either way)');
     expect(r.rows).toHaveLength(2);
     expect(r.rows[0]).toMatch(/^Chapter 25: /);
-    expect(r.roadmap?.title).toMatch(/^Roadmap: [0-9]+ milestones?/);
+    expect(r.roadmap?.title).toMatch(/^Roadmap: [0-9]+ milestones?.* · (every unit on track|[0-9]+ units? not on track)$/);
+    expect(r.roadmap?.readings.length).toBeGreaterThan(0);
   });
 
   it('reads the seed plan’s chance, keeping the marriages the player pinned (#198)', () => {
@@ -167,6 +168,46 @@ describe('the roadmap readout (#194)', () => {
     const olivia = tm.findIndex((m) => m.id === 'support:donnel+olivia');
     expect(t.rows[olivia]).toBe('Donnel and Olivia reach S before Paralogue 6 · non-starter: 8 maps together needed, from Chapter 11 on');
     expect(t.rows.filter((x) => x.includes('non-starter'))).toHaveLength(tm.filter((m) => m.kind === 'support' && m.nonStarter).length);
+  });
+});
+
+describe('readings on the roadmap (#197)', () => {
+  const engine = createEngine();
+  const fresh = runFromRoster(withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal', gender: 'M', asset: 'mag', flaw: 'hp' }));
+  const plan = engine.seedPlan(fresh, { pins: [{ kind: 'marriage', couple: ['chrom', 'sumia'] }, { kind: 'marriage', couple: ['stahl', 'sully'] }] });
+  const milestones = engine.milestones(fresh, plan);
+  const labels = new Map(engine.mapOrder(fresh).steps.map((s) => [s.key, engine.maps().find((m) => m.id === s.map)!.label]));
+  // Every milestone at 90%, but Chrom and Sumia's wedding at 50% and Kjelle's recruitment unreached.
+  const chances = milestones.map((m) => ({ id: m.id, chance: m.id === 'support:chrom+sumia' ? 0.5 : m.id === 'recruit:kjelle' ? undefined : 0.9, runs: 8, level: undefined }));
+  const wedding = milestones.find((m) => m.id === 'support:chrom+sumia')!;
+
+  it('adds each milestone’s chance and each unit’s reading, behind first, counting those not on track', () => {
+    const readings = readUnits(milestones, chances, { units: plan.wishlist.units.map((w) => w.unit), reserves: plan.wishlist.reserves.map((x) => x.unit) });
+    const r = roadmapReadout(engine, fresh, plan, readings, labels);
+    const notOn = readings.readings.filter((x) => x.reading !== 'on-track').length;
+    expect(r.title).toMatch(new RegExp(` · ${notOn} units not on track$`));
+    expect(r.rows[milestones.indexOf(wedding)]).toMatch(/^Chrom marries Sumia .* · 50\.0%$/);
+    expect(r.rows[milestones.findIndex((m) => m.id === 'recruit:kjelle')]).toMatch(/ · no run reaches it with nobody lost$/);
+    expect(r.readings[0]).toBe('Kjelle: at risk? · recruited on Paralogue 8 (no run reaches it with nobody lost) · reading the changes that could bring it back');
+    expect(r.readings).toContain('Chrom: at risk? · marrying Sumia by the end of Chapter 11 50.0% · reading the changes that could bring it back');
+    expect(r.readings.filter((x) => x.includes(': on track')).length).toBe(readings.readings.length - notOn);
+    expect(r.note).toContain('the share of runs missing its worst milestone');
+  });
+
+  it('names the change that restores an at-risk unit, why one is behind, and recorded stats as percentiles', () => {
+    const pin = { kind: 'priority' as const, unit: 'sumia' as const, value: 'high' as const, from: engine.mapOrder(fresh).steps[3]!.key, to: engine.mapOrder(fresh).steps[9]!.key };
+    const suggestions = { 'support:chrom+sumia': [{ pin, chance: 0.85, reaches: true, breaks: [], turns: 2, flawless: -0.01 }] };
+    const stats = [{ unit: 'sumia' as const, map: 'chapter-2', stats: [{ stat: 'str' as const, value: 5, percentile: 12 }, { stat: 'spd' as const, value: 12, percentile: 80 }] }];
+    const readings = readUnits(milestones, chances, { suggestions, stats });
+    const sumia = roadmapReadout(engine, fresh, plan, readings, labels).readings.find((x) => x.startsWith('Sumia'));
+    expect(sumia).toBe(`Sumia: at risk · marrying Chrom by the end of Chapter 11 50.0% · raise Sumia’s EXP priority from ${labels.get(pin.from)} to ${labels.get(pin.to)}: ${chanceText(0.85)} · recorded Str p12, Spd p80`);
+    const behind = readUnits(milestones, chances, { suggestions: { 'support:chrom+sumia': [] } });
+    expect(roadmapReadout(engine, fresh, plan, behind, labels).readings).toContain('Chrom: behind · marrying Sumia by the end of Chapter 11 50.0% · no single change brings it back to 80%');
+  });
+
+  it('reads a unit with nothing left on track, with no milestones left', () => {
+    const readings = readUnits([], [], { units: ['frederick'] });
+    expect(roadmapReadout(engine, fresh, plan, readings).readings).toEqual(['Frederick: on track · no milestones left']);
   });
 });
 
