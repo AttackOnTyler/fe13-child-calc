@@ -143,7 +143,7 @@ describe('the checklist’s items and armory (#207)', () => {
     const r = prepReadout(engine, run, all[all.length - 2]!, { plan, forecast: engine.expForecast(run, plan, { runs: 2 }) });
     const armory = r.before.find((s) => s.step === 'armory')!;
     expect(armory.label).toBe('Armory and forge');
-    expect(armory.actions[0]).toMatchObject({ id: 'shop:0', text: 'Buy Iron Sword for Chrom (520G)', why: 'shopping list: runs dry before the next armory; 100% of runs', units: ['chrom'] });
+    expect(armory.actions[0]).toMatchObject({ id: 'shop:0', text: 'Buy Silver Lance for Chrom (1,560G)', why: 'shopping list: arms the lineup for this map; 100% of runs', units: ['chrom'] });
     expect(r.cards.find((c) => c.members.some((m) => m.unit === 'chrom'))!.todo).toContain('shop:0');
   });
 
