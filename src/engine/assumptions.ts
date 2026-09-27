@@ -616,7 +616,8 @@ export type BlindSpotId =
   | 'talk-reaches'
   | 'door-keys'
   | 'skills-in-combat'
-  | 'walls-draw-foes';
+  | 'walls-draw-foes'
+  | 'potions-traded';
 
 /** The run simulation's own blind spots (#186): how it walks the army from one map to the next. */
 export type RunBlindSpotId =
@@ -666,6 +667,15 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
       'map offers such ground, or whether the foes come at all: fewer attackers mean fewer counter kills and longer maps.',
     lean: 'high',
     touches: ['map', 'fight'],
+  },
+  {
+    id: 'potions-traded',
+    label: 'Potions traded where they’re needed',
+    why:
+      'A front short of HP drinks a potion, its own or one traded over from any unit of the army on the field (a trade costs no action), ' +
+      'with its own action. In play the holder must stand next to it to trade, before it moves.',
+    lean: 'high',
+    touches: ['map'],
   },
   {
     id: 'equal-share-of-actions',

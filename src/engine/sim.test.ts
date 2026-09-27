@@ -213,6 +213,18 @@ describe('sustain, Dance, Rally and staff reach (#182)', () => {
     expect(play.units.tank!.used.Vulnerary).toBe(drinks.length);
   });
 
+  it('trades a Vulnerary over from another unit on the field: the drinker’s action, the holder’s use', () => {
+    // The cleric holds the potions and never fights; the tank has none of its own.
+    const holder: SimUnit = { ...unit(cleric), items: [{ item: itemByName('Vulnerary')!, uses: 3 }] };
+    const play = engine.playMap({ map: rout([group({ ...wall, stats: { ...wall.stats, hp: 200 } })]), lineup: [solo(tank), { lead: holder, support: null }] }, 1);
+    const drinks = play.log.flatMap((t) => t.acts).filter((a) => a.kind === 'item' && a.unit === 'tank');
+    expect(drinks.length).toBeGreaterThan(0);
+    expect(drinks.every((a) => a.from === 'cleric')).toBe(true);
+    expect(play.units.cleric!.used.Vulnerary).toBe(drinks.length);
+    expect(play.units.tank!.used.Vulnerary).toBeUndefined();
+    expect(play.blindSpots).toContain('potions-traded');
+  });
+
   it('reaches pairs by the assumed army spread: an assumption with a default and an override', () => {
     const spread = engine.assumptions().find((a) => a.id === 'army-spread')!;
     expect(spread).toMatchObject({ isDefault: true });
