@@ -20,7 +20,7 @@
  *   Counter, Aegis+ and Pavise+ before Chapter 3.
  */
 import { CLASSES, type ClassData, type ClassId } from '../game-data/classes';
-import type { BossRow, ChapterDifficulty, EnemyGroup } from '../game-data/chapters';
+import type { BossRow, ChapterDifficulty, EnemyGroup, MapItem } from '../game-data/chapters';
 import { itemByName, forgedStats, type Effectiveness, type GameItem } from '../game-data/items';
 import { MOD_STATS, STATS, type Gender, type ModStat, type Stat } from '../game-data/stats';
 import { className } from './classes';
@@ -226,10 +226,19 @@ export function statValue(text: string): number {
 
 const WEAPONS = new Set(['sword', 'lance', 'axe', 'bow', 'tome', 'stone', 'beaststone']);
 
-/** An enemy group or boss row as a foe: its first weapon, its listed skills. */
+/** A foe's weapon with its forge as the chapter data states it (#189): the forged Mt and Hit, or the bonus added. */
+function forgedWeapon(i: MapItem): GameItem | undefined {
+  const item = itemByName(i.name);
+  if (!item || !WEAPONS.has(item.kind)) return undefined;
+  if (i.forgedTo) return { ...item, mt: i.forgedTo.mt, hit: i.forgedTo.hit };
+  if (i.forge && (i.forge.mt || i.forge.hit)) return { ...item, mt: (item.mt ?? 0) + i.forge.mt, hit: (item.hit ?? 0) + i.forge.hit };
+  return item;
+}
+
+/** An enemy group or boss row as a foe: its first weapon (forged as the data states), its listed skills. */
 export function foeOf(g: EnemyGroup | BossRow, boss: boolean): Foe {
   const stats = Object.fromEntries(STATS.map((s) => [s, statValue(g.stats[s])])) as Record<Stat, number>;
-  const weapon = g.items.map((i) => itemByName(i.name)).find((i): i is GameItem => !!i && WEAPONS.has(i.kind));
+  const weapon = g.items.map(forgedWeapon).find((i): i is GameItem => !!i);
   return {
     name: ('name' in g && g.name) || g.class,
     className: g.class,
@@ -245,9 +254,24 @@ export function foeOf(g: EnemyGroup | BossRow, boss: boolean): Foe {
 /** The foes of a map on a difficulty: its boss rows first, then each enemy group. */
 export function foesOf(map: { readonly enemies: Readonly<Partial<Record<ChapterDifficulty, readonly EnemyGroup[]>>>; readonly bosses: Readonly<Partial<Record<string, readonly BossRow[]>>> }, difficulty: ChapterDifficulty, lunaticPlus = false): Foe[] {
   const bosses = ((lunaticPlus && map.bosses['lunatic-plus']) || map.bosses[difficulty] || []).map((b) => foeOf(b, true));
-  const bossNames = new Set(bosses.map((b) => `${b.className}|${b.stats.hp}`));
-  const groups = (map.enemies[difficulty] ?? []).map((g) => foeOf(g, false)).filter((f) => !bossNames.has(`${f.className}|${f.stats.hp}`));
-  return [...bosses, ...groups];
+  const groups = (map.enemies[difficulty] ?? []).map((g) => foeOf(g, false));
+  // Each boss's own row in the enemy table, counted once: of its class and HP, named as the boss or its stats within two
+  // of the boss data's (#189: late maps and Apotheosis have many foes of a boss's class at 80 HP; they stay).
+  const own = new Set<number>();
+  for (const b of bosses) {
+    let best = -1;
+    let bestScore = Infinity;
+    groups.forEach((f, i) => {
+      if (own.has(i) || f.className !== b.className || f.stats.hp !== b.stats.hp) return;
+      const diff = STATS.filter((s) => f.stats[s] !== b.stats[s]).length;
+      const named = b.name === f.name || b.name.startsWith(`${f.name} (`);
+      if (!named && diff > 2) return;
+      const score = (named ? 0 : 100) + diff;
+      if (score < bestScore) [best, bestScore] = [i, score];
+    });
+    if (best >= 0) own.add(best);
+  }
+  return [...bosses, ...groups.filter((_, i) => !own.has(i))];
 }
 
 /** The best of a unit's weapons against a foe: most damage, then hit. */

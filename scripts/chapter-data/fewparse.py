@@ -145,6 +145,47 @@ def section(text, title, level=3):
     return rest[:n.start()] if n else rest
 
 
+def forge_of(entry):
+    """A forged item's forge as its hover note states it (#189): the forged weapon's Mt and Hit (`17 Mt, 85 Hit`), or the
+    bonus per difficulty (Apotheosis: `Unforged on Normal; +4 Mt, +10 Hit on Hard; +8 Mt, +20 Hit on Lunatic`)."""
+    h = re.search(r'\{\{h\|\*\|([^}]*)\}\}', entry, re.I)
+    if not h:
+        return {}
+    note = h.group(1)
+    to = re.fullmatch(r'\s*(\d+) Mt, (\d+) Hit\s*', note)
+    if to:
+        return {'forgedTo': {'mt': int(to.group(1)), 'hit': int(to.group(2))}}
+    by = {}
+    for part in note.split(';'):
+        d = re.search(r'on (Normal|Hard|Lunatic)', part)
+        if not d:
+            continue
+        b = re.search(r'\+(\d+) Mt, \+(\d+) Hit', part)
+        by[d.group(1).lower()] = {'mt': int(b.group(1)), 'hit': int(b.group(2))} if b else {'mt': 0, 'hit': 0}
+    return {'forgeBy': by} if by else {}
+
+
+def page_forge(text):
+    """The forge a page states for every forged weapon without its own note (#189): Apotheosis's `forged to have +8 Mt and
+    +20 Hit unless otherwise noted`, Chapters 11-13's `All forged weapons have +4 might and +10 hit`."""
+    m = re.search(r'forge\]\]d to have \+(\d+) Mt and \+(\d+) Hit', text) or re.search(r'All \{\{forged\|forged[^}]*\}\} weapons have \+(\d+) might and \+(\d+) hit', text)
+    return {'mt': int(m.group(1)), 'hit': int(m.group(2))} if m else None
+
+
+def settle(g, d, default):
+    """A group's items on difficulty `d`: a per-difficulty forge resolved, a forged item with no note given the page's."""
+    items = []
+    for it in g['items']:
+        it = dict(it)
+        by = it.pop('forgeBy', None)
+        if by is not None and d in by:
+            it['forge'] = by[d]
+        elif it.get('forged') and 'forgedTo' not in it and default:
+            it['forge'] = default
+        items.append(it)
+    return {**g, 'items': items}
+
+
 def items_of(inv):
     """ChapUnitCell inventory: items (first line, • separated) and skills (later lines), plus a random-skill note."""
     lines = re.split(r'<br\s*/?>', inv or '')
@@ -155,7 +196,8 @@ def items_of(inv):
             continue
         entries = [e for e in re.split(r'•', line) if e.strip()]
         for e in entries:
-            m = re.search(r'\{\{Item\|13\|([^|}]*)([^}]*)\}\}', e)
+            # Case-insensitive: Apotheosis writes {{item|13|…}} (#189).
+            m = re.search(r'\{\{Item\|13\|([^|}]*)([^}]*)\}\}', e, re.I)
             if not m:
                 continue
             name, rest = m.group(1).strip(), m.group(2)
@@ -165,6 +207,7 @@ def items_of(inv):
                     it['drop'] = True
                 if 'type=forged' in rest:
                     it['forged'] = True
+                    it.update(forge_of(e))
                 items.append(it)
             else:
                 skills.append(name)
@@ -308,6 +351,9 @@ def parse(path, meta):
             rows.append({'class': clean(p.get('class')), 'level': clean(p.get('lv') or p.get('level')), 'stats': boss_stats(p), 'items': items_, 'skills': sk2, **({'wave': p['__wave']} if p.get('__wave') else {})})
         bosses[d] = rows
     rec['bosses'] = bosses
+    default = page_forge(text)
+    rec['enemies'] = {d: [settle(g, d, default) for g in v] for d, v in rec['enemies'].items()}
+    rec['bosses'] = {d: [settle(g, d, default) for g in v] for d, v in rec['bosses'].items()}
     return rec
 
 

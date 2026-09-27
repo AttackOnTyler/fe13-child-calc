@@ -112,11 +112,17 @@ describe('the ceiling of a recorded run (#189)', () => {
     expect(engine.ceiling(played(all))).toBeUndefined();
   });
 
-  it('has no chance at Apotheosis, whose foes carry no weapons in the chapter data', () => {
-    const full = runFromRoster(withRun(EMPTY_ROSTER, { route: 'full-route', difficulty: 'lunatic', gender: 'F' }));
-    const c = engine.ceiling(full, { runs: 1 })!;
+  it('plays Apotheosis, the Full route’s endpoint, now that its foes carry their forged weapons', () => {
+    const full = withRun(EMPTY_ROSTER, { route: 'full-route', difficulty: 'lunatic', gender: 'F', asset: 'str', flaw: 'lck' });
+    const order = engine.mapOrder(runFromRoster(full)).steps.map((s) => s.map);
+    const before = order.slice(0, order.indexOf('apotheosis')).reduce((r, m, i) => addEntry(r, m, i + 1), runFromRoster(full));
+    const unit = (cls: string, s: ReturnType<typeof stats>, weapon: string) => ({ class: cls, level: 15, promoted: true, reclassed: false, exp: 0, stats: s, skills: [], inventory: [{ item: weapon, uses: null }], supports: [] });
+    const run = editEntry(before, 'e1', (s) => ({ ...s, units: { ...s.units, chrom: unit('Great Lord', stats(55, 30, 5, 30, 28, 25, 25, 12), 'Falchion'), frederick: unit('Great Knight', stats(60, 35, 2, 30, 22, 20, 35, 15), 'Silver Lance'), robin: unit('Grandmaster', stats(50, 25, 30, 28, 26, 20, 20, 22), 'Thoron') } }), 1);
+    const c = engine.ceiling(run, { runs: 1 })!;
     expect(c.key).toBe('apotheosis-secret');
-    expect(c.chance).toBeUndefined();
-    expect(c.unarmed).toEqual(['Apotheosis', 'Apotheosis (secret route)']);
+    expect(c.unarmed).toEqual([]);
+    expect(c.chance).toBeGreaterThanOrEqual(0);
+    expect(c.chance).toBeLessThanOrEqual(1);
+    expect(c.units.map((u) => u.id)).toEqual(expect.arrayContaining(['chrom', 'frederick', 'robin']));
   });
 });

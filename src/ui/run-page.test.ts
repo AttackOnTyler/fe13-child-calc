@@ -53,14 +53,16 @@ describe('the flawless chance readout (#186)', () => {
     expect(flawlessReadout(engine, played(all), { runs: 1 }).text).toBe('Flawless chance: the endpoint is recorded, nothing left to simulate.');
   });
 
-  it('says there’s no ceiling yet when the endpoint can’t be simulated (Apotheosis)', () => {
+  it('shows the ceiling at Apotheosis, now that its foes carry their forged weapons (#189)', () => {
     const full = withRun(EMPTY_ROSTER, { route: 'full-route', difficulty: 'normal', gender: 'M', asset: 'mag', flaw: 'hp' });
     const order = engine.mapOrder(runFromRoster(full)).steps.map((s) => s.map);
     // Played up to the last story chapter: Apotheosis (both routes) is what's left.
     const run = order.slice(0, order.indexOf('apotheosis')).reduce((r, m, i) => addEntry(r, m, i + 1), runFromRoster(full));
     const r = flawlessReadout(engine, run, { runs: 1 });
-    expect(r.text).toMatch(/ · no ceiling yet$/);
-    expect(r.detail).toContain('Apotheosis and Apotheosis (secret route) aren’t simulated yet: their foes carry no weapons in the chapter data, so the chance counts no risk there and there’s no ceiling.');
+    const ceiling = engine.ceiling(run, { runs: 1 })!;
+    expect(r.text).toMatch(new RegExp(` · ceiling ${chanceText(ceiling.chance!).replace(/[.()]/g, '\\$&')}$`));
+    expect(r.detail).toContain('The ceiling is the chance no unit dies on Apotheosis (secret route)');
+    expect(r.detail).not.toContain('simulated yet');
   });
 });
 

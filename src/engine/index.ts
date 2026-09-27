@@ -523,7 +523,7 @@ export type Engine = {
   /**
    * The ceiling (#189): the endpoint's flawless chance with every unit of today's plan (the army and every recruit on
    * the way) at its effective caps in its full class, no spread; it brackets the flawless chance from above. Its chance
-   * is undefined when the endpoint's foes carry no weapons in the chapter data (Apotheosis); the result is undefined
+   * is undefined when the endpoint's foes carry no weapons in the chapter data; the result is undefined
    * once the endpoint is recorded. Same options as `flawlessChance` (Lunatic+ plays `runs` skill draws).
    */
   ceiling(run: Run, options?: FlawlessOptions): Ceiling | undefined;

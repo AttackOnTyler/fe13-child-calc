@@ -11,8 +11,8 @@
  * nothing is rolled, so only Lunatic+ skill draws vary between runs, on the seeds the flawless chance's runs play the
  * endpoint with.
  *
- * A map whose foes carry no weapon in the chapter data (Apotheosis: its pages list inventories the parser doesn't read)
- * can't hurt anyone in the simulation. The ceiling names such maps (`unarmed`) and has no chance when the endpoint is
+ * A map whose foes carry no weapon in the chapter data (Apotheosis's did until its lower-case item templates were
+ * parsed, #189) can't hurt anyone in the simulation. The ceiling names such maps (`unarmed`) and has no chance when the endpoint is
  * one, rather than a 100% nothing earned.
  */
 import { CLASSES, type ClassData, type ClassId } from '../../game-data/classes';

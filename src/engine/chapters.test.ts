@@ -131,7 +131,29 @@ describe('the xenologues and Apotheosis (#114)', () => {
     expect(apo.conditions.normal!.deploy).toBe('20');
     const waves = new Set(apo.enemies.lunatic!.map((g) => g.wave));
     expect(waves.has('Wave 1') && waves.has('Secret wave 5')).toBe(true);
-    expect(apo.enemies.normal).toEqual(apo.enemies.lunatic);
+    // The same but for the forges of the secret route's Warrior's Silver Bow: unforged on Normal, +4/+10 Hard, +8/+20 Lunatic.
+    const bows = (d: 'normal' | 'hard' | 'lunatic') => apo.enemies[d]!.flatMap((g) => g.items.filter((i) => i.name === 'Silver Bow' && i.forge?.mt !== 8).map((i) => i.forge));
+    expect(bows('normal').length).toBeGreaterThan(0);
+    expect(bows('normal').every((f) => f?.mt === 0 && f.hit === 0)).toBe(true);
+    expect(bows('hard').every((f) => f?.mt === 4 && f.hit === 10)).toBe(true);
+    expect(bows('lunatic')).toEqual([]);
+    const unforged = (d: 'normal' | 'lunatic') => apo.enemies[d]!.map((g) => ({ ...g, items: g.items.map(({ forge: _, ...i }) => i) }));
+    expect(unforged('normal')).toEqual(unforged('lunatic'));
+  });
+
+  it('give Apotheosis’s foes their weapons, forged to +8 Mt and +20 Hit unless noted (#189)', () => {
+    const apo = byId.get('apotheosis')!;
+    const general = apo.enemies.lunatic!.find((g) => g.wave === 'Wave 1' && g.class === 'General' && g.count === '1')!;
+    expect(general.items).toEqual([{ name: 'Silver Lance', forged: true, forge: { mt: 8, hit: 20 } }]);
+    expect(general.skills).toEqual(['Movement +1', 'Rally Defense', 'Vengeance', 'Dragonskin', 'Pavise+']);
+    // Every foe carries its items: a weapon, or a staff for the War Clerics.
+    expect(apo.enemies.lunatic!.every((g) => g.items.length > 0)).toBe(true);
+  });
+
+  it('keep a forged weapon’s stated Mt and Hit (#189)', () => {
+    const stated = maps.flatMap((m) => Object.values(m.enemies).flatMap((gs) => gs!.flatMap((g) => g.items.filter((i) => i.forged))));
+    expect(stated.length).toBeGreaterThan(1000);
+    expect(stated.every((i) => i.forgedTo || i.forge)).toBe(true);
   });
 
   it('keep Grima’s separate Lunatic+ row in The Future Past 3', () => {
