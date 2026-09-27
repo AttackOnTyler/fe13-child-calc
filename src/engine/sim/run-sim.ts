@@ -88,6 +88,7 @@ import { STAT_BOOSTERS, TONICS, itemByName, statItemGain, type GameItem } from '
 import type { StockItem } from '../supply';
 import { buyDown, endpointKit, forgedWeapon, freshWeapon, mapUpkeep, type KitPiece, type MapUpkeep } from './upkeep';
 import { classWeaponKinds } from '../supply';
+import { foesOfMap, loadout } from './loadout';
 
 export type Weapon = NonNullable<Fighter['weapon']>;
 
@@ -527,7 +528,7 @@ export type RunSim = {
 };
 
 /** The run simulation's own blind spots (see BLIND_SPOTS): what it simplifies between maps. */
-const RUN_BLIND_SPOTS: readonly RunBlindSpotId[] = ['class-change-at-cap', 'exp-from-likely-play', 'supports-from-pair-combats', 'side-goal-actions', 'kit-by-matchups-won', 'arms-on-the-way'];
+const RUN_BLIND_SPOTS: readonly RunBlindSpotId[] = ['class-change-at-cap', 'exp-from-likely-play', 'supports-from-pair-combats', 'side-goal-actions', 'kit-by-matchups-won', 'arms-on-the-way', 'loadout-for-the-map'];
 
 /** Special classes (Dancer, Villager, Taguel, Manakete, the DLC classes) level to 30; base and advanced to 20. */
 export const levelCap = (tier: ClassTier): number => (tier === 'special' ? 30 : 20);
@@ -847,15 +848,17 @@ type Interner = { readonly units: Map<string, SimUnit>; readonly keys: Map<SimUn
 
 const newInterner = (): Interner => ({ units: new Map(), keys: new Map(), groups: new Map() });
 
-function lineupOf(state: RunState, d: Deployment, extra: ReadonlyMap<RosterUnit, Live>, interner: Interner): SimGroup[] {
+function lineupOf(state: RunState, d: Deployment, extra: ReadonlyMap<RosterUnit, Live>, interner: Interner, foes: readonly Foe[]): SimGroup[] {
   const unit = (id: RosterUnit): SimUnit | undefined => {
     const u = state.army.get(id) ?? extra.get(id);
     if (!u) return undefined;
     const stats = shownStats(u);
-    const key = `${id}|${u.classId}|${STATS.map((s) => stats[s]).join(',')}|${u.gearKey}`;
+    // What it carries into this map (five items, `loadout`).
+    const kit = carriedBy(u, stats, foes);
+    const key = `${id}|${u.classId}|${STATS.map((s) => stats[s]).join(',')}|${kit.weapons.map(weaponId).join(',')}/${kit.items.map((i) => `${i.item.name}:${i.uses}`).join(',')}`;
     let su = interner.units.get(key);
     if (!su) {
-      interner.units.set(key, (su = { id, fighter: fighterOf(u, stats), weapons: u.weapons, ...(u.items.length ? { items: u.items } : {}) }));
+      interner.units.set(key, (su = { id, fighter: { ...fighterOf(u, stats), weapon: kit.weapons[0] }, weapons: kit.weapons, ...(kit.items.length ? { items: kit.items } : {}) }));
       interner.keys.set(su, key);
     }
     return su;
@@ -880,16 +883,25 @@ function lineupOf(state: RunState, d: Deployment, extra: ReadonlyMap<RosterUnit,
   return out;
 }
 
-/** The units a map can field: the army, its opening recruits and its own setups. */
-function candidatesOf(state: RunState, extra: ReadonlyMap<RosterUnit, Live>): DeployCandidate[] {
-  return [...state.army.values(), ...extra.values()].map((u) => ({
-    unit: u.base.id,
-    role: u.base.role,
-    fighter: fighterOf(u, shownStats(u)),
-    weapons: u.weapons,
-    ...(u.items.length ? { items: u.items } : {}),
-    supports: supportsOf(state, u.base.id),
-  }));
+/** What a unit carries into a map with these foes (`loadout`: five items). */
+function carriedBy(u: Live, stats: Readonly<Record<Stat, number>>, foes: readonly Foe[]) {
+  return loadout(fighterOf(u, stats), u.weapons, u.items, foes);
+}
+
+/** The units a map can field: the army, its opening recruits and its own setups, each with what it would carry there. */
+function candidatesOf(state: RunState, extra: ReadonlyMap<RosterUnit, Live>, foes: readonly Foe[]): DeployCandidate[] {
+  return [...state.army.values(), ...extra.values()].map((u) => {
+    const stats = shownStats(u);
+    const kit = carriedBy(u, stats, foes);
+    return {
+      unit: u.base.id,
+      role: u.base.role,
+      fighter: { ...fighterOf(u, stats), weapon: kit.weapons[0] },
+      weapons: kit.weapons,
+      ...(kit.items.length ? { items: kit.items } : {}),
+      supports: supportsOf(state, u.base.id),
+    };
+  });
 }
 
 /** Whether a map is entered in this run: a child paralogue only when its gates hold (Chapter 13 cleared, its parent married, its place reachable). */
@@ -968,9 +980,11 @@ function rebuy(state: RunState, step: RunSimMap, shop: Shop) {
       const price = priceIn(step, item.name);
       if (price === undefined) {
         // Not sold here (a Killing Edge, a Silver Lance early on): a careful player buys the nearest weapon of its kind
-        // the armory sells and the unit can wield, rather than field it unarmed.
+        // the armory sells and the unit can wield, rather than field it unarmed or weaker, unless it already holds one
+        // as strong with the uses the maps ahead spend.
         const sub = substituteFor(u, item, step);
-        if (sub && !u.gear.some((x) => x.uses > 0 && x.weapon.item === sub.item) && pay(state, receipt(sub.item, sub.cost))) {
+        const covered = (x: { weapon: Weapon; uses: number }) => x !== g && x.weapon.item.kind === item.kind && (x.weapon.item.mt ?? 0) >= (sub?.item.mt ?? 0) && x.uses >= need;
+        if (sub && !u.gear.some(covered) && !substitutes.some(covered) && pay(state, receipt(sub.item, sub.cost))) {
           substitutes.push({ weapon: freshWeapon(sub.item), uses: fullUses(sub.item) });
           changed = true;
         }
@@ -1474,7 +1488,7 @@ function planner(input: RunSimInput, seed: number, assumptions: Assumptions): Pl
       // so the lineups after it are worked out armed as the runs will be.
       kits[k] = step.armory?.length ? kitFor(state, step, d, k === last) : [];
       if (k !== last && kits[k]!.length) buyKit(state, kits[k]!);
-      const lineup = lineupOf(state, d, extra, interner);
+      const lineup = lineupOf(state, d, extra, interner, foesOfMap(step.map));
       const play = playMap(playInput(state, input, k, lineup), runSeed(seed, k));
       wear.push(mapUpkeep(step.map, play, lineup, null, assumptions['tome-miss-use']));
       afterMap(state, step, k, play, null, input.difficulty, assumptions);
@@ -1511,7 +1525,7 @@ function deploymentFor(state: RunState, input: RunSimInput, k: number, extra: Re
   let d = planned
     ? plannedDeployment(pinnedLineup(planned, rules, kept), step.forced, max, here, rank)
     : suggestDeployment({
-        candidates: candidatesOf(state, extra),
+        candidates: candidatesOf(state, extra, foesOfMap(step.map)),
         forced: step.forced,
         pinned: [...(rules ?? []).flatMap((r) => (r.partner && (r.position === 'lead' || r.position === 'back') ? [r.position === 'lead' ? { lead: r.unit, back: r.partner } : { lead: r.partner, back: r.unit }] : [])), ...pinned],
         ...(rules?.some((r) => r.position === 'out') ? { excluded: new Set(rules.filter((r) => r.position === 'out').map((r) => r.unit)) } : {}),
@@ -1577,9 +1591,23 @@ function projection(input: RunSimInput, seed: number, assumptions: Assumptions):
   if (!byAssumptions) PROJECTIONS.set(input, (byAssumptions = new WeakMap()));
   let bySeed = byAssumptions.get(assumptions);
   if (!bySeed) byAssumptions.set(assumptions, (bySeed = new Map()));
-  let plan = bySeed.get(seed);
-  if (!plan) bySeed.set(seed, (plan = planner(input, seed, assumptions)));
+  // The seed only draws Lunatic+ skills in the projection's plays: with no map to draw them on, one projection serves
+  // every seed.
+  const k = drawsSkills(input) ? seed : 0;
+  let plan = bySeed.get(k);
+  if (!plan) bySeed.set(k, (plan = planner(input, seed, assumptions)));
   return plan;
+}
+
+/** Whether any map of the input draws Lunatic+ skills for its foes (a pool to draw from). */
+const DRAWS = new WeakMap<RunSimInput, boolean>();
+function drawsSkills(input: RunSimInput): boolean {
+  let d = DRAWS.get(input);
+  if (d === undefined) {
+    d = input.maps.some((m) => [...m.map.foes, ...m.map.waves.flatMap((w) => w.groups)].some((g) => !!g.pool?.length));
+    DRAWS.set(input, d);
+  }
+  return d;
 }
 
 /** The plan's lineup for every map (see `planner`). */
@@ -1789,7 +1817,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
       // A map the plan's projection never entered (a child paralogue whose gates held only in some runs) is played by
       // this run's own lineup.
       const planned = (lineups[i] ??= plan.lineup(i));
-      const lineup = lineupOf(state, planned === NOBODY ? deploymentFor(state, input, i, extra) : planned, extra, interner);
+      const lineup = lineupOf(state, planned === NOBODY ? deploymentFor(state, input, i, extra) : planned, extra, interner, foesOfMap(step.map));
       const play = playMap(playInput(state, input, i, lineup, input.idle), runSeed(rs, i));
       if (play.noDeath < 1) for (const [u, share] of lossShares(play)) lost.set(u, (lost.get(u) ?? 0) + flawless * (1 - play.noDeath) * share);
       // A map the play can't win in its turns isn't cleared: the run doesn't get past it (the plan isn't shown to).

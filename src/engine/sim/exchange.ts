@@ -35,11 +35,17 @@ export type Exchange = {
 /** A weapon's range as [min, max]; `1~Mag/2` reads as 1~2 (only staves have it). */
 export function rangeOf(item: GameItem | undefined): readonly [number, number] | undefined {
   if (!item?.range) return undefined;
+  if (RANGES.has(item)) return RANGES.get(item);
   const [lo, hi] = item.range.split('~');
   const min = parseInt(lo!, 10);
   const max = hi === undefined ? min : parseInt(hi, 10) || 2;
-  return Number.isFinite(min) ? [min, max] : undefined;
+  const r = Number.isFinite(min) ? ([min, max] as const) : undefined;
+  RANGES.set(item, r);
+  return r;
 }
+
+/** Each item's range, read once (every exchange asks). */
+const RANGES = new WeakMap<GameItem, readonly [number, number] | undefined>();
 
 /**
  * Whether the defender can counter: the attacker picks a distance its weapon reaches and, if it can, one the
@@ -54,6 +60,17 @@ export function counters(attacker: GameItem | undefined, defender: GameItem | un
 }
 
 type Side = 'lead' | 'foe';
+
+/**
+ * Where each state key sits among the next states being summed (its position + 1): a flat table instead of a map, as
+ * every exchange of every play sums its states here. A position that doesn't hold the key is stale.
+ */
+let SLOT = new Int32Array(1 << 17);
+function grow(k: number) {
+  const next = new Int32Array(Math.max(k + 1, SLOT.length * 2));
+  next.set(SLOT);
+  SLOT = next;
+}
 
 /**
  * The exchange from the given HPs. `m` is the lead's matchup against the foe (the back's pair-up bonus, Dual Strike and
@@ -76,17 +93,28 @@ export function exchange(m: Matchup, leadWeapon: GameItem | undefined, leadHp: n
   if (m.doubles) attack('lead');
   else if (m.doubled) attack('foe');
 
-  // States: lead HP × 1024 + foe HP → chance.
+  // States: lead HP × 1024 + foe HP → chance, in the order each state was first reached (a strike's outcomes are
+  // summed into the next states in that order: the arithmetic is the same whatever holds them).
   const K = 1024;
   // Stats are whole numbers in the game; a fractional one (hand-built input) is rounded down so the state key holds.
   const dmg = Math.floor(m.damage);
   const backDmg = Math.floor(m.backDamage);
   const foeDmg = Math.floor(m.worstHit);
-  let states = new Map<number, number>([[Math.floor(leadHp) * K + Math.floor(foeHp), 1]]);
-  const add = (map: Map<number, number>, l: number, f: number, p: number) => {
+  let keys = [Math.floor(leadHp) * K + Math.floor(foeHp)];
+  let probs = [1];
+  let nextKeys: number[] = [];
+  let nextProbs: number[] = [];
+  const add = (l: number, f: number, p: number) => {
     if (p <= 0) return;
     const k = Math.max(0, l) * K + Math.max(0, f);
-    map.set(k, (map.get(k) ?? 0) + p);
+    if (k >= SLOT.length) grow(k);
+    const at = SLOT[k]!;
+    if (at > 0 && at <= nextKeys.length && nextKeys[at - 1] === k) nextProbs[at - 1]! += p;
+    else {
+      nextKeys.push(k);
+      nextProbs.push(p);
+      SLOT[k] = nextKeys.length;
+    }
   };
   const hit = m.hit / 100;
   const crit = m.crit / 100;
@@ -97,47 +125,51 @@ export function exchange(m: Matchup, leadWeapon: GameItem | undefined, leadHp: n
   const fCrit = m.foeCrit / 100;
   const guard = m.dualGuardRate / 100;
   for (const s of seq) {
-    const next = new Map<number, number>();
-    for (const [k, p] of states) {
+    nextKeys = [];
+    nextProbs = [];
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i]!;
+      const p = probs[i]!;
       const l = Math.floor(k / K);
       const f = k % K;
       if (l <= 0 || f <= 0) {
-        add(next, l, f, p);
+        add(l, f, p);
         continue;
       }
       if (s === 'lead') {
         // The lead's strike: miss, hit or crit; then, if the foe still stands, the back's Dual Strike.
-        const outcomes: [number, number][] = [
-          [f, 1 - hit],
-          [f - dmg, hit * (1 - crit)],
-          [f - dmg * 3, hit * crit],
-        ];
-        for (const [f1, q] of outcomes) {
+        for (let o = 0; o < 3; o++) {
+          const f1 = o === 0 ? f : o === 1 ? f - dmg : f - dmg * 3;
+          const q = o === 0 ? 1 - hit : o === 1 ? hit * (1 - crit) : hit * crit;
           if (q <= 0) continue;
           if (f1 <= 0 || dual <= 0) {
-            add(next, l, f1, p * q);
+            add(l, f1, p * q);
             continue;
           }
-          add(next, l, f1, p * q * (1 - dual + dual * (1 - bHit)));
-          add(next, l, f1 - backDmg, p * q * dual * bHit * (1 - bCrit));
-          add(next, l, f1 - backDmg * 3, p * q * dual * bHit * bCrit);
+          add(l, f1, p * q * (1 - dual + dual * (1 - bHit)));
+          add(l, f1 - backDmg, p * q * dual * bHit * (1 - bCrit));
+          add(l, f1 - backDmg * 3, p * q * dual * bHit * bCrit);
         }
       } else {
         // The foe's strike on the lead: Dual Guard, else miss, hit or crit.
         const lands = 1 - guard;
-        add(next, l, f, p * (guard + lands * (1 - fHit)));
-        add(next, l - foeDmg, f, p * lands * fHit * (1 - fCrit));
-        add(next, l - foeDmg * 3, f, p * lands * fHit * fCrit);
+        add(l, f, p * (guard + lands * (1 - fHit)));
+        add(l - foeDmg, f, p * lands * fHit * (1 - fCrit));
+        add(l - foeDmg * 3, f, p * lands * fHit * fCrit);
       }
     }
-    states = next;
+    // The slots only mark this strike's states: a stale one never matches (its position holds another key).
+    keys = nextKeys;
+    probs = nextProbs;
   }
   let survive = 0;
   let kill = 0;
   let lSum = 0;
   let fAlive = 0;
   let fSum = 0;
-  for (const [k, p] of states) {
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i]!;
+    const p = probs[i]!;
     const l = Math.floor(k / K);
     const f = k % K;
     if (l <= 0) continue;
@@ -160,3 +192,4 @@ export function exchange(m: Matchup, leadWeapon: GameItem | undefined, leadHp: n
     foeStrikes: foeCan,
   };
 }
+

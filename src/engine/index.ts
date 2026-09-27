@@ -998,6 +998,9 @@ function mapById(id: string): ChapterData {
 
 /** Plan inputs kept per run for the solve's batches (#199). */
 const PLAN_INPUTS = 16;
+
+/** What the simulation reads of a plan, as a key: its Robin, marriages, children's passes and roadmap (not the builds). */
+const simKeyOf = (plan: Plan): string => JSON.stringify([plan.robin, plan.wishlist.marriages, plan.wishlist.children, plan.roadmap]);
 /** Worth's variant inputs and plans kept per run (#202): a few plans' units, losses and reserves. */
 const WORTH_INPUTS = 96;
 /** Lunatic+ skill draws the solve's ceiling check plays (#199). */
@@ -1154,20 +1157,32 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
    */
   /** Hand-built worth variants (#202, `simulateWorth`), kept while the input lives. */
   const handBuilt = new WeakMap<RunSimInput, Map<string, RunSimInput>>();
-  const planInputs = new WeakMap<Run, { roleOf: ((u: RosterUnit) => DeploymentRole) | undefined; byPlan: Map<string, RunSimInput> }>();
-  const planInput = (run: Run, plan: Plan, roleOf: ((u: RosterUnit) => DeploymentRole) | undefined): RunSimInput => {
+  const planInputs = new WeakMap<Run, { roleOf: ((u: RosterUnit) => DeploymentRole) | undefined; byPlan: Map<string, ReturnType<typeof flawlessInput>> }>();
+  const planBuilt = (run: Run, plan: Plan, roleOf: ((u: RosterUnit) => DeploymentRole) | undefined): ReturnType<typeof flawlessInput> => {
     let held = planInputs.get(run);
     if (!held || held.roleOf !== roleOf) planInputs.set(run, (held = { roleOf, byPlan: new Map() }));
-    const k = JSON.stringify(plan);
-    let input = held.byPlan.get(k);
-    if (input) {
+    // What the simulation reads of a plan (its builds don't count): plans alike there share an input and its projection.
+    const k = simKeyOf(plan);
+    let built = held.byPlan.get(k);
+    if (built) {
       held.byPlan.delete(k);
     } else {
-      input = flawlessInput(run, assumptions, roleOf, undefined, plan).input;
+      built = flawlessInput(run, assumptions, roleOf, undefined, plan);
       if (held.byPlan.size >= PLAN_INPUTS) held.byPlan.delete(held.byPlan.keys().next().value!);
     }
-    held.byPlan.set(k, input);
-    return input;
+    held.byPlan.set(k, built);
+    return built;
+  };
+  const planInput = (run: Run, plan: Plan, roleOf: ((u: RosterUnit) => DeploymentRole) | undefined): RunSimInput => planBuilt(run, plan, roleOf).input;
+  /**
+   * A plan's flawless chance (#198): its input kept with the plan's (`planBuilt`), so re-scoring a plan the solve is
+   * comparing reuses its projection.
+   */
+  const planChance = (run: Run, options: FlawlessOptions & { readonly plan: Plan }): FlawlessChance => {
+    if (options.marriages) return flawlessChance(run, assumptions, options);
+    const { input, notSimulated, unknownHistory, endpoint, goldUnrecorded, renown } = planBuilt(run, options.plan, options.roleOf);
+    const sim = simulateRuns(input, options.seed ?? FLAWLESS_SEED, options.runs ?? FLAWLESS_RUNS, assumptions);
+    return { ...sim, notSimulated, unknownHistory, endpoint, goldUnrecorded, renown };
   };
   /**
    * Worth's variants of a plan (#202), each input built once and kept while the run lives (so each keeps its
@@ -2005,7 +2020,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     sideGoals: (run) => sideGoalChoices(run.sideGoals),
     sideGoalsSecured: (run, entry) => sideGoalsSecured(run, entry),
     renown: (run) => renownAhead(run, remainingMapOrder(run).steps, assumptions['paralogue-renown']),
-    flawlessChance: (run, options) => flawlessChance(run, assumptions, options),
+    flawlessChance: (run, options) => (options?.plan ? planChance(run, { ...options, plan: options.plan }) : flawlessChance(run, assumptions, options)),
     simulateRuns: (input, seed, runs) => simulateRuns(input, seed, runs, assumptions),
     ceiling: (run, options) => flawlessCeiling(run, assumptions, options),
     simulateCeiling: (input, seed, runs) => simulateCeiling(input, seed, runs, assumptions),
@@ -2036,13 +2051,13 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
           seed: () => seedFor(run, options),
           edits: (plan, hints) => planEdits(run, ctx, options, plan, hints, (p) => lineupsOf(run, p, input.seed, roleOf)),
           samples: (plan, first, count) => simulateRuns(planInput(run, plan, roleOf), input.seed, count, assumptions, first).samples,
-          rescore: (plan, seed, runs) => flawlessChance(run, assumptions, { plan, seed, runs, ...(roleOf ? { roleOf } : {}) }),
+          rescore: (plan, seed, runs) => planChance(run, { plan, seed, runs, ...(roleOf ? { roleOf } : {}) }),
           // Lunatic+ plays the ceiling over a few skill draws; otherwise one play is the ceiling.
-          ceiling: (plan) => flawlessCeiling(run, assumptions, { plan, seed: input.seed, runs: lunaticPlus ? CEILING_DRAWS : 1, ...(roleOf ? { roleOf } : {}) })?.chance,
+          ceiling: (plan) => simulateCeiling(planInput(run, plan, roleOf), input.seed, lunaticPlus ? CEILING_DRAWS : 1, assumptions)?.chance,
           // A pinned couple's non-starter is the player's to lift: only the others count against a plan.
           nonStarters: (plan) => nonStarters(run, assumptions, plan).filter((c) => !pinnedKeys.has(coupleKey(c))),
           // What the simulation reads of a plan: its Robin, marriages, children's passes and its roadmap (not the builds).
-          simKey: (plan) => JSON.stringify([plan.robin, plan.wishlist.marriages, plan.wishlist.children, plan.roadmap]),
+          simKey: simKeyOf,
         },
         input.display ?? FLAWLESS_RUNS,
       );

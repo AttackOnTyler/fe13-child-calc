@@ -570,7 +570,8 @@ export type RunBlindSpotId =
   | 'kit-as-recorded'
   | 'side-goal-actions'
   | 'kit-by-matchups-won'
-  | 'arms-on-the-way';
+  | 'arms-on-the-way'
+  | 'loadout-for-the-map';
 
 export type BlindSpot = {
   readonly id: BlindSpotId | RunBlindSpotId;
@@ -720,6 +721,17 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
       'nearest one of its kind that it does. The simulation keeps no weapon EXP, so a unit is taken to wield the best rank it holds in a kind, ' +
       'or what its level suggests when that’s higher (a base class D, C from Lv 10; an advanced or special class B, A from Lv 10). A player ' +
       'may train ranks faster, forge along the way, or hold gold back for the endpoint.',
+    lean: 'either',
+    touches: ['flawless'],
+  },
+  {
+    id: 'loadout-for-the-map',
+    label: 'Five items a map, picked by expected damage',
+    why:
+      'Each unit carries five items into a map (the game’s inventory): its staves (two at most) and one potion, then the weapons that add ' +
+      'the most expected damage over that map’s foes, from Str or Mag, Mt, effectiveness, Def or Res, and a hit chance from Hit, Skl and Lck. ' +
+      'The rest waits in the convoy. A player may carry a weapon for a reason the pick doesn’t weigh (range, a spare for one that runs dry ' +
+      'mid-map, a Rescue staff over a Physic).',
     lean: 'either',
     touches: ['flawless'],
   },

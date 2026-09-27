@@ -95,6 +95,26 @@ const CLASS_TYPES: Readonly<Record<Effectiveness, readonly string[]>> = {
 /** The unit types a class counts as, for effectiveness. */
 export const classTypes = (cls: string): Effectiveness[] => (Object.keys(CLASS_TYPES) as Effectiveness[]).filter((t) => CLASS_TYPES[t].includes(cls));
 
+/** `classTypes`, worked out once per class (the simulation asks it for every matchup). */
+const TYPES = new Map<string, readonly Effectiveness[]>();
+const typesOf = (cls: string): readonly Effectiveness[] => TYPES.get(cls) ?? (TYPES.set(cls, classTypes(cls)), TYPES.get(cls)!);
+const effectiveOn = (w: GameItem | undefined, cls: string): boolean => {
+  if (!w?.effective) return false;
+  const types = typesOf(cls);
+  return w.effective.some((e) => types.includes(e));
+};
+
+/** A foe's skills with the Lunatic+ ones assumed, as a set: worked out once per foe and assumed skills. */
+const SKILL_SETS = new WeakMap<Foe, Map<string, ReadonlySet<string>>>();
+function skillSet(foe: Foe, lunaticPlus: readonly string[]): ReadonlySet<string> {
+  let byExtra = SKILL_SETS.get(foe);
+  if (!byExtra) SKILL_SETS.set(foe, (byExtra = new Map()));
+  const k = lunaticPlus.length ? lunaticPlus.join(',') : '';
+  let set = byExtra.get(k);
+  if (!set) byExtra.set(k, (set = new Set([...foe.skills, ...lunaticPlus])));
+  return set;
+}
+
 const TRIANGLE: Readonly<Record<string, string>> = { sword: 'axe', axe: 'lance', lance: 'sword' };
 const triangle = (a: GameItem | undefined, b: GameItem | undefined) =>
   !a || !b ? 0 : TRIANGLE[a.kind] === b.kind ? 1 : TRIANGLE[b.kind] === a.kind ? -1 : 0;
@@ -125,7 +145,27 @@ function dualSupport(rank: number): [number, number, number, number] {
   return [r >= 9 ? 20 : r >= 5 ? 15 : 10, r >= 10 ? 20 : r >= 6 ? 15 : r >= 2 ? 10 : 0, r >= 12 ? 20 : r >= 8 ? 15 : r >= 4 ? 10 : 0, r >= 11 ? 20 : r >= 7 ? 15 : r >= 3 ? 10 : 0];
 }
 
-const weaponStats = (w: Fighter['weapon']) => (w ? forgedStats(w.item, w.forge ?? { mt: 0, hit: 0, crit: 0 }) : { mt: 0, hit: 0, crit: 0 });
+const NO_WEAPON = { mt: 0, hit: 0, crit: 0 } as const;
+const WEAPON_STATS = new WeakMap<NonNullable<Fighter['weapon']>, { mt: number; hit: number; crit: number }>();
+const weaponStats = (w: Fighter['weapon']) => {
+  if (!w) return NO_WEAPON;
+  let ws = WEAPON_STATS.get(w);
+  if (!ws) WEAPON_STATS.set(w, (ws = forgedStats(w.item, w.forge ?? NO_WEAPON)));
+  return ws;
+};
+const STRIKE_BY_SUPPORT: Readonly<Record<SupportLevel | 'none', number>> = { none: 20, C: 30, B: 40, A: 50, S: 60 };
+const GUARD_BY_SUPPORT: Readonly<Record<SupportLevel | 'none', number>> = { none: 0, C: 2, B: 5, A: 7, S: 10 };
+
+/** Pair-up bonuses, worked out once per back and support (the simulation's backs are shared objects). */
+const BONUSES = new WeakMap<Fighter, Map<SupportLevel | null, Partial<Record<ModStat, number>>>>();
+function bonusOf(back: Fighter, support: SupportLevel | null): Partial<Record<ModStat, number>> {
+  let bySupport = BONUSES.get(back);
+  if (!bySupport) BONUSES.set(back, (bySupport = new Map()));
+  let b = bySupport.get(support);
+  if (!b) bySupport.set(support, (b = pairUpBonus(back, support)));
+  return b;
+}
+const NO_BONUS: Partial<Record<ModStat, number>> = {};
 
 /**
  * One lead + back pair against one foe. `lunaticPlus` lists the Lunatic+ skills to assume (the map's pool) when the
@@ -135,14 +175,14 @@ const weaponStats = (w: Fighter['weapon']) => (w ? forgedStats(w.item, w.forge ?
  */
 export function matchup(lead: Fighter, back: Fighter | undefined, support: SupportLevel | null, foe: Foe, lunaticPlus: readonly string[] = [], paired = true): Matchup {
   const notes: string[] = [];
-  const bonus = back && paired ? pairUpBonus(back, support) : {};
+  const bonus = back && paired ? bonusOf(back, support) : NO_BONUS;
   const st = (s: Stat) => lead.stats[s] + (s === 'hp' ? 0 : (bonus[s as ModStat] ?? 0));
-  const skills = new Set([...foe.skills, ...lunaticPlus]);
+  const skills = skillSet(foe, lunaticPlus);
   if (lunaticPlus.length) notes.push(`Lunatic+: assumes ${lunaticPlus.join(', ')}`);
   const w = lead.weapon?.item;
   const magic = !!w && (w.kind === 'tome' || w.magic === true);
   const ws = weaponStats(lead.weapon);
-  const effective = w?.effective?.some((e) => classTypes(foe.className).includes(e)) ?? false;
+  const effective = effectiveOn(w, foe.className);
   if (effective) notes.push(`${w!.name} is effective: Mt tripled`);
   const tri = triangle(w, foe.weapon);
   const attack = (magic ? st('mag') : st('str')) + ws.mt * (effective ? 3 : 1);
@@ -166,7 +206,7 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
     const bw = back.weapon?.item;
     const bmagic = !!bw && (bw.kind === 'tome' || bw.magic === true);
     const bws = weaponStats(back.weapon);
-    const beff = bw?.effective?.some((e) => classTypes(foe.className).includes(e)) ?? false;
+    const beff = effectiveOn(bw, foe.className);
     backDamage = Math.max(0, (bmagic ? back.stats.mag : back.stats.str) + bws.mt * (beff ? 3 : 1) - (bmagic ? foe.stats.res : foe.stats.def));
     const bPlus = aegisSide(bw, bmagic) ? skills.has('Aegis+') : skills.has('Pavise+');
     if (bPlus || dragonskin) {
@@ -174,7 +214,7 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
       notes.push(`${bPlus ? (aegisSide(bw, bmagic) ? 'Aegis+' : 'Pavise+') : 'Dragonskin'} halves dual strikes too`);
     } else if (shield) notes.push(`${aegisSide(w, magic) ? 'Aegis' : 'Pavise'} may halve the lead’s hits; dual strikes get past it`);
     const skl = lead.stats.skl + back.stats.skl;
-    dualStrikeRate = clamp(skl / 4 + { none: 20, C: 30, B: 40, A: 50, S: 60 }[support ?? 'none'] + ([...lead.skills, ...back.skills].includes('Dual Strike+') ? 10 : 0));
+    dualStrikeRate = clamp(skl / 4 + STRIKE_BY_SUPPORT[support ?? 'none'] + (lead.skills.includes('Dual Strike+') || back.skills.includes('Dual Strike+') ? 10 : 0));
     // The dual strike itself uses the back's own stats and weapon; a back with no weapon can't strike.
     if (bw) {
       backHit = clamp(bws.hit + (back.stats.skl * 3 + back.stats.lck) / 2 + 5 * triangle(bw, foe.weapon) - (foe.stats.spd * 3 + foe.stats.lck) / 2);
@@ -187,13 +227,14 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
   // The foe's side.
   const fw = foe.weapon;
   const fmagic = !!fw && (fw.kind === 'tome' || fw.magic === true);
-  const fws = fw ? { mt: fw.mt ?? 0, hit: fw.hit ?? 0, crit: fw.crit ?? 0 } : { mt: 0, hit: 0, crit: 0 };
-  const leadTypes = classTypes(lead.className);
-  const feff = fw?.effective?.some((e) => leadTypes.includes(e)) ?? false;
+  const fmt = fw?.mt ?? 0;
+  const fhit = fw?.hit ?? 0;
+  const fcrit = fw?.crit ?? 0;
+  const feff = effectiveOn(fw, lead.className);
   if (feff) notes.push(`${foe.name}’s ${fw!.name} is effective against the lead`);
   const leadDef = fmagic ? st('res') : st('def');
   const luna = skills.has('Luna+');
-  const worstHit = Math.max(0, (fmagic ? foe.stats.mag : foe.stats.str) + fws.mt * (feff ? 3 : 1) - (luna ? Math.floor(leadDef / 2) : leadDef));
+  const worstHit = Math.max(0, (fmagic ? foe.stats.mag : foe.stats.str) + fmt * (feff ? 3 : 1) - (luna ? Math.floor(leadDef / 2) : leadDef));
   const foeHits = fw ? (fw.brave ? 2 : 1) * (doubled ? 2 : 1) : 0;
   // Counter returns the lead's damage when it hits in melee and doesn't kill.
   const melee = !w || (w.range ?? '1') === '1';
@@ -203,14 +244,14 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
   // Dual Guard (SF Dual System): both units' Def (Res against magic) / 4, + 0/2/5/7/10 by support, +10 with Dual Guard+.
   const guardStat = fmagic ? 'res' : 'def';
   const dualGuardRate = back
-    ? clamp((lead.stats[guardStat] + back.stats[guardStat]) / 4 + { none: 0, C: 2, B: 5, A: 7, S: 10 }[support ?? 'none'] + ([...lead.skills, ...back.skills].includes('Dual Guard+') ? 10 : 0))
+    ? clamp((lead.stats[guardStat] + back.stats[guardStat]) / 4 + GUARD_BY_SUPPORT[support ?? 'none'] + (lead.skills.includes('Dual Guard+') || back.skills.includes('Dual Guard+') ? 10 : 0))
     : 0;
   const survives = worstRound < lead.stats.hp;
   const [sHit, sAvo, sCrit, sCritAvo] = back ? dualSupport(SUPPORT_RANK[support ?? 'none']) : [0, 0, 0, 0];
   const hit = clamp(ws.hit + (st('skl') * 3 + st('lck')) / 2 + sHit + 5 * tri - (foe.stats.spd * 3 + foe.stats.lck) / 2);
   const crit = clamp(ws.crit + st('skl') / 2 + sCrit - foe.stats.lck);
-  const foeHit = skills.has('Hawkeye') ? 100 : clamp(fws.hit + (foe.stats.skl * 3 + foe.stats.lck) / 2 - 5 * tri - ((st('spd') * 3 + st('lck')) / 2 + sAvo));
-  const foeCrit = clamp(fws.crit + foe.stats.skl / 2 - (st('lck') + sCritAvo));
+  const foeHit = skills.has('Hawkeye') ? 100 : clamp(fhit + (foe.stats.skl * 3 + foe.stats.lck) / 2 - 5 * tri - ((st('spd') * 3 + st('lck')) / 2 + sAvo));
+  const foeCrit = clamp(fcrit + foe.stats.skl / 2 - (st('lck') + sCritAvo));
   if (skills.has('Hawkeye')) notes.push('Hawkeye: the foe always hits');
   if (luna) notes.push('Luna+: the foe’s hits ignore half your defence');
   if (skills.has('Vantage+')) notes.push('Vantage+: on its turn the foe strikes first');
@@ -276,13 +317,17 @@ export function foesOf(map: { readonly enemies: Readonly<Partial<Record<ChapterD
   return [...bosses, ...groups.filter((_, i) => !own.has(i))];
 }
 
+/** How `bestWeapon` ranks a matchup: one-rounding first, then surviving, then damage, then hit. */
+export const bestKey = (r: Matchup): number => (r.oneRounds ? 1e6 : 0) + (r.survives ? 1e5 : 0) + r.damage * r.hits * 100 + r.hit;
+
 /** The best of a unit's weapons against a foe: most damage, then hit. */
 export function bestWeapon(fighter: Fighter, weapons: readonly NonNullable<Fighter['weapon']>[], back: Fighter | undefined, support: SupportLevel | null, foe: Foe, lunaticPlus: readonly string[], paired = true): { weapon: Fighter['weapon']; result: Matchup } | undefined {
   let best: { weapon: Fighter['weapon']; result: Matchup } | undefined;
+  let bestK = 0;
   for (const weapon of weapons) {
-    const result = matchup({ ...fighter, weapon }, back, support, foe, lunaticPlus, paired);
-    const key = (r: Matchup) => (r.oneRounds ? 1e6 : 0) + (r.survives ? 1e5 : 0) + r.damage * r.hits * 100 + r.hit;
-    if (!best || key(result) > key(best.result)) best = { weapon, result };
+    const result = matchup(weapon === fighter.weapon ? fighter : { ...fighter, weapon }, back, support, foe, lunaticPlus, paired);
+    const k = bestKey(result);
+    if (!best || k > bestK) [best, bestK] = [{ weapon, result }, k];
   }
   return best;
 }
