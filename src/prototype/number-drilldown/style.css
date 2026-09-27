@@ -1,0 +1,26 @@
+/* PROTOTYPE — throwaway (#173). On top of ../wishlist-editing/style.css. */
+.num { background: none; border: 0; padding: 0 1px; color: inherit; font: inherit; border-bottom: 1px dotted var(--acc); border-radius: 0; cursor: pointer; }
+.num:hover, .num.on { background: #1a2233; color: var(--acc); }
+.mark { color: var(--warn); font-size: 9px; margin-left: 1px; }
+.link { background: none; border: 0; color: var(--acc); padding: 0; cursor: pointer; } .link.small { font-size: 12px; }
+.receipt { background: #171b24; border: 1px solid var(--acc); border-radius: 8px; padding: 8px 12px; margin: 8px 0; font-size: 13px; }
+.crumbs { display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; color: var(--dim); font-size: 12.5px; } .crumbs b { color: var(--fg); }
+.crumbs .x { margin-left: auto; }
+.big { font-size: 22px; margin: 6px 0 2px; }
+.math { margin: 4px 0; padding-left: 18px; color: var(--dim); }
+h4 { margin: 12px 0 4px; font-size: 13px; }
+.rows { width: 100%; } .rows td.v { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rows tr.drill { cursor: pointer; } .rows tr.drill:hover td { background: #20242d; }
+.barcell { width: 30%; } .barcell i { display: block; height: 8px; border-radius: 2px; } .barcell i.neg { background: var(--bad); } .barcell i.pos { background: var(--ok); }
+.stop { color: var(--dim); border-left: 3px solid var(--line); padding-left: 8px; }
+.spot, .rule { padding: 3px 0; } .stress { display: block; margin-left: 4px; color: var(--warn); } .stakes { color: var(--ov); }
+.wording { background: #fff; color: #000; padding: 4px 16px; font-size: 12px; }
+.wording button { background: #ddd; color: #000; border: 0; } .wording button.on { background: #000; color: #fff; } .wording small { color: #444; }
+body { padding-bottom: 80px; }
+/* B */
+.bcols { display: grid; grid-template-columns: 1fr 440px; } .bcols .c { max-width: 780px; }
+.panel { border-left: 1px solid var(--line); position: sticky; top: 0; align-self: start; max-height: 100vh; overflow: auto; padding: 6px 12px; }
+.ptabs { display: flex; gap: 4px; margin-bottom: 6px; } .ptabs button.on { background: var(--acc); color: #000; }
+/* C */
+.proof { display: grid; grid-template-columns: 1fr 420px; gap: 20px; padding: 8px 20px; } .pside { border-left: 1px solid var(--line); padding-left: 16px; font-size: 13px; }
+.pmain .big { font-size: 34px; }

@@ -7,7 +7,8 @@
     "build": "tsc && vite build",
     "typecheck": "tsc",
     "test": "vitest run",
-    "proto:wishlist": "vite --open /src/prototype/wishlist-editing/index.html"
+    "proto:wishlist": "vite --open /src/prototype/wishlist-editing/index.html",
+    "proto:drilldown": "vite --host 127.0.0.1 --open /src/prototype/number-drilldown/index.html"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
