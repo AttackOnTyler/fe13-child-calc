@@ -476,11 +476,12 @@ export function whatChangedReadout(engine: Engine, run: Run, progress: SolveProg
   const chance = w.before
     ? `Flawless chance: ${withMargin(w.before)} before → ${now}${w.after ? ` (${signed(w.after.chance - w.before.chance)} points)` : ''}`
     : `Flawless chance: ${now} (not worked out before the map was recorded)`;
-  const exp = w.exp.map(
+  // A unit with no EXP forecast or earned (a Back that never struck, a unit left idle) has nothing to compare.
+  const exp = w.exp.filter((x) => x.forecast >= 0.5 || x.earned).map(
     (x) =>
       `${name(x.unit)}: ${x.earned === undefined ? 'EXP not comparable (a class change)' : `${x.earned} EXP`} against ${Math.round(x.forecast)} forecast; level ${lv(x.level)}, ${x.against === 'inside' ? 'inside' : x.against === 'below' ? 'below' : 'above'} the forecast’s ${lv(x.spread.low)}–${lv(x.spread.high)}`,
   );
-  const readings = w.readings.map((r) => `${name(r.unit)}: ${READING_WORDS[r.before]} → ${READING_WORDS[r.after]}${r.pending ? '?' : ''}`);
+  const readings = w.readings.map((r) => `${name(r.unit)}: ${READING_WORDS[r.before]}${r.wasPending ? '?' : ''} → ${READING_WORDS[r.after]}${r.pending ? '?' : ''}`);
   const dismissed = new Set(run.dismissedProposals ?? []);
   const found = (progress?.proposals ?? []).filter((p) => !dismissed.has(proposalId(p))).length;
   const improvements = !progress ? 'Re-solving from your plan…' : found ? `The re-solve found ${found} improvement${found === 1 ? '' : 's'}: in the inbox below.` : progress.done ? 'The re-solve found no improvement on your plan.' : 'Re-solving from your plan…';

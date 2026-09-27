@@ -58,7 +58,7 @@ export type ExpAgainstForecast = {
   /** Its level at the map's end, EXP as the fraction (Lv 5, 40 EXP → 5.4), and the forecast's spread. */
   readonly level: number;
   readonly spread: { readonly low: number; readonly median: number; readonly high: number };
-  /** Below the forecast's 10th percentile, inside its 10th–90th, or above its 90th. */
+  /** Below the forecast's 10th percentile, inside its 10th–90th (to 5 EXP), or above its 90th. */
   readonly against: 'below' | 'inside' | 'above';
 };
 
@@ -71,8 +71,8 @@ export type WhatChanged = {
   readonly after: { readonly chance: number; readonly margin: number } | undefined;
   /** The forecast's units on the map, in its order; empty when the map recorded isn't the one it expected. */
   readonly exp: readonly ExpAgainstForecast[];
-  /** Units whose reading moved (`after` pending: "at risk?"). */
-  readonly readings: readonly { readonly unit: RosterUnit; readonly before: ReadingKind; readonly after: ReadingKind; readonly pending: boolean }[];
+  /** Units whose reading moved (`wasPending`, `pending`: "at risk?" before, after). */
+  readonly readings: readonly { readonly unit: RosterUnit; readonly before: ReadingKind; readonly after: ReadingKind; readonly wasPending: boolean; readonly pending: boolean }[];
   /** Dismissed with "got it". */
   readonly dismissed: boolean;
 };
@@ -93,13 +93,14 @@ export function whatChanged(run: Run, now: { readonly chance?: { readonly chance
     const was = prev?.[x.unit];
     const earned = was && was.class === u.class && u.level >= was.level ? (u.level - was.level) * 100 + u.exp - was.exp : undefined;
     const level = u.level + u.exp / 100;
-    const against = level < x.level.low ? 'below' : level > x.level.high ? 'above' : 'inside';
+    // Within half a tenth of a level (5 EXP) of the spread reads inside: the card writes levels to a tenth.
+    const against = level < x.level.low - 0.05 ? 'below' : level > x.level.high + 0.05 ? 'above' : 'inside';
     return [{ unit: x.unit, earned, forecast: x.exp, level, spread: x.level, against }];
   });
-  const before = new Map((f?.readings ?? []).map((r) => [r.unit, r.reading]));
+  const before = new Map((f?.readings ?? []).map((r) => [r.unit, r]));
   const readings = (now.readings?.readings ?? []).flatMap((r) => {
     const b = before.get(r.unit);
-    return b && b !== r.reading ? [{ unit: r.unit, before: b, after: r.reading, pending: r.pending }] : [];
+    return b && b.reading !== r.reading ? [{ unit: r.unit, before: b.reading, after: r.reading, wasPending: !!b.pending, pending: r.pending }] : [];
   });
   return {
     entry: e.id,
