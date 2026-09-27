@@ -144,7 +144,7 @@ A first-gen unit seen on its own: its join data, class tree, build coverage over
 _Avoid_: Character page, profile
 
 **Explorer**:
-The Table view and unit pages, as opposed to planning: pairings scored on stats with presets and Σ, and unit opinions. It keeps its own play context (defaulting to the run's route) and never feeds the wishlist.
+The Table view and unit pages, as opposed to planning: pairings scored on stats with presets and Σ (`scoring:v1`), and unit opinions. It keeps its own play context (defaulting to the run's route; a unit page notes when they differ) and never feeds the wishlist. Its header says "The wishlist ranks by flawless chance; this explorer ranks by your presets", and each unit page links to the unit's Wishlist entry.
 _Avoid_: Planner (the inbox, Wishlist tab and Run view plan), table (alone)
 
 **Class tree**:
@@ -152,7 +152,7 @@ A unit's classes as base → promotion lines plus the DLC classes, each with the
 _Avoid_: Class list
 
 **Partners**:
-A unit page's read-only list of everyone the unit can S-support, with the children each marriage produces (scored in their plan presets) and where the marriage stands: married, in the saved plan, dead or blocked. Sorted by the best child.
+A unit page's read-only list of everyone the unit can S-support, with the children each marriage produces (scored in the explorer's preset) and where the marriage stands: married, dead or blocked. Sorted by the best child.
 _Avoid_: Spouses, matches
 
 **Preview** (Robin):
@@ -160,11 +160,11 @@ A Robin gender and asset/flaw tried on Robin's page while the Run facts leave Ro
 _Avoid_: Draft Robin, temporary Robin
 
 **Front door**:
-A child's overview page: what stays the same in every pairing (fixed parent, start class, default class set, personal growths, fixed passes), its best parents ranked as the pairing table ranks them, and whether it can marry Robin. It leads into the pairing table.
+A child's overview page: what stays the same in every pairing (fixed parent, start class, default class set, personal growths, fixed passes), its best parents ranked as the pairing table ranks them under the explorer's preset (which it names), and whether it can marry Robin. It leads into the pairing table.
 _Avoid_: Child page, child summary
 
 **Unit opinion**:
-What a named source says about one unit (first-gen, child or Robin) in a play context: role and tier in its words, classes, a 5-skill loadout, partners recommended and warned, a note and a citation. Curated from the source registry and shown on unit pages, never scored or merged across sources. Planning never reads it; where a source's tier and a unit's worth disagree, that is a check on the model, not an input to it.
+What a named source says about one unit (first-gen, child or Robin) in a play context: role and tier in its words, classes, a 5-skill loadout, partners recommended and warned, a note and a citation. Curated from the source registry and shown on unit pages, never scored or merged across sources. Planning never reads it, and unit pages say so ("What the community says. The wishlist doesn't read this; it ranks by flawless chance."). Where a source's tier and a unit's worth strongly disagree (rated S or A but worth under 1 point, or C or F but worth 5 points or more), the worth shows beside it on the unit page, never on the Wishlist tab or in the inbox: a check on the model, not an input to it.
 _Avoid_: Rating, review, expert score
 
 **Join data**:
@@ -250,25 +250,6 @@ _Avoid_: Buffer, overhead
 **Auto class**:
 The class chosen per row as the one that scores highest under the current preset, role and basis, from the child's final-tier reachable classes.
 _Avoid_: Best class (alone), default class (the child's starting class)
-
-**Candidate preset**:
-A preset a child's role is derived from: Physical, Magical and Mixed lead and Physical and Magical hard support for Lead, Battery for Battery, Rallybot for Staff/Rally.
-_Avoid_: Core preset
-
-**Niche preset**:
-Any preset that isn't a candidate (V/V lead, Crisis/crit, Lancekiller, Armsthrift bruiser, Tank, Nostank, Staffbot). Never derived; a player reaches one only by choosing it.
-_Avoid_: Special preset
-
-**Standing**:
-A child's place in the cast's spread under a preset: its best pairing that can still happen, scored, placed between the weakest and the strongest child's best (0–1). Everyone stands at 0 when the spread is zero.
-_Avoid_: Rank (it keeps gap sizes), percentile
-
-**Role preset**:
-A child's highest-standing candidate preset within one deployment role, ties to menu order.
-
-**Best role**:
-The deployment role whose role preset gives a child its highest standing, ties to menu order. Always say Best role, never role alone.
-_Avoid_: Role (alone), natural role
 
 ### Planning
 
@@ -529,67 +510,23 @@ The Plan's pick-line action that writes the marriage plan's Robin into the Run f
 _Avoid_: Lock for a pin (that is a pin), set Robin
 
 **Unit state**:
-Where a unit stands in the current run: Available, Not yet recruited (prunes nothing), Benched (soft), Missed or Dead (hard).
+Where a unit stands in the current run: Available, Not yet recruited (prunes nothing), Missed or Dead (hard). The Roster offers only these hard facts (#212); Benched is read only from a run saved before the wishlist (keeping a unit out is a keep-out edit).
 _Avoid_: Status (alone), availability
 
 **Pin**:
-A planned marriage the player has kept. Soft: the player can unpin it. It is **broken** for good when either unit is missed or dead, and **on hold** while either unit is benched (it returns when un-benched); either way it is a lost pin and frees the partner.
-_Avoid_: Lock (reserved for Lock (Robin)), reservation, planned (every marriage in the marriage plan is planned; only a pinned one is kept)
+A hard constraint the player keeps on the solve: a marriage, a span, keep-in or keep-out, a carrier, a side goal, the Robin Lock. Held on the run (`run:v2`), never on the Roster; a pin on a unit dead or missed drops out.
+_Avoid_: Lock (reserved for Lock (Robin)), reservation
 
 **Rule-out**:
-A marriage the player has forbidden. Soft: the marriage plan works around it until it is ruled back in.
+A marriage pin with forbid: no plan marries the couple until it is ruled back in.
 _Avoid_: Ban, block (a blocked pairing is the roster's doing, not the player's)
 
-**Marriage plan**:
-One spouse per unit for the whole roster, chosen by the solver to maximise the sum of each child's priority × score (each child scored with its own preset), with marriages and pins fixed. Re-solved around losses and compared with the saved plan; among plans of equal value it keeps the saved plan's children. Endpoint-first planning replaces its solver: marriages are edits of one joint solve on the flawless chance.
-_Avoid_: Backup (alone), optimal pairing
-
-**Plan preset**:
-The preset a child is scored with in the marriage plan — an output, not a curated default: the child's preset override if set, else the role preset of its role override, else the role preset of the role army fit gives it. A child out of the cast without an override (Morgan before Robin is set) uses the global preset. The pairing tables ignore it and use the global preset, except on a **visit**: a child opened from the marriage plan scores with its plan preset (its scoring role, Auto class) until the visitor leaves its table or sets the preset, scoring role or class.
-_Avoid_: Child preset, default preset (ambiguous with the global one)
-
 **Children ledger**:
-The Roster page's one row per child: fixed parent, the marriage plan's pairing (or its parents' marriage), its best pairing that can still happen with Δ vs the plan, and where it stands — open, pinned, left out (it can still be born, but the marriage plan doesn't produce it: no score, priority 0, outscored in a husband shortage, or its parent benched), on hold (its parents' pin is on hold through a bench), parents married, plan broken (the saved plan's pairing, or without a saved plan its parents' pin, can no longer happen; a broken saved pairing is struck through before the plan's, with why it can't happen on the status), can't be born, or dead. Before Adopt, a child whose saved pairing is gone reads plan broken; after Adopt it reads left out. It edits the same priority and plan preset as the Plan sidebar.
+The Wishlist tab's one row per child: fixed parent, the wishlist's parents for it and the skills they pass, and where it stands — dead, missed, parents married, in the wishlist, or not in the wishlist. Read from the run and the plan, never a score.
 _Avoid_: Child list, tracker
 
-**Left out**:
-A child that can still be born but the marriage plan doesn't produce, because it values the child at 0 (no score, priority 0), a higher-valued child won the husband it needed (outscored), or its fixed parent is benched. Amber and reversible through priority, preset or a pin, unlike can't be born (red, gone for good).
-_Avoid_: Lost (ambiguous between left out and can't be born), dropped
-
-**Deployment role**:
-The job a deployed unit does in the army: Lead, Battery, Staff/Rally or Dancer. A child's comes from its plan preset, which army fit may have moved; a first-gen unit's is a tag the user sets, defaulted from a curated table. A preset's deployment role is usually its scoring role (Lead → Lead, Support → Battery, none → Staff/Rally), but Staffbot scores as Lead and deploys as Staff/Rally. No child can be a Dancer. Endpoint-first planning replaces it with a position and a job per map, picked by the solve and steered by span pins; Battery survives only as a preset's name, and planning says Back.
-_Avoid_: Role (alone — ambiguous with scoring role and build template role), job, position
-
-**Composition quotas**:
-Per play context, a min–max range of deployed units for each deployment role plus a deploy cap, curated and editable. Counted over deployed first-gen units and every child the marriage plan produces, leaving out benched, missed and dead units; All uses Main story's. Out-of-range is a warning, never a block. Endpoint-first planning deletes them: sustain, rally buffs and actions hold each job's place, each map's deploy count from the chapter data is the only limit, and a wanted second healer is a span pin.
-_Avoid_: Slots, army limits
-
-**Role matrix**:
-The Plan's table of every child's standing in each deployment role, with its best role, army fit's moves and the roles and presets the user pinned. Where role and preset overrides are set.
-_Avoid_: Role grid, role picker
-
-**Robin gain**:
-How much more a child scores under its Lead role preset with Robin in the gene pool than without: the run's Robin once set, else the child's best Robin. A view of the children, never a Robin recommendation.
-_Avoid_: Robin bonus, Robin value
-
-**No-Robin view**:
-The cast in a world without Robin: Robin is no one's parent, Morgan leaves the cast and Robin isn't deployed. Standing, roles and the plan rerun under it; pairing tables don't.
-_Avoid_: Hide Robin
-
-**Army fit**:
-The last step of deriving roles, run on every re-plan: every child starts in its best role, and a composition quota moves a child only when it forces one — the child whose move costs the least standing. Staff/Rally is filled only from children whose planned pairing reaches a staff class or rally skill. Overrides and first-gen units count but never move; army fit never benches a child, and says which quota moved each child it moved. Endpoint-first planning deletes it: positions come from the solve.
-_Avoid_: Suggest roles (replaced), auto-roles, role solver
-
-**Role override**:
-A deployment role the user pins for a child; the role preset inside it stays derived, so it stays correct when Robin or the settings change.
-_Avoid_: Role lock
-
-**Preset override**:
-Any preset the user pins for a child, niche ones included; its deployment role comes with it. The only way to use a niche preset.
-_Avoid_: Custom preset, user preset
-
 **Blocked pairing**:
-A pairing that contradicts the roster: hard when it can no longer happen (a unit is dead or missed, or married to someone else), soft when it only contradicts a pin or a bench.
+A pairing that contradicts the roster: hard when it can no longer happen (a unit is dead or missed, or married to someone else).
 _Avoid_: Invalid, disabled
 
 **Seed**:
@@ -665,3 +602,24 @@ _Avoid_: Bug, error, conflict
 **Resolved disagreement**:
 A value where the sources conflicted and the research picked a winner. It is listed with the winning and losing values and their sources. It is not an assumption, because it can't be overridden.
 _Avoid_: Conflict, discrepancy
+
+### Retired (#212)
+
+The old planning machinery went with the Plan page; these words now only name what the migration note drops. Avoid them in code and copy.
+
+- **Candidate preset**: the presets a child's role was derived from.
+- **Niche preset**: any preset that wasn't a candidate; every preset is now simply a preset of the explorer.
+- **Standing**: a child's place in the cast's spread under a preset.
+- **Role preset**: a child's highest-standing candidate preset in one deployment role.
+- **Best role**: the deployment role giving a child its highest standing.
+- **Marriage plan**: one spouse per unit maximising Σ priority × score; marriages are now edits of the joint solve on the flawless chance.
+- **Plan preset**: the preset a child was scored with in the marriage plan; the explorer scores every child with your preset.
+- **Left out**: a child the marriage plan didn't produce; the children ledger now says whether the wishlist recruits it.
+- **Deployment role**: Lead, Battery, Staff/Rally or Dancer as a tag; the solve picks positions, and the greedy lineup leads with armed units.
+- **Composition quotas**: per-role ranges of deployed units; each map's deploy count is the only limit.
+- **Role matrix**: the Plan's table of every child's standing per role.
+- **Robin gain**: what Robin as a parent added to a child's score; the Robin alternatives compare Robins by flawless chance.
+- **No-Robin view**: the cast without Robin as a parent.
+- **Army fit**: moving children between deployment roles to meet the quotas.
+- **Role override**: a deployment role pinned for a child.
+- **Preset override**: a preset pinned for a child.
