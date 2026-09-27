@@ -54,7 +54,7 @@ import { sealReaches } from '../sim/class-changes';
 import { mapsToS } from '../milestones';
 import { pairThresholds, pointsOfRank } from '../sim/support-growth';
 import { latestEntry, type Run } from '../run';
-import { isMarriagePin, isRuleOut, type Plan, type PlanItem, type PlanLineup, type PlanPriority, type PlanRobin, type WishlistChild } from './plan';
+import { isMarriagePin, isRuleOut, mapSpanPin, type Plan, type PlanItem, type PlanLineup, type PlanPin, type PlanPriority, type PlanRobin, type WishlistChild } from './plan';
 import { UNAVAILABLE, genderOf, pairingsOf, placedForSupports, planFor, robinRef, type SeedContext, type SeedOptions } from './seed';
 import type { Edit, EditHints } from './step';
 import { brokenPins, lineupRules, rulesBroken } from './pins';
@@ -182,9 +182,13 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
     if (add.some(hopeless)) return undefined;
     const kept = couples.filter((c) => !drop.some((d) => couplesKey([d]) === couplesKey([c])));
     const next = [...kept, ...add];
-    return { kind: 'marriage', key: `marriage:${couplesKey(next)}`, label, make: () => rebuilt(run, ctx, options, plan, plan.robin, next) };
+    const units = [...new Set([...drop, ...add].flat())];
+    const pins = add.map((c): PlanPin => ({ kind: 'marriage', couple: c }));
+    return { kind: 'marriage', key: `marriage:${couplesKey(next)}`, label, make: () => rebuilt(run, ctx, options, plan, plan.robin, next), units, pins };
   };
   const marries = (m: RosterUnit, w: RosterUnit) => `${name(m)} marries ${name(w)}`;
+  /** The children recruited on a map (a child paralogue's). */
+  const childrenAt = (k: string) => [...new Set((maps.find((m) => m.key === k)?.children ?? []).map((c) => c.id))];
 
   // A non-starter's fixes first: its child's paralogue later, then the marriages that touch it.
   const stuck = new Set(hints.stuck);
@@ -197,6 +201,7 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
         key: `place:${placed.roadmap.order.join(',')}`,
         label: `Play ${later.map(mapLabel).join(', ') || 'the child paralogues'} later, so each couple reaches S first`,
         make: () => placed,
+        units: later.flatMap(childrenAt),
       };
     }
     for (let i = 0; i < free.length; i++)
@@ -225,7 +230,7 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
   for (const m of men) for (const w of women) if (legal(m, w)) yield* opt(marriageEdit([], [[m, w]], marries(m, w)));
 
   // Robin: another asset or flaw, where the run facts leave it open.
-  const robinEdit = (r: PlanRobin, label: string): Edit => ({ kind: 'robin', key: `robin:${r.asset}-${r.flaw}`, label, make: () => rebuilt(run, ctx, options, plan, r, couples) });
+  const robinEdit = (r: PlanRobin, label: string): Edit => ({ kind: 'robin', key: `robin:${r.asset}-${r.flaw}`, label, make: () => rebuilt(run, ctx, options, plan, r, couples), units: ['robin'] });
   if (!facts.asset) for (const asset of STATS) if (asset !== plan.robin.asset && asset !== plan.robin.flaw) yield robinEdit({ ...plan.robin, asset }, `Robin’s asset: ${STAT_NAMES[asset]}`);
   if (!facts.flaw) for (const flaw of STATS) if (flaw !== plan.robin.flaw && flaw !== plan.robin.asset) yield robinEdit({ ...plan.robin, flaw }, `Robin’s flaw: ${STAT_NAMES[flaw]}`);
 
@@ -252,6 +257,7 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
           wishlist: { ...plan.wishlist, units: plan.wishlist.units.map((w) => (w.unit === seal.unit && w.classId === seal.classId ? { ...w, classId: to } : w)) },
           roadmap: { ...plan.roadmap, seals: plan.roadmap.seals.map((x) => (x === seal ? { ...x, classId: to } : x)) },
         }),
+        units: [seal.unit],
       };
     }
   }
@@ -267,6 +273,7 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
           key: `build:${w.unit}:${slot}:${id}`,
           label: `${name(w.unit)}’s build: ${SKILLS[id]?.name ?? id} instead of ${SKILLS[now]?.name ?? now}`,
           make: () => ({ ...plan, wishlist: { ...plan.wishlist, units: plan.wishlist.units.map((x) => (x === w ? { ...x, build: x.build.map((b, i) => (i === slot ? id : b)) } : x)) } }),
+          units: [w.unit],
         };
   }
 
@@ -290,6 +297,7 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
           key: `pass:${c.child}:${side}:${id}`,
           label: `${name(parent)} passes ${SKILLS[id]?.name ?? id} to ${name(c.child)} instead of ${SKILLS[now]?.name ?? now}`,
           make: () => ({ ...plan, wishlist: { ...plan.wishlist, children: plan.wishlist.children.map((x) => (x === c ? { ...x, passes } : x)) } }),
+          units: [parent, c.child],
         };
       }
     }
@@ -306,7 +314,15 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
         const l = resolved[i]!;
         const here = new Set(fieldedIn(l));
         const on = `On ${mapLabel(key)}`;
-        const edit = (what: string, label: string, next: PlanLineup): Edit => ({ kind, key: `${kind}:${key}:${what}`, label: `${on}, ${label}`, make: () => withLineup(plan, next) });
+        // Its pins: span pins over this map holding the units it moves where the edit puts them.
+        const edit = (what: string, label: string, next: PlanLineup, units: readonly RosterUnit[], pins: readonly PlanPin[]): Edit => ({
+          kind,
+          key: `${kind}:${key}:${what}`,
+          label: `${on}, ${label}`,
+          make: () => withLineup(plan, next),
+          units,
+          pins,
+        });
         const swap = (x: RosterUnit, y: RosterUnit): PlanLineup => ({
           key,
           pairs: l.pairs.map((p) => ({ lead: p.lead === x ? y : p.lead, ...(p.back ? { back: p.back === x ? y : p.back } : {}) })),
@@ -314,7 +330,7 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
         });
         if (kind === 'lineup') {
           const bench = [...new Set([...(resolved[i - 1] ? fieldedIn(resolved[i - 1]!) : []), ...(resolved[i + 1] ? fieldedIn(resolved[i + 1]!) : [])])].filter((u) => !here.has(u));
-          for (const x of here) for (const y of bench) yield edit(`${x}>${y}`, `field ${name(y)} instead of ${name(x)}`, swap(x, y));
+          for (const x of here) for (const y of bench) yield edit(`${x}>${y}`, `field ${name(y)} instead of ${name(x)}`, swap(x, y), [x, y], [mapSpanPin(x, 'out', key)]);
           continue;
         }
         const ps = l.pairs;
@@ -323,17 +339,20 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
             const [p, q] = [ps[a]!, ps[b]!];
             if (!p.back || !q.back) continue;
             const pairs = ps.map((x, n) => (n === a ? { lead: p.lead, back: q.back } : n === b ? { lead: q.lead, back: p.back } : x));
-            yield edit(`${p.lead}+${q.back},${q.lead}+${p.back}`, `pair ${name(p.lead)} with ${name(q.back)} and ${name(q.lead)} with ${name(p.back)}`, { key, pairs, solo: l.solo });
+            yield edit(`${p.lead}+${q.back},${q.lead}+${p.back}`, `pair ${name(p.lead)} with ${name(q.back)} and ${name(q.lead)} with ${name(p.back)}`, { key, pairs, solo: l.solo }, [p.lead, p.back, q.lead, q.back], [
+              mapSpanPin(p.lead, 'lead', key, q.back),
+              mapSpanPin(q.lead, 'lead', key, p.back),
+            ]);
           }
         for (const [n, p] of ps.entries()) {
           if (!p.back) continue;
-          yield edit(`split:${p.lead}`, `${name(p.lead)} and ${name(p.back)} fight apart`, { key, pairs: ps.map((x, m) => (m === n ? { lead: p.lead } : x)), solo: [...l.solo, p.back] });
-          yield edit(`lead:${p.back}`, `${name(p.back)} leads ${name(p.lead)}`, { key, pairs: ps.map((x, m) => (m === n ? { lead: p.back!, back: p.lead } : x)), solo: l.solo });
+          yield edit(`split:${p.lead}`, `${name(p.lead)} and ${name(p.back)} fight apart`, { key, pairs: ps.map((x, m) => (m === n ? { lead: p.lead } : x)), solo: [...l.solo, p.back] }, [p.lead, p.back], [mapSpanPin(p.back, 'solo', key)]);
+          yield edit(`lead:${p.back}`, `${name(p.back)} leads ${name(p.lead)}`, { key, pairs: ps.map((x, m) => (m === n ? { lead: p.back!, back: p.lead } : x)), solo: l.solo }, [p.lead, p.back], [mapSpanPin(p.back, 'lead', key, p.lead)]);
         }
         for (let a = 0; a < l.solo.length; a++)
           for (let b = a + 1; b < l.solo.length; b++) {
             const [x, y] = [l.solo[a]!, l.solo[b]!];
-            yield edit(`pair:${x}+${y}`, `${name(x)} and ${name(y)} pair up`, { key, pairs: [...ps, { lead: x, back: y }], solo: l.solo.filter((u) => u !== x && u !== y) });
+            yield edit(`pair:${x}+${y}`, `${name(x)} and ${name(y)} pair up`, { key, pairs: [...ps, { lead: x, back: y }], solo: l.solo.filter((u) => u !== x && u !== y) }, [x, y], [mapSpanPin(x, 'lead', key, y)]);
           }
       }
   }
@@ -343,13 +362,13 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
   const spans = plan.roadmap.priorities ?? [];
   const withSpans = (next: readonly PlanPriority[]): Plan => ({ ...plan, roadmap: { ...plan.roadmap, priorities: next } });
   const spanText = (p: PlanPriority) => (p.from === p.to ? `on ${mapLabel(p.from)}` : `from ${mapLabel(p.from)} to ${mapLabel(p.to)}`);
-  const priorityEdit = (what: string, label: string, next: readonly PlanPriority[]): Edit => ({ kind: 'priority', key: `priority:${what}`, label, make: () => withSpans(next) });
+  const priorityEdit = (what: string, label: string, next: readonly PlanPriority[], unit: RosterUnit): Edit => ({ kind: 'priority', key: `priority:${what}`, label, make: () => withSpans(next), units: [unit] });
   for (const p of spans) {
     const tag = `${p.unit}:${p.from}-${p.to}`;
     const rest = spans.filter((x) => x !== p);
-    yield priorityEdit(`${tag}:normal`, `${name(p.unit)} at normal EXP priority ${spanText(p)}`, rest);
+    yield priorityEdit(`${tag}:normal`, `${name(p.unit)} at normal EXP priority ${spanText(p)}`, rest, p.unit);
     const other = p.priority === 'high' ? 'low' : 'high';
-    yield priorityEdit(`${tag}:${other}`, `${name(p.unit)} at ${other} EXP priority ${spanText(p)}`, spans.map((x) => (x === p ? { ...x, priority: other } : x)));
+    yield priorityEdit(`${tag}:${other}`, `${name(p.unit)} at ${other} EXP priority ${spanText(p)}`, spans.map((x) => (x === p ? { ...x, priority: other } : x)), p.unit);
   }
   const quarters = [...new Set([Math.floor(keys.length / 4), Math.floor(keys.length / 2), Math.floor((3 * keys.length) / 4)])].filter((i) => i > 0 && i < keys.length - 1);
   const raisable = [...new Set([...plan.wishlist.units.map((w) => w.unit), ...plan.wishlist.children.flatMap((c) => c.parents.filter((u): u is RosterUnit => u !== 'maiden'))])];
@@ -359,7 +378,7 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
     for (const to of quarters) {
       if (to < at) continue;
       const p: PlanPriority = { unit: u, priority: 'high', from: keys[at]!, to: keys[to]! };
-      yield priorityEdit(`${u}:${p.from}-${p.to}:high`, `${name(u)} at high EXP priority ${spanText(p)}`, [...spans, p]);
+      yield priorityEdit(`${u}:${p.from}-${p.to}:high`, `${name(u)} at high EXP priority ${spanText(p)}`, [...spans, p], u);
     }
   }
 
@@ -377,6 +396,7 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
         key: `place:${next.join(',')}`,
         label: `Play ${mapLabel(k)} ${j < i ? 'before' : 'after'} ${mapLabel(keys[j]!)}`,
         make: () => ({ ...plan, roadmap: { ...plan.roadmap, order: next } }),
+        units: childrenAt(k),
       };
     }
   }
@@ -393,6 +413,7 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
         key: `seal:${seal.unit}:${seal.classId}:${key}`,
         label: `${name(seal.unit)} reaches ${cls(seal.classId, g)} by ${mapLabel(key)}`,
         make: () => ({ ...plan, roadmap: { ...plan.roadmap, seals: plan.roadmap.seals.map((x) => (x === seal ? { ...x, key } : x)) } }),
+        units: [seal.unit],
       };
     }
   }
@@ -414,7 +435,7 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
   /** The map index a source arrives after (-1: held now). */
   const arrivesAfter = (source: string) => (source.startsWith('held:') ? -1 : (keyAt.get(source.slice(0, source.indexOf(':'))) ?? -1));
   const withItems = (items: readonly PlanItem[]): Plan => ({ ...plan, roadmap: { ...plan.roadmap, items } });
-  const itemEdit = (what: string, label: string, items: readonly PlanItem[]): Edit => ({ kind: 'item', key: `item:${what}`, label, make: () => withItems(items) });
+  const itemEdit = (what: string, label: string, items: readonly PlanItem[], units: readonly RosterUnit[]): Edit => ({ kind: 'item', key: `item:${what}`, label, make: () => withItems(items), units });
   const replaced = (p: PlanItem, next: PlanItem) => plan.roadmap.items.map((x) => (x === p ? next : x));
   for (const p of plan.roadmap.items) {
     if (pinnedItems.has(p.item)) continue;
@@ -424,14 +445,14 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
     const tag = `${p.source}@${p.key}>${p.unit}`;
     if (kind === 'booster' || kind === 'tonic') {
       for (const u of wishlist)
-        if (u !== p.unit && inArmyBy(u, at)) yield itemEdit(`${tag}:unit:${u}`, `${name(u)} takes ${p.item} on ${mapLabel(p.key)} instead of ${name(p.unit)}`, replaced(p, { ...p, unit: u }));
+        if (u !== p.unit && inArmyBy(u, at)) yield itemEdit(`${tag}:unit:${u}`, `${name(u)} takes ${p.item} on ${mapLabel(p.key)} instead of ${name(p.unit)}`, replaced(p, { ...p, unit: u }), [p.unit, u]);
       // A booster held from the start or found earlier can move; a tonic stays on its map's armory (a held one can move).
       if (kind === 'tonic' && p.source === 'buy') continue;
       for (const dir of [-1, 1]) {
         const j = shifted(at, dir);
         if (j === undefined || !inArmyBy(p.unit, j) || j <= arrivesAfter(p.source)) continue;
         const k = keys[j]!;
-        yield itemEdit(`${tag}:map:${k}`, `${name(p.unit)} takes ${p.item} on ${mapLabel(k)} instead of ${mapLabel(p.key)}`, replaced(p, { ...p, key: k }));
+        yield itemEdit(`${tag}:map:${k}`, `${name(p.unit)} takes ${p.item} on ${mapLabel(k)} instead of ${mapLabel(p.key)}`, replaced(p, { ...p, key: k }), [p.unit]);
       }
       continue;
     }
@@ -441,7 +462,7 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
     for (const u of wishlist) {
       const c = classOf(u);
       if (u === p.unit || !c || !inArmyBy(u, at) || !classWeaponKinds(className(c, entering.get(u)?.gender ?? gender)).has(item.kind)) continue;
-      yield itemEdit(`${tag}:carrier:${u}`, `${name(u)} carries ${p.item} from ${mapLabel(p.key)} instead of ${name(p.unit)}`, replaced(p, { ...p, unit: u }));
+      yield itemEdit(`${tag}:carrier:${u}`, `${name(u)} carries ${p.item} from ${mapLabel(p.key)} instead of ${name(p.unit)}`, replaced(p, { ...p, unit: u }), [p.unit, u]);
     }
   }
 

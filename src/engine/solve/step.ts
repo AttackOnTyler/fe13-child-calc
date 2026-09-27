@@ -84,6 +84,26 @@ export type Edit = {
   readonly label: string;
   /** The plan with the edit; built only when the search tries it. */
   readonly make: () => Plan;
+  /** The units it touches (the Wishlist tab lists a unit's edits by them, #203). */
+  readonly units?: readonly RosterUnit[];
+  /** The pins that make it the player's (#203): a marriage's, a lineup's span pins; none where no pin kind holds it. */
+  readonly pins?: readonly PlanPin[];
+};
+
+/**
+ * An edit that touches one unit, as the Wishlist tab lists it (#203): one of the search's single edits, or keeping the
+ * unit in or out of the wishlist (a keep pin, #200). `pins` make it the player's (none where no pin kind holds it: it
+ * can only come as the search's proposal); `play` are the pins the edited plan plays under, for `editCost` (a keep
+ * edit's own).
+ */
+export type UnitEdit = {
+  readonly kind: EditKind | 'keep';
+  readonly key: string;
+  readonly label: string;
+  readonly pins: readonly PlanPin[];
+  readonly play: readonly PlanPin[];
+  /** The plan with the edit; built only when it's costed. */
+  readonly make: () => Plan;
 };
 
 /**
@@ -335,6 +355,8 @@ export type EditCostInput = {
   readonly runs?: number;
   readonly cap?: number;
   readonly roleOf?: (u: RosterUnit) => DeploymentRole;
+  /** Pins the edited plan plays under besides the run's: a keep-in or keep-out edit's own (#203, `UnitEdit.play`). */
+  readonly pins?: readonly PlanPin[];
 };
 
 /**

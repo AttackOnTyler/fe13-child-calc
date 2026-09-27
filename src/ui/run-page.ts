@@ -43,7 +43,12 @@ export type RunContext = {
   readonly roleOf?: (u: RosterUnit) => DeploymentRole;
   /** The marriages the player pinned (#198) and the run's item pins (#193): the seed keeps them, so the flawless chance's plan does. */
   readonly pins?: () => readonly PlanPin[];
+  /** Called when the solve's progress for the run changes (#203: the Wishlist tab and its count follow it). */
+  readonly onProgress?: () => void;
 };
+
+/** What the headline reads: the Wishlist tab draws it too (#203), so opening it first starts the solve. */
+export type HeadlineContext = Pick<RunContext, 'engine' | 'assumptions' | 'run' | 'setRun' | 'roleOf' | 'pins' | 'onProgress'>;
 
 const RECORD_STEPS = ['Deployed units', 'Recruits', 'Deaths and marriages', 'Convoy and gold', 'Shopping', 'Side goals and renown', 'Items used'] as const;
 
@@ -426,7 +431,7 @@ export function itemPlanReadout(engine: Engine, run: Run, plan: Plan, chance: Fl
 }
 
 /** The item plan section (#193): its rows with their pin selects, and the tonics to buy per map. */
-function itemPlanSection(ctx: RunContext, r: ItemPlanReadout | undefined, plan: Plan | undefined): HTMLElement {
+function itemPlanSection(ctx: HeadlineContext, r: ItemPlanReadout | undefined, plan: Plan | undefined): HTMLElement {
   const gender = ctx.run.roster.run.gender;
   const choices = plan?.wishlist.units.map((u) => u.unit) ?? [];
   const pin = (row: ItemRowView, unit: string) => {
@@ -634,13 +639,26 @@ let solvedOnce = false;
 let solving: Run | undefined;
 /** The section on the page now, for the run it shows: updates land on it, whichever render drew it. */
 let live: { run: Run; el: HTMLElement } | undefined;
+/** The solve's latest progress, by run (#203: the Wishlist tab reads the same best plan and readings). */
+const PROGRESS = new WeakMap<Run, SolveProgress>();
+
+/**
+ * Where the solve stands for a run (#203): the plan the page shows (the search's best so far, or the seed's where
+ * there's no worker), its progress, and whether the worker is still at it (the search, the pin cost, the readings).
+ * Undefined until the headline has been drawn for the run.
+ */
+export function solveState(run: Run): { readonly plan: Plan; readonly progress: SolveProgress | undefined; readonly working: boolean } | undefined {
+  const progress = PROGRESS.get(run);
+  const plan = progress?.best ?? READOUTS.get(run)?.plan;
+  return plan && { plan, progress, working: solving === run };
+}
 
 /**
  * The flawless chance (#186) under the map order. The solve's Web Worker (#199) works it out off the page: the
  * headline updates as it improves the best plan, with what it found listed below (a full solve the first time, about
  * 30 s; a re-solve after an edit or a recorded map, about 5 s). Without a worker the page works out the seed plan's. The item plan (#193) reads the same plan and runs.
  */
-function flawlessSection(ctx: RunContext): HTMLElement {
+export function flawlessSection(ctx: HeadlineContext): HTMLElement {
   const draw = (r: FlawlessReadout | undefined) =>
     h(
       'details',
@@ -667,6 +685,7 @@ function flawlessSection(ctx: RunContext): HTMLElement {
   live = here;
   const show = (r: FlawlessReadout) => {
     READOUTS.set(run, r);
+    ctx.onProgress?.();
     if (live !== here || !here.el.isConnected) return;
     const next = draw(r);
     // Keep the panel open across updates.
@@ -690,8 +709,9 @@ function flawlessSection(ctx: RunContext): HTMLElement {
         }
         // The pin cost (#200) and then the readings (#197) come once the search is done, while the worker is idle.
         if (reply.kind === 'pin-cost' || reply.kind === 'readings') {
-          if (!last) return;
+          if (!last) return void ctx.onProgress?.();
           last = reply.kind === 'pin-cost' ? { ...last, pinCost: reply.cost } : { ...last, ...(reply.readings ? { readings: reply.readings } : {}) };
+          PROGRESS.set(run, last);
           show(solvedReadout(ctx.engine, run, last, pins, ctx.roleOf));
           return;
         }
@@ -700,6 +720,7 @@ function flawlessSection(ctx: RunContext): HTMLElement {
         chance = s.chance ?? chance;
         if (!chance) return;
         last = { ...(last?.readings && last.best === s.best ? { readings: last.readings } : {}), best: s.best, chance, proposals: s.proposals, closeCalls: s.closeCalls, pruned: s.pruned, done: reply.searched, converged: s.converged };
+        PROGRESS.set(run, last);
         show(solvedReadout(ctx.engine, run, last, pins, ctx.roleOf));
       },
     );

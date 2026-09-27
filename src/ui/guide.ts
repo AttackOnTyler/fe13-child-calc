@@ -16,6 +16,7 @@ export const GUIDE_TARGETS = [
   'bench',
   'spouse-picker',
   'married',
+  // Wishlist
   'children-ledger',
   // Plan
   'marriage-table',

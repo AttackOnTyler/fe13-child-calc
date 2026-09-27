@@ -526,3 +526,26 @@ button.gd-deeper-head:hover { background: var(--hover); }
 /* The next map's no-death chance (#181). */
 .prep-page .no-death { margin: 8px 0 12px; }
 .prep-page .no-death p { margin: 2px 0 0; }
+
+/* The Wishlist tab (#203): the endpoint army as Lead / Back rows, a unit's edits under its row. */
+.wishlist { padding: 0 12px 16px; }
+.wl-sheet { width: 100%; table-layout: fixed; }
+.wl-sheet td { vertical-align: top; white-space: normal; }
+.wl-unit { padding: 4px 6px; border-radius: 4px; }
+.wl-unit.sel, .wl-res.sel { background: var(--hover); box-shadow: inset 2px 0 0 var(--accent); }
+.wl-unit .linkish, .wl-res .linkish { background: none; border: 0; padding: 0; color: inherit; cursor: pointer; font: inherit; text-align: left; }
+.wl-unit .linkish:hover, .wl-res .linkish:hover { color: var(--accent); }
+.wl-worth { margin-left: 6px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.wl-reading { margin-left: 6px; cursor: help; }
+.wl-reading.on-track { color: var(--pos); }
+.wl-reading.at-risk { color: var(--warn); }
+.wl-reading.behind { color: var(--neg); }
+.wl-build { display: flex; flex-wrap: wrap; gap: 3px; margin: 2px 0; }
+.wl-menu { padding: 6px 8px; border-left: 2px solid var(--accent); background: var(--mods); }
+.wl-menu details { margin: 4px 0; }
+.wl-edit { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; padding: 1px 0; }
+.wl-edit.on { color: var(--accent); }
+.wl-edit .cost { font-variant-numeric: tabular-nums; }
+.wl-edit .cost.costing { color: var(--muted); font-style: italic; }
+.wl-edit .cost.provisional { color: var(--warn); }
+.rail-item .num.warn { color: var(--warn); }

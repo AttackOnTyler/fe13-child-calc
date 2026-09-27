@@ -51,6 +51,7 @@ import {
   type PageSubject,
   type Run,
   type RosterUnit,
+  type DeploymentRole,
   type Difficulty,
   type Pairing,
   type PageUnitId,
@@ -102,7 +103,8 @@ import {
 import { validationPanel, withOverride } from './validation';
 import { rosterPage } from './roster-page';
 import { unitsView, type UnitsContext } from './unit-page';
-import { runView } from './run-page';
+import { runView, solveState } from './run-page';
+import { notOnTrack, wishlistPage } from './wishlist-page';
 import { prepPage } from './prep-page';
 import { CHILD_UNITS } from '../game-data/children';
 import { unitLink, type OpenUnit } from './unit-links';
@@ -156,7 +158,7 @@ let selected: ChildId | 'all' = 'lucina';
 /** The last child the visitor opened from the left rail, which the guide's table jumps show again. */
 let childOpened: ChildId | undefined;
 /** A new visitor starts on Roster, under the welcome box: setup comes first. */
-type View = 'table' | 'validation' | 'roster' | 'plan' | 'units' | 'run';
+type View = 'table' | 'validation' | 'roster' | 'plan' | 'units' | 'run' | 'wishlist';
 let view: View = !selfTest.passed ? 'validation' : welcomeOpen ? 'roster' : 'table';
 /** The Units view's open unit page (#101); undefined shows the list. */
 let unitOpen: PageUnitId | 'robin' | ChildId | undefined;
@@ -178,6 +180,31 @@ const prepKey = (r: Run, map: string): string => engine.mapOrder(r).steps.find((
 const droppedHere = (r: Run, map: string): ReadonlySet<RosterUnit> => {
   const key = prepKey(r, map);
   return new Set((r.pins ?? []).flatMap((p) => (p.kind === 'span' && p.position === 'out' && p.from === key && p.to === key ? [p.unit] : [])));
+};
+/** The Wishlist tab's unit whose edits are open (#203; view state). */
+let wishlistOpen: RosterUnit | undefined;
+/** The count of units not on track the Wishlist tab's rail button last showed (#203). */
+let wishlistCount = 0;
+/** The count of units not on track on the solve's best plan so far (#203): the Wishlist tab's rail button. */
+const wishlistNotOnTrack = (): number => {
+  const s = solveState(run);
+  return s ? notOnTrack(s.plan, s.progress?.readings) : 0;
+};
+/**
+ * The solve's progress for the run changed (#203): the Wishlist tab follows it, and the rail's count when it moves.
+ * Deferred a tick, as a reply may land while the headline is being drawn.
+ */
+const solveProgressed = (): void => {
+  setTimeout(() => {
+    const count = wishlistNotOnTrack();
+    const parts: Part[] = [...(count !== wishlistCount ? (['rail'] as const) : []), ...(view === 'wishlist' ? (['main'] as const) : [])];
+    if (parts.length) renderParts(parts);
+  }, 0);
+};
+/** The preparation page's roles, worked out only when the flawless chance needs them (the Run view and Wishlist tab). */
+const runRoleOf = (): ((u: RosterUnit) => DeploymentRole) => {
+  let roles: ReturnType<typeof engine.roles> | undefined;
+  return (u: RosterUnit) => deployRoleOf(u, roster, (roles ??= engine.roles(roster, planSettings())));
 };
 /** The Run view's open map (#109); undefined shows the Maps list. */
 let mapOpen: string | undefined;
@@ -425,7 +452,7 @@ function openUnit(unit: PageUnitId | 'robin' | ChildId, preview?: RobinRef): voi
   renderParts(['rail', 'main', 'panel']);
 }
 
-const VIEW_LABELS: Readonly<Record<View, string>> = { table: 'Pairings', validation: 'Validation', roster: LABELS.roster, plan: LABELS.plan, units: 'Units', run: 'Run' };
+const VIEW_LABELS: Readonly<Record<View, string>> = { table: 'Pairings', validation: 'Validation', roster: LABELS.roster, plan: LABELS.plan, units: 'Units', run: 'Run', wishlist: 'Wishlist' };
 
 const unitsContext = (): UnitsContext => ({
   engine,
@@ -488,7 +515,7 @@ const unitsContext = (): UnitsContext => ({
   },
 });
 
-/** The priority and plan-preset controls: the Plan sidebar and the Roster page's ledger edit the same values. */
+/** The priority and plan-preset controls: the Plan sidebar and the Wishlist tab's children ledger edit the same values. */
 const planControls = (): ChildPlanControls => ({
   engine,
   roster,
@@ -678,6 +705,7 @@ function rail(): HTMLElement[] {
       h('b', { class: 'num' }, String(score ?? '—')),
     );
   const married = Object.values(roster.spouses).filter((s) => s?.bond === 'married').length / 2;
+  wishlistCount = wishlistNotOnTrack();
   return [
     h(
       'button',
@@ -694,6 +722,19 @@ function rail(): HTMLElement[] {
         },
       },
       h('span', {}, 'Run'),
+    ),
+    h(
+      'button',
+      {
+        class: `rail-item roster-item${view === 'wishlist' ? ' on' : ''}`,
+        title: 'The endpoint army the plan works towards: each unit’s class, build, worth and reading, its edits and their costs, the reserves and the children ledger',
+        onclick: () => {
+          view = 'wishlist';
+          render();
+        },
+      },
+      h('span', {}, 'Wishlist'),
+      h('b', { class: `num${wishlistCount ? ' warn' : ' muted'}`, title: 'Units not on track' }, wishlistCount ? String(wishlistCount) : ''),
     ),
     h(
       'button',
@@ -2411,11 +2452,30 @@ function renderParts(parts: readonly Part[]): void {
       ...(view === 'validation'
         ? [validationPanel({ engine, assumptions, selfTest, setOverride, resetAll: () => applyOverrides({}), render })]
         : view === 'roster'
-          ? rosterPage({ engine, roster, setRoster, setDeployment, clearAll: clearRosterState, plan: planControls() })
+          ? rosterPage({ engine, roster, setRoster, setDeployment, clearAll: clearRosterState })
           : view === 'plan'
           ? planPage(planContext())
           : view === 'units'
           ? unitsView(unitsContext())
+          : view === 'wishlist'
+          ? wishlistPage({
+              engine,
+              assumptions,
+              run,
+              setRun,
+              roleOf: runRoleOf(),
+              pins: () => [...marriagePins(roster), ...(run.pins ?? [])],
+              onProgress: solveProgressed,
+              open: wishlistOpen,
+              setOpen: (u) => {
+                wishlistOpen = u;
+                renderParts(['main']);
+              },
+              refresh: () => {
+                if (view === 'wishlist') renderParts(['main']);
+              },
+              ledger: planControls(),
+            })
           : view === 'run' && preparing
           ? prepPage({
               engine,
@@ -2472,13 +2532,10 @@ function renderParts(parts: readonly Part[]): void {
                 prepBacks = {};
                 renderParts(['main']);
               },
-              // The preparation page's roles, worked out only when the flawless chance needs them.
-              roleOf: (() => {
-                let roles: ReturnType<typeof engine.roles> | undefined;
-                return (u: RosterUnit) => deployRoleOf(u, roster, (roles ??= engine.roles(roster, planSettings())));
-              })(),
+              roleOf: runRoleOf(),
               // The marriages pinned on the Plan page and the run's item pins: the seed plan keeps them (#198, #193).
               pins: () => [...marriagePins(roster), ...(run.pins ?? [])],
+              onProgress: solveProgressed,
               recording,
               setRecording: (r) => {
                 recording = r;
