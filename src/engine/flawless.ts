@@ -383,6 +383,8 @@ export function flawlessInput(
   // Renown rewards reached and not yet claimed are held from the start (#191).
   const waiting = rewardsValue(renown.waiting);
   const gold = (snap.gold ?? (fresh ? STARTING_GOLD : 0)) + waiting.gold;
+  const decided = new Map(plan?.roadmap.lineups.map((l) => [l.key, l]) ?? []);
+  const lineups = decided.size ? { lineups: maps.map((m) => decided.get(m.key)) } : {};
   return {
     input: {
       army,
@@ -394,6 +396,7 @@ export function flawlessInput(
       cleared: recordedMaps,
       married: couplesOf(recorded),
       couples: couplesOf(spouseOf).filter(([a]) => !recorded.has(a)),
+      ...lineups,
     },
     notSimulated,
     unknownHistory,
