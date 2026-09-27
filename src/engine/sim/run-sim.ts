@@ -11,9 +11,10 @@
  * it, so runs differ only by their rolls, as edits compared on the same runs need.
  *
  * Cost: a run stops at the map where it has lost a unit (its chance of nobody lost falls below `LOST`), and the plan's
- * lineups are worked out only as far as some run gets, so a plan that fails early is cheap. A run that plays every map
- * of the Full route costs about 0.3 s, and the plan's projection about 0.8 s (the anytime solve's worker, #199, takes
- * that off the page).
+ * lineups are worked out only as far as some run gets, so a plan that fails early is cheap, and a play stops once its
+ * run is lost (`stopBelow`). A run that plays every map of the Main story costs about 0.2–0.3 s, and the plan's
+ * projection about 0.4–0.6 s, shared by every seed when no map draws Lunatic+ skills (the anytime solve's worker, #199,
+ * takes that off the page).
  *
  * Each run's state is a `RunState`, walked map by map: `beforeMap` (joins, children read at entry, promotions), the
  * play, then `afterMap` (EXP and level-ups, later recruits and children). Children (#187): a child paralogue is entered

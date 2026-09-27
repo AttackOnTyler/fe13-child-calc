@@ -121,9 +121,9 @@ export type FlawlessChance = RunSim & {
 };
 
 /**
- * The default run count. Today's plays lose a unit early on most routes, so the Full route's headline takes 0.05–0.4 s;
- * a plan whose runs all reach the endpoint would take several seconds (about 0.3 s a run), which the anytime solve's
- * Web Worker (#199) takes off the page. The ± says how far 24 runs can be trusted.
+ * The default run count. A plan whose runs reach the endpoint takes about 0.2–0.3 s a run on the Main story (the
+ * headline, seed and projection included, 7–10 s), which the anytime solve's Web Worker (#199) takes off the page. The
+ * ± says how far 24 runs can be trusted.
  */
 export const FLAWLESS_RUNS = 24;
 export const FLAWLESS_SEED = 1;
