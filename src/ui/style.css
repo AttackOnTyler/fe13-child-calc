@@ -522,3 +522,7 @@ button.gd-deeper-head:hover { background: var(--hover); }
 /* Next map and Record results (#118) */
 .next-map .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .next-map .next-first b { font-size: 1.05em; }
+
+/* The next map's no-death chance (#181). */
+.prep-page .no-death { margin: 8px 0 12px; }
+.prep-page .no-death p { margin: 2px 0 0; }

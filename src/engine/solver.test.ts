@@ -51,6 +51,23 @@ describe('the map solver’s combat math', () => {
     expect(plain.dualStrikeRate).toBe(Math.floor((12 + 15) / 4 + 50));
   });
 
+  it('gives Dual Guard from both units’ Def or Res by support, and the back’s own dual strike hit and damage (#181)', () => {
+    const back: Fighter = { name: 'Stahl', className: 'Cavalier', stats: stats(30, 20, 0, 15, 12, 6, 15, 2), skills: [], weapon: weapon('Steel Sword') };
+    const axe: Foe = { name: 'Fighter', className: 'Fighter', count: 1, stats: stats(40, 15, 0, 10, 8, 2, 7, 1), weapon: itemByName('Iron Axe'), skills: [], boss: false };
+    const tome: Foe = { ...axe, name: 'Mage', className: 'Mage', stats: { ...axe.stats, mag: 15 }, weapon: itemByName('Fire') };
+    // SF Dual System: (both Def or Res) / 4 + 0/2/5/7/10 by support, +10 with Dual Guard+.
+    expect(matchup(frederick, back, 'A', axe).dualGuardRate).toBe(Math.floor((14 + 15) / 4 + 7));
+    expect(matchup(frederick, back, null, tome).dualGuardRate).toBe(Math.floor((3 + 2) / 4));
+    expect(matchup(frederick, { ...back, skills: ['Dual Guard+'] }, 'S', axe).dualGuardRate).toBe(Math.floor((14 + 15) / 4 + 10 + 10));
+    expect(matchup(frederick, undefined, null, axe).dualGuardRate).toBe(0);
+    const m = matchup(frederick, back, 'A', axe);
+    expect(m.backDamage).toBe(20 + itemByName('Steel Sword')!.mt! - 7);
+    expect(m.backHit).toBe(Math.min(100, Math.floor(itemByName('Steel Sword')!.hit! + (15 * 3 + 6) / 2 + 5 - (8 * 3 + 2) / 2)));
+    expect(m.backCrit).toBe(Math.max(0, Math.floor((itemByName('Steel Sword')!.crit ?? 0) + 15 / 2 - 2)));
+    // Frederick doesn't double; the Fighter strikes once a round.
+    expect(m.foeStrikes).toBe(1);
+  });
+
   it('adds the back’s pair-up bonus by class and support (SF’s Grandmaster example)', () => {
     const avatar: Fighter = { name: 'Robin', className: 'Grandmaster', stats: stats(50, 25, 31, 27, 22, 33, 15, 19), skills: [], weapon: undefined };
     expect(pairUpBonus(avatar, 'A')).toEqual({ str: 6, mag: 7, skl: 6, spd: 6, lck: 3, def: 1, res: 1 });

@@ -380,3 +380,65 @@ export function resolveAssumptions(overrides: Overrides): Assumptions {
 /** Whether a resolved value equals the default (values are plain JSON). */
 export const isDefaultValue = (id: AssumptionId, value: unknown) =>
   JSON.stringify(value) === JSON.stringify(ASSUMPTION_REGISTRY[id].default);
+
+/**
+ * The stated blind spots (#181; spec #175, The Why panel): what the simulation leaves out or simplifies on purpose,
+ * where no source can settle it and no setting changes it. Each carries its **lean**, the way it can push the numbers
+ * it touches: may read high, may read low, or either way. Later tickets add theirs (the assumed army spread, stats
+ * treated as independent, Rally reaching every pair, no taxiing or ferrying, Attack Stance adjacency from the spread,
+ * no kills by NPC allies, Ch 3's door keys, simulation error) and retire placeholders they replace.
+ */
+export type BlindSpotId = 'one-worst-attacker' | 'equal-share-of-actions' | 'full-hp-each-turn' | 'likely-result' | 'bosses-hold';
+
+export type BlindSpot = {
+  readonly id: BlindSpotId;
+  readonly label: string;
+  readonly why: string;
+  readonly lean: 'high' | 'low' | 'either';
+  /** What it touches: the map simulation's chances (each map's no-death chance and everything built on it). */
+  readonly touches: readonly 'map'[];
+};
+
+export const BLIND_SPOTS: readonly BlindSpot[] = [
+  {
+    id: 'one-worst-attacker',
+    label: 'One worst attacker per pair',
+    why:
+      'With no map positions, each exposed pair takes one enemy-phase attack, from the foe left that is worst for it, each foe attacking once; ' +
+      'units with no weapon (healers, dancers) stay out of reach. Two or more attackers can reach one pair in play.',
+    lean: 'high',
+    touches: ['map'],
+  },
+  {
+    id: 'equal-share-of-actions',
+    label: 'An equal share of actions per turn',
+    why:
+      'Each pair or unit alone gets one action a turn, whoever it is: nothing says who can reach which foe, so a fast flier and an armoured ' +
+      'unit act alike, and every foe is in reach of every action.',
+    lean: 'either',
+    touches: ['map'],
+  },
+  {
+    id: 'full-hp-each-turn',
+    label: 'Every unit starts each turn at full HP',
+    why: 'Healing isn’t spent from actions yet (staff, Vulnerary, Rescue come with sustain), so damage taken is healed by the next turn for free.',
+    lean: 'high',
+    touches: ['map'],
+  },
+  {
+    id: 'likely-result',
+    label: 'Each fight plays out at its likely result',
+    why:
+      'The play goes on from each exchange’s likely result given nobody died (the lead’s expected HP; the foe falls when that’s more likely ' +
+      'than not), while the chance of dying in it is exact. A foe left standing by bad luck can attack again.',
+    lean: 'either',
+    touches: ['map'],
+  },
+  {
+    id: 'bosses-hold',
+    label: 'Bosses hold their ground',
+    why: 'A boss fights only when attacked, as most do on their throne or gate; one that moves out to attack isn’t counted on enemy phase.',
+    lean: 'high',
+    touches: ['map'],
+  },
+];

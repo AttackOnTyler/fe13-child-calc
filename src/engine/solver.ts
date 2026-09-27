@@ -10,7 +10,8 @@
  * - Doubling: Spd − the other's Spd ≥ 5. Brave weapons strike twice per attack.
  * - Pair-up: the back adds its stat bonus (+1/+2/+3 for each stat at 10/20/30 and up) and its class bonus, the class
  *   bonus raised by 1 (C, B) or 2 (A, S) support. Dual strike rate = (both Skl) / 4 + 20/30/40/50/60 by support (+10
- *   with Dual Strike+). Dual support adds Hit, Avoid, Crit and crit avoid by support rank.
+ *   with Dual Strike+). Dual guard rate = (both Def, or Res against magic) / 4 + 0/2/5/7/10 by support (+10 with
+ *   Dual Guard+). Dual support adds Hit, Avoid, Crit and crit avoid by support rank.
  * - Weapon triangle (sword > axe > lance > sword): ±5 Hit at the advantaged side's E/D rank. Weapon ranks aren't
  *   recorded, so no rank bonus is counted and the triangle is taken at its smallest, a cautious reading.
  * - Plain Pavise/Aegis halve the lead's hits but not dual strikes; Pavise+/Aegis+ (Lunatic+) halve both (research
@@ -57,6 +58,14 @@ export type Matchup = {
   /** One round kills if every dual strike lands. */
   readonly oneRoundsWithDualStrikes: boolean;
   readonly dualStrikeRate: number;
+  /** A dual strike: the back's damage, hit and crit against the foe (its own stats and weapon; 0 with no back or weapon). */
+  readonly backDamage: number;
+  readonly backHit: number;
+  readonly backCrit: number;
+  /** The chance the back nullifies one of the foe's strikes (SF Dual System); 0 with no back. */
+  readonly dualGuardRate: number;
+  /** How many times the foe strikes in a round (brave, doubling); 0 with no weapon. */
+  readonly foeStrikes: number;
   /** The biggest single hit the lead can take (no crit), and the most it takes in a round. */
   readonly worstHit: number;
   readonly worstRound: number;
@@ -147,6 +156,8 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
   // Dual strikes: plain Pavise/Aegis don't touch them, the + versions (and Dragonskin) halve them.
   let backDamage = 0;
   let dualStrikeRate = 0;
+  let backHit = 0;
+  let backCrit = 0;
   if (back) {
     const bw = back.weapon?.item;
     const bmagic = !!bw && (bw.kind === 'tome' || bw.magic === true);
@@ -160,6 +171,11 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
     } else if (shield) notes.push(`${aegisSide(w, magic) ? 'Aegis' : 'Pavise'} may halve the lead’s hits; dual strikes get past it`);
     const skl = lead.stats.skl + back.stats.skl;
     dualStrikeRate = clamp(skl / 4 + { none: 20, C: 30, B: 40, A: 50, S: 60 }[support ?? 'none'] + ([...lead.skills, ...back.skills].includes('Dual Strike+') ? 10 : 0));
+    // The dual strike itself uses the back's own stats and weapon; a back with no weapon can't strike.
+    if (bw) {
+      backHit = clamp(bws.hit + (back.stats.skl * 3 + back.stats.lck) / 2 + 5 * triangle(bw, foe.weapon) - (foe.stats.spd * 3 + foe.stats.lck) / 2);
+      backCrit = clamp(bws.crit + back.stats.skl / 2 - foe.stats.lck);
+    } else backDamage = 0;
   }
   const total = damage * hits;
   const oneRounds = total >= foe.stats.hp;
@@ -180,6 +196,11 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
   const counter = skills.has('Counter') && melee && !oneRounds ? damage * Math.min(hits, Math.max(1, Math.ceil(foe.stats.hp / Math.max(1, damage)) - 1)) : 0;
   if (counter) notes.push(`Counter returns ${counter}`);
   const worstRound = worstHit * foeHits + counter;
+  // Dual Guard (SF Dual System): both units' Def (Res against magic) / 4, + 0/2/5/7/10 by support, +10 with Dual Guard+.
+  const guardStat = fmagic ? 'res' : 'def';
+  const dualGuardRate = back
+    ? clamp((lead.stats[guardStat] + back.stats[guardStat]) / 4 + { none: 0, C: 2, B: 5, A: 7, S: 10 }[support ?? 'none'] + ([...lead.skills, ...back.skills].includes('Dual Guard+') ? 10 : 0))
+    : 0;
   const survives = worstRound < lead.stats.hp;
   const [sHit, sAvo, sCrit, sCritAvo] = back ? dualSupport(SUPPORT_RANK[support ?? 'none']) : [0, 0, 0, 0];
   const hit = clamp(ws.hit + (st('skl') * 3 + st('lck')) / 2 + sHit + 5 * tri - (foe.stats.spd * 3 + foe.stats.lck) / 2);
@@ -189,7 +210,7 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
   if (skills.has('Hawkeye')) notes.push('Hawkeye: the foe always hits');
   if (luna) notes.push('Luna+: the foe’s hits ignore half your defence');
   if (skills.has('Vantage+')) notes.push('Vantage+: on its turn the foe strikes first');
-  return { foe, damage, hits, doubles, doubled, oneRounds, oneRoundsWithDualStrikes, dualStrikeRate, worstHit, worstRound, survives, hit, crit, foeHit, foeCrit, notes };
+  return { foe, damage, hits, doubles, doubled, oneRounds, oneRoundsWithDualStrikes, dualStrikeRate, backDamage, backHit, backCrit, dualGuardRate, foeStrikes: foeHits, worstHit, worstRound, survives, hit, crit, foeHit, foeCrit, notes };
 }
 
 /** The top of FEW's `min~max` (or the one number), bonuses included: the worst case for the player. */
