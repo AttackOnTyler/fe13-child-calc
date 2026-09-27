@@ -6,7 +6,7 @@
  * edit never stops the search.
  * Where there's no Worker (tests), `startSolve` returns undefined and the page works the chance out itself.
  */
-import type { Assumptions, CheckedRules, EditCost, RuleStake, SetupCheck, PinCost, Plan, PlanPin, Readings, ReservesCursor, ReservesStep, RobinCursor, RobinStep, RosterUnit, Run, RunSim, SolveCursor, SolveStep, UnitEdit, WhatItCost, WorthCursor, WorthStep } from '../engine';
+import type { Assumptions, CheckedRules, EditCost, RuleStake, SetupCheck, PinCost, Plan, PlanPin, Readings, ReservesCursor, ReservesStep, RobinCursor, RobinStep, RosterUnit, Run, RunSim, SolveCursor, SolveStep, StressCase, UnitEdit, WhatItCost, WorthCursor, WorthStep } from '../engine';
 
 /** A unit's edit as the worker posts it (#203): its plan is built and costed in the worker. */
 export type UnitEditView = Pick<UnitEdit, 'kind' | 'key' | 'label' | 'pins'>;
@@ -120,6 +120,16 @@ export type SolveRequest =
     })
   | (Common & {
       /**
+       * The stress tests (#211), in the `stress` slot once the headline's search is done: `plan` re-run under each
+       * case's bad case, on the headline's seed and run count, one reply a case.
+       */
+      readonly kind: 'stress';
+      readonly plan: Plan;
+      readonly runs: number;
+      readonly cases: readonly StressCase[];
+    })
+  | (Common & {
+      /**
        * The in-play checks (#209), in the `checks` slot: each open rule's stakes on the adopted plan (one re-run under its
        * other reading), then the setup checks those stakes call for, each edit costed at each of `budgets` in turn.
        */
@@ -149,10 +159,14 @@ export type SolveReply =
   | { readonly id: number; readonly kind: 'stake'; readonly stake: RuleStake; readonly done: boolean }
   | { readonly id: number; readonly kind: 'setup'; readonly checks: readonly SetupCheck[]; readonly done: boolean }
   | { readonly id: number; readonly kind: 'setup-cost'; readonly rule: string; readonly cost: EditCost; readonly done: boolean }
+  | { readonly id: number; readonly kind: 'stress'; readonly stress: StressCase; readonly chance: RunSim; readonly done: boolean }
   | { readonly id: number; readonly kind: 'why'; readonly chance: RunSim; /** The plan compared against's runs (with a unit: the plan's own). */ readonly base?: RunSim; readonly done: boolean };
 
-/** Where a request runs: the solve and its idle work, a unit's edits beside it, the Why panel's drill-down (#210), or the checks' stakes (#209). */
-export type SolveSlot = 'main' | 'edits' | 'why' | 'checks';
+/**
+ * Where a request runs: the solve and its idle work, a unit's edits beside it, the Why panel's drill-down (#210), the
+ * checks' stakes (#209), or the stress tests (#211).
+ */
+export type SolveSlot = 'main' | 'edits' | 'why' | 'checks' | 'stress';
 
 /** A request as the page makes it: the client numbers it. */
 export type NewSolveRequest = SolveRequest extends infer R ? (R extends SolveRequest ? Omit<R, 'id'> : never) : never;

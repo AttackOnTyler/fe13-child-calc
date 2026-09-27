@@ -3,7 +3,8 @@
  * through `guide()`, so the guide finds it whatever its class names or label text. `guide.test.ts` fails when a target
  * has no anchor left in the UI source, and when a guide entry points at one. #212 removed the Plan page's anchors and
  * the Roster's Deploy, deployment-role and Bench anchors with their controls, and the guide entries that pointed at
- * them; #213 added the inbox's, the Robin card's, the flawless headline's and the Wishlist tab's army.
+ * them; #213 added the inbox's, the Robin card's, the flawless headline's and the Wishlist tab's army; #211 the
+ * headline's link to the Why panel's Stated assumptions.
  */
 export const GUIDE_TARGETS = [
   // Header
@@ -22,6 +23,7 @@ export const GUIDE_TARGETS = [
   'inbox',
   'robin-card',
   'flawless-headline',
+  'stated-assumptions',
   'units-rail',
   'run-rail',
   'chapter-log',

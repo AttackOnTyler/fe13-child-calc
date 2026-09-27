@@ -2,7 +2,8 @@
  * The Why panel (#210; spec #175, The Why panel): every number on the Run view and the Wishlist tab opens it beside the
  * page. It renders the facade's explanation (`engine.explain`) and nothing else: the value, one sentence on what it is,
  * its math, the rows that moved it (each drilling further, with breadcrumbs), where the trail stops, and the blind
- * spots touching it with their lean. Its second tab is the stated assumptions list (#211 fills it; `setAssumptionsTab`).
+ * spots touching it with their lean. Its second tab is the stated assumptions list (#211, `stated-assumptions.ts`,
+ * handed over by main.ts with `setAssumptionsTab`; `openAssumptions` opens the panel on it): the list lives only here.
  *
  * A number is made clickable by one helper, `whyText` (or `whyNumber`): a button carrying its explanation's id in
  * `data-why`. One click handler on the document (`installWhy`) opens the panel on it, so pages never wire their own.
@@ -87,6 +88,15 @@ export function openWhy(id: string): void {
   changed?.();
 }
 
+/**
+ * Opens the panel on its stated assumptions tab (#211): the Run view's and the Wishlist tab's headline link to it. The
+ * Why tab keeps the number it was on, if any.
+ */
+export function openAssumptions(): void {
+  tab = 'assumptions';
+  changed?.();
+}
+
 export function closeWhy(): void {
   path = [];
   tab = 'why';
@@ -142,7 +152,15 @@ export type WhyContext = {
    * milestones the readings read) with its readings.
    */
   readonly headline:
-    | { readonly plan: Plan; readonly chance: RunSim; readonly solved: boolean; readonly adopted?: Plan; readonly readings?: ExplainContext['readings'] }
+    | {
+        readonly plan: Plan;
+        readonly chance: RunSim;
+        readonly solved: boolean;
+        readonly adopted?: Plan;
+        readonly readings?: ExplainContext['readings'];
+        /** The plan re-run under each stressed blind spot's bad case (#211), as they come in. */
+        readonly stress?: ExplainContext['stress'];
+      }
     | undefined;
   readonly pins?: () => readonly PlanPin[];
   /** Opens a map's matchups (the Maps list), where a fight's trail stops. */
@@ -169,6 +187,7 @@ export function explainContext(ctx: WhyContext, id?: string): ExplainContext {
     run: ctx.run,
     ...(hd ? { plan: w ? worthRead!.plan : hd.plan, chance: w ? w.base : hd.chance, seed: hd.solved ? rescoreSeed(FLAWLESS_SEED) : FLAWLESS_SEED } : {}),
     ...(hd?.readings ? { readings: hd.readings } : {}),
+    ...(hd?.stress ? { stress: hd.stress } : {}),
     // A milestone is the roadmap's: the adopted plan's.
     ...(id?.startsWith('milestone:') && hd?.adopted ? { milestones: milestonesOf(ctx.engine, ctx.run, hd.adopted) } : {}),
     ...(worth ? { worth } : {}),
@@ -208,7 +227,8 @@ function ask(ctx: WhyContext, id: string, e: Explanation): void {
   if (started) asking = id;
 }
 
-const LEAN = { high: ['▲ may read high', 'the real chance is probably lower', 'warn'], low: ['▼ may read low', 'the real chance is probably higher', 'ok'], either: ['◆ either way', 'it could go either way', 'dim'] } as const;
+/** A blind spot's lean as the panel tags it: the chip's words, what it means, and its colour class. */
+export const LEAN = { high: ['▲ may read high', 'the real chance is probably lower', 'warn'], low: ['▼ may read low', 'the real chance is probably higher', 'ok'], either: ['◆ either way', 'it could go either way', 'dim'] } as const;
 
 /** A signed number of points: 0.012 → "+1.2", −0.034 → "−3.4". */
 const signed = (p: number) => {

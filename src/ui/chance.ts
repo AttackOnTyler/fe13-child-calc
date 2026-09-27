@@ -38,6 +38,16 @@ export function killText(p: number): string {
   return `${(p * 100).toFixed(1)}% (kills someone about 1 run in ${runs(p)})`;
 }
 
+/**
+ * A stress-test range (#211; spec #175, The Why panel): the chance under a stated blind spot's bad case beside the
+ * headline's, "as low as 31.8% if two attackers reach each exposed pair". Undefined unless the bad case takes the chance
+ * lower by 0.05 points or more: the range is how low it could go (a bad case the plan does as well or better under
+ * isn't one).
+ */
+export function stressText(chance: number, stressed: number, bad: string): string | undefined {
+  return chance - stressed < 0.0005 ? undefined : `as low as ${chanceText(stressed)} if ${bad}`;
+}
+
 /** Points of chance with a sign, as a difference reads: −0.002 → "−0.2", 0.012 → "+1.2" (a minus sign, not a hyphen). */
 const signedPoints = (d: number) => {
   const s = (Math.abs(d) * 100).toFixed(1);

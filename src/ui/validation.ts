@@ -3,6 +3,7 @@ import {
   STATS,
   STAT_LABELS,
   isDefaultValue,
+  openRule,
   type AssumptionDef,
   type AssumptionId,
   type AssumptionStatus,
@@ -14,21 +15,26 @@ import {
 } from '../engine';
 import { h } from './dom';
 import { LABELS } from './labels';
-import { openRulesSection, type RulesContext } from './checks-view';
 
-/** What the validation panel reads, and how it changes the assumption overrides. */
+/**
+ * What the validation panel reads, and how it changes the assumption overrides. An assumption play can settle is an
+ * open rule (#209): it's answered by hand or reopened only in the Why panel's stated assumptions tab (#211), so here
+ * it shows where it stands and points there.
+ */
 export type ValidationContext = {
   readonly engine: Engine;
   readonly assumptions: Assumptions;
   readonly selfTest: SelfTestReport;
   /** Sets one override; undefined or the default value clears it. */
   readonly setOverride: (id: AssumptionId, value: unknown) => void;
+  /** Resets every override that isn't an open rule's answer. */
   readonly resetAll: () => void;
   /** Re-renders, discarding an invalid edit. */
   readonly render: () => void;
-  /** The open rules (#209): answered by hand or reopened here. */
-  readonly rules?: RulesContext;
 };
+
+/** An assumption play can settle (an open rule, #209): answered or reopened in the stated assumptions tab only. */
+export const isRuleAssumption = (id: AssumptionId): boolean => openRule(id)?.assumption === id;
 
 function sourceLinks(sources: readonly Citation[]): HTMLElement {
   return h(
@@ -146,11 +152,25 @@ function assumptionsSection(ctx: ValidationContext): HTMLElement {
       'h3',
       {},
       'Assumptions ',
-      statuses.some((a) => !a.isDefault) ? h('button', { class: 'reset', onclick: ctx.resetAll }, '↺ Reset all to defaults') : null,
+      statuses.some((a) => !a.isDefault && !isRuleAssumption(a.id)) ? h('button', { class: 'reset', onclick: ctx.resetAll }, '↺ Reset all to defaults') : null,
     ),
-    h('p', { class: 'muted' }, 'Values the sources couldn’t verify. Overriding one recomputes every pairing and is saved in this browser.'),
+    h(
+      'p',
+      { class: 'muted' },
+      'Values the sources couldn’t verify. Overriding one recomputes every pairing and is saved in this browser. An open rule (one play can settle) is answered or reopened in the Why panel’s Stated assumptions, from the Run view or the Wishlist tab.',
+    ),
     ...statuses.map((a) =>
-      h(
+      isRuleAssumption(a.id)
+        ? h(
+            'article',
+            { class: `assumption${a.isDefault ? '' : ' overridden'}`, 'data-assumption': a.id },
+            h('div', {}, h('strong', {}, a.label), h('span', { class: 'muted' }, a.affects ? ` · affects ${a.affects} ⚠` : ` · ${a.pairingsAffected} ${a.pairingsAffected === 1 ? 'pairing' : 'pairings'} ⚠`)),
+            h('div', {}, 'Current: ', h('b', {}, a.current), a.isDefault ? h('span', { class: 'muted' }, ' (its best reading, until play checks it)') : h('span', { class: 'warn' }, ` · answered, best reading ${a.default}`)),
+            h('div', { class: 'small muted' }, 'An open rule: answer it by hand or reopen it in the Why panel’s Stated assumptions (Run view or Wishlist tab).'),
+            h('p', { class: 'a-why' }, a.why),
+            h('div', { class: 'muted' }, 'Sources: ', sourceLinks(a.sources)),
+          )
+        : h(
         'article',
         { class: `assumption${a.isDefault ? '' : ' overridden'}`, 'data-assumption': a.id },
         h(
@@ -218,7 +238,7 @@ export function validationPanel(ctx: ValidationContext): HTMLElement {
     'section',
     { class: 'main' },
     h('div', { class: 'main-head' }, h('h2', {}, LABELS.validation)),
-    h('div', { class: 'scroll vpanel' }, selfTestSection(ctx.selfTest), ctx.rules ? openRulesSection(ctx.rules) : null, assumptionsSection(ctx), disagreementsSection(ctx.engine)),
+    h('div', { class: 'scroll vpanel' }, selfTestSection(ctx.selfTest), assumptionsSection(ctx), disagreementsSection(ctx.engine)),
   );
 }
 

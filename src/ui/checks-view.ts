@@ -3,7 +3,8 @@
  * for each open rule on the adopted plan (one re-run under its other reading, kept per run and plan) and the setup
  * checks they call for; the checks a map offers, in words, for the inbox and the preparation page; Record results'
  * Checks step, which takes each check's raw observation and settles it through the engine; and the open rules list
- * (stakes first), where any rule is answered by hand or reopened.
+ * (stakes first) in words, which the Why panel's stated assumptions tab (#211, `stated-assumptions.ts`) draws, where
+ * any rule is answered by hand or reopened.
  *
  * Checked rules are global (`checked-rules.ts`): a change goes to main.ts (`setRules`), which rebuilds the model,
  * relearns the learned corrections from the chapter log and re-solves when the model reads the rule differently.
@@ -11,9 +12,7 @@
 import {
   EDIT_COST_BUDGET,
   FLAWLESS_SEED,
-  answerRule,
   openRule,
-  reopenRule,
   withCheckObserved,
   type Assumptions,
   type CheckAsk,
@@ -267,47 +266,4 @@ export function checksStep(ctx: RulesContext & { readonly setRun: (run: Run) => 
       );
     }),
   ];
-}
-
-/**
- * The open rules (#209), for the stated assumptions: open rules by stakes, each answerable by hand ("from outside this
- * run"), then model mismatches, then checked and answered rules (collapsed), each of which can be reopened.
- */
-export function openRulesSection(ctx: RulesContext): HTMLElement {
-  const maps = new Map(ctx.engine.maps().map((m) => [m.id, m.label]));
-  const read = rulesReadout(ctx.engine.openRules(ctx.rules), latestStakes(), (id) => maps.get(id) ?? id);
-  const answer = (id: string, reading: 'best' | 'other') => ctx.setRules(answerRule(ctx.rules, id, reading, ctx.evidence, ctx.now()));
-  const item = (r: RuleRow) =>
-    h(
-      'article',
-      { class: 'assumption open-rule', 'data-rule': r.id },
-      h('div', {}, h('strong', {}, r.label), h('span', { class: 'muted' }, ` · ${r.status}`)),
-      ...r.notes.map((n) => h('div', { class: 'small muted' }, n)),
-      h('p', { class: 'a-why' }, r.why),
-      h(
-        'div',
-        { class: 'a-control' },
-        ...(r.can === 'answer'
-          ? [
-              h('span', { class: 'small' }, 'From outside this run: '),
-              h('button', { class: 'mini', title: 'Answer it by hand: the model keeps this reading', onclick: () => answer(r.id, 'best') }, r.best),
-              h('button', { class: 'mini', title: 'Answer it by hand: the model switches to this reading', onclick: () => answer(r.id, 'other') }, r.other),
-            ]
-          : [h('button', { class: 'mini ghost', title: 'Open it again: the model goes back to the best reading', onclick: () => ctx.setRules(reopenRule(ctx.rules, r.id)) }, 'Reopen')]),
-      ),
-    );
-  return h(
-    'section',
-    { class: 'vsec', 'aria-label': 'Open rules' },
-    h('h3', {}, 'Open rules'),
-    h(
-      'p',
-      { class: 'muted' },
-      'Game rules no source settles. The forecasts use each one’s best reading until play checks it: Record results asks for what you saw on a map that offered its check. Stakes are the flawless points that turn on a rule (the plan re-run under its other reading). Answers are kept for every run and survive Clear all.',
-    ),
-    ...read.open.map(item),
-    read.mismatches.length ? h('h4', {}, 'Model mismatches') : null,
-    ...read.mismatches.map(item),
-    read.settled.length ? h('details', {}, h('summary', {}, `Checked and answered rules (${read.settled.length})`), ...read.settled.map(item)) : null,
-  );
 }

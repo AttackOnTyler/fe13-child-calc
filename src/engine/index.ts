@@ -223,7 +223,7 @@ export type { ClassMilestone, Milestone, MilestonePoint, RecruitMilestone, SealS
 export { QUIET_POINTS, blindSpotsTouching, milestoneWords, riskSplit, type Comparison, type ExplainContext, type Explanation, type ExplanationFormat, type ExplanationKind, type ExplanationRow } from './explain';
 export { EDIT_COST_BUDGET, EDIT_KINDS, SEARCH_RUNS, rescoreSeed, SOLVE_SECONDS, STEP_BUDGET, type EditCost, type EditCostInput, type EditKind, type PinCost, type PinCostInput, type SolveStep, type SolveStepInput, type UnitEdit } from './solve/step';
 export { FORCED_UNITS, LIKELY_LOSSES, type LikelyLoss, type ReserveReading, type ReservesCursor, type ReservesInput, type ReservesStep, type UnitWorth, type WorthCursor, type WorthInput, type WorthStep } from './solve/worth';
-export { BLIND_SPOTS, STRESS_TESTS, type BlindSpot, type BlindSpotId, type RunBlindSpotId, type StressTest } from './assumptions';
+export { BLIND_SPOTS, STRESS_TESTS, type BlindSpot, type BlindSpotId, type BlindSpotTouch, type RunBlindSpotId, type StressTest } from './assumptions';
 export { bestWeapon, classTypes, dangerFlags, foeKey, foeOf, foesOf, matchup, pairUpBonus, statValue, type DangerFlag, type Fighter, type Foe, type Matchup } from './solver';
 export {
   CORRECTION_RANGE,

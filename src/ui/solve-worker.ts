@@ -9,7 +9,8 @@
  * or, on request, the Robin alternatives (#201), after the search, pin cost and readings; and the Wishlist tab (#203) asks,
  * in a second worker, for a unit's edits, listed then costed one by one (`unitEdits`); the inbox (#204) asks there for
  * every edit (`editChoices`), its matches costed with their edited plans, and for one pin's own cost; after the Lock, a
- * third worker works out the in-play checks' stakes and setup checks (#209). It holds no logic: the search,
+ * third worker works out the in-play checks' stakes and setup checks (#209); once the search is done, another re-runs
+ * the headline's plan under each stressed blind spot's bad case (#211). It holds no logic: the search,
  * its state (the cursor) and its budgets are the engine's. Started by `solve-client.ts`, which terminates it to stop a solve.
  */
 import { EDIT_COST_BUDGET, READING_SECONDS, SOLVE_SECONDS, SUGGEST_RUNS, createEngine, type Assumptions, type Engine, type Plan, type RuleStake, type Run, type SolveCursor, type SuggestedChange, type UnitEdit } from '../engine';
@@ -91,6 +92,13 @@ scope.onmessage = ({ data: m }) => {
     }
     const without = engine.worthChance(m.run, m.plan, m.unit, { ...options, ...(m.pins ? { pins: m.pins } : {}) });
     return void scope.postMessage({ id: m.id, kind: 'why', chance: without, base: engine.flawlessChance(m.run, { ...options, plan: m.plan }), done: true });
+  }
+  if (m.kind === 'stress') {
+    // The stress tests (#211): the plan re-run under each blind spot's bad case, one reply a case.
+    m.cases.forEach((c, i) =>
+      scope.postMessage({ id: m.id, kind: 'stress', stress: c, chance: engine.stressChance(m.run, m.plan, c, { seed: m.seed, runs: m.runs }), done: i === m.cases.length - 1 }),
+    );
+    return;
   }
   if (m.kind === 'edits') return unitEdits(engine, m);
   if (m.kind === 'checks') return checks(engine, m);

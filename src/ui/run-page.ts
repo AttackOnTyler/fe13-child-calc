@@ -4,9 +4,9 @@
  * A new entry copies the one before; editing a past entry never reaches later ones, which are flagged instead.
  */
 import type { Assumptions, ChildId, CloseCall, Gender, Reading, Readings, SuggestedPin, Engine, FlawlessChance, FlawlessOptions, GoldSpread, HeldItem, ItemPin, ItemPlanRow, ItemUsed, MapOrderStep, Milestone, MilestonePoint, PinCost, Plan, PlanPin, PlanProposal, PlanRobin, PrunedComp, RobinCursor, RobinStep, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
-import { chanceText, differenceText } from './chance';
+import { chanceText, differenceText, stressText } from './chance';
 import { startSolve } from './solve-client';
-import { SOLVE_SECONDS, STEP_BUDGET, rosterUnits } from '../engine';
+import { SOLVE_SECONDS, STEP_BUDGET, rescoreSeed, rosterUnits, type RunSim, type StressCase } from '../engine';
 import { EMPTY_SNAPSHOT, FLAWLESS_SEED, SUPPORT_LEVELS, addEntry, childJoinFrom, chromWedding, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, withUnit } from '../engine';
 import { removeClassChange, tierOfClass, withClassChange, withCountOverride, type Seal } from '../engine';
 import { entryAfterShopping, goldAfterShopping, removeShopLine, shopPrice, withShopLine, type ShopKind, type ShopLine } from '../engine';
@@ -21,8 +21,11 @@ import { guide } from './guide';
 import { mapsView, type MapsContext } from './maps-page';
 import { beforeTheLock, inboxNudge, inboxProgress, inboxView, robinName, robinToLock } from './inbox';
 import { GAME_OVER_UNITS, forecastBefore, openLosses, proposalId, recordMissed, unrecordLoss, withEntryForecast, type Comparison, type WhatItCost } from '../engine';
-import { setComparison, whyText, type WhyMark } from './why';
-import { calibration, learnCorrections, withCorrectionsOff, withLearned } from '../engine';
+import { openAssumptions, setComparison, whyText, type WhyMark } from './why';
+
+/** A chance as `chanceText` writes it, in a line: the first one. */
+const CHANCE_IN = /over 99\.9%|under 0\.1%|\d+(?:\.\d)?%/;
+import { calibration, learnCorrections, withLearned } from '../engine';
 import { withEntryChecks, type CheckedRules } from '../engine';
 import { currentRules, ruleEvidence } from './checked-rules';
 import { checksProgress, checksStep, lineupOf } from './checks-view';
@@ -329,6 +332,11 @@ export type SolveProgress = {
   readonly loss?: { readonly plan: Plan; readonly chance: number; readonly margin: number };
   /** What it cost for the latest recorded map (#208), priced after the readings; undefined inside: nothing to price. */
   readonly cost?: { readonly value: WhatItCost | undefined };
+  /**
+   * The best plan re-run under each stressed blind spot's bad case (#211), on the headline's seed and runs, by case:
+   * worked out once the search is done, while the worker is idle.
+   */
+  readonly stress?: Readonly<Partial<Record<StressCase, RunSim>>>;
 };
 
 export type FlawlessReadout = {
@@ -344,6 +352,11 @@ export type FlawlessReadout = {
   /** The plan's item plan (#193), and the plan itself (its wishlist offers the item pins' units); absent once the endpoint is recorded. */
   readonly items?: ItemPlanReadout;
   readonly plan?: Plan;
+  /**
+   * The stress-test ranges (#211): for each blind spot that can be stressed and moves the chance, how low it could go
+   * ("as low as 31.8% if two attackers reach each exposed pair"), each with its explanation's id.
+   */
+  readonly stress: readonly { readonly text: string; readonly id: string }[];
   /** The headline's own chance and the readings it shows (#206: a map's record keeps them for What changed). */
   readonly chance?: FlawlessChance;
   readonly readings?: Readings;
@@ -359,6 +372,18 @@ export type FlawlessReadout = {
     readonly comparisons: readonly WhyComparison[];
   };
 };
+
+/**
+ * The stress-test ranges (#211) beside a chance: each stressed blind spot's bad case that moves it, in words, with its
+ * explanation's id (`stress:<case>`).
+ */
+export function stressRanges(engine: Engine, chance: number, stressed: Readonly<Partial<Record<StressCase, { readonly chance: number }>>> | undefined): { readonly text: string; readonly id: string }[] {
+  return engine.stressTests().flatMap((t) => {
+    const s = stressed?.[t.id];
+    const text = s && stressText(chance, s.chance, t.bad);
+    return text ? [{ text, id: `stress:${t.id}` }] : [];
+  });
+}
 
 /** A difference the page shows, as the Why panel takes it (`setComparison`). */
 export type WhyComparison = { readonly key: string; readonly comparison: Comparison; readonly plans?: { readonly other: Plan; readonly base: Plan } };
@@ -397,7 +422,7 @@ function readoutOf(
   progress: SolveProgress | undefined,
   readings?: Readings,
 ): FlawlessReadout {
-  if (!r.maps.length) return { text: 'Flawless chance: the endpoint is recorded, nothing left to simulate.', detail: '', rows: [], found: [], notes: [] };
+  if (!r.maps.length) return { text: 'Flawless chance: the endpoint is recorded, nothing left to simulate.', detail: '', rows: [], found: [], notes: [], stress: [] };
   const ceiling = engine.ceiling(run, { runs: r.runs, plan });
   const gender = run.roster.run.gender;
   const names = (us: readonly RosterUnit[]) => listOf(us.map((u) => unitName(u, gender)));
@@ -493,6 +518,7 @@ function readoutOf(
     // The roadmap and its readings are the adopted plan's (#206): the plan the search started from.
     roadmap: roadmapReadout(engine, run, progress?.start ?? plan, readings, new Map(r.maps.map((m) => [m.key, m.label]))),
     chance: r,
+    stress: stressRanges(engine, r.chance, progress?.stress),
     ...(readings ? { readings } : {}),
     found: [...improvements, ...notes],
     notes,
@@ -674,29 +700,25 @@ export function forecastLearningReadout(run: Run, touched: readonly { readonly u
   };
 }
 
-/** The forecast learning section (#196): corrections as a stated assumption with its switch, and the calibration line. */
+/**
+ * The forecast learning section (#196): the calibration line and the falls. The learned corrections are stated
+ * assumptions: they're listed, with their switch, in the Why panel's Stated assumptions (#211), which this links to.
+ */
 function forecastLearningSection(ctx: RunContext): HTMLElement {
-  const r = forecastLearningReadout(ctx.run, ctx.engine.correctionChecks(ctx.run, solveState(ctx.run)?.plan, currentRules()));
+  const r = forecastLearningReadout(ctx.run);
   return h(
     'details',
     { class: 'banner forecast-learning' },
     h('summary', {}, h('b', {}, 'Forecast learning'), h('span', { class: 'muted small' }, ` · ${r.corrections.length ? `${r.corrections.length} correction${r.corrections.length === 1 ? '' : 's'}${r.off ? ' (off)' : ''}` : 'no corrections'}`)),
     h('div', { class: 'small' }, r.calibration),
     r.falls ? h('div', { class: 'small' }, r.falls) : null,
-    r.corrections.length
-      ? h(
-          'div',
-          { class: 'small' },
-          h('div', {}, r.assumption),
-          ...r.corrections.map((t) => h('div', { class: r.off ? 'muted' : '' }, t)),
-          h(
-            'label',
-            { class: 'small', title: 'Compare the forecast with and without what the recorded maps taught it' },
-            h('input', { type: 'checkbox', checked: !r.off, onchange: (ev) => ctx.setRun(withCorrectionsOff(ctx.run, !(ev.target as HTMLInputElement).checked)) }),
-            ' Apply the learned corrections',
-          ),
-        )
-      : h('span', { class: 'muted small' }, 'Each recorded map teaches each unit an EXP factor against the forecast kept on its entry (shrunk toward ×1, ×0.5–×2).'),
+    h(
+      'div',
+      { class: 'small muted' },
+      'Each recorded map teaches each unit an EXP factor against the forecast kept on its entry (shrunk toward ×1, ×0.5–×2). ',
+      h('button', { class: 'linkish', type: 'button', title: 'The learned corrections, with the switch to compare the forecast without them', onclick: () => openAssumptions() }, 'The corrections are in Stated assumptions'),
+      '.',
+    ),
   );
 }
 
@@ -870,7 +892,34 @@ export function flawlessSection(ctx: HeadlineContext, inInbox = false): HTMLElem
     return h(
       'details',
       { ...guide('flawless-headline'), class: 'banner flawless' },
-      h('summary', {}, h('b', {}, ...(r ? marked(r.text, r.why?.text) : ['Flawless chance: working it out…']))),
+      h(
+        'summary',
+        {},
+        h('b', {}, ...(r ? marked(r.text, r.why?.text) : ['Flawless chance: working it out…'])),
+        // The stress-test ranges (#211), each explained in the Why panel; the stated assumptions tab beside them.
+        h(
+          'span',
+          { class: 'small stress-ranges' },
+          ...(r?.stress ?? []).flatMap((s, i) => [i ? '; ' : '', ...marked(s.text, [[CHANCE_IN.exec(s.text)?.[0] ?? '', s.id]])]),
+          (r?.stress.length ? ' · ' : ''),
+          h(
+            'button',
+            {
+              ...guide('stated-assumptions'),
+              class: 'linkish',
+              type: 'button',
+              title: 'Everything the numbers rest on: blind spots, open rules, mismatches, learned corrections and checked rules',
+              onclick: (e: Event) => {
+                // Inside the summary: open the panel, not the headline.
+                e.preventDefault();
+                e.stopPropagation();
+                openAssumptions();
+              },
+            },
+            'Stated assumptions',
+          ),
+        ),
+      ),
       r?.detail ? h('p', { class: 'muted small' }, r.detail) : null,
       r?.rows.length ? h('ol', { class: 'small' }, ...r.rows.map((x, i) => h('li', {}, ...marked(x, r.why?.rows[i])))) : null,
       r?.roadmap && (r.roadmap.rows.length || r.roadmap.readings.length)
@@ -928,8 +977,11 @@ export function flawlessSection(ctx: HeadlineContext, inInbox = false): HTMLElem
       (reply) => {
         if (reply.done && solving === run) {
           solving = undefined;
-          // The worker is free: the Robin alternatives (#201) may start.
-          setTimeout(() => whenIdle?.(), 0);
+          // The worker is free: the Robin alternatives (#201) may start, and the stress tests (#211).
+          setTimeout(() => {
+            whenIdle?.();
+            askStress(ctx, run, (p) => show(solvedReadout(ctx.engine, run, p, pins)));
+          }, 0);
         }
         // The loss's re-solve (#208), the pin cost (#200), the readings (#197) and What it cost (#208) come once the
         // search is done, while the worker is idle.
@@ -971,6 +1023,34 @@ export function flawlessSection(ctx: HeadlineContext, inInbox = false): HTMLElem
     show(READOUTS.get(run) ?? flawlessReadout(ctx.engine, run, { ...(pins ? { pins } : {}) }));
   }, 0);
   return el;
+}
+
+/**
+ * The stress tests (#211), once the headline's search is done: the best plan re-run under each stressed blind spot the
+ * headline rests on, in their own worker, on the headline's seed and runs (so each pairs with it); each range lands on
+ * the run's progress as it comes in.
+ */
+function askStress(ctx: HeadlineContext, run: Run, shown: (p: SolveProgress) => void): void {
+  const p = PROGRESS.get(run);
+  if (!p || !ctx.assumptions || p.stress) return;
+  const cases = ctx.engine
+    .stressTests()
+    .filter((t) => p.chance.blindSpots.includes(t.blindSpot))
+    .map((t) => t.id);
+  if (!cases.length) return;
+  const best = p.best;
+  startSolve(
+    { kind: 'stress', assumptions: ctx.assumptions, run, plan: best, seed: rescoreSeed(FLAWLESS_SEED), runs: p.chance.runs, cases },
+    (reply) => {
+      const now = PROGRESS.get(run);
+      if (reply.kind !== 'stress' || !now || now.best !== best) return;
+      const next = { ...now, stress: { ...now.stress, [reply.stress]: reply.chance } };
+      PROGRESS.set(run, next);
+      inboxProgress(run, next);
+      shown(next);
+    },
+    'stress',
+  );
 }
 
 export { robinName };

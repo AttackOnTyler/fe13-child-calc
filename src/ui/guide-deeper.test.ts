@@ -60,6 +60,7 @@ describe('Going deeper', () => {
       'inbox-before': ['log', 'inbox'],
       wishlist: ['wishlist', 'wishlist-army'],
       why: ['log', 'flawless-headline'],
+      assumption: ['log', 'stated-assumptions'],
       'record-results': ['log', 'next-map'],
       'inbox-after': ['log', 'inbox'],
       loss: ['roster', 'state-strip'],
