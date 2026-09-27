@@ -60,15 +60,26 @@ describe('upkeep: uses spent per hit (#190)', () => {
   });
 
   it('makes the back pay for its Dual Strikes with its own weapon', () => {
-    const back = hero({ id: 'vaike', name: 'Back', weapons: [{ item: item('Steel Sword') }] });
-    const lead = hero();
+    // Axe-wielding foes (22 a hit) that the tough lead shrugs off (2 a hit) but that kill the frail back alone: the pair
+    // stays together (#183), and the lead fells each in its two hits.
+    const axe: Foe = { name: 'Axe', className: 'Fighter', count: 10, stats: stats(40, 14, 0, 0, 0, 0, 0, 0), weapon: item('Iron Axe'), skills: [], boss: false, level: 5 };
+    const back = hero({ id: 'vaike', name: 'Back', stats: stats(10, 15, 0, 27, 28, 0, 0, 0), weapons: [{ item: item('Steel Sword') }] });
+    const lead = hero({ stats: stats(60, 15, 0, 27, 28, 0, 20, 0) });
     const pair = { lead: simUnit(lead), back: simUnit(back), support: 'A' as const };
-    const u = upkeep({ map: rout('a', [dummy(10, 40)]), lineup: [pair] });
-    const m = bestWeapon(pair.lead.fighter, pair.lead.weapons, pair.back.fighter, 'A', dummy(1, 40), [])!.result;
+    const input = { map: rout('a', [axe]), lineup: [pair] };
+    const u = upkeep(input);
+    const m = bestWeapon(pair.lead.fighter, pair.lead.weapons, pair.back.fighter, 'A', axe, [])!.result;
+    // Sword beats axe: 21 a hit, two to fell one.
+    expect(m).toMatchObject({ hit: 100, hits: 2, damage: 21 });
     expect(m.dualStrikeRate).toBeGreaterThan(0);
-    // Each foe falls in the lead's two hits; each may bring a Dual Strike, which lands at the back's hit chance.
-    expect(uses(u, 'vaike', 'Steel Sword')).toBeCloseTo(10 * 2 * (m.dualStrikeRate / 100) * (m.backHit / 100), 9);
-    expect(uses(u, 'lonqu', 'Iron Sword')).toBe(20);
+    const fights = engine.playMap(input, 1).log.flatMap((t) => t.fights);
+    const paired = fights.filter((f) => f.phase === 'player' && f.back === 'vaike');
+    expect(paired.length).toBeGreaterThan(0);
+    expect(paired.every((f) => f.lead === 'lonqu' && f.kill)).toBe(true);
+    // Each player-phase fight takes the lead's two hits; each may bring a Dual Strike, landing at the back's hit
+    // chance, on the back's own weapon. Enemy phase (the back guards) costs it nothing.
+    expect(uses(u, 'vaike', 'Steel Sword')).toBeCloseTo(paired.length * 2 * (m.dualStrikeRate / 100) * (m.backHit / 100), 9);
+    expect(uses(u, 'lonqu', 'Iron Sword')).toBeGreaterThanOrEqual(paired.length * 2);
   });
 
   it('spends a use on a tome’s miss by default, an open rule', () => {
