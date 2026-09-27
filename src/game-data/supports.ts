@@ -36,10 +36,29 @@ export const S_SUPPORTS: Readonly<Partial<Record<UnitId, readonly UnitId[]>>> = 
 };
 
 /**
- * Chrom marries the Maiden if he has no S-support by the end of Chapter 11 (FEW Inheritance).
- * She is a possible mother for Lucina but not an S-support partner.
+ * Chrom's forced marriage (#154; research/child-recruitment §3.3 and C7, research/support-growth §4.1). At the end of
+ * Chapter 11 an unmarried Chrom marries the candidate (Sumia, Sully, Maribelle, Olivia, Robin (F)) he has the highest
+ * support rank with, and gets an S. He marries the Maiden only if he has (almost) no support with any of them (under 1
+ * point with each) or all of them are married. A candidate lost in Classic can still be picked.
+ * Sources: FEW Inheritance https://fireemblemwiki.org/w/index.php?oldid=752340, SF Support Basics
+ * https://serenesforest.net/awakening/characters/supports/support-basics/, JP-112 https://w.atwiki.jp/fireemblem3ds/pages/112.html
+ * (and its mirror JP-89 https://w.atwiki.jp/kakuseife/pages/89.html).
+ *
+ * Two details are unsettled, and the app records ranks, not points, so it can't decide them:
+ * - Olivia's threshold. SF Support Basics: Olivia if he has at least 2 points with her and no C with anyone else.
+ *   JP-27 (https://w.atwiki.jp/fireemblem3ds/pages/27.html): she needs at least C.
+ * - Ties. SF Support Basics: the fewest points to the next rank, then Sumia > Sully > Maribelle > Robin > Olivia.
+ *   JP-89: probably Sumia > Maribelle > Sully > Olivia > Robin (F).
+ *
+ * The Maiden is a possible mother for Lucina but not an S-support partner.
  */
 export const CHROM_FALLBACK_PARTNER = 'maiden' satisfies UnitId;
+
+/** The map whose end marries an unmarried Chrom (see `CHROM_FALLBACK_PARTNER`). */
+export const CHROM_WEDDING_MAP = 'chapter-11';
+
+/** The first-gen women the game can marry Chrom to at the end of Chapter 11; Robin (F) is one too. */
+export const CHROM_WEDDING_CANDIDATES = (Object.keys(S_SUPPORTS) as UnitId[]).filter((w) => S_SUPPORTS[w]!.includes('chrom'));
 
 /**
  * Everyone Robin can S-support, by Robin's gender (research/marriage-and-classes, #3: FEW romantic supports,

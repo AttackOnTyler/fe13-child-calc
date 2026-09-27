@@ -4,7 +4,7 @@
  * A new entry copies the one before; editing a past entry never reaches later ones, which are flagged instead.
  */
 import type { Engine, HeldItem, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitSnapshot } from '../engine';
-import { SUPPORT_LEVELS, addEntry, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, withUnit } from '../engine';
+import { SUPPORT_LEVELS, addEntry, chromWedding, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, withUnit } from '../engine';
 import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
 import { h } from './dom';
 import { guide } from './guide';
@@ -106,6 +106,7 @@ function recordResults(ctx: RunContext, e: RunEntry, step: number): HTMLElement 
               .filter((u) => roster.states[u] !== 'dead')
               .map((u) => h('button', { class: 'mini', disabled: casual, title: `${name(u)} fell`, onclick: () => ctx.setRun(recordFallen(ctx.run, e.id, u, ctx.now())) }, `✝ ${name(u)}`)),
           ),
+          chromWeddingRow(ctx, e),
           h(
             'div',
             { class: 'row' },
@@ -144,6 +145,43 @@ function recordResults(ctx: RunContext, e: RunEntry, step: number): HTMLElement 
         ? h('button', { onclick: () => (ctx.setRecording(undefined), ctx.setOpenEntry(undefined)) }, 'Done')
         : h('button', { onclick: () => ctx.setRecording({ entry: e.id, step: step + 1 }) }, 'Next →'),
       h('span', { class: 'muted small' }, 'Anything you skip keeps its copied value.'),
+    ),
+  );
+}
+
+/**
+ * Chapter 11 with Chrom unmarried (#154): the game married him at the map's end, so ask to whom. The candidates not
+ * married to someone else and the Maiden are offered; one is pre-selected only when his logged ranks decide it.
+ */
+function chromWeddingRow(ctx: RunContext, e: RunEntry): HTMLElement | null {
+  const ask = chromWedding(ctx.run, e.id);
+  if (!ask) return null;
+  const name = (u: RosterUnit) => unitName(u, ctx.run.roster.run.gender);
+  let wife: RosterUnit | '' = ask.preselect ?? '';
+  return h(
+    'div',
+    { class: 'banner' },
+    h('b', {}, 'The game married Chrom at the end of Chapter 11'),
+    h(
+      'div',
+      { class: 'row' },
+      'Chrom × ',
+      h(
+        'select',
+        { 'aria-label': 'Chrom’s wife', onchange: (ev) => (wife = (ev.target as HTMLSelectElement).value as RosterUnit) },
+        h('option', { value: '', selected: !ask.preselect }, '—'),
+        ...ask.options.map((u) => h('option', { value: u, selected: u === ask.preselect }, name(u))),
+      ),
+      h('button', { class: 'mini', onclick: () => wife && ctx.setRun(recordMarriage(ctx.run, e.id, 'chrom', wife, ctx.now())) }, 'Record marriage'),
+    ),
+    h(
+      'span',
+      { class: 'muted small' },
+      ask.preselect === 'maiden'
+        ? 'Every candidate is married to someone else, so he marries the Maiden.'
+        : ask.preselect
+        ? 'He marries the candidate he has the highest support rank with; his logged ranks point to this one.'
+        : 'He marries the candidate he has the highest support with, or the Maiden if he has almost none with any. The game decides by support points the app can’t see: pick who he married.',
     ),
   );
 }
