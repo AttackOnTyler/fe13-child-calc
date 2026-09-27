@@ -234,13 +234,10 @@ export const OPEN_RULES: readonly OpenRule[] = [
   },
   {
     id: 'deadlord-boss-bonus',
-    label: 'Deadlords and the boss bonus',
-    why: 'A Deadlord (Chapter 22) carries a +20 unit bonus; whether the boss +20 comes on top isn’t published (research G8). The EXP data gives it the unit bonus only.',
-    best: { label: 'The unit bonus only', value: 'unit-only' },
-    other: { label: 'The boss +20 on top', value: 'boss-too' },
+    ...fromRegistry('deadlord-boss-bonus'),
     ask: { kind: 'yes-no', question: 'Did the kill EXP include the boss +20 on top of the Deadlord’s +20?', best: false },
-    exp: (_u, run) => run.entries.some((e) => e.map === 'chapter-22'),
-    setsUp: (c) => (c.map === 'chapter-22' ? 'Deadlords are on this map: note the kill EXP for one, with the killer’s level.' : undefined),
+    exp: (_u, run) => run.entries.some((e) => e.map === 'chapter-22' || e.map === 'infinite-regalia'),
+    setsUp: (c) => (c.map === 'chapter-22' || c.map === 'infinite-regalia' ? 'Deadlords are on this map: note the kill EXP for one, with the killer’s level.' : undefined),
   },
   {
     id: 'support-past-threshold',
