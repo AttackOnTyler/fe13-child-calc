@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, addEntry, createEngine, editEntry, itemByName, runFromRoster, withRun, type ArmyUnit, type Foe, type RunSimMap, type SimFoeGroup, type SimMap } from './index';
+import { EMPTY_ROSTER, addEntry, createEngine, editEntry, itemByName, runFromRoster, withRun, type ArmyUnit, type ChildRecruit, type Foe, type RunSimMap, type SimFoeGroup, type SimMap } from './index';
 
 /**
  * The ceiling (#189): the endpoint's flawless chance with every unit of today's plan at its effective caps, hand-built
@@ -58,6 +58,25 @@ describe('the ceiling of a hand-built plan (#189)', () => {
     expect(c.units.map((u) => u.id)).toEqual(['lonqu', 'vaike']);
     expect(c.lineup?.deployed).toHaveLength(2);
     expect(engine.simulateCeiling(input([hero()], []), 1, 1)).toBeUndefined();
+  });
+
+  it('fields every child the plan’s marriages produce on the way, at its caps with its inherited skills', () => {
+    const sully = hero({ id: 'sully', name: 'Sully', gender: 'F', classId: 'paladin', skills: ['Discipline', 'Outdoor Fighter', 'Defender', 'Aegis', 'Luna'] });
+    const stahl = hero({ id: 'stahl', name: 'Stahl', classId: 'great-knight', skills: ['Discipline', 'Outdoor Fighter', 'Defender', 'Luna', 'Dual Guard+'] });
+    const kjelle: ChildRecruit = { id: 'kjelle', name: 'Kjelle', parents: ['sully', 'stahl'], growths: stats(0, 0, 0, 0, 0, 0, 0, 0), modifiers: { ...noMods, def: 2 }, weapons: [{ item: itemByName('Iron Lance')! }], role: 'lead' };
+    const plan = (children: ChildRecruit[]) => engine.simulateCeiling(input([sully, stahl], [step(rout('paralogue-8', [brute]), { children }), step(rout('end', [brute]), { deploy: 3 })]), 1, 1)!;
+    const kid = plan([kjelle]).units.find((u) => u.id === 'kjelle')!;
+    // Knight, her first class, promoted.
+    expect(kid.className).toMatch(/^(General|Great Knight)$/);
+    const cls = kid.className === 'General' ? 'general' : 'great-knight';
+    const caps = engine.classMaxStats(cls, 'F');
+    expect(kid.stats).toEqual({ ...caps, def: caps.def + 2 });
+    const inherited = engine.childSkills({ child: 'kjelle', parents: [{ skills: sully.skills }, { skills: stahl.skills }], startClass: 'knight', level: 10 }).skills;
+    expect(kid.skills).toEqual(inherited);
+    expect(plan([kjelle]).lineup?.deployed).toContain('kjelle');
+    // A child read on the endpoint itself joins after it: not fielded there.
+    const late = engine.simulateCeiling(input([sully, stahl], [step(rout('end', [brute]), { deploy: 3, children: [kjelle] })]), 1, 1)!;
+    expect(late.units.map((u) => u.id)).not.toContain('kjelle');
   });
 
   it('is never below the flawless chance for the endpoint map alone', () => {

@@ -290,7 +290,7 @@ export function flawlessChance(run: Run, assumptions: Assumptions, options: Flaw
  * its effective caps; undefined once the endpoint is recorded. Lunatic+ plays it on the flawless chance's seeds.
  */
 export function flawlessCeiling(run: Run, assumptions: Assumptions, options: FlawlessOptions = {}): Ceiling | undefined {
-  const { input } = flawlessInput(run, assumptions, options.roleOf);
-  return simulateCeiling(input, options.seed ?? FLAWLESS_SEED, options.runs ?? FLAWLESS_RUNS);
+  const { input } = flawlessInput(run, assumptions, options.roleOf, options.marriages);
+  return simulateCeiling(input, options.seed ?? FLAWLESS_SEED, options.runs ?? FLAWLESS_RUNS, assumptions);
 }
 
