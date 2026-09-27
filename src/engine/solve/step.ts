@@ -1,20 +1,84 @@
 /**
- * The anytime solve's stepping call (#198; spec #175, Engine interfaces): given the adopted plan (or none: the seed),
- * the recorded run, the pins and a budget in evaluations, it returns the best plan found so far, the proposals and
- * whether the search has converged. The Web Worker (#199) loops it against a time budget; it holds no logic.
+ * The anytime solve's stepping call (#198, #199; spec #175, The joint solve, Noise and Engine interfaces): given the
+ * adopted plan (or none: the seed), the recorded run, the pins and a budget in evaluations, it returns the best plan
+ * found so far, the proposals, the close calls, and whether the search has converged. The Web Worker loops it against
+ * a time budget and posts each step back; it holds no logic.
  *
- * Deterministic: the same run, plan, pins, budget, seed and cursor give the same step. An evaluation is one flawless
- * chance of one plan over `runs` simulated runs (its time grows with how far those runs get).
+ * **An evaluation is one simulated run of one plan** (a run that loses a unit early is cheap; one that reaches the
+ * endpoint of the Full route costs about 0.3–0.45 s today). A step spends its budget in pieces: a batch of runs for one
+ * plan, never more than the budget left, except the re-score (below), which is one piece and may overrun a step's
+ * budget when it's the step's first piece (so a small budget still gets there). A ceiling check (pruning, below) counts
+ * as one evaluation.
  *
- * The local search (#199) spends the budget on single edits; until then a step evaluates the plan it starts from and
- * has nothing left to try, so it proposes nothing and has converged. What already happened is the starting state:
- * the evaluation reads the log first (a recorded marriage stands whatever the plan lists), never a pin.
+ * **The local search** tries single edits on the flawless chance, in the spec's order each round (`EDIT_KINDS`): the
+ * marriages and Robin; the endpoint class, one build skill and the passed skills; the lineups, pairs, paralogue places,
+ * seals, item uses and side goals. Each edit is compared with the best plan on the same runs (the same seed: common
+ * random numbers), starting at `runs` runs: it's kept when its gain is more than twice the paired standard error,
+ * dropped when its loss is, and otherwise the runs double, up to `cap`. An edit still unclear at the cap is a close
+ * call, read "no measurable difference (−0.2 ±0.3)". A kept edit makes a new best plan and a proposal; a round with no
+ * kept edit ends the search (converged).
+ *
+ * **Noise:** the search's runs pick the plan, so its chance on them is inflated by the selection; the chance the step
+ * shows (`chance`) is the best plan's re-scored on fresh runs (a seed derived from `seed`, never the search's), over
+ * `display` runs, each time the best plan changes.
+ *
+ * **Pruning (the ceiling):** a set of marriages (or a Robin) whose ceiling (the endpoint's flawless chance at caps,
+ * which no plan with those marriages can beat) is below the best found (its chance on the search's runs, less its
+ * margin) isn't evaluated; it's listed in `pruned`.
+ *
+ * **Proposals never replace the adopted plan:** the step never changes the plan it's given; each kept edit is offered
+ * as a proposal with its gain over the adopted plan on the same runs, best first.
+ *
+ * Deterministic: the same run, plan, pins, budget, seed and cursor give the same step. The cursor is plain JSON (the
+ * search's whole state, including the plans it holds), so the worker can post it and a later step resume it.
+ * What already happened is the starting state, never a pin: the evaluation reads the log first.
  */
 import type { DeploymentRole } from '../../curated/deployment';
 import type { FlawlessChance } from '../flawless';
 import type { RosterUnit } from '../roster';
 import type { Run } from '../run';
-import type { Plan, PlanPin, PlanProposal, SolveCursor } from './plan';
+import { paired, scoreOf, verdictOf } from './paired';
+import type { CloseCall, Plan, PlanPin, PlanProposal, PrunedComp, SearchState, SolveCursor } from './plan';
+
+/**
+ * The search's run counts (spec: runs double from 200 up to a cap; if they don't fit, fewer runs with a wider stated
+ * error, never a different objective). A run that reaches the endpoint costs about 0.3 s on the Main story and 0.45 s
+ * on the Full route today, so 200 runs of one plan would take a minute, twice the full solve's 30 s. The search starts
+ * at 8 runs and doubles to 32 (one plan at the cap is about 10 s), and the headline is re-scored on `FLAWLESS_RUNS` (24)
+ * fresh runs; the ± on each says what that leaves.
+ */
+export const SEARCH_RUNS = { start: 8, cap: 32 } as const;
+
+/** The Web Worker's time budgets (spec: about 30 s for a full solve, 5 s for a re-solve after an edit or a recorded map). */
+export const SOLVE_SECONDS = { full: 30, resolve: 5 } as const;
+
+/** Evaluations a worker step spends before it posts: small, so the worker checks its clock often. */
+export const STEP_BUDGET = 4;
+
+/**
+ * An edit's cost budgets (evaluations over both plans): provisional in about 1 s (2 runs each, a wide margin), settled
+ * at the search's cap (32 runs each).
+ */
+export const EDIT_COST_BUDGET = { provisional: 4, settled: 2 * SEARCH_RUNS.cap } as const;
+
+/** The seed of the re-score's fresh runs for a search's seed: never the search's own. */
+export const rescoreSeed = (seed: number): number => (seed ^ 0x5eed) >>> 0;
+
+/** The kinds of edit, in the order the search tries them each round (spec #175, The joint solve). */
+export const EDIT_KINDS = ['marriage', 'robin', 'class', 'build', 'pass', 'lineup', 'pair', 'place', 'seal', 'item', 'side-goal'] as const;
+export type EditKind = (typeof EDIT_KINDS)[number];
+
+/** A single edit of a plan: what it changes (`key`, unique within a plan), how it reads, and the edited plan. */
+export type Edit = {
+  readonly kind: EditKind;
+  readonly key: string;
+  readonly label: string;
+  /** The plan with the edit; built only when the search tries it. */
+  readonly make: () => Plan;
+};
+
+/** What the edits read besides the plan: the maps the best plan loses the most on, riskiest first. */
+export type EditHints = { readonly riskiest: readonly string[] };
 
 export type SolveStepInput = {
   readonly run: Run;
@@ -22,12 +86,16 @@ export type SolveStepInput = {
   readonly plan?: Plan;
   /** Hard constraints: the seed and every edit keep them. */
   readonly pins?: readonly PlanPin[];
-  /** How many evaluations this step may spend: 0 returns the plan it starts from, unevaluated. */
+  /** Evaluations (simulated runs of one plan) this step may spend: 0 returns the plan it starts from, unevaluated. */
   readonly budget: number;
   /** Every chance is seeded: edits are compared on the same runs. */
   readonly seed: number;
-  /** Simulated runs per evaluation; `FLAWLESS_RUNS` by default. */
+  /** Runs an edit is first compared on; `SEARCH_RUNS.start` by default. */
   readonly runs?: number;
+  /** The most runs an edit is compared on before it's a close call; `SEARCH_RUNS.cap` by default. */
+  readonly cap?: number;
+  /** Fresh runs the displayed chance is re-scored on; `FLAWLESS_RUNS` by default. */
+  readonly display?: number;
   /** The cursor the previous step returned, passed back unchanged; absent on a first step. */
   readonly cursor?: SolveCursor;
   /** Each unit's deployment role for the greedy lineups (until #212). */
@@ -35,23 +103,216 @@ export type SolveStepInput = {
 };
 
 export type SolveStep = {
-  /** The best plan found so far. */
+  /** The best plan found so far (the adopted plan until an edit beats it). */
   readonly best: Plan;
-  /** Its flawless chance, when this step worked it out. */
+  /** The best plan's flawless chance on fresh runs, when this step worked it out (each time the best plan changes). */
   readonly chance: FlawlessChance | undefined;
   /** Improvements on the adopted plan, best first: offered, never applied. */
   readonly proposals: readonly PlanProposal[];
-  /** No single edit is left to try. */
+  /** Edits still unclear at the run cap: no measurable difference. */
+  readonly closeCalls: readonly CloseCall[];
+  /** Sets of marriages (or Robins) whose ceiling is below the best found. */
+  readonly pruned: readonly PrunedComp[];
+  /** No single edit is left to try: a whole round kept none. */
   readonly converged: boolean;
-  /** Evaluations this step spent (never more than the budget). */
+  /** Evaluations this step spent. */
   readonly evaluations: number;
   /** Pass it to the next step. */
   readonly cursor: SolveCursor;
 };
 
-export function solveStep(input: SolveStepInput, seed: () => Plan, evaluate: (plan: Plan) => FlawlessChance): SolveStep {
-  const best = input.plan ?? seed();
-  const spent = input.cursor?.evaluations ?? 0;
-  if (Math.floor(input.budget) < 1) return { best, chance: undefined, proposals: [], converged: false, evaluations: 0, cursor: { evaluations: spent } };
-  return { best, chance: evaluate(best), proposals: [], converged: true, evaluations: 1, cursor: { evaluations: spent + 1 } };
+/** What the step needs from the engine: the seed, the edits, and a plan's runs, re-score and ceiling. */
+export type SearchDeps = {
+  readonly seed: () => Plan;
+  /** The edits of a plan in `EDIT_KINDS` order; generated lazily, so only the ones tried are built. */
+  readonly edits: (plan: Plan, hints: EditHints) => Iterable<Edit>;
+  /** Runs `first` to `first + count - 1` of a plan on the search's seed: each run's flawless chance. */
+  readonly samples: (plan: Plan, first: number, count: number) => readonly number[];
+  /** A plan's flawless chance on `runs` fresh runs from `seed`. */
+  readonly rescore: (plan: Plan, seed: number, runs: number) => FlawlessChance;
+  /** A plan's ceiling (undefined when there's none). */
+  readonly ceiling: (plan: Plan) => number | undefined;
+};
+
+const keyOf = (p: Plan) => JSON.stringify(p);
+const PRUNABLE = new Set<EditKind>(['marriage', 'robin']);
+
+function freshState(start: Plan): SearchState {
+  return {
+    start,
+    best: start,
+    bestSamples: [],
+    startSamples: null,
+    kept: [],
+    proposals: [],
+    closeCalls: [],
+    pruned: [],
+    round: 0,
+    tried: [],
+    improved: false,
+    trial: null,
+    scored: false,
+    riskiest: [],
+    converged: false,
+  };
+}
+
+export function solveStep(input: SolveStepInput, deps: SearchDeps, display: number): SolveStep {
+  const budget = Math.max(0, Math.floor(input.budget));
+  const start = Math.max(2, Math.floor(input.runs ?? SEARCH_RUNS.start));
+  const cap = Math.max(start, Math.floor(input.cap ?? SEARCH_RUNS.cap));
+  const spentBefore = input.cursor?.evaluations ?? 0;
+  // The search's state: resumed from the cursor unless the adopted plan changed under it.
+  const resumed = input.cursor?.search && (!input.plan || keyOf(input.cursor.search.start) === keyOf(input.plan)) ? structuredClone(input.cursor.search) : undefined;
+  if (!resumed && budget < 1) {
+    const best = input.plan ?? deps.seed();
+    return { best, chance: undefined, proposals: [], closeCalls: [], pruned: [], converged: false, evaluations: 0, cursor: { evaluations: spentBefore } };
+  }
+  const s: SearchState = resumed ?? freshState(input.plan ?? deps.seed());
+  let spent = 0;
+  let chance: FlawlessChance | undefined;
+  const fresh = rescoreSeed(input.seed);
+
+  /** The next edit of the best plan not yet tried this round; undefined when the round is done. */
+  const nextEdit = () => {
+    const tried = new Set(s.tried);
+    for (const e of deps.edits(s.best, { riskiest: s.riskiest })) if (!tried.has(e.key)) return e;
+    return undefined;
+  };
+
+  while (!s.converged && spent < budget) {
+    const left = budget - spent;
+    // The displayed chance: the best plan re-scored on fresh runs, first thing and each time it changes.
+    if (!s.scored) {
+      if (spent > 0 && left < display) break;
+      chance = deps.rescore(s.best, fresh, display);
+      spent += display;
+      s.scored = true;
+      s.riskiest = chance.maps
+        .filter((m) => m.noDeath !== undefined && m.noDeath < 1)
+        .sort((a, b) => a.noDeath! - b.noDeath! || a.key.localeCompare(b.key))
+        .map((m) => m.key);
+      continue;
+    }
+    // The best plan's runs: at least the first comparison's, before any edit is tried against it.
+    const need = s.trial?.target ?? start;
+    if (s.bestSamples.length < need) {
+      const k = Math.min(left, need - s.bestSamples.length);
+      s.bestSamples.push(...deps.samples(s.best, s.bestSamples.length, k));
+      spent += k;
+      continue;
+    }
+    if (!s.trial) {
+      const e = nextEdit();
+      if (!e) {
+        if (!s.improved) s.converged = true;
+        else Object.assign(s, { round: s.round + 1, tried: [], improved: false });
+        continue;
+      }
+      const plan = e.make();
+      if (PRUNABLE.has(e.kind)) {
+        // A ceiling check is one evaluation: prune a comp that can't beat the best found.
+        spent += 1;
+        const c = deps.ceiling(plan);
+        const found = scoreOf(s.bestSamples);
+        if (c !== undefined && c < found.chance - found.margin) {
+          s.pruned.push({ label: e.label, ceiling: c, best: found.chance });
+          s.tried.push(e.key);
+          continue;
+        }
+      }
+      s.trial = { kind: e.kind, key: e.key, label: e.label, plan, samples: [], target: start };
+      continue;
+    }
+    const t = s.trial;
+    if (t.samples.length < t.target) {
+      const k = Math.min(left, t.target - t.samples.length);
+      t.samples.push(...deps.samples(t.plan, t.samples.length, k));
+      spent += k;
+      continue;
+    }
+    const p = paired(s.bestSamples.slice(0, t.target), t.samples);
+    const v = verdictOf(p);
+    if (v === 'unclear' && t.target < cap) {
+      t.target = Math.min(cap, t.target * 2);
+      continue;
+    }
+    s.tried.push(t.key);
+    s.trial = null;
+    if (v === 'better') {
+      if (!s.startSamples) s.startSamples = s.bestSamples;
+      s.best = t.plan;
+      s.bestSamples = t.samples;
+      s.kept.push(t.label);
+      const vs = paired(s.startSamples, s.bestSamples);
+      s.proposals.push({ plan: t.plan, label: t.label, edits: [...s.kept], gain: vs.gain, margin: vs.margin, runs: vs.runs });
+      s.proposals.sort((a, b) => b.gain - a.gain);
+      s.improved = true;
+      s.scored = false;
+    } else if (v === 'unclear') {
+      s.closeCalls = [...s.closeCalls.filter((c) => c.key !== t.key), { key: t.key, plan: t.plan, label: t.label, gain: p.gain, margin: p.margin, runs: p.runs }];
+    }
+  }
+  return {
+    best: s.best,
+    chance,
+    proposals: s.proposals,
+    closeCalls: s.closeCalls,
+    pruned: s.pruned,
+    converged: s.converged,
+    evaluations: spent,
+    cursor: { evaluations: spentBefore + spent, search: s },
+  };
+}
+
+export type EditCostInput = {
+  readonly run: Run;
+  /** The adopted plan. */
+  readonly plan: Plan;
+  /** The plan with the edit. */
+  readonly edited: Plan;
+  readonly seed: number;
+  /** Evaluations over both plans: `EDIT_COST_BUDGET.provisional` for the first reading, `.settled` to settle it. */
+  readonly budget: number;
+  /** Runs it's first compared on, doubling up to `cap`; `SEARCH_RUNS` by default. */
+  readonly runs?: number;
+  readonly cap?: number;
+  readonly roleOf?: (u: RosterUnit) => DeploymentRole;
+};
+
+/**
+ * An edit's cost (#199): the edited plan's gain in flawless chance over the adopted plan on the same runs, with its
+ * paired error (±, 95%). `settled` once it's clear either way or reached the cap; `close` when it's still unclear at the
+ * cap (no measurable difference). A reading on fewer runs than the cap, still unclear, is provisional.
+ */
+export type EditCost = {
+  readonly gain: number;
+  readonly margin: number;
+  readonly runs: number;
+  readonly verdict: 'better' | 'worse' | 'close' | 'unclear';
+  readonly settled: boolean;
+};
+
+/**
+ * An edit's cost within a budget: compared on `runs` runs doubling to `cap` while the budget lasts (each doubling costs
+ * the new runs of both plans), stopping once it's clear. A budget below the first comparison compares on as many runs
+ * as it pays for (at least 2 each): the provisional reading.
+ */
+export function editCost(input: EditCostInput, samples: (plan: Plan, first: number, count: number) => readonly number[]): EditCost {
+  const start = Math.max(2, Math.floor(input.runs ?? SEARCH_RUNS.start));
+  const cap = Math.max(start, Math.floor(input.cap ?? SEARCH_RUNS.cap));
+  const afford = Math.max(2, Math.floor(input.budget / 2));
+  const a: number[] = [];
+  const b: number[] = [];
+  let n = Math.min(start, afford);
+  for (;;) {
+    a.push(...samples(input.plan, a.length, n - a.length));
+    b.push(...samples(input.edited, b.length, n - b.length));
+    const p = paired(a, b);
+    const v = verdictOf(p);
+    if (v !== 'unclear') return { gain: p.gain, margin: p.margin, runs: n, verdict: v, settled: true };
+    if (n >= cap) return { gain: p.gain, margin: p.margin, runs: n, verdict: 'close', settled: true };
+    if (Math.min(cap, n * 2) > afford) return { gain: p.gain, margin: p.margin, runs: n, verdict: 'unclear', settled: false };
+    n = Math.min(cap, n * 2);
+  }
 }

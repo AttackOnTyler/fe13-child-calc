@@ -100,16 +100,16 @@ const BIG = 1e12;
 const WEAPON_KINDS = new Set(['sword', 'lance', 'axe', 'bow', 'tome', 'stone', 'beaststone']);
 /** Weapons tried per kind for a class: the strongest few sold. */
 const PER_KIND = 2;
-const UNAVAILABLE = new Set(['dead', 'missed', 'benched']);
+export const UNAVAILABLE = new Set(['dead', 'missed', 'benched']);
 /** Robin's asset/flaw options tried on Robin's marriage, when the run facts leave them open: the best few by Robin's own coverage. */
 const ROBIN_SHORTLIST = 3;
 
-const genderOf = (u: RosterUnit, robin: Gender): Gender => (u === 'robin' ? robin : isChild(u) ? CHILD_UNITS[u].gender : FIRST_GEN_UNITS[u as UnitId].gender);
+export const genderOf = (u: RosterUnit, robin: Gender): Gender => (u === 'robin' ? robin : isChild(u) ? CHILD_UNITS[u].gender : FIRST_GEN_UNITS[u as UnitId].gender);
 const refOf = (u: RosterUnit, robin: RobinRef): ParentRef => (u === 'robin' ? robin : { kind: 'unit', id: u as UnitId });
-const robinRef = (r: PlanRobin): RobinRef => ({ kind: 'robin', ...r });
+export const robinRef = (r: PlanRobin): RobinRef => ({ kind: 'robin', ...r });
 
 /** The pairings a couple makes: each first-gen parent's children with the other as variable parent, Morgan on Robin's. */
-function pairingsOf([a, b]: Couple, robin: RobinRef): Pairing[] {
+export function pairingsOf([a, b]: Couple, robin: RobinRef): Pairing[] {
   const out: Pairing[] = [];
   for (const [p, q] of [[a, b], [b, a]] as const) {
     if (isChild(p) || isChild(q)) continue;
@@ -326,7 +326,7 @@ export function seedPlan(run: Run, ctx: SeedContext, options: SeedOptions = {}):
 }
 
 /** The wishlist and roadmap for a set of marriages and a Robin: the endpoint's lineup, builds and passes. */
-function planFor(run: Run, ctx: SeedContext, options: SeedOptions, robin: PlanRobin, marriages: readonly Couple[]): Plan {
+export function planFor(run: Run, ctx: SeedContext, options: SeedOptions, robin: PlanRobin, marriages: readonly Couple[]): Plan {
   const shell: Plan = {
     robin,
     wishlist: { endpoint: '', units: [], marriages, children: [], reserves: [] },

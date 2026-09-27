@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_ROSTER, addEntry, createEngine, editEntry, latestEntry, recordMarriage, runFromRoster, withRenown, withRun, withShopLine, withSideGoalPin, withSideGoalSecured, type Route, type RosterUnit, type Run, type Snapshot, type UnitSnapshot } from '../engine';
-import { childStatsNote, flawlessReadout, heldText, mapOrderReadout, parseHeldText, parseSupportsText, roadmapReadout, shoppingReadout, sideGoalPlanReadout, sideGoalsReadout, supportsText } from './run-page';
+import { childStatsNote, flawlessReadout, heldText, mapOrderReadout, solvedReadout, parseHeldText, parseSupportsText, roadmapReadout, shoppingReadout, sideGoalPlanReadout, sideGoalsReadout, supportsText } from './run-page';
 import { chanceText } from './chance';
 
 describe('the map order readout (#179)', () => {
@@ -81,6 +81,33 @@ describe('the flawless chance readout (#186)', () => {
     const run = editEntry(played(all.slice(0, -1)), 'e1', (s) => ({ ...s, units: { ...s.units, chrom: { class: 'Great Lord', level: 5, promoted: true, reclassed: false, exp: 0, stats: { hp: 40, str: 20, mag: 3, skl: 20, spd: 20, lck: 20, def: 15, res: 10 }, skills: [], inventory: [], supports: [] } } }), 1);
     expect(flawlessReadout(engine, run, { runs: 1 }).detail).toContain('Chrom was first logged in a class it can’t join in: the Second Seal count before the log is read as 0');
     expect(flawlessReadout(engine, played(all), { runs: 1 }).text).toBe('Flawless chance: the endpoint is recorded, nothing left to simulate.');
+  });
+
+  it('shows the solve’s best plan with its fresh chance, and lists what the search found (#199)', () => {
+    const run = played(all.slice(0, -2));
+    const best = engine.seedPlan(run);
+    const chance = engine.flawlessChance(run, { runs: 2, plan: best, seed: 9 });
+    const progress = {
+      best,
+      chance,
+      proposals: [{ plan: best, label: 'Vaike marries Sully', edits: ['Chrom marries Olivia', 'Vaike marries Sully'], gain: 0.012, margin: 0.004, runs: 32 }],
+      closeCalls: [{ key: 'k', plan: best, label: 'Stahl marries Miriel', gain: -0.002, margin: 0.003, runs: 32 }],
+      pruned: [{ label: 'Gaius marries Nowi', ceiling: 0.2, best: 0.5 }],
+      done: false,
+      converged: false,
+    };
+    const r = solvedReadout(engine, run, progress);
+    expect(r.text).toMatch(new RegExp(`^Flawless chance: ${chanceText(chance.chance).replace(/[.()]/g, '\\$&')} ±.* · searching…$`));
+    expect(r.detail).toContain('It’s the best plan the search has found so far');
+    expect(r.detail).toContain('worked out again on fresh runs, so picking it doesn’t inflate it');
+    expect(r.found).toEqual([
+      'Improvement: Chrom marries Olivia; Vaike marries Sully: +1.2 ±0.4',
+      'Stahl marries Miriel: no measurable difference (−0.2 ±0.3)',
+      'Not tried: Gaius marries Nowi (its ceiling 20.0% is below the best found, 50.0%)',
+    ]);
+    expect(solvedReadout(engine, run, { ...progress, done: true, converged: true }).text).toMatch(/ · searched$/);
+    // Worked out on the page, there's nothing found to list.
+    expect(flawlessReadout(engine, run, { runs: 1 }).found).toEqual([]);
   });
 
   it('shows the ceiling at Apotheosis, now that its foes carry their forged weapons (#189)', () => {

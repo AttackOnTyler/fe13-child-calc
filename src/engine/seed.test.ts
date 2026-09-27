@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, addEntry, createEngine, marriagePins, runFromRoster, withRun, withSpouse, type Plan, type RosterUnit } from './index';
+import { EMPTY_ROSTER, addEntry, createEngine, marriagePins, rescoreSeed, runFromRoster, withRun, withSpouse, type Plan, type RosterUnit } from './index';
 import { SKILLS } from '../game-data/skills';
 
 /**
@@ -152,27 +152,67 @@ describe('a plan’s roadmap (#198)', () => {
   });
 });
 
-describe('the stepping call (#198)', () => {
-  const step = (budget: number, more: Partial<Parameters<typeof engine.solveStep>[0]> = {}) => engine.solveStep({ run: fresh, budget, seed: 3, runs: 2, ...more });
+describe('the stepping call (#198, #199)', () => {
+  // Two maps left: each run is cheap. Small run counts: the search's logic is tested on a made-up objective (search.test.ts).
+  const all = engine.mapOrder(fresh).steps.map((s) => s.map);
+  const late = all.slice(0, -2).reduce((r, m, i) => addEntry(r, m, i + 1), fresh);
+  const small = { seed: 3, runs: 2, cap: 4, display: 3 } as const;
+  const step = (budget: number, more: Partial<Parameters<typeof engine.solveStep>[0]> = {}) => engine.solveStep({ run: late, budget, ...small, ...more });
+  /** Steps until converged or `n` steps. */
+  const steps = (n: number, more: Partial<Parameters<typeof engine.solveStep>[0]> = {}) => {
+    let s = step(4, more);
+    for (let i = 1; i < n && !s.converged; i++) s = step(4, { ...more, cursor: s.cursor });
+    return s;
+  };
 
-  it('starts from the seed, and is the same for the same input', () => {
-    const a = step(1);
-    expect(a.best).toEqual(engine.seedPlan(fresh));
-    expect(step(1)).toEqual(a);
+  it('starts from the seed, shows its chance re-scored on fresh runs first, and is the same for the same input', () => {
+    const first = step(1);
+    expect(first.best).toEqual(engine.seedPlan(late));
+    // The re-score is the first piece: it may overrun a small budget.
+    expect(first.evaluations).toBe(small.display);
+    expect(rescoreSeed(small.seed)).not.toBe(small.seed);
+    expect(first.chance).toEqual(engine.flawlessChance(late, { plan: first.best, seed: rescoreSeed(small.seed), runs: small.display }));
+    expect(step(1)).toEqual(first);
+    expect(JSON.parse(JSON.stringify(first.cursor))).toEqual(first.cursor);
   });
 
-  it('evaluates within its budget: nothing for 0, the plan’s flawless chance for 1', () => {
-    const none = step(0);
-    expect(none).toMatchObject({ chance: undefined, evaluations: 0, converged: false, proposals: [], cursor: { evaluations: 0 } });
-    const one = step(1);
-    expect(one).toMatchObject({ evaluations: 1, converged: true, proposals: [], cursor: { evaluations: 1 } });
-    expect(one.chance).toEqual(engine.flawlessChance(fresh, { plan: one.best, seed: 3, runs: 2 }));
-    expect(step(1, { cursor: one.cursor }).cursor).toEqual({ evaluations: 2 });
+  it('spends nothing on a budget of 0', () => {
+    expect(step(0)).toMatchObject({ chance: undefined, evaluations: 0, converged: false, proposals: [], closeCalls: [], cursor: { evaluations: 0 } });
   });
 
-  it('keeps the adopted plan it’s given, and the pins on a seed', () => {
-    const pinned = step(0, { pins: [{ kind: 'marriage', couple: ['vaike', 'sully'] }] }).best;
-    expect(spouseIn(pinned, 'vaike')).toBe('sully');
-    expect(step(0, { plan: pinned }).best).toBe(pinned);
+  it('reads an edit it can’t tell apart at the run cap as a close call, and never breaks a pin', () => {
+    const pins = [{ kind: 'marriage', couple: ['vaike', 'sully'] }] as const;
+    const s = steps(8, { pins });
+    expect(s.cursor.evaluations).toBeGreaterThan(small.display);
+    expect(s.closeCalls.length).toBeGreaterThan(0);
+    for (const c of s.closeCalls) {
+      expect(c.runs).toBe(small.cap);
+      expect(Math.abs(c.gain)).toBeLessThanOrEqual((2 * c.margin) / 1.96 + 1e-12);
+    }
+    for (const p of [s.best, ...s.closeCalls.map((c) => c.plan), ...s.proposals.map((p) => p.plan)]) expect(spouseIn(p, 'vaike')).toBe('sully');
+  });
+
+  it('never replaces the adopted plan: improvements are proposals', () => {
+    const adopted = engine.seedPlan(late);
+    const frozen = structuredClone(adopted);
+    const s = steps(6, { plan: adopted });
+    expect(adopted).toEqual(frozen);
+    for (const p of s.proposals) {
+      expect(p.gain).toBeGreaterThan(0);
+      expect(p.plan).not.toEqual(adopted);
+    }
+    // A search on another adopted plan starts again from it.
+    const other = s.closeCalls[0]?.plan ?? adopted;
+    expect(step(0, { plan: other, cursor: s.cursor }).best).toBe(other);
+  });
+
+  it('costs an edit provisionally on a small budget, then settles it', () => {
+    const adopted = engine.seedPlan(late);
+    const edited = steps(4).closeCalls[0]!.plan;
+    const provisional = engine.editCost({ run: late, plan: adopted, edited, seed: 3, budget: 2, runs: 2, cap: 4 });
+    expect(provisional).toMatchObject({ runs: 2, settled: false });
+    const settled = engine.editCost({ run: late, plan: adopted, edited, seed: 3, budget: 8, runs: 2, cap: 4 });
+    expect(settled).toMatchObject({ runs: 4, settled: true, verdict: 'close' });
   });
 });
+

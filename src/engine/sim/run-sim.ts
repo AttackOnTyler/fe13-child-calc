@@ -1106,9 +1106,24 @@ function plannedDeployment(
   return { max, deployed, pairs, solo, forced: forced.filter(here) };
 }
 
+/**
+ * The plan's projection for an input and seed, walked once and kept while the input lives (#199): the solve simulates
+ * one plan's runs in batches (`simulateRuns`' `first`), and every batch plays the same lineups.
+ */
+const PROJECTIONS = new WeakMap<RunSimInput, WeakMap<Assumptions, Map<number, Plan>>>();
+function projection(input: RunSimInput, seed: number, assumptions: Assumptions): Plan {
+  let byAssumptions = PROJECTIONS.get(input);
+  if (!byAssumptions) PROJECTIONS.set(input, (byAssumptions = new WeakMap()));
+  let bySeed = byAssumptions.get(assumptions);
+  if (!bySeed) byAssumptions.set(assumptions, (bySeed = new Map()));
+  let plan = bySeed.get(seed);
+  if (!plan) bySeed.set(seed, (plan = planner(input, seed, assumptions)));
+  return plan;
+}
+
 /** The plan's lineup for every map (see `planner`). */
 export function planLineups(input: RunSimInput, seed: number, assumptions: Assumptions): Deployment[] {
-  const plan = planner(input, seed, assumptions);
+  const plan = projection(input, seed, assumptions);
   return input.maps.map((_, i) => plan.lineup(i));
 }
 
@@ -1192,11 +1207,12 @@ function shoppingStop(step: RunSimMap, s: StopTally): ShoppingStop {
 
 /**
  * The flawless chance over `runs` simulated runs from `seed` (see the module comment). The same input, seed and run
- * count give the same result; more runs narrow the margin.
+ * count give the same result; more runs narrow the margin. `first` starts at a later run index (#199): runs `first` to
+ * `first + runs - 1` of the same seed, so a plan's runs can be simulated in batches and compared on the same runs.
  */
-export function simulateRuns(input: RunSimInput, seed: number, runs: number, assumptions: Assumptions): RunSim {
+export function simulateRuns(input: RunSimInput, seed: number, runs: number, assumptions: Assumptions, first = 0): RunSim {
   const n = Math.max(1, Math.floor(runs));
-  const plan = planner(input, seed, assumptions);
+  const plan = projection(input, seed, assumptions);
   const lineups: (Deployment | undefined)[] = input.maps.map(() => undefined);
   const interner = newInterner();
   const samples: number[] = [];
@@ -1223,7 +1239,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
     for (let j = i; j < nextStop[i]!; j++) spend += plan.wear(j).get(unit)?.get(item) ?? 0;
     return spend;
   };
-  for (let r = 0; r < n; r++) {
+  for (let r = first; r < first + n; r++) {
     const rs = runSeed(seed, r);
     const rng = createRng(rs);
     // Hits are drawn from their own stream, so upkeep never moves the level-up rolls.

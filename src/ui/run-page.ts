@@ -3,8 +3,10 @@
  * holds a snapshot: every unit's class, level, EXP, stats, skills, inventory and supports, plus the convoy and gold.
  * A new entry copies the one before; editing a past entry never reaches later ones, which are flagged instead.
  */
-import type { Assumptions, ChildId, DeploymentRole, Engine, FlawlessOptions, GoldSpread, HeldItem, MapOrderStep, Milestone, MilestonePoint, Plan, PlanPin, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
-import { chanceText } from './chance';
+import type { Assumptions, ChildId, CloseCall, DeploymentRole, Engine, FlawlessChance, FlawlessOptions, GoldSpread, HeldItem, MapOrderStep, Milestone, MilestonePoint, Plan, PlanPin, PlanProposal, PrunedComp, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
+import { chanceText, differenceText } from './chance';
+import { startSolve } from './solve-client';
+import { SOLVE_SECONDS, STEP_BUDGET, rosterUnits } from '../engine';
 import { EMPTY_SNAPSHOT, FLAWLESS_SEED, SUPPORT_LEVELS, addEntry, childJoinFrom, chromWedding, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, withUnit } from '../engine';
 import { removeClassChange, tierOfClass, withClassChange, withCountOverride, type Seal } from '../engine';
 import { entryAfterShopping, goldAfterShopping, removeShopLine, shopPrice, withShopLine, type ShopKind, type ShopLine } from '../engine';
@@ -152,23 +154,61 @@ const listOf = (xs: readonly string[]) => (xs.length < 2 ? xs.join('') : `${xs.s
 /** What the headline is worked out from: the seed's runs and the player's pins (#198). */
 export type FlawlessReadoutOptions = Pick<FlawlessOptions, 'seed' | 'runs' | 'roleOf'> & { readonly pins?: readonly PlanPin[] };
 
+/** Where the solve's Web Worker stands (#199): its latest best plan, the chance re-scored for it, and what it found. */
+export type SolveProgress = {
+  readonly best: Plan;
+  readonly chance: FlawlessChance;
+  readonly proposals: readonly PlanProposal[];
+  readonly closeCalls: readonly CloseCall[];
+  readonly pruned: readonly PrunedComp[];
+  /** The worker is done: converged, or out of time. */
+  readonly done: boolean;
+  readonly converged: boolean;
+};
+
+export type FlawlessReadout = {
+  readonly text: string;
+  readonly detail: string;
+  readonly rows: readonly string[];
+  /** The search's improvements, close calls and pruned marriages, one line each (#199; the inbox is #204). */
+  readonly found: readonly string[];
+  /** The plan's roadmap (#194); absent once the endpoint is recorded. */
+  readonly roadmap?: ReturnType<typeof roadmapReadout>;
+};
+
 /**
  * The headline flawless chance (#186), as the Run view writes it: the seed plan's (#198: its marriages, Robin and
  * lineups, the player's pinned marriages kept) with its simulation error (±, 95%) and the ceiling beside it (#189), what
  * it covers and rests on (units whose seal history is read as 0, units it can't simulate, maps whose foes carry no
  * weapons, the blind spots), each map's no-death chance for the runs that reach it with nobody lost, and the plan's
- * roadmap (#194).
+ * roadmap (#194). Worked out here, on the page; with the solve's Web Worker the headline is `solvedReadout`'s.
  */
-export function flawlessReadout(
+export function flawlessReadout(engine: Engine, run: Run, options: FlawlessReadoutOptions = {}): FlawlessReadout {
+  const { pins, ...sim } = options;
+  const plan = engine.seedPlan(run, { ...(pins ? { pins } : {}), ...(sim.roleOf ? { roleOf: sim.roleOf } : {}) });
+  return readoutOf(engine, run, plan, engine.flawlessChance(run, { ...sim, plan }), pins, undefined, sim.roleOf);
+}
+
+/**
+ * The headline as the solve's Web Worker improves it (#199): the best plan found so far, its chance re-scored on fresh
+ * runs (so picking it doesn't inflate it), and what the search found: improvements on the plan (proposals, never
+ * applied), close calls ("no measurable difference (−0.2 ±0.3)") and marriages pruned by their ceiling.
+ */
+export function solvedReadout(engine: Engine, run: Run, progress: SolveProgress, pins?: readonly PlanPin[], roleOf?: (u: RosterUnit) => DeploymentRole): FlawlessReadout {
+  return readoutOf(engine, run, progress.best, progress.chance, pins, progress, roleOf);
+}
+
+function readoutOf(
   engine: Engine,
   run: Run,
-  options: FlawlessReadoutOptions = {},
-): { readonly text: string; readonly detail: string; readonly rows: readonly string[]; readonly roadmap?: ReturnType<typeof roadmapReadout> } {
-  const { pins, ...sim } = options;
-  const step = engine.solveStep({ run, budget: 1, seed: sim.seed ?? FLAWLESS_SEED, ...(sim.runs ? { runs: sim.runs } : {}), ...(sim.roleOf ? { roleOf: sim.roleOf } : {}), ...(pins ? { pins } : {}) });
-  const r = step.chance!;
-  if (!r.maps.length) return { text: 'Flawless chance: the endpoint is recorded, nothing left to simulate.', detail: '', rows: [] };
-  const ceiling = engine.ceiling(run, { ...sim, plan: step.best });
+  plan: Plan,
+  r: FlawlessChance,
+  pins: readonly PlanPin[] | undefined,
+  progress: SolveProgress | undefined,
+  roleOf: ((u: RosterUnit) => DeploymentRole) | undefined,
+): FlawlessReadout {
+  if (!r.maps.length) return { text: 'Flawless chance: the endpoint is recorded, nothing left to simulate.', detail: '', rows: [], found: [] };
+  const ceiling = engine.ceiling(run, { runs: r.runs, plan, ...(roleOf ? { roleOf } : {}) });
   const gender = run.roster.run.gender;
   const names = (us: readonly RosterUnit[]) => listOf(us.map((u) => unitName(u, gender)));
   const first = r.maps[0]!.label;
@@ -177,9 +217,12 @@ export function flawlessReadout(
   const blank = r.notSimulated.filter((n) => n.why !== 'child').map((n) => n.unit);
   const LEAN = { high: 'may read high', low: 'may read low', either: 'either way' } as const;
   const spots = engine.blindSpots().filter((b) => r.blindSpots.includes(b.id));
+  const seedPlan = `marriages${run.roster.run.gender && run.roster.run.asset && run.roster.run.flaw ? '' : ' and Robin'} matched on how much of ${ceiling?.label ?? 'the endpoint'} each child could beat at caps and how long it’s in the army, ${pins?.length ? 'your pinned marriages kept, ' : ''}the endpoint fielded as the plan’s army would fight it at caps, and each parent passing the skill its child’s build wants`;
   const detail = [
     `The chance no unit dies from ${first}${r.maps.length > 1 ? ` to ${last}` : ''} (${r.maps.length} map${r.maps.length === 1 ? '' : 's'}), each played by its suggested deployment while EXP and level-ups are rolled, over ${r.runs} simulated run${r.runs === 1 ? '' : 's'}; the ± is the simulation error (95%).`,
-    `It’s the seed plan’s: marriages${run.roster.run.gender && run.roster.run.asset && run.roster.run.flaw ? '' : ' and Robin'} matched on how much of ${ceiling?.label ?? 'the endpoint'} each child could beat at caps and how long it’s in the army, ${pins?.length ? 'your pinned marriages kept, ' : ''}the endpoint fielded as the plan’s army would fight it at caps, and each parent passing the skill its child’s build wants.`,
+    progress
+      ? `It’s the best plan the search has found ${progress.done ? '' : 'so far '}(single edits on the seed plan: ${seedPlan}), each edit kept only when it beats the plan on the same runs by more than twice their error; its chance is worked out again on fresh runs, so picking it doesn’t inflate it.`
+      : `It’s the seed plan’s: ${seedPlan}.`,
     ceiling?.chance !== undefined
       ? `The ceiling is the chance no unit dies on ${ceiling.label} with every unit at its effective caps (a base class promoted) and its recorded skills and weapons: the most any plan for this army could reach there.`
       : '',
@@ -199,8 +242,16 @@ export function flawlessReadout(
     children.length ? `Children who don’t join the simulated army (their fixed parent isn’t married in the log or the plan, or a parent isn’t simulated): ${names(children)}.` : '',
     `Rests on: ${spots.map((b) => `${b.label[0]!.toLowerCase()}${b.label.slice(1)} (${LEAN[b.lean]})`).join(', ')}.`,
   ].filter(Boolean);
+  const found = progress
+    ? [
+        ...progress.proposals.map((p) => `Improvement: ${p.edits.join('; ')}: ${differenceText(p.gain, p.margin)}`),
+        ...progress.closeCalls.map((c) => `${c.label}: ${differenceText(c.gain, c.margin, true)}`),
+        ...progress.pruned.map((c) => `Not tried: ${c.label} (its ceiling ${chanceText(c.ceiling)} is below the best found, ${chanceText(c.best)})`),
+      ]
+    : [];
+  const status = progress ? (progress.done ? (progress.converged ? ' · searched' : '') : ' · searching…') : '';
   return {
-    text: `Flawless chance: ${chanceText(r.chance)} ±${points(r.margin)} · ${ceiling?.chance !== undefined ? `ceiling ${chanceText(ceiling.chance)}` : 'no ceiling yet'}`,
+    text: `Flawless chance: ${chanceText(r.chance)} ±${points(r.margin)} · ${ceiling?.chance !== undefined ? `ceiling ${chanceText(ceiling.chance)}` : 'no ceiling yet'}${status}`,
     detail: detail.join(' '),
     rows: r.maps.map((m) => {
       // Its side goals (#191): the share of runs that secure each one chased; and renown's rewards arriving on it.
@@ -211,7 +262,8 @@ export function flawlessReadout(
       const extra = [...goals, ...(rewards.length ? [`renown: ${listOf(rewards)}`] : [])].map((x) => ` · ${x}`).join('');
       return `${m.label}: ${m.noDeath === undefined ? 'no run gets here with nobody lost' : `${chanceText(m.noDeath)}${m.gold ? ` · ${goldRange(m.gold)}` : ''}`}${extra}`;
     }),
-    roadmap: roadmapReadout(engine, run, step.best),
+    roadmap: roadmapReadout(engine, run, plan),
+    found,
   };
 }
 
@@ -324,17 +376,22 @@ export const goldText = (g: number) => `${Math.round(g).toLocaleString('en-US')}
 /** A gold spread as a range, 10th to 90th percentile (#190): "4,000–6,500G", or one amount when every run agrees. */
 export const goldRange = (g: GoldSpread) => (g.low === g.high ? goldText(g.low) : `${Math.round(g.low).toLocaleString('en-US')}–${goldText(g.high)}`);
 
-type Readout = ReturnType<typeof flawlessReadout>;
-
 /** Readouts already worked out, by run: a run is replaced, never edited, so a new run works it out again. */
-const READOUTS = new WeakMap<Run, Readout>();
+const READOUTS = new WeakMap<Run, FlawlessReadout>();
+/** Whether this visit has run a full solve yet: the first is full (about 30 s), later ones re-solves (about 5 s). */
+let solvedOnce = false;
+/** The run the worker is solving, so a re-render of the same run doesn't restart it. */
+let solving: Run | undefined;
+/** The section on the page now, for the run it shows: updates land on it, whichever render drew it. */
+let live: { run: Run; el: HTMLElement } | undefined;
 
 /**
- * The flawless chance (#186) under the map order. It takes a moment on a long map order, so the view renders first and
- * the chance fills in right after.
+ * The flawless chance (#186) under the map order. The solve's Web Worker (#199) works it out off the page: the
+ * headline updates as it improves the best plan, with what it found listed below (a full solve the first time, about
+ * 30 s; a re-solve after an edit or a recorded map, about 5 s). Without a worker the page works out the seed plan's.
  */
 function flawlessSection(ctx: RunContext): HTMLElement {
-  const draw = (r: Readout | undefined) =>
+  const draw = (r: FlawlessReadout | undefined) =>
     h(
       'details',
       { class: 'banner flawless' },
@@ -344,16 +401,46 @@ function flawlessSection(ctx: RunContext): HTMLElement {
       r?.roadmap?.rows.length
         ? h('details', { class: 'roadmap' }, h('summary', {}, h('b', {}, r.roadmap.title)), h('ol', { class: 'small' }, ...r.roadmap.rows.map((x) => h('li', {}, x))))
         : null,
+      r?.found.length ? h('ul', { class: 'small solve-found' }, ...r.found.map((x) => h('li', {}, x))) : null,
     );
-  const done = READOUTS.get(ctx.run);
-  if (done) return draw(done);
-  const el = draw(undefined);
   const run = ctx.run;
-  setTimeout(() => {
-    if (!el.isConnected) return;
-    const r = READOUTS.get(run) ?? flawlessReadout(ctx.engine, run, { ...(ctx.roleOf ? { roleOf: ctx.roleOf } : {}), ...(ctx.pins ? { pins: ctx.pins() } : {}) });
+  const el = draw(READOUTS.get(run));
+  const here = { run, el };
+  live = here;
+  const show = (r: FlawlessReadout) => {
     READOUTS.set(run, r);
-    if (el.isConnected) el.replaceWith(draw(r));
+    if (live !== here || !here.el.isConnected) return;
+    const next = draw(r);
+    // Keep the panel open across updates.
+    if ((here.el as HTMLDetailsElement).open) (next as HTMLDetailsElement).open = true;
+    here.el.replaceWith(next);
+    here.el = next;
+  };
+  if (READOUTS.has(run) && solving !== run) return el;
+  const pins = ctx.pins?.();
+  if (solving !== run && ctx.assumptions) {
+    const roles = ctx.roleOf ? Object.fromEntries(rosterUnits(run.roster.run).map((u) => [u.id, ctx.roleOf!(u.id)])) : undefined;
+    let chance: FlawlessChance | undefined;
+    const started = startSolve(
+      { kind: 'solve', assumptions: ctx.assumptions, run, seed: FLAWLESS_SEED, budget: STEP_BUDGET, seconds: solvedOnce ? SOLVE_SECONDS.resolve : SOLVE_SECONDS.full, ...(pins ? { pins } : {}), ...(roles ? { roles } : {}) },
+      (reply) => {
+        if (reply.kind !== 'step') return;
+        const s = reply.step;
+        chance = s.chance ?? chance;
+        if (reply.done && solving === run) solving = undefined;
+        if (chance) show(solvedReadout(ctx.engine, run, { best: s.best, chance, proposals: s.proposals, closeCalls: s.closeCalls, pruned: s.pruned, done: reply.done, converged: s.converged }, pins, ctx.roleOf));
+      },
+    );
+    if (started) {
+      solvedOnce = true;
+      solving = run;
+      return el;
+    }
+  }
+  if (solving === run) return el;
+  setTimeout(() => {
+    if (!here.el.isConnected) return;
+    show(READOUTS.get(run) ?? flawlessReadout(ctx.engine, run, { ...(ctx.roleOf ? { roleOf: ctx.roleOf } : {}), ...(pins ? { pins } : {}) }));
   }, 0);
   return el;
 }
