@@ -10,9 +10,15 @@
  * of Chapter 11 by the game's rule. So a child is listed once per spouse its fixed parent can have: the recorded one,
  * else the plan's, Chrom (for a Chapter 11 candidate) and, for Lucina, each candidate and the Maiden. A child with
  * none, or whose parent the simulation doesn't play, doesn't join (`notSimulated`, why `child`).
+ *
+ * Gold and items (#190): the runs start from the latest entry's gold (5,000G before any map is logged), seals and
+ * weapons' uses; each map carries what the open armories sell in its preparations (`openStock` over the maps cleared
+ * by then), its sure income (`sureIncome`) and its sure free seals.
  */
 import { CHILD_UNITS, type ChildId } from '../game-data/children';
-import { MAPS, type ChapterDifficulty } from '../game-data/chapters';
+import { MAPS, type ChapterData, type ChapterDifficulty } from '../game-data/chapters';
+import { STARTING_GOLD } from '../game-data/gold';
+import { mapGold } from './gold';
 import { ASSET_FLAW, ROBIN_GROWTHS, ROBIN_MODIFIERS } from '../game-data/robin';
 import { MOD_STATS, STATS, type Gender, type Growths, type Modifiers } from '../game-data/stats';
 import { FIRST_GEN_UNITS, type UnitId } from '../game-data/units';
@@ -30,7 +36,7 @@ import { fixedPass } from './child-skills';
 import { CHROM_FALLBACK_PARTNER, CHROM_WEDDING_CANDIDATES, CHROM_WEDDING_MAP } from '../game-data/supports';
 import type { Fighter } from './solver';
 import type { SimItem } from './sim/sustain';
-import { classIdByName, sealAvailability, sealsHeld } from './supply';
+import { classIdByName, openStock, sealAvailability, sealsHeld } from './supply';
 import { simMapById } from './sim/sim-map';
 import { simulateCeiling, type Ceiling } from './sim/ceiling';
 import { simulateRuns, type ArmyUnit, type ChildRecruit, type RunSim, type RunSimInput, type RunSimMap } from './sim/run-sim';
@@ -41,18 +47,19 @@ const WEAPON_KINDS = new Set(['sword', 'lance', 'axe', 'bow', 'tome', 'stone', '
  * A recorded unit as a fighter: its first weapon (the one it would equip), its weapons to choose from, and the staves
  * and other items it can spend uses of on the map (#182; the simulation uses the ones that heal or Rescue).
  */
-export function fighterOf(name: string, u: UnitSnapshot): { fighter: Fighter; weapons: NonNullable<Fighter['weapon']>[]; items: SimItem[] } | undefined {
+export function fighterOf(name: string, u: UnitSnapshot): { fighter: Fighter; weapons: NonNullable<Fighter['weapon']>[]; weaponUses: (number | null)[]; items: SimItem[] } | undefined {
   if (!u.stats) return undefined;
-  const weapons = u.inventory.flatMap((h) => {
+  const held = u.inventory.flatMap((h) => {
     const item = itemByName(h.item);
-    return item && WEAPON_KINDS.has(item.kind) ? [{ item, ...(h.forge ? { forge: { mt: h.forge.mt, hit: h.forge.hit, crit: h.forge.crit } } : {}) }] : [];
+    return item && WEAPON_KINDS.has(item.kind) ? [{ weapon: { item, ...(h.forge ? { forge: { mt: h.forge.mt, hit: h.forge.hit, crit: h.forge.crit } } : {}) }, uses: h.uses }] : [];
   });
+  const weapons = held.map((h) => h.weapon);
   const items = u.inventory.flatMap((h) => {
     const item = itemByName(h.item);
     const uses = h.uses ?? item?.uses ?? 0;
     return item && (item.kind === 'staff' || item.kind === 'item') && uses > 0 ? [{ item, uses }] : [];
   });
-  return { fighter: { name, className: u.class, stats: u.stats, skills: u.skills, weapon: weapons[0] }, weapons, items };
+  return { fighter: { name, className: u.class, stats: u.stats, skills: u.skills, weapon: weapons[0] }, weapons, weaponUses: held.map((h) => h.uses), items };
 }
 
 /** Why a unit of the army isn't in the simulation. */
@@ -78,6 +85,8 @@ export type FlawlessChance = RunSim & {
   readonly unknownHistory: readonly RosterUnit[];
   /** The map order's endpoint key; `maps` is empty once it's recorded. */
   readonly endpoint: string;
+  /** The latest entry records no gold: the runs start with none (#190). */
+  readonly goldUnrecorded: boolean;
 };
 
 /**
@@ -133,7 +142,12 @@ function sideOf(run: Run, snap: Snapshot, u: RosterUnit, assumptions: Assumption
  * The simulation's input for a run: the army, the maps still to play and the seals held. Units the simulation can't
  * play are listed in `notSimulated`; units whose seal history is unknown in `unknownHistory`.
  */
-export function flawlessInput(run: Run, assumptions: Assumptions, roleOf?: (u: RosterUnit) => DeploymentRole, marriages?: readonly Couple[]): { readonly input: RunSimInput; readonly notSimulated: readonly NotSimulated[]; readonly unknownHistory: readonly RosterUnit[]; readonly endpoint: string } {
+export function flawlessInput(
+  run: Run,
+  assumptions: Assumptions,
+  roleOf?: (u: RosterUnit) => DeploymentRole,
+  marriages?: readonly Couple[],
+): { readonly input: RunSimInput; readonly notSimulated: readonly NotSimulated[]; readonly unknownHistory: readonly RosterUnit[]; readonly endpoint: string; readonly goldUnrecorded: boolean } {
   const difficulty: Difficulty = run.roster.run.difficulty ?? 'normal';
   const table: ChapterDifficulty = difficulty === 'lunatic-plus' ? 'lunatic' : difficulty;
   const order = remainingMapOrder(run);
@@ -165,6 +179,7 @@ export function flawlessInput(run: Run, assumptions: Assumptions, roleOf?: (u: R
       modifiers: side.modifiers,
       skills: s.skills,
       weapons: f.weapons,
+      weaponUses: f.weaponUses,
       ...(f.items.length ? { items: f.items } : {}),
       supports: s.supports,
       role: role(u),
@@ -283,17 +298,37 @@ export function flawlessInput(run: Run, assumptions: Assumptions, roleOf?: (u: R
       later,
       ...(children.length ? { children } : {}),
       masterSeals: sealAvailability(cleared).master === 'armory',
+      armory: openStock(cleared).armory,
+      income: sureIncome(data),
+      seals: sureSeals(data),
     };
     cleared.add(step.map);
     return m;
   });
-  const held = sealsHeld([...snap.convoy, ...Object.values(snap.units).flatMap((u) => u?.inventory ?? [])]).master;
+  const held = sealsHeld([...snap.convoy, ...Object.values(snap.units).flatMap((u) => u?.inventory ?? [])]);
+  // Gold: the latest entry's; a run with no map logged yet starts with the game's 5,000G; otherwise unrecorded reads 0.
+  const fresh = run.entries.every((e) => e.map === 'other');
+  const goldUnrecorded = snap.gold === null && !fresh;
+  const gold = snap.gold ?? (fresh ? STARTING_GOLD : 0);
   return {
-    input: { army, maps, difficulty, masterSealsHeld: held, cleared: recordedMaps, married: couplesOf(recorded), couples: couplesOf(spouseOf).filter(([a]) => !recorded.has(a)) },
+    input: { army, maps, difficulty, masterSealsHeld: held.master, secondSealsHeld: held.second, gold, cleared: recordedMaps, married: couplesOf(recorded), couples: couplesOf(spouseOf).filter(([a]) => !recorded.has(a)) },
     notSimulated,
     unknownHistory,
     endpoint: order.endpoint.key,
+    goldUnrecorded,
   };
+}
+
+/**
+ * A map's sure income (#190): its Bullion at its sale price and Paralogue 13's gold (`mapGold`), the rows no play can
+ * lose (side goals come with #191). Only Bullion is sold; every other item is held.
+ */
+export const sureIncome = (map: ChapterData): number => mapGold(map).reduce((a, r) => a + (r.play ? 0 : r.gold), 0);
+
+/** The seals a map hands out that no play can lose (#190). */
+function sureSeals(map: ChapterData): { master: number; second: number } {
+  const count = (seal: string) => map.items.filter((r) => r.item === seal && !r.play).length;
+  return { master: count('Master Seal'), second: count('Second Seal') };
 }
 
 /** Each couple once, from a map of spouses both ways. */
@@ -302,9 +337,9 @@ const couplesOf = (spouses: ReadonlyMap<RosterUnit, RosterUnit>): [RosterUnit, R
 
 /** The flawless chance of a run from the next map to the endpoint (see `simulateRuns`). */
 export function flawlessChance(run: Run, assumptions: Assumptions, options: FlawlessOptions = {}): FlawlessChance {
-  const { input, notSimulated, unknownHistory, endpoint } = flawlessInput(run, assumptions, options.roleOf, options.marriages);
+  const { input, notSimulated, unknownHistory, endpoint, goldUnrecorded } = flawlessInput(run, assumptions, options.roleOf, options.marriages);
   const sim = simulateRuns(input, options.seed ?? FLAWLESS_SEED, options.runs ?? FLAWLESS_RUNS, assumptions);
-  return { ...sim, notSimulated, unknownHistory, endpoint };
+  return { ...sim, notSimulated, unknownHistory, endpoint, goldUnrecorded };
 }
 
 /**

@@ -23,6 +23,7 @@ import {
   RESEARCH_SKILL_INHERITANCE,
   RESEARCH_DEATH_AFTER_MARRIAGE,
   RESEARCH_GOLD,
+  FEW_DURABILITY,
   FEW_RENOWN,
   SF_RENOWN,
   RESEARCH_EXP,
@@ -91,6 +92,8 @@ type AssumptionValues = {
   'chrom-wedding-olivia': 'two-points' | 'rank-c';
   /** Chrom's end-of-Chapter 11 tie order, after the fewest points to the next rank. */
   'chrom-wedding-tie-order': 'sf' | 'jp';
+  /** A tome's miss: it spends a use (the series rule for tomes and staves), or it's free like a physical miss. */
+  'tome-miss-use': 'costs-a-use' | 'free';
 };
 
 export type AssumptionId = keyof AssumptionValues;
@@ -445,6 +448,21 @@ export const ASSUMPTION_REGISTRY: { readonly [K in AssumptionId]: AssumptionDef<
     parse: (raw) => (raw === 'sf' || raw === 'jp' ? raw : undefined),
     affects: 'who Chrom marries at the end of Chapter 11 in the simulated runs',
   }),
+  'tome-miss-use': entry({
+    id: 'tome-miss-use',
+    label: 'A tome’s miss spending a use',
+    why:
+      'A weapon spends a use on each hit; a physical miss is free (GameFAQs, the Fandom Dual System page). FEW Durability, Fandom and ' +
+      'fedic give the series rule that tomes and staves spend one on a miss too and don’t name Awakening as an exception, but nobody has ' +
+      'tested it in Awakening (research C7, G3). A use a miss spends brings a tome’s rebuy one map sooner.',
+    sources: [FEW_DURABILITY, RESEARCH_GOLD],
+    default: 'costs-a-use',
+    alternatives: [{ label: 'Free, like a physical miss', value: 'free' }],
+    input: 'choice',
+    format: (v) => (v === 'costs-a-use' ? 'Spends a use (the series rule)' : 'Free, like a physical miss'),
+    parse: (raw) => (raw === 'costs-a-use' || raw === 'free' ? raw : undefined),
+    affects: 'weapon upkeep and rebuys in the simulated runs',
+  }),
 };
 
 export const ASSUMPTION_IDS = Object.keys(ASSUMPTION_REGISTRY) as AssumptionId[];
@@ -479,7 +497,7 @@ export const isDefaultValue = (id: AssumptionId, value: unknown) =>
 export type BlindSpotId = 'one-worst-attacker' | 'held-back-out-of-reach' | 'equal-share-of-actions' | 'rally-reaches-every-pair' | 'attack-stance-adjacency' | 'likely-result' | 'bosses-hold';
 
 /** The run simulation's own blind spots (#186): how it walks the army from one map to the next. */
-export type RunBlindSpotId = 'promotes-at-cap' | 'lead-takes-exp' | 'supports-from-pair-combats' | 'kit-as-recorded';
+export type RunBlindSpotId = 'promotes-at-cap' | 'lead-takes-exp' | 'supports-from-pair-combats' | 'kit-as-recorded' | 'sure-income-only' | 'kit-by-matchups-won';
 
 export type BlindSpot = {
   readonly id: BlindSpotId | RunBlindSpotId;
@@ -592,5 +610,25 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
       'when a player keeps a split pair side by side; a careful player often does.',
     lean: 'low',
     touches: ['map'],
+  },
+  {
+    id: 'sure-income-only',
+    label: 'Only sure income is counted',
+    why:
+      'A run’s gold is the gold held plus the Bullion (and Paralogue 13’s gold) no play can lose, sold at the next armory. Bullion an ' +
+      'escaping Thief carries, a village that can burn, Chapter 18’s falling floor and paralogue results aren’t counted until the side ' +
+      'goals are chased (#191), nor renown’s Bullion, nor free seals play can lose. Nothing else is ever sold.',
+    lean: 'low',
+    touches: ['flawless'],
+  },
+  {
+    id: 'kit-by-matchups-won',
+    label: 'The endpoint kit is trimmed by matchups won per gold',
+    why:
+      'Each kit piece (a weapon the open armories sell, its forge to +5 Mt, a Vulnerary) is worth the endpoint matchups it wins: foes its ' +
+      'lead one-rounds and rounds it survives, by count; a Vulnerary counts as one. A run short of gold drops the pieces that win fewest ' +
+      'per gold, after its rebuys and seals. Scoring each piece by flawless points (the full solve, #199) may keep a different set.',
+    lean: 'either',
+    touches: ['flawless'],
   },
 ];

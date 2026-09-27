@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, addEntry, createEngine, editEntry, latestEntry, recordMarriage, runFromRoster, withRun, type Route, type RosterUnit, type UnitSnapshot } from '../engine';
+import { EMPTY_ROSTER, addEntry, createEngine, editEntry, latestEntry, recordMarriage, runFromRoster, withRun, type Route, type RosterUnit, type Run, type Snapshot, type UnitSnapshot } from '../engine';
 import { childStatsNote, flawlessReadout, heldText, mapOrderReadout, parseHeldText, parseSupportsText, supportsText } from './run-page';
 import { chanceText } from './chance';
 
@@ -45,6 +45,20 @@ describe('the flawless chance readout (#186)', () => {
     expect(r.detail).toContain('promotions at the level cap (either way), each fight’s EXP goes to its lead (may read low)');
     expect(r.rows).toHaveLength(2);
     expect(r.rows[0]).toMatch(/^Chapter 25: /);
+  });
+
+  it('shows each map’s gold at its end as a range, and says when the log records none (#190)', () => {
+    const atLatest = (run: Run, edit: (s: Snapshot) => Snapshot) => editEntry(run, latestEntry(run)!.id, edit, 1);
+    const run = atLatest(played(all.slice(0, -2)), (s) => ({ ...s, gold: 12500 }));
+    const r = flawlessReadout(engine, run, { runs: 2 });
+    const sim = engine.flawlessChance(run, { runs: 2 });
+    const g = sim.maps[0]!.gold!;
+    expect(g.low).toBeLessThanOrEqual(g.high);
+    const range = g.low === g.high ? `${g.low.toLocaleString('en-US')}G` : `${g.low.toLocaleString('en-US')}–${g.high.toLocaleString('en-US')}G`;
+    expect(r.rows[0]).toBe(`Chapter 25: ${chanceText(sim.maps[0]!.noDeath!)} · ${range}`);
+    expect(r.detail).toContain('Gold per map is each run’s gold at the map’s end, 10th to 90th percentile');
+    expect(r.detail).not.toContain('records no gold');
+    expect(flawlessReadout(engine, played(all.slice(0, -2)), { runs: 1 }).detail).toContain('Your latest entry records no gold, so the runs start with none');
   });
 
   it('names a unit whose seal history is read as 0, and says when the endpoint is recorded', () => {

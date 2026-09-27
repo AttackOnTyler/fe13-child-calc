@@ -96,7 +96,9 @@ export const RESEARCH_GOLD: Citation = {
   label: 'Research: the gold economy (#158)',
   url: `${RESEARCH}/research/gold-economy/research/gold-economy.md`,
 };
-export const FEW_RENOWN: Citation = { label: 'FEW Renown (oldid 762420)', url: 'https://fireemblemwiki.org/w/index.php?title=Renown&oldid=762420' };
+/** FEW Durability: a use goes each time a weapon attacks; tomes and staves spend one on a miss in the series (no Awakening test). */
+export const FEW_DURABILITY: Citation = { label: 'FEW Durability (oldid 772928)', url: 'https://fireemblemwiki.org/w/index.php?title=Durability&oldid=772928' };
+export const FEW_RENOWN: Citation ={ label: 'FEW Renown (oldid 762420)', url: 'https://fireemblemwiki.org/w/index.php?title=Renown&oldid=762420' };
 export const SF_RENOWN: Citation = { label: 'SF Renown', url: 'https://serenesforest.net/awakening/miscellaneous/renown/' };
 export const RESEARCH_EXP: Citation = {
   label: 'Research: EXP rules (#138)',
