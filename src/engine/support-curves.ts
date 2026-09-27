@@ -27,8 +27,11 @@ export type SupportPairCurve = PairCurve & { readonly a: SupportUnit; readonly b
 
 const RANKS: readonly SupportLevel[] = ['C', 'B', 'A', 'S'];
 
-/** Maps to each rank at `perMap` points a map, points held at each threshold until the map ends. */
-export function mapsToRanks(thresholds: SupportThresholds, perMap: number = SUPPORT_POINTS_PER_MAP): Partial<Record<SupportLevel, number>> {
+/**
+ * Maps to each rank at `perMap` points a map, points held at each threshold until the map ends (the clamp), or
+ * carried past it (the bank; the `support-past-threshold` assumption).
+ */
+export function mapsToRanks(thresholds: SupportThresholds, perMap: number = SUPPORT_POINTS_PER_MAP, rule: 'clamp' | 'bank' = 'clamp'): Partial<Record<SupportLevel, number>> {
   const out: Partial<Record<SupportLevel, number>> = {};
   let points = 0;
   let maps = 0;
@@ -36,7 +39,7 @@ export function mapsToRanks(thresholds: SupportThresholds, perMap: number = SUPP
     const need = thresholds[rank];
     if (need === undefined) break;
     while (points < need) {
-      points = Math.min(need, points + perMap);
+      points = rule === 'clamp' ? Math.min(need, points + perMap) : points + perMap;
       maps++;
     }
     out[rank] = maps;
@@ -53,9 +56,11 @@ const curves: Readonly<Record<SupportCurve, PairCurve>> = Object.fromEntries(
 ) as Record<SupportCurve, PairCurve>;
 
 /** A pair's curve, either way round; undefined when the two can't support. */
-export function pairCurve(a: SupportUnit, b: SupportUnit): PairCurve | undefined {
+export function pairCurve(a: SupportUnit, b: SupportUnit, rule: 'clamp' | 'bank' = 'clamp'): PairCurve | undefined {
   const curve = supportCurveOf(a, b);
-  return curve && curves[curve];
+  if (!curve || rule === 'clamp') return curve && curves[curve];
+  const mapsTo = mapsToRanks(SUPPORT_CURVES[curve], SUPPORT_POINTS_PER_MAP, 'bank');
+  return { curve, thresholds: SUPPORT_CURVES[curve], mapsTo, mapsToS: mapsTo.S };
 }
 
 /** Every pair that can support (Robin (M) and Robin (F) apart), with its curve. */

@@ -3,6 +3,7 @@
  * Record results asks about it. The rule and its sources are on `CHROM_FALLBACK_PARTNER` (game-data/supports.ts).
  */
 import { CHROM_FALLBACK_PARTNER, CHROM_WEDDING_CANDIDATES, CHROM_WEDDING_MAP } from '../game-data/supports';
+import type { Assumptions } from './assumptions';
 import type { RosterUnit } from './roster';
 import { SUPPORT_LEVELS, type Run, type SupportLevel } from './run';
 
@@ -29,6 +30,39 @@ export function chromChapter11Wife(
   if (top < 0) return { decided: false, contenders: [...free, CHROM_FALLBACK_PARTNER] };
   const tied = free.filter((c) => level(c) === top);
   return tied.length === 1 ? { decided: true, wife: tied[0]! } : { decided: false, contenders: tied };
+}
+
+/** The tie orders after the fewest points to the next rank (the `chrom-wedding-tie-order` assumption). */
+export const CHROM_WEDDING_TIE_ORDERS: Readonly<Record<Assumptions['chrom-wedding-tie-order'], readonly RosterUnit[]>> = {
+  sf: ['sumia', 'sully', 'maribelle', 'robin', 'olivia'],
+  jp: ['sumia', 'maribelle', 'sully', 'olivia', 'robin'],
+};
+
+/** Where Chrom stands with a candidate in points: its rank and the points still needed for the next one. */
+export type ChromStanding = { readonly points: number; readonly rank: SupportLevel | null; readonly toNext: number };
+
+/**
+ * Who an unmarried Chrom marries at the end of Chapter 11 when points are known (the simulation, #188): the rank rule
+ * (`chromChapter11Wife`), then a tie at the top to the fewest points to the next rank, then the tie order. With no rank
+ * at all, a candidate needs at least 1 point (Olivia 2 under SF, a C under the JP wiki, so never here); with none, the
+ * Maiden. Both unsettled details are assumptions (`chrom-wedding-olivia`, `chrom-wedding-tie-order`).
+ */
+export function chromWifeByPoints(
+  candidates: readonly RosterUnit[],
+  marriedElsewhere: ReadonlySet<RosterUnit>,
+  standing: Readonly<Partial<Record<RosterUnit, ChromStanding>>>,
+  assumptions: Pick<Assumptions, 'chrom-wedding-olivia' | 'chrom-wedding-tie-order'>,
+): RosterUnit {
+  const ranks: Partial<Record<RosterUnit, SupportLevel>> = {};
+  for (const c of candidates) if (standing[c]?.rank) ranks[c] = standing[c]!.rank!;
+  const rule = chromChapter11Wife(candidates, marriedElsewhere, ranks);
+  if (rule.decided) return rule.wife;
+  const order = CHROM_WEDDING_TIE_ORDERS[assumptions['chrom-wedding-tie-order']];
+  const needs = (c: RosterUnit) => (c === 'olivia' ? (assumptions['chrom-wedding-olivia'] === 'two-points' ? 2 : Infinity) : 1);
+  const tied = rule.contenders.filter((c) => c !== CHROM_FALLBACK_PARTNER && (ranks[c] || (standing[c]?.points ?? 0) >= needs(c)));
+  if (!tied.length) return CHROM_FALLBACK_PARTNER;
+  const toNext = (c: RosterUnit) => standing[c]?.toNext ?? Infinity;
+  return [...tied].sort((a, b) => toNext(a) - toNext(b) || order.indexOf(a) - order.indexOf(b))[0]!;
 }
 
 /** Record results' question for Chapter 11: who the game married Chrom to, what to offer, and what to pre-select. */

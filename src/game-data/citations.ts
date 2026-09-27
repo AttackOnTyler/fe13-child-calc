@@ -85,6 +85,13 @@ export const RESEARCH_CHILD_RECRUITMENT: Citation = {
   label: 'Research: child recruitment (#140)',
   url: `${RESEARCH}/research/child-recruitment/research/child-recruitment.md`,
 };
+export const RESEARCH_SUPPORT_GROWTH: Citation = {
+  label: 'Research: how fast supports grow (#139)',
+  url: `${RESEARCH}/research/support-growth/research/support-growth.md`,
+};
+export const SF_SUPPORT_BASICS: Citation = { label: 'SF Support Basics', url: 'https://serenesforest.net/awakening/characters/supports/support-basics/' };
+/** The JP 2ch wiki's supports page: Chrom marries Olivia at the end of Chapter 11 only from a C. */
+export const JP_SUPPORTS: Citation = { label: 'JP 2ch wiki supports (p.27)', url: 'https://w.atwiki.jp/fireemblem3ds/pages/27.html' };
 export const RESEARCH_GOLD: Citation = {
   label: 'Research: the gold economy (#158)',
   url: `${RESEARCH}/research/gold-economy/research/gold-economy.md`,

@@ -44,7 +44,8 @@ export const S_SUPPORTS: Readonly<Partial<Record<UnitId, readonly UnitId[]>>> = 
  * https://serenesforest.net/awakening/characters/supports/support-basics/, JP-112 https://w.atwiki.jp/fireemblem3ds/pages/112.html
  * (and its mirror JP-89 https://w.atwiki.jp/kakuseife/pages/89.html).
  *
- * Two details are unsettled, and the app records ranks, not points, so it can't decide them:
+ * Two details are unsettled, and the app records ranks, not points, so Record results can't decide them; the simulation
+ * (#188) reads them from its points as assumptions (`chrom-wedding-olivia`, `chrom-wedding-tie-order`):
  * - Olivia's threshold. SF Support Basics: Olivia if he has at least 2 points with her and no C with anyone else.
  *   JP-27 (https://w.atwiki.jp/fireemblem3ds/pages/27.html): she needs at least C.
  * - Ties. SF Support Basics: the fewest points to the next rank, then Sumia > Sully > Maribelle > Robin > Olivia.

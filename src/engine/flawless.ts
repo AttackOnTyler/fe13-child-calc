@@ -5,9 +5,11 @@
  * forced units, and its recruits joining as Record results would add them (`recruitSnapshot`).
  *
  * Children (#187) are read on entering the map that recruits them (their paralogue; Chapter 13 for Lucina), from their
- * fixed parent and its spouse: the recorded marriage when there is one (a fact), else the plan's (`marriages`: the
- * adopted plan by default). Chrom's wife is the Maiden when neither names one. A child whose fixed parent has no
- * spouse, or whose parent the simulation doesn't play, doesn't join (`notSimulated`, why `child`).
+ * fixed parent and its spouse in the run. The recorded marriages are facts; the plan's (`marriages`: the adopted plan
+ * by default) are made in a run only once the pair reaches S there (#188), and an unmarried Chrom marries at the end
+ * of Chapter 11 by the game's rule. So a child is listed once per spouse its fixed parent can have: the recorded one,
+ * else the plan's, Chrom (for a Chapter 11 candidate) and, for Lucina, each candidate and the Maiden. A child with
+ * none, or whose parent the simulation doesn't play, doesn't join (`notSimulated`, why `child`).
  */
 import { CHILD_UNITS, type ChildId } from '../game-data/children';
 import { MAPS, type ChapterDifficulty } from '../game-data/chapters';
@@ -25,6 +27,7 @@ import { remainingMapOrder } from './map-order';
 import { unitName, type Couple, type Difficulty, type RosterUnit } from './roster';
 import { EMPTY_SNAPSHOT, latestEntry, morganStart, recruitSnapshot, unitNamed, type Run, type Snapshot, type UnitSnapshot } from './run';
 import { fixedPass } from './child-skills';
+import { CHROM_FALLBACK_PARTNER, CHROM_WEDDING_CANDIDATES, CHROM_WEDDING_MAP } from '../game-data/supports';
 import type { Fighter } from './solver';
 import type { SimItem } from './sim/sustain';
 import { classIdByName, sealAvailability, sealsHeld } from './supply';
@@ -179,14 +182,28 @@ export function flawlessInput(run: Run, assumptions: Assumptions, roleOf?: (u: R
     spouseOf.set(a, b);
     spouseOf.set(b, a);
   }
+  // Chrom's wedding is still to come in the simulation: every candidate not married elsewhere may be his wife.
+  const weddingAhead = !recorded.has('chrom') && order.steps.some((st) => st.map === CHROM_WEDDING_MAP);
+  const chromCandidates: RosterUnit[] = weddingAhead ? [...CHROM_WEDDING_CANDIDATES, ...(gender === 'F' ? (['robin'] as const) : [])].filter((c) => !recorded.has(c)) : [];
+  /** The spouses a fixed parent can have in a run: the recorded one, else the plan's, and Chrom's wedding's. */
+  const spousesFor = (fixed: RosterUnit): RosterUnit[] => {
+    const known = recorded.get(fixed);
+    if (known) return [known];
+    const out = new Set<RosterUnit>();
+    const planned = spouseOf.get(fixed);
+    if (planned) out.add(planned);
+    // Lucina's mother is the Maiden while Chrom is unmarried.
+    if (fixed === 'chrom') for (const c of [...chromCandidates, CHROM_FALLBACK_PARTNER as RosterUnit]) out.add(c);
+    if (chromCandidates.includes(fixed)) out.add('chrom');
+    return [...out];
+  };
   const chromsChild = (u: RosterUnit) => u === 'lucina' || (u in CHILD_UNITS && spouseOf.get(CHILD_UNITS[u as ChildId].fixedParent) === 'chrom');
   const simulated = new Set<RosterUnit>();
 
-  /** A child read on entering its map, from its fixed parent and that parent's spouse (#187). */
-  const childRecruit = (u: ChildId, s: UnitSnapshot): ChildRecruit | undefined => {
+  /** A child read on entering its map, from its fixed parent and a spouse that parent can have (#187). */
+  const childRecruit = (u: ChildId, s: UnitSnapshot, spouse: RosterUnit): ChildRecruit | undefined => {
     const child = CHILD_UNITS[u];
     const fixed: RosterUnit = child.fixedParent;
-    const spouse = spouseOf.get(fixed) ?? (u === 'lucina' ? 'maiden' : undefined);
     if (!spouse || !simulated.has(fixed) || (spouse !== 'maiden' && !simulated.has(spouse))) return undefined;
     const startClass = fixed === 'robin' ? morganStart(u, spouse, assumptions) : undefined;
     if (startClass === null) return undefined;
@@ -235,9 +252,10 @@ export function flawlessInput(run: Run, assumptions: Assumptions, roleOf?: (u: R
       const onlyHere = r.stats !== undefined;
       if (!onlyHere && seenUnits.has(u)) continue;
       if (u in CHILD_UNITS) {
-        const c = childRecruit(u as ChildId, recruitSnapshot(u, run, r, snap, assumptions));
-        if (c) {
-          children.push(c);
+        const snapshot = recruitSnapshot(u, run, r, snap, assumptions);
+        const options = spousesFor(CHILD_UNITS[u as ChildId].fixedParent).flatMap((sp) => childRecruit(u as ChildId, snapshot, sp) ?? []);
+        if (options.length) {
+          children.push(...options);
           seenUnits.add(u);
           simulated.add(u);
         } else if (!notSimulated.some((l) => l.unit === u)) notSimulated.push({ unit: u, why: 'child' });
@@ -271,12 +289,16 @@ export function flawlessInput(run: Run, assumptions: Assumptions, roleOf?: (u: R
   });
   const held = sealsHeld([...snap.convoy, ...Object.values(snap.units).flatMap((u) => u?.inventory ?? [])]).master;
   return {
-    input: { army, maps, difficulty, masterSealsHeld: held, cleared: recordedMaps, married: [...spouseOf.keys()] },
+    input: { army, maps, difficulty, masterSealsHeld: held, cleared: recordedMaps, married: couplesOf(recorded), couples: couplesOf(spouseOf).filter(([a]) => !recorded.has(a)) },
     notSimulated,
     unknownHistory,
     endpoint: order.endpoint.key,
   };
 }
+
+/** Each couple once, from a map of spouses both ways. */
+const couplesOf = (spouses: ReadonlyMap<RosterUnit, RosterUnit>): [RosterUnit, RosterUnit][] =>
+  [...spouses].filter(([a, b]) => spouses.get(b) !== a || a < b).map(([a, b]) => [a, b]);
 
 /** The flawless chance of a run from the next map to the endpoint (see `simulateRuns`). */
 export function flawlessChance(run: Run, assumptions: Assumptions, options: FlawlessOptions = {}): FlawlessChance {

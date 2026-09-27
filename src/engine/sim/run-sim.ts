@@ -20,8 +20,14 @@
  * only when its gates hold in the run (`childParalogueGates` over the run's cleared maps and marriages; a closed one
  * isn't played); on entry the child's join stats (`childJoinStats`) and skills (`childSkills`) are read from its
  * parents as they stand in this run, and it joins the army after the map (Lucina: read at the start of Chapter 13,
- * joining at its end, as the chapter data has her). Later tickets extend the same walk:
- * - #188: support points per pair per map from `play.units[id].together`, kept on `state.supports` in `afterMap`.
+ * joining at its end, as the chapter data has her).
+ *
+ * Supports (#188) grow in `afterMap` from the map's combats together (`mapSupportGains`: at most 3 points a pair, each
+ * unit's top three pairs 3, 2 and 1, stopping at each rank's threshold under the clamp), from the recorded ranks. A
+ * planned couple marries in a run only once the pair reaches S there, and the plan pairs it until then; at the end of
+ * Chapter 11 an unmarried Chrom marries by the game's rule (`chromWifeByPoints`). A child's parents are then the run's
+ * marriage: `children` lists one recruit per spouse its fixed parent can have, and the run takes the one it married.
+ * Later tickets extend the same walk:
  * - #190: gold and held items per run on `state.gold`, Bullion in `afterMap`, the shopping list in `beforeMap`.
  * - #194 replaces the promotion rule below (`PROMOTION_RULE`) with the roadmap's class-reached milestones.
  */
@@ -39,6 +45,10 @@ import { suggestDeployment, type DeployCandidate, type Deployment } from '../dep
 import { COUNT_CAP, combatExp, expFoeOf, tierBonus, type ExpFoe } from '../exp';
 import type { Difficulty, RosterUnit } from '../roster';
 import type { Fighter, Foe, SupportLevel } from '../solver';
+import { CHROM_WEDDING_CANDIDATES, CHROM_WEDDING_MAP } from '../../game-data/supports';
+import { chromWifeByPoints, type ChromStanding } from '../chrom-wedding';
+import { SUPPORT_LEVELS } from '../run';
+import { addPoints, mapSupportGains, pairThresholds, pointsOfRank, rankOf } from './support-growth';
 import { playMap, type MapPlay, type SimFoeGroup, type SimGroup, type SimMap, type SimUnit } from './map-play';
 import { createRng, runSeed, type Rng } from './random';
 import type { SimItem } from './sustain';
@@ -75,7 +85,9 @@ export type ArmyUnit = {
 
 /**
  * A child who joins when its map is entered (#187): what doesn't depend on the run. Its join stats and skills are read
- * from its parents as they stand in the run on entry, and it joins the army after the map.
+ * from its parents as they stand in the run on entry, and it joins the army after the map. A map lists one per spouse
+ * its fixed parent can have (#188); a run takes the one whose parents it married (Lucina's with the Maiden while Chrom
+ * is unmarried).
  */
 export type ChildRecruit = {
   readonly id: ChildId;
@@ -123,11 +135,13 @@ export type RunSimInput = {
   readonly masterSealsHeld?: number;
   /** Maps already played (the chapter log's): a child paralogue's gates read them (#187). */
   readonly cleared?: readonly string[];
+  /** The recorded marriages (facts): married from the start of every run. */
+  readonly married?: readonly (readonly [RosterUnit, RosterUnit | 'maiden'])[];
   /**
-   * Units married by the time a child paralogue is reached: the recorded marriages and the plan's (the plan's are
-   * taken as made in time until supports are simulated, #188; the `plan-marriages-made` blind spot).
+   * The plan's marriages still to make (#188): a couple marries in a run once the pair reaches S there, and the plan's
+   * lineups pair it until then.
    */
-  readonly married?: readonly RosterUnit[];
+  readonly couples?: readonly (readonly [RosterUnit, RosterUnit])[];
 };
 
 /** A stat's spread over the runs at the endpoint: 10th percentile, median, 90th, and the effective cap. */
@@ -144,6 +158,26 @@ export type UnitForecast = {
   readonly stats: Readonly<Record<Stat, StatSpread>>;
   /** Its equipped skills: as recorded, or a child's as it joined (its class's and its parents' passes, #187). */
   readonly skills: readonly string[];
+};
+
+/** A pair's support entering the endpoint, over the runs that reach it with nobody lost (#188). */
+export type SupportForecast = {
+  readonly a: RosterUnit;
+  readonly b: RosterUnit;
+  /** Its points: the spread's cap is its top rank's threshold. */
+  readonly points: StatSpread;
+  /** The rank it holds in most of those runs (null below C). */
+  readonly rank: SupportLevel | null;
+};
+
+/** A marriage entering the endpoint (#188): recorded, made by S, or Chrom's at the end of Chapter 11. */
+export type MarriageForecast = {
+  readonly a: RosterUnit;
+  readonly b: RosterUnit | 'maiden';
+  /** The share of the runs reaching the endpoint with nobody lost in which it's made. */
+  readonly share: number;
+  /** The map after which it's made in most of those runs (its key); undefined when it's recorded. */
+  readonly after: string | undefined;
 };
 
 export type RunSimMapResult = {
@@ -179,6 +213,10 @@ export type RunSim = {
    * with nobody lost; empty when none does.
    */
   readonly units: readonly UnitForecast[];
+  /** Supports entering the endpoint, pairs with points only, over the same runs (#188). */
+  readonly supports: readonly SupportForecast[];
+  /** Marriages entering the endpoint, over the same runs (#188). */
+  readonly marriages: readonly MarriageForecast[];
   /** The stated blind spots it rests on: the map simulation's, then the run simulation's own. */
   readonly blindSpots: readonly (BlindSpotId | RunBlindSpotId)[];
 };
@@ -191,7 +229,7 @@ export type RunSim = {
 export const PROMOTION_RULE = { level: 20 } as const;
 
 /** The run simulation's own blind spots (see BLIND_SPOTS): what it simplifies between maps. */
-const RUN_BLIND_SPOTS: readonly RunBlindSpotId[] = ['promotes-at-cap', 'lead-takes-exp', 'plan-marriages-made', 'kit-as-recorded'];
+const RUN_BLIND_SPOTS: readonly RunBlindSpotId[] = ['promotes-at-cap', 'lead-takes-exp', 'supports-from-pair-combats', 'kit-as-recorded'];
 
 /** Special classes (Dancer, Villager, Taguel, Manakete, the DLC classes) level to 30; base and advanced to 20. */
 export const levelCap = (tier: ClassTier): number => (tier === 'special' ? 30 : 20);
@@ -208,13 +246,24 @@ type Live = {
   readonly stats: Record<Stat, number>;
 };
 
-/** One run's state, walked map by map. Later tickets add supports (#188) and gold and items (#190) here. */
+/** One run's state, walked map by map. Later tickets add gold and items (#190) here. */
 export type RunState = {
   readonly army: Map<RosterUnit, Live>;
   masterSealsHeld: number;
   /** Maps played, recorded ones included: the child paralogues' gates read them. */
   readonly cleared: Set<string>;
-  readonly married: ReadonlySet<RosterUnit>;
+  /** Who is married to whom (both ways; the Maiden only as Chrom's wife). */
+  readonly spouses: Map<RosterUnit, RosterUnit | 'maiden'>;
+  /** Units married: the child paralogues' gates read them. */
+  readonly married: Set<RosterUnit>;
+  /** Support points by pair (`pairKey`), from the recorded ranks on (#188). */
+  readonly supports: Map<string, number>;
+  /** The map index after which each marriage the run made was made, by `pairKey`. */
+  readonly weddings: Map<string, number>;
+  /** The plan's couples still to marry, by `pairKey`. */
+  readonly couples: ReadonlyMap<string, readonly [RosterUnit, RosterUnit]>;
+  /** Robin's gender, for Robin's support curves. */
+  readonly robin: Gender | undefined;
   /** Children read on entering this map, who join after it. */
   arriving: Live[];
 };
@@ -372,7 +421,7 @@ function lineupOf(state: RunState, d: Deployment, extra: ReadonlyMap<RosterUnit,
   for (const p of d.pairs) {
     const lead = unit(p.lead);
     const back = p.back ? unit(p.back) : undefined;
-    if (lead) out.push(group(lead, back, p.support));
+    if (lead) out.push(group(lead, back, back ? rankIn(state, p.lead, p.back!) : null));
     else if (back) out.push(group(back, undefined, null));
   }
   for (const id of d.solo) {
@@ -390,7 +439,7 @@ function candidatesOf(state: RunState, extra: ReadonlyMap<RosterUnit, Live>): De
     fighter: fighterOf(u, shownStats(u)),
     weapons: u.base.weapons,
     ...(u.base.items?.length ? { items: u.base.items } : {}),
-    supports: u.base.supports,
+    supports: supportsOf(state, u.base.id),
   }));
 }
 
@@ -446,10 +495,10 @@ function childOf(state: RunState, c: ChildRecruit, assumptions: Assumptions): Li
  */
 function beforeMap(state: RunState, step: RunSimMap, assumptions: Assumptions): Map<RosterUnit, Live> | undefined {
   if (!entered(state, step)) return undefined;
-  for (const a of step.joining) if (!state.army.has(a.id)) state.army.set(a.id, liveOf(a));
+  for (const a of step.joining) if (!state.army.has(a.id)) join(state, a);
   state.arriving = [];
   for (const c of step.children ?? []) {
-    if (state.army.has(c.id)) continue;
+    if (state.army.has(c.id) || state.arriving.some((u) => u.base.id === c.id) || c.parents[1] !== spouseIn(state, c.parents[0])) continue;
     const u = childOf(state, c, assumptions);
     if (u) state.arriving.push(u);
   }
@@ -457,22 +506,123 @@ function beforeMap(state: RunState, step: RunSimMap, assumptions: Assumptions): 
   return new Map(step.mapOnly.map((a) => [a.id, liveOf(a)]));
 }
 
-/** After a map: EXP and level-ups from its fights, then the recruits and children who came during it. */
-function afterMap(state: RunState, step: RunSimMap, play: MapPlay, rng: Rng | null, difficulty: Difficulty, assumptions: Assumptions) {
+/**
+ * After map `at`: EXP and level-ups from its fights, support points from its combats together and the marriages they
+ * make, the recruits and children who came during it, then (Chapter 11) Chrom's wedding.
+ */
+function afterMap(state: RunState, step: RunSimMap, at: number, play: MapPlay, rng: Rng | null, difficulty: Difficulty, assumptions: Assumptions) {
   earn(state, step.map, play, rng, difficulty, assumptions);
-  for (const a of step.later) if (!state.army.has(a.id)) state.army.set(a.id, liveOf(a));
+  growSupports(state, play, at, assumptions['support-past-threshold']);
+  for (const a of step.later) if (!state.army.has(a.id)) join(state, a);
   for (const u of state.arriving) if (!state.army.has(u.base.id)) state.army.set(u.base.id, u);
   state.arriving = [];
   state.cleared.add(step.map.id);
+  if (step.map.id === CHROM_WEDDING_MAP) chromWedding(state, at, assumptions);
 }
 
-const newState = (input: RunSimInput): RunState => ({
-  army: new Map(input.army.map((a) => [a.id, liveOf(a)])),
-  masterSealsHeld: input.masterSealsHeld ?? 0,
-  cleared: new Set(input.cleared ?? []),
-  married: new Set(input.married ?? []),
-  arriving: [],
-});
+const pairKey = (a: string, b: string) => (a < b ? `${a}+${b}` : `${b}+${a}`);
+
+/** A fixed parent's spouse in the run: Chrom's is the Maiden until he marries (Lucina's other parent). */
+const spouseIn = (state: RunState, u: RosterUnit): RosterUnit | 'maiden' | undefined => state.spouses.get(u) ?? (u === 'chrom' ? 'maiden' : undefined);
+
+/** Whether a pair can reach S in the run: married to each other, or a plan's couple with neither married yet. */
+const sAllowed = (state: RunState, a: RosterUnit, b: RosterUnit): boolean =>
+  state.spouses.get(a) === b || (state.couples.has(pairKey(a, b)) && !state.married.has(a) && !state.married.has(b));
+
+/** The pair's rank in the run (S when married to each other), or null. */
+function rankIn(state: RunState, a: RosterUnit, b: RosterUnit): SupportLevel | null {
+  if (state.spouses.get(a) === b) return 'S';
+  const points = state.supports.get(pairKey(a, b));
+  const t = points ? pairThresholds(a, b, state.robin) : undefined;
+  return t ? rankOf(points!, t, sAllowed(state, a, b)) : null;
+}
+
+/** A unit's supports in the run, as a deployment reads them. */
+function supportsOf(state: RunState, id: RosterUnit): { partner: RosterUnit; rank: SupportLevel }[] {
+  const out: { partner: RosterUnit; rank: SupportLevel }[] = [];
+  for (const k of state.supports.keys()) {
+    const [a, b] = k.split('+') as [RosterUnit, RosterUnit];
+    if (a !== id && b !== id) continue;
+    const partner = a === id ? b : a;
+    const rank = rankIn(state, id, partner);
+    if (rank) out.push({ partner, rank });
+  }
+  const spouse = state.spouses.get(id);
+  if (spouse && spouse !== 'maiden' && !out.some((s) => s.partner === spouse)) out.push({ partner: spouse, rank: 'S' });
+  return out;
+}
+
+/** A unit joins the army, its recorded supports seeding the run's points (each rank at its threshold). */
+function join(state: RunState, a: ArmyUnit) {
+  state.army.set(a.id, liveOf(a));
+  for (const s of a.supports) {
+    const t = pairThresholds(a.id, s.partner, state.robin);
+    if (!t) continue;
+    const k = pairKey(a.id, s.partner);
+    state.supports.set(k, Math.max(state.supports.get(k) ?? 0, pointsOfRank(s.rank, t)));
+  }
+}
+
+function marry(state: RunState, a: RosterUnit, b: RosterUnit | 'maiden', at: number | undefined) {
+  state.spouses.set(a, b);
+  state.married.add(a);
+  if (b !== 'maiden') {
+    state.spouses.set(b, a);
+    state.married.add(b);
+    const s = pairThresholds(a, b, state.robin)?.S;
+    if (s !== undefined) state.supports.set(pairKey(a, b), s);
+  }
+  if (at !== undefined) state.weddings.set(pairKey(a, b), at);
+}
+
+/** Map `at`'s support points (`mapSupportGains`), then the plan's couples that reached S marry. */
+function growSupports(state: RunState, play: MapPlay, at: number, rule: Assumptions['support-past-threshold']) {
+  const together: Record<string, Readonly<Record<string, number>>> = {};
+  for (const [id, t] of Object.entries(play.units)) together[id] = t.together;
+  for (const g of mapSupportGains(together, state.robin)) {
+    const k = pairKey(g.a, g.b);
+    state.supports.set(k, addPoints(state.supports.get(k) ?? 0, g.points, pairThresholds(g.a, g.b, state.robin)!, sAllowed(state, g.a, g.b), rule));
+  }
+  for (const [a, b] of state.couples.values()) if (!state.married.has(a) && !state.married.has(b) && rankIn(state, a, b) === 'S') marry(state, a, b, at);
+}
+
+/** Chrom's wedding at the end of Chapter 11 when he's unmarried, by the game's rule over the run's points. */
+function chromWedding(state: RunState, at: number, assumptions: Assumptions) {
+  if (state.married.has('chrom')) return;
+  const candidates: RosterUnit[] = [...CHROM_WEDDING_CANDIDATES, ...(state.robin === 'F' ? (['robin'] as const) : [])];
+  const standing: Partial<Record<RosterUnit, ChromStanding>> = {};
+  for (const c of candidates) {
+    const t = pairThresholds('chrom', c, state.robin);
+    if (!t) continue;
+    const points = state.supports.get(pairKey('chrom', c)) ?? 0;
+    const next = SUPPORT_LEVELS.map((r) => t[r]).find((need) => need !== undefined && need > points);
+    standing[c] = { points, rank: rankOf(points, t, false), toNext: next === undefined ? Infinity : next - points };
+  }
+  const marriedElsewhere = new Set(candidates.filter((c) => state.married.has(c)));
+  marry(state, 'chrom', chromWifeByPoints(candidates, marriedElsewhere, standing, assumptions), at);
+}
+
+/** Robin's gender, from the army or a recruit. */
+const robinOf = (input: RunSimInput): Gender | undefined =>
+  [...input.army, ...input.maps.flatMap((m) => [...m.joining, ...m.later])].find((a) => a.id === 'robin')?.gender;
+
+function newState(input: RunSimInput): RunState {
+  const state: RunState = {
+    army: new Map(),
+    masterSealsHeld: input.masterSealsHeld ?? 0,
+    cleared: new Set(input.cleared ?? []),
+    spouses: new Map(),
+    married: new Set(),
+    supports: new Map(),
+    weddings: new Map(),
+    couples: new Map((input.couples ?? []).map((c) => [pairKey(c[0], c[1]), c])),
+    robin: robinOf(input),
+    arriving: [],
+  };
+  for (const [a, b] of input.married ?? []) marry(state, a, b, undefined);
+  for (const a of input.army) join(state, a);
+  return state;
+}
 
 /** The lineup of a map no run enters. */
 const NOBODY: Deployment = { max: 0, deployed: [], pairs: [], solo: [], forced: [] };
@@ -496,15 +646,22 @@ function planner(input: RunSimInput, seed: number, assumptions: Assumptions): (i
         continue;
       }
       const pools = new Map<Foe, readonly string[]>(step.map.foes.map((g) => [g.foe, g.pool ?? []]));
+      const here = (u: RosterUnit) => state.army.has(u) || extra.has(u);
+      const leads = (u: RosterUnit) => step.forced.includes(u) || (state.army.get(u) ?? extra.get(u))!.base.role === 'lead';
+      // The plan pairs each couple it marries until they marry (#188), the one that leads in front.
+      const pinned = [...state.couples.values()]
+        .filter(([a, b]) => here(a) && here(b) && !state.married.has(a) && !state.married.has(b))
+        .map(([a, b]) => (leads(b) && !leads(a) ? { lead: b, back: a } : { lead: a, back: b }));
       const d = suggestDeployment({
         candidates: candidatesOf(state, extra),
         forced: step.forced,
+        pinned,
         max: step.deploy || state.army.size + extra.size,
         foes: step.map.foes.map((g) => g.foe),
         pool: (f) => pools.get(f) ?? [],
       });
       const play = playMap({ map: step.map, lineup: lineupOf(state, d, extra, interner) }, runSeed(seed, k));
-      afterMap(state, step, play, null, input.difficulty, assumptions);
+      afterMap(state, step, k, play, null, input.difficulty, assumptions);
       done.push(d);
     }
     return done[i]!;
@@ -539,6 +696,25 @@ function recordEndpoint(atEnd: Endpoint, state: RunState) {
   }
 }
 
+/** Supports and marriages entering the endpoint: each pair's points and each marriage's map, one slot per run recorded. */
+type Bonds = { runs: number; readonly points: Map<string, number[]>; readonly weddings: Map<string, { a: RosterUnit; b: RosterUnit | 'maiden'; at: (number | undefined)[] }> };
+
+function recordBonds(bonds: Bonds, state: RunState) {
+  const r = bonds.runs++;
+  for (const [k, points] of state.supports) {
+    let xs = bonds.points.get(k);
+    if (!xs) bonds.points.set(k, (xs = []));
+    xs[r] = points;
+  }
+  for (const [a, b] of state.spouses) {
+    if (b !== 'maiden' && b < a) continue;
+    const k = pairKey(a, b);
+    let w = bonds.weddings.get(k);
+    if (!w) bonds.weddings.set(k, (w = { a, b, at: [] }));
+    w.at.push(state.weddings.get(k));
+  }
+}
+
 const quantile = (sorted: readonly number[], q: number) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.round(q * (sorted.length - 1))))]!;
 
 /**
@@ -555,6 +731,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
   const noDeath = input.maps.map(() => 0);
   const turns = input.maps.map(() => 0);
   const atEnd: Endpoint = new Map();
+  const bonds: Bonds = { runs: 0, points: new Map(), weddings: new Map() };
   const spots = new Set<BlindSpotId>();
   const last = input.maps.length - 1;
   for (let r = 0; r < n; r++) {
@@ -567,7 +744,10 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
       if (flawless < LOST) break;
       const step = input.maps[i]!;
       const extra = beforeMap(state, step, assumptions);
-      if (i === last) recordEndpoint(atEnd, state);
+      if (i === last) {
+        recordEndpoint(atEnd, state);
+        recordBonds(bonds, state);
+      }
       // A child paralogue whose gates don't hold in this run isn't played.
       if (!extra) continue;
       const play = playMap({ map: step.map, lineup: lineupOf(state, (lineups[i] ??= plan(i)), extra, interner) }, runSeed(rs, i));
@@ -576,7 +756,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
       turns[i]! += flawless * play.turns;
       flawless *= play.noDeath;
       for (const b of play.blindSpots) spots.add(b);
-      afterMap(state, step, play, rng, input.difficulty, assumptions);
+      afterMap(state, step, i, play, rng, input.difficulty, assumptions);
     }
     samples.push(flawless < LOST ? 0 : flawless);
   }
@@ -612,5 +792,36 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
         skills: e.skills,
       };
     }),
+    ...bondsOf(bonds, input, spread, sAllowedAtEnd(input)),
   };
+}
+
+/** Whether a pair's forecast rank can be S: the plan's couples and the recorded marriages. */
+const sAllowedAtEnd = (input: RunSimInput) => {
+  const keys = new Set([...(input.couples ?? []), ...(input.married ?? [])].map(([a, b]) => pairKey(a, b)));
+  return (k: string) => keys.has(k);
+};
+
+function bondsOf(bonds: Bonds, input: RunSimInput, spread: (xs: number[], cap: number) => StatSpread, canS: (k: string) => boolean): Pick<RunSim, 'supports' | 'marriages'> {
+  const robin = robinOf(input);
+  const supports: SupportForecast[] = [];
+  for (const [k, xs] of bonds.points) {
+    const [a, b] = k.split('+') as [RosterUnit, RosterUnit];
+    const t = pairThresholds(a, b, robin);
+    if (!t) continue;
+    const all = Array.from({ length: bonds.runs }, (_, i) => xs[i] ?? 0);
+    const married = bonds.weddings.get(k)?.at.length ?? 0;
+    const ranks = new Map<SupportLevel | null, number>();
+    all.forEach((p) => {
+      const r = rankOf(p, t, canS(k) || married > 0);
+      ranks.set(r, (ranks.get(r) ?? 0) + 1);
+    });
+    const rank = [...ranks.entries()].sort((x, y) => y[1] - x[1])[0]![0];
+    supports.push({ a, b, points: spread(all, t.S !== undefined && canS(k) ? t.S : t.A), rank });
+  }
+  const marriages: MarriageForecast[] = [...bonds.weddings.values()].map((w) => {
+    const made = w.at.filter((x): x is number => x !== undefined).sort((x, y) => x - y);
+    return { a: w.a, b: w.b, share: w.at.length / Math.max(1, bonds.runs), after: made.length ? input.maps[quantile(made, 0.5)]!.key : undefined };
+  });
+  return { supports, marriages };
 }
