@@ -1,6 +1,6 @@
 /**
  * The plan (#198; spec #175, The objective and The joint solve): a wishlist plus its roadmap, ranked by its flawless
- * chance. The seed (`seed.ts`) proposes the first one, the local search (#199) improves it one edit at a time, and pins
+ * chance. The seed (`seed.ts`) proposes the first one, the local search (`step.ts`, #199) improves it one edit at a time (`edits.ts`), and pins
  * (#200) constrain it; the flawless chance evaluates it (`flawlessChance(run, { plan })`).
  *
  * A plan is plain JSON: ids and keys only, no class instances or functions, so it can be stored (#205), posted from the
@@ -111,15 +111,78 @@ export type PlanPin = { readonly kind: 'marriage'; readonly couple: readonly [Ro
 /** An improvement the search found (#199): the plan with the edit, what it changes, and its gain in flawless chance. */
 export type PlanProposal = {
   readonly plan: Plan;
+  /** The edit that made it. */
   readonly label: string;
+  /** Every edit it makes to the adopted plan, in the order the search kept them (this one last). */
+  readonly edits: readonly string[];
   /** Flawless chance gained over the adopted plan, on the same runs. */
   readonly gain: number;
   /** Its paired simulation error (±, 95%). */
   readonly margin: number;
+  /** The runs compared. */
+  readonly runs: number;
+};
+
+/**
+ * An edit still unclear at the run cap (#199): no measurable difference either way, so the player can pick whichever
+ * they like. Its gain over the best plan and the paired error (±, 95%).
+ */
+export type CloseCall = {
+  readonly key: string;
+  readonly plan: Plan;
+  readonly label: string;
+  readonly gain: number;
+  readonly margin: number;
+  readonly runs: number;
+};
+
+/** A set of marriages (or a Robin) the search didn't evaluate: its ceiling is below the best found (#199). */
+export type PrunedComp = { readonly label: string; readonly ceiling: number; readonly best: number };
+
+/** The edit the search is comparing with the best plan, and the runs it has of it (#199). */
+export type SearchTrial = {
+  readonly kind: string;
+  readonly key: string;
+  readonly label: string;
+  readonly plan: Plan;
+  readonly samples: number[];
+  /** The runs it's compared on this time. */
+  target: number;
+};
+
+/** The local search's whole state between steps (#199): plain JSON. */
+export type SearchState = {
+  /** The plan the search started from: the adopted plan, or the seed. */
+  start: Plan;
+  best: Plan;
+  /** The best plan's runs on the search's seed, in run order. */
+  bestSamples: number[];
+  /** The start's runs, kept once the best plan moves off it (proposals' gains are over the start). */
+  startSamples: number[] | null;
+  /** Labels of the edits kept, in order. */
+  kept: string[];
+  proposals: PlanProposal[];
+  closeCalls: CloseCall[];
+  pruned: PrunedComp[];
+  round: number;
+  /** Keys of the edits tried this round. */
+  tried: string[];
+  /** This round kept an edit. */
+  improved: boolean;
+  trial: SearchTrial | null;
+  /** The best plan's displayed chance is worked out. */
+  scored: boolean;
+  /** The maps the best plan loses the most on, riskiest first (its re-score's). */
+  riskiest: string[];
+  converged: boolean;
 };
 
 /** Where the search stands between steps (#199): plain JSON the caller passes back unchanged. */
-export type SolveCursor = { readonly evaluations: number };
+export type SolveCursor = {
+  /** Evaluations spent over every step so far. */
+  readonly evaluations: number;
+  readonly search?: SearchState;
+};
 
 /**
  * The roster's pinned marriages as marriage pins, each couple once: what the player kept on today's Plan page, until

@@ -25,3 +25,19 @@ export function chanceText(p: number, words: ChanceWords = DEFAULT_WORDS): strin
   if (p <= 0.1) return `${pct} (${words.make} about 1 run in ${runs(p)})`;
   return pct;
 }
+
+/** Points of chance with a sign, as a difference reads: −0.002 → "−0.2", 0.012 → "+1.2" (a minus sign, not a hyphen). */
+const signedPoints = (d: number) => {
+  const s = (Math.abs(d) * 100).toFixed(1);
+  return s === '0.0' ? s : `${d < 0 ? '−' : '+'}${s}`;
+};
+
+/**
+ * How a paired difference in flawless chance reads (#199; spec #175, The Why panel's wording): an edit's gain and its
+ * paired error (±, 95%), in points of chance. A close call (still unclear at the run cap) reads "no measurable
+ * difference (−0.2 ±0.3)"; otherwise "+1.2 ±0.3".
+ */
+export function differenceText(gain: number, margin: number, close = false): string {
+  const pm = `±${Number.isFinite(margin) ? (margin * 100).toFixed(1) : '?'}`;
+  return close ? `no measurable difference (${signedPoints(gain)} ${pm})` : `${signedPoints(gain)} ${pm}`;
+}

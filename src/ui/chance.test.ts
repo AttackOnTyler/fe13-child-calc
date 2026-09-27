@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chanceText } from './chance';
+import { chanceText, differenceText } from './chance';
 
 describe('chance wording (#181; spec #175’s Why panel wording)', () => {
   it('reads a chance in percent, one decimal', () => {
@@ -29,5 +29,17 @@ describe('chance wording (#181; spec #175’s Why panel wording)', () => {
     expect(chanceText(0.998)).toBe('99.8% (loses a unit about 1 run in 500)');
     expect(chanceText(0.0012)).toBe('0.1% (flawless about 1 run in 833)');
     expect(chanceText(0.99895)).toBe('99.9% (loses a unit about 1 run in 952)');
+  });
+});
+
+describe('difference wording (#199)', () => {
+  it('reads a close call as the spec words it', () => {
+    expect(differenceText(-0.002, 0.003, true)).toBe('no measurable difference (−0.2 ±0.3)');
+    expect(differenceText(0, 0, true)).toBe('no measurable difference (0.0 ±0.0)');
+  });
+
+  it('reads a gain in signed points with its paired ±', () => {
+    expect(differenceText(0.012, 0.004)).toBe('+1.2 ±0.4');
+    expect(differenceText(-0.05, 0.01)).toBe('−5.0 ±1.0');
   });
 });
