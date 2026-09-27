@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_ROSTER, addEntry, createEngine, editEntry, latestEntry, recordMarriage, runFromRoster, withRun, type Route, type RosterUnit, type UnitSnapshot } from '../engine';
-import { childStatsNote, heldText, mapOrderReadout, parseHeldText, parseSupportsText, supportsText } from './run-page';
+import { childStatsNote, flawlessReadout, heldText, mapOrderReadout, parseHeldText, parseSupportsText, supportsText } from './run-page';
+import { chanceText } from './chance';
 
 describe('the map order readout (#179)', () => {
   const engine = createEngine();
@@ -22,6 +23,32 @@ describe('the map order readout (#179)', () => {
     expect(r.rows.at(-1)).toBe('Endgame: Grima (endpoint)');
     const all = engine.mapOrder(run('main-story')).steps.map((s) => s.map);
     expect(mapOrderReadout(engine, run('main-story', ...all)).rows).toEqual([]);
+  });
+});
+
+describe('the flawless chance readout (#186)', () => {
+  const engine = createEngine();
+  const facts = withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal', gender: 'M', asset: 'mag', flaw: 'hp' });
+  const played = (maps: readonly string[]) => maps.reduce((r, m, i) => addEntry(r, m, i + 1), runFromRoster(facts));
+  const all = engine.mapOrder(played([])).steps.map((s) => s.map);
+
+  it('shows the chance with its ± and says what it covers', () => {
+    const run = played(all.slice(0, -2));
+    const r = flawlessReadout(engine, run, { runs: 3 });
+    const sim = engine.flawlessChance(run, { runs: 3 });
+    expect(r.text).toBe(`Flawless chance: ${chanceText(sim.chance)} ±${(sim.margin * 100).toFixed(1)}`);
+    expect(r.detail).toContain('from Chapter 25 to Endgame (2 maps)');
+    expect(r.detail).toContain('over 3 simulated runs; the ± is the simulation error (95%)');
+    expect(r.detail).toContain('Rests on: one worst attacker per pair (may read high)');
+    expect(r.detail).toContain('promotions at the level cap (either way), each fight’s EXP goes to its lead (may read low)');
+    expect(r.rows).toHaveLength(2);
+    expect(r.rows[0]).toMatch(/^Chapter 25: /);
+  });
+
+  it('names a unit whose seal history is read as 0, and says when the endpoint is recorded', () => {
+    const run = editEntry(played(all.slice(0, -1)), 'e1', (s) => ({ ...s, units: { ...s.units, chrom: { class: 'Great Lord', level: 5, promoted: true, reclassed: false, exp: 0, stats: { hp: 40, str: 20, mag: 3, skl: 20, spd: 20, lck: 20, def: 15, res: 10 }, skills: [], inventory: [], supports: [] } } }), 1);
+    expect(flawlessReadout(engine, run, { runs: 1 }).detail).toContain('Chrom was first logged in a class it can’t join in: the Second Seal count before the log is read as 0');
+    expect(flawlessReadout(engine, played(all), { runs: 1 }).text).toBe('Flawless chance: the endpoint is recorded, nothing left to simulate.');
   });
 });
 

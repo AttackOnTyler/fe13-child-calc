@@ -114,7 +114,9 @@ export function suggestDeployment(input: {
     const back = p.back && !paired.has(p.back) ? byId.get(p.back) : undefined;
     if (lead && !paired.has(p.lead) && room() >= slotCost(lead) + (back ? slotCost(back) : 0)) addPair(lead, back);
   }
-  const solo = (c: DeployCandidate) => coverage(c, undefined, null, foes, pool);
+  // Worked out once per unit: the sorts below compare it many times.
+  const soloCoverage = new Map<RosterUnit, number>();
+  const solo = (c: DeployCandidate) => soloCoverage.get(c.unit) ?? soloCoverage.set(c.unit, coverage(c, undefined, null, foes, pool)).get(c.unit)!;
   /**
    * Deploys `lead` in a pair, with the battery (or else any unit but a dancer) that raises its coverage most among
    * those the room allows: one already deployed alone costs no slot.
