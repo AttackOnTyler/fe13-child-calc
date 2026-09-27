@@ -1588,12 +1588,12 @@ class MapState {
    * When nobody is in the foes' reach yet this turn and foes are left, the army engages once, with the least risk: the
    * safest attack by anyone (whatever its risk), or a bait (a front waits in reach, to take one attack and counter),
    * whichever risks less. Otherwise holding back would never finish the map. A turn with a talk (#184) has moved the
-   * map on already: nobody needs to. Nor does a turn that restored HP (the second realism pass): the army is healing up
-   * before the risky engagement, as a careful player does, and engages once it can't (a hurt front drinking a potion
-   * left only a fragile one to engage, at a near-certain death).
+   * map on already: nobody needs to. A turn that restored HP (the second realism pass) waits for the next rather than
+   * send a front more likely to die than not: the army is healing up (a hurt Chrom drinking a potion left only a Lv 1
+   * Robin to engage, at a near-certain death).
    */
   engage(ctx: PolicyContext): Action | undefined {
-    if (this.exposed.size || this.recovered || !this.foes.length || this.acts.some((a) => a.kind === 'talk')) return undefined;
+    if (this.exposed.size || !this.foes.length || this.acts.some((a) => a.kind === 'talk')) return undefined;
     // Nothing left that attacks (only bosses holding their ground): waiting costs nothing, so a careful player heals up
     // before the risky attack, while a staff can still lift a hurt front (the realism pass).
     if (!ctx.threats.length && this.healingLeft()) return undefined;
@@ -1613,6 +1613,8 @@ class MapState {
         consider({ kind: 'bait', group: gi, risk, value: 0 }, risk);
       }
     }
+    // A turn that restored HP can wait for the next rather than send a front more likely to die than not.
+    if (best && this.recovered && (best as { readonly risk: number }).risk >= 0.5) return undefined;
     return (best as { readonly action: Action } | undefined)?.action;
   }
 
@@ -1669,7 +1671,8 @@ class MapState {
 
   /**
    * Fronts that keep their action from the fighting tier: a dancer (it dances), and a front whose own sustain (its
-   * staff, its potion) is worth more than its best attack. They fight later if nothing better turns up.
+   * staff, its potion) is worth more than its best attack. They fight later if nothing better turns up. A potion it
+   * could have traded over doesn't hold a fighter back: the healers' staves come first, a trade is the fallback.
    */
   private heldBack(ctx: PolicyContext): Set<number> {
     const held = new Set<number>();
@@ -1677,7 +1680,7 @@ class MapState {
       if (ctx.acted.has(gi)) continue;
       const kit = this.kitOf(gi);
       if (kit.dances) held.add(gi);
-      else if ((kit.staves.length || kit.potions.length || this.potionsLeft()) && this.armed(gi)) {
+      else if ((kit.staves.length || kit.potions.length) && this.armed(gi)) {
         const own = this.sustainOfCached(gi, ctx);
         if (own && own.value > (this.bestAttackOf(gi, ctx)?.value ?? 0)) held.add(gi);
       }
@@ -1699,15 +1702,22 @@ class MapState {
     return best;
   }
 
-  /** The best sustain action by any front that hasn't acted. */
+  /**
+   * The best sustain action by any front that hasn't acted: the unarmed healers' first (their action has no other use),
+   * then anyone's, a fighter's potion among them (the second realism pass: a fighter drank a potion a staff was there
+   * to give, and lost its action to it).
+   */
   bestSustain(ctx: PolicyContext): Action | undefined {
-    let best: Action | undefined;
-    for (let gi = 0; gi < this.front.length; gi++) {
-      if (ctx.acted.has(gi)) continue;
-      const a = this.sustainOfCached(gi, ctx);
-      if (a && (!best || a.value > best.value)) best = a;
+    for (const pass of [false, true]) {
+      let best: Action | undefined;
+      for (let gi = 0; gi < this.front.length; gi++) {
+        if (ctx.acted.has(gi) || (!pass && this.armed(gi))) continue;
+        const a = this.sustainOfCached(gi, ctx);
+        if (a && (!best || a.value > best.value)) best = a;
+      }
+      if (best) return best;
     }
-    return best;
+    return undefined;
   }
 
   /**
