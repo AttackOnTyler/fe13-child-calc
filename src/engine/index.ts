@@ -60,6 +60,7 @@ import { coupleKey, endpointCoverage, nonStarters, seedPlan, type EndpointCovera
 import { milestones, type Milestone } from './milestones';
 import { editCost, solveStep, type EditCost, type EditCostInput, type PinCost, type PinCostInput, type SolveStep, type SolveStepInput, type UnitEdit } from './solve/step';
 import { keptPins, planEdits } from './solve/edits';
+import { adoptedOf } from './solve/adopted';
 import { brokenPins, livePins, pinKey, runPins, withPin, withoutPins } from './solve/pins';
 import { ROBIN_EXTRA, ROBIN_SOLVE, withRobinLock, robinKey, robinLock, robinOptions, robinStep, wishlistDifference, withoutRobinMarriage, type RobinCost, type RobinCursor, type RobinInput, type RobinOption, type RobinPick, type RobinStep, type SolvedRobin, type WishlistDifference } from './solve/robin';
 import { FORCED_UNITS, childrenOf, coveredLineup, hasUtility, planWithout, reservesStep, withoutUnits, worthStep, type ReservesInput, type ReservesStep, type WorthInput, type WorthStep, type WorthVariant } from './solve/worth';
@@ -153,6 +154,7 @@ export { effectiveCaps, type Ceiling, type CeilingUnit } from './sim/ceiling';
 export type { LineupPlan } from './sim/run-sim';
 export { isMarriagePin, isRuleOut, mapSpanPin, marriagePins } from './solve/plan';
 export { pinKey, withPin, withoutPins, type LineupRule } from './solve/pins';
+export { adoptedOf, proposalId, withDismissedProposal, withEdit, withoutEdit, type NewEdit } from './solve/adopted';
 export { ROBIN_EXTRA, ROBIN_SOLVE, withRobinLock, robinKey, robinLock, robinOptions, wishlistDifference, type RobinCost, type RobinCursor, type RobinInput, type RobinOption, type RobinPick, type RobinStep, type SolvedRobin, type WishlistDifference };
 export type { KeepPin, MarriagePin, SideGoalPin, SpanPin, SpanPosition } from './solve/plan';
 export { NO_PREPARATIONS } from '../game-data/chapters';
@@ -200,6 +202,7 @@ export {
   type LearnedCorrections,
   type MigrationNote,
   type Run,
+  type RunEdit,
   type RunEntry,
   type Snapshot,
   type SupportLevel,
@@ -632,6 +635,21 @@ export type Engine = {
    * else). Each edited plan is built only when it's costed (`editCost` with the edit's `play` pins).
    */
   unitEdits(run: Run, plan: Plan, unit: RosterUnit, options?: { readonly pins?: readonly PlanPin[]; readonly seed?: number; readonly roleOf?: (u: RosterUnit) => DeploymentRole }): readonly UnitEdit[];
+  /**
+   * The adopted plan (#204): the run's (`Run.adopted`, made to keep the pins set since), or the seed when there's none
+   * (or its Robin contradicts the run facts). What the solve starts from and the edits' costs are read against.
+   */
+  adoptedPlan(run: Run, options?: SeedOptions): Plan;
+  /**
+   * Every edit of a plan the player can make (#204, the inbox's "anything else"): the search's own (a marriage, Robin's
+   * asset or flaw, a class, a build or passed skill, lineups and pairs on `riskiest` maps, an EXP priority, a
+   * paralogue's place, a seal, an item's use) and keep-in or keep-out, a planned couple ruled out, a side goal always
+   * taken or skipped, as `unitEdits` has them (#203): `pins` make it the player's (a marriage, a lineup's span pins, a
+   * keep, a rule-out, a side goal), `play` are the pins its plan plays under; one with no pins is a plan edit (#204:
+   * made by adopting `make()`). Lazy: an edit's plan is built only when asked. Lineups are resolved (about 2 s on a
+   * fresh Full route) only with `riskiest`.
+   */
+  editChoices(run: Run, plan: Plan, options?: SeedOptions & { readonly riskiest?: readonly string[]; readonly seed?: number }): readonly UnitEdit[];
   /**
    * Each unit's worth and utility on a plan (#202), within a budget of evaluations: the flawless chance lost without it
    * (removed from every lineup where it's optional, its children with it, its spouse re-matched, the wishlist rebuilt
@@ -2038,6 +2056,58 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         });
       }
       return edits;
+    },
+    adoptedPlan: (given, options = {}) => {
+      const run = pinnedRun(given, options.pins);
+      const opts: SeedOptions = { ...options, pins: livePinsOf(run) };
+      const adopted = adoptedOf(run);
+      return adopted ? keptPins(run, seedContext(run), opts, adopted) : seedFor(run, opts);
+    },
+    editChoices: (given, plan, options = {}) => {
+      const { riskiest = [], seed = FLAWLESS_SEED, roleOf } = options;
+      const run = pinnedRun(given, options.pins);
+      const pins = livePinsOf(run);
+      const ctx = seedContext(run);
+      const opts: SeedOptions = { pins, ...(roleOf ? { roleOf } : {}) };
+      const base = keptPins(run, ctx, opts, plan);
+      const out = new Map<string, UnitEdit>();
+      for (const e of planEdits(run, ctx, opts, base, { riskiest, stuck: [] }, (p) => lineupsOf(run, p, seed, roleOf)))
+        if (!out.has(e.key)) out.set(e.key, { kind: e.kind, key: e.key, label: e.label, pins: e.pins ?? [], play: [], make: e.make });
+      // Those only the player makes, as pins: the plan keeps them (`keptPins` over the run with them).
+      const gender = run.roster.run.gender ?? base.robin.gender;
+      const name = (u: RosterUnit) => unitName(u, gender);
+      const keeping = (extra: readonly PlanPin[]) => () => {
+        const r = pinnedRun(run, extra);
+        return keptPins(r, seedContext(r), { ...opts, pins: livePinsOf(r) }, base);
+      };
+      // Keyed as `unitEdits` keys a keep (#203); `play` are the pins its plan plays under (a keep's, a side goal's).
+      const add = (kind: UnitEdit['kind'], key: string, label: string, pin: PlanPin, play: boolean, make = keeping([pin])) => {
+        if (!out.has(key)) out.set(key, { kind, key, label, pins: [pin], play: play ? [pin] : [], make });
+      };
+      const last = run.entries[run.entries.length - 1]?.snapshot;
+      const gone = (u: RosterUnit) => ['dead', 'missed'].includes(last?.states[u] ?? stateOf(run.roster, u));
+      const married = (u: RosterUnit) => last?.spouses[u]?.bond === 'married';
+      const kept = new Map(pins.flatMap((p) => (p.kind === 'keep' ? [[p.unit, p.keep] as const] : [])));
+      const fielded = new Set(base.wishlist.units.map((w) => w.unit));
+      const planned = new Set<RosterUnit>(base.wishlist.children.map((c) => c.child));
+      for (const u of rosterUnits({ ...run.roster.run, gender })) {
+        if (FORCED_UNITS.includes(u.id) || gone(u.id) || (u.kind === 'child' && !planned.has(u.id))) continue;
+        const keep = fielded.has(u.id) ? 'out' : 'in';
+        if (kept.get(u.id) === keep) continue;
+        add('keep', `keep:${u.id}:${keep}`, `Keep ${name(u.id)} ${keep === 'in' ? 'in the wishlist' : 'out of the wishlist'}`, { kind: 'keep', unit: u.id, keep }, true);
+      }
+      const pinned = new Set(pins.flatMap((p) => (p.kind === 'marriage' ? [coupleKey(p.couple)] : [])));
+      for (const c of base.wishlist.marriages)
+        if (!c.includes(CHROM_FALLBACK_PARTNER as RosterUnit) && !c.some(married) && !pinned.has(coupleKey(c)))
+          add('marriage', `rule-out:${coupleKey(c)}`, `${name(c[0])} and ${name(c[1])} don’t marry`, { kind: 'marriage', couple: c, forbid: true }, false);
+      // Side goals still ahead: the other decision than the one the plan takes.
+      const ahead = new Set(remainingMapOrder(run).steps.map((s) => s.map));
+      for (const g of sideGoalChoices(run.sideGoals))
+        if (ahead.has(g.goal.map)) {
+          const decision = g.decision === 'chase' ? 'skip' : 'chase';
+          add('side-goal', `side-goal:${g.goal.id}:${decision}`, `${decision === 'chase' ? 'Always take' : 'Always skip'} ${g.goal.label}`, { kind: 'side-goal', goal: g.goal.id, decision }, true, () => base);
+        }
+      return [...out.values()];
     },
     unitWorth: (input) => {
       const { run, plan, seed, roleOf, pins } = input;

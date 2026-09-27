@@ -23,7 +23,7 @@ import { entryAfterShopping, parseShopLines, type ShopLine } from './shopping';
 import { parseSideGoalPlan, parseSideGoalsSecured, type SideGoalId, type SideGoalPlan } from './side-goals';
 import { parseRenown, type RunRenown } from './renown';
 import { parseItemsUsed, type ItemUsed } from './item-plan';
-import type { PlanPin } from './solve/plan';
+import type { Plan, PlanPin } from './solve/plan';
 import { parsePins } from './solve/pins';
 import { EMPTY_ROSTER, parseRoster, withSpouse, withState, type Roster, type RosterUnit, type RunFacts } from './roster';
 
@@ -112,8 +112,16 @@ export type Run = {
    * stay in `sideGoals` and read as pins (`runPins`). A save from before #200 kept item pins as `itemPins`; they're read in.
    */
   readonly pins?: readonly PlanPin[];
-  /** Proposals the player dismissed (#206), by id. */
+  /** Proposals the player dismissed (#204, #206), by id (`proposalId`). */
   readonly dismissedProposals?: readonly string[];
+  /**
+   * The adopted plan (#204): the plan the player took (a proposal or close call accepted, a Robin chosen, a plan edit
+   * made), which the solve starts from and every edit's cost is read against. Absent: the seed. Proposals never
+   * replace it on their own.
+   */
+  readonly adopted?: Plan;
+  /** The player's edits (#204), in the order made: each pin it set and the adopted plan it replaced, for undo. */
+  readonly edits?: readonly RunEdit[];
   /** Entries whose What changed card was dismissed with "got it" (#206), by entry id. */
   readonly dismissedChanges?: readonly string[];
   /** Learned corrections (#196): each unit's EXP factor (×0.5–×2), and whether the player switched them off. */
@@ -122,6 +130,19 @@ export type Run = {
   readonly calibration?: readonly CalibrationRow[];
   /** The one-time migration note (#205): shown on the Run view until dismissed. */
   readonly migration?: MigrationNote;
+};
+
+/**
+ * One of the player's edits (#204), as "Your edits" lists it: its words, the pins it set (#200) and, for an edit of the
+ * adopted plan, the plan it replaced (`before`; null: the seed), so undo lifts the pins or restores the plan. `cost` is
+ * what it cost when made, where read; `accepted` marks one taken from the search (a proposal, a close call).
+ */
+export type RunEdit = {
+  readonly label: string;
+  readonly pins?: readonly PlanPin[];
+  readonly before?: Plan | null;
+  readonly cost?: { readonly gain: number; readonly margin: number; readonly verdict: 'better' | 'worse' | 'close' | 'unclear' };
+  readonly accepted?: true;
 };
 
 export type LearnedCorrections = {
@@ -572,8 +593,29 @@ export function parseRun(raw: unknown): Run {
     isObject(r) && isText(r.entry) && isText(r.unit) && typeof r.percentile === 'number' && r.percentile >= 0 && r.percentile <= 1 ? [{ entry: r.entry, unit: r.unit as RosterUnit, percentile: r.percentile }] : [],
   );
   const migration = parseMigrationNote(raw.migration);
+  const adopted = parsePlan(raw.adopted);
+  const edits = (Array.isArray(raw.edits) ? raw.edits : []).flatMap((e): RunEdit[] => {
+    if (!isObject(e) || !isText(e.label)) return [];
+    const pins = parsePins(e.pins);
+    const c = e.cost;
+    const cost =
+      isObject(c) && typeof c.gain === 'number' && typeof c.margin === 'number' && ['better', 'worse', 'close', 'unclear'].includes(c.verdict as string)
+        ? { gain: c.gain, margin: c.margin, verdict: c.verdict as NonNullable<RunEdit['cost']>['verdict'] }
+        : undefined;
+    return [
+      {
+        label: e.label,
+        ...(pins.length ? { pins } : {}),
+        ...('before' in e ? { before: parsePlan(e.before) ?? null } : {}),
+        ...(cost ? { cost } : {}),
+        ...(e.accepted === true ? { accepted: true as const } : {}),
+      },
+    ];
+  });
   return {
     ...run,
+    ...(adopted ? { adopted } : {}),
+    ...(edits.length ? { edits } : {}),
     ...(dismissedProposals.length ? { dismissedProposals } : {}),
     ...(dismissedChanges.length ? { dismissedChanges } : {}),
     ...(corrections ? { corrections } : {}),
@@ -583,6 +625,15 @@ export function parseRun(raw: unknown): Run {
 }
 
 const isText = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
+
+/** A stored plan (#204): kept as it was saved when it has a plan's shape (Robin, wishlist, roadmap), else dropped. */
+function parsePlan(v: unknown): Plan | undefined {
+  if (!isObject(v) || !isObject(v.robin) || !isObject(v.wishlist) || !isObject(v.roadmap)) return undefined;
+  const w = v.wishlist;
+  const r = v.roadmap;
+  const lists = [w.units, w.marriages, w.children, w.reserves, r.order, r.lineups, r.seals, r.items];
+  return lists.every(Array.isArray) && isText(w.endpoint) ? (v as unknown as Plan) : undefined;
+}
 
 function parseCorrections(v: unknown): LearnedCorrections | undefined {
   if (!isObject(v)) return undefined;
