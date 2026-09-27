@@ -2562,7 +2562,11 @@ const whyShown = () => (view === 'run' || view === 'wishlist') && whyOpen();
 function whyContext(): WhyContext {
   const s = solveState(run);
   const p = s?.progress;
-  const headline = p ? { plan: p.best, chance: p.chance, ...(p.readings ? { readings: p.readings } : {}), solved: true } : s?.chance ? { plan: s.plan, chance: s.chance, ...(s.readings ? { readings: s.readings } : {}), solved: false } : undefined;
+  const headline = p
+    ? { plan: p.best, chance: p.chance, adopted: s!.plan, ...(p.readings ? { readings: p.readings } : {}), solved: true }
+    : s?.chance
+      ? { plan: s.plan, chance: s.chance, adopted: s.plan, ...(s.readings ? { readings: s.readings } : {}), solved: false }
+      : undefined;
   return {
     engine,
     assumptions,

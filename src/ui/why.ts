@@ -139,12 +139,26 @@ export type WhyContext = {
   readonly engine: Engine;
   readonly assumptions?: Assumptions;
   readonly run: Run;
-  /** The headline's plan and runs, the adopted plan's readings, and whether the solve's worker worked it out. */
-  readonly headline: { readonly plan: Plan; readonly chance: RunSim; readonly readings?: ExplainContext['readings']; readonly solved: boolean } | undefined;
+  /**
+   * The headline's plan and runs, whether the solve's worker worked it out, and the adopted plan (the roadmap's, whose
+   * milestones the readings read) with its readings.
+   */
+  readonly headline:
+    | { readonly plan: Plan; readonly chance: RunSim; readonly solved: boolean; readonly adopted?: Plan; readonly readings?: ExplainContext['readings'] }
+    | undefined;
   readonly roleOf?: (u: RosterUnit) => DeploymentRole;
   readonly pins?: () => readonly PlanPin[];
   /** Opens a map's matchups (the Maps list), where a fight's trail stops. */
   readonly openMap?: (map: string) => void;
+};
+
+const MILESTONES = new WeakMap<Plan, { run: Run; milestones: ReturnType<Engine['milestones']> }>();
+const milestonesOf = (engine: Engine, run: Run, plan: Plan) => {
+  const held = MILESTONES.get(plan);
+  if (held?.run === run) return held.milestones;
+  const milestones = engine.milestones(run, plan);
+  MILESTONES.set(plan, { run, milestones });
+  return milestones;
 };
 
 /** The explanation context from what the page holds. */
@@ -158,6 +172,8 @@ export function explainContext(ctx: WhyContext, id?: string): ExplainContext {
     run: ctx.run,
     ...(hd ? { plan: w ? worthRead!.plan : hd.plan, chance: w ? w.base : hd.chance, seed: hd.solved ? rescoreSeed(FLAWLESS_SEED) : FLAWLESS_SEED } : {}),
     ...(hd?.readings ? { readings: hd.readings } : {}),
+    // A milestone is the roadmap's: the adopted plan's.
+    ...(id?.startsWith('milestone:') && hd?.adopted ? { milestones: milestonesOf(ctx.engine, ctx.run, hd.adopted) } : {}),
     ...(ctx.roleOf ? { roleOf: ctx.roleOf } : {}),
     ...(worth ? { worth } : {}),
     ...(w && unit ? { without: { [unit]: w.without } } : {}),

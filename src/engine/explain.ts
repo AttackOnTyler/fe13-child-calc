@@ -828,9 +828,9 @@ function sideGoalExplanation(c: Resolved, id: string): Explanation | undefined {
 }
 
 function itemExplanation(c: Resolved, id: string): Explanation | undefined {
-  const parts = id.split(':');
-  const source = parts.pop()!;
-  const key = parts.slice(1).join(':');
+  // A map key has no colon; a source may ("chapter-3:Hammer#0").
+  const [, key, ...rest] = id.split(':');
+  const source = rest.join(':');
   const u = c.chance?.items.find((x) => x.key === key && x.source === source);
   if (!u || u.share === undefined) return undefined;
   return made({
