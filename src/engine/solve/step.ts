@@ -51,8 +51,9 @@ import type { CloseCall, Plan, PlanPin, PlanProposal, PrunedComp, SearchState, S
 
 /**
  * The search's run counts (spec: runs double from 200 up to a cap; if they don't fit, fewer runs with a wider stated
- * error, never a different objective). A run that reaches the endpoint costs about 0.3 s on the Main story and 0.45 s
- * on the Full route today, so 200 runs of one plan would take a minute, twice the full solve's 30 s. The search starts
+ * error, never a different objective). A run that reaches the endpoint costs about 0.2–0.3 s on the Main story (the
+ * realism pass's measure), plus 0.4–0.6 s for a new plan's projection, so 200 runs of one plan would still take about a
+ * minute, twice the full solve's 30 s. The search starts
  * at 8 runs and doubles to 32 (one plan at the cap is about 10 s), and the headline is re-scored on `FLAWLESS_RUNS` (24)
  * fresh runs; the ± on each says what that leaves.
  */
