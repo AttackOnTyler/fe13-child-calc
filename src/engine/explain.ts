@@ -7,7 +7,8 @@
  * - **Ids** name a number: `flawless`, `ceiling`, `map:<key>`, `fight:<key>:<turn>:<n>` (the n-th fight of a turn in a
  *   map's representative play; `fight:ceiling:…` in the ceiling's), `edit:<key>` (a comparison the page hands over:
  *   a proposal, a close call, an edit's or pins' cost, a Robin, a reserve, What changed), `worth:<unit>`,
- *   `milestone:<id>`, `exp:<key>:<unit>`, `gold:<key>`, `side-goal:<id>`, `item:<key>:<source>`.
+ *   `milestone:<id>`, `exp:<key>:<unit>`, `gold:<key>`, `side-goal:<id>`, `item:<key>:<source>`, `stress:<case>` (a
+ *   stress-test range, #211: the plan re-run under a stated blind spot's bad case).
  * - **Drill paths:** headline → map → fight; edit → maps; worth → lineup spans → maps; milestone chance → EXP per map
  *   → the forecast's foe groups (where the EXP trail stops). The ceiling's rows are its own fights.
  * - **The headline's lost points** are split between maps by share of the risk: each map's log no-death chance over the
@@ -21,7 +22,7 @@
  * - **Blind spots** are exactly those touching the number's kind (`blindSpotsTouching`). Numbers carry no markers; the
  *   simulation error shows in the math.
  */
-import { BLIND_SPOTS, type Assumptions, type BlindSpot, type BlindSpotTouch } from './assumptions';
+import { BLIND_SPOTS, STRESS_TESTS, type Assumptions, type BlindSpot, type BlindSpotTouch, type StressTest } from './assumptions';
 import { className } from './classes';
 import type { Milestone, MilestonePoint } from './milestones';
 import type { Readings } from './readings';
@@ -33,11 +34,12 @@ import { playMap, type MapPlay, type SimFight, type SimFoeGroup, type SimGroup, 
 import { runSeed } from './sim/random';
 import type { ArmyUnit, RunSim, RunSimInput } from './sim/run-sim';
 import { simLineup } from './sim/sim-map';
+import { paired } from './solve/paired';
 import type { Plan } from './solve/plan';
 import type { UnitWorth } from './solve/worth';
 import { STATS, STAT_LABELS, type Gender, type Stat } from '../game-data/stats';
 
-export type ExplanationKind = 'flawless' | 'ceiling' | 'map' | 'fight' | 'edit' | 'worth' | 'milestone' | 'exp' | 'gold' | 'side-goal' | 'item';
+export type ExplanationKind = 'flawless' | 'ceiling' | 'map' | 'fight' | 'edit' | 'worth' | 'milestone' | 'exp' | 'gold' | 'side-goal' | 'item' | 'stress';
 
 /**
  * How the value reads: a chance (percent, "1 run in N" near the edges), a fight's kill chance ("kills someone about 1
@@ -121,6 +123,8 @@ export type ExplainContext = {
   /** A unit's worth's other side: the plan's runs without it (`worthChance`), by unit. */
   readonly without?: Readonly<Partial<Record<string, RunSim>>>;
   readonly comparisons?: Readonly<Record<string, Comparison>>;
+  /** The headline's plan re-run under each stressed blind spot's bad case (#211), on the headline's seed and runs, by case. */
+  readonly stress?: Readonly<Partial<Record<StressTest['id'], RunSim>>>;
 };
 
 /** The blind spots each kind of number rests on (see `BlindSpotTouch`). */
@@ -131,6 +135,7 @@ const TOUCHED: Readonly<Record<ExplanationKind, readonly BlindSpotTouch[]>> = {
   gold: ['flawless'],
   'side-goal': ['flawless'],
   item: ['flawless'],
+  stress: ['map', 'flawless'],
   ceiling: ['map'],
   map: ['map'],
   fight: ['fight'],
@@ -180,6 +185,7 @@ export type Resolved = {
   readonly worth: readonly UnitWorth[];
   readonly without: Readonly<Partial<Record<string, RunSim>>>;
   readonly comparisons: Readonly<Record<string, Comparison>>;
+  readonly stress: Readonly<Partial<Record<StressTest['id'], RunSim>>>;
 };
 
 /** A number's explanation, or undefined when there's nothing to explain it from (an unknown id, or its data isn't in). */
@@ -209,6 +215,8 @@ export function explain(id: string, c: Resolved): Explanation | undefined {
       return sideGoalExplanation(c, tail);
     case 'item':
       return itemExplanation(c, id);
+    case 'stress':
+      return stressExplanation(c, tail);
     default:
       return undefined;
   }
@@ -614,6 +622,45 @@ function editExplanation(c: Resolved, key: string): Explanation | undefined {
     ...(rows.length ? { rowsTitle: 'Where it gains and loses, by map', rows } : {}),
     ...(!k.other && k.drill ? { pending: 'other' as const } : {}),
   });
+}
+
+// ---- the stress test ----
+
+/**
+ * A stress-test range (#211): the headline's plan re-run under a stated blind spot's bad case, on the headline's seed
+ * and runs, so the difference is paired. Its rows split that difference by map (share of the risk, as an edit's). It
+ * rests on the headline's blind spots but the one it stresses, which its bad case replaces.
+ */
+function stressExplanation(c: Resolved, id: string): Explanation | undefined {
+  const t = STRESS_TESTS.find((s) => s.id === id);
+  const r = c.chance;
+  const s = t && c.stress[t.id];
+  if (!t || !r || !s) return undefined;
+  const spot = BLIND_SPOTS.find((b) => b.id === t.blindSpot)!;
+  const p = paired(r.samples, s.samples);
+  const labels = new Map([...r.maps, ...s.maps].map((m) => [m.key, m.label]));
+  const d = [...mapDifferences(r, s)].filter(([, x]) => Math.abs(x) >= 0.0005).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+  const rows: ExplanationRow[] = d.slice(0, FIGHT_ROWS).map(([m, x]) => ({ label: labels.get(m) ?? m, points: x, ...(r.maps.some((y) => y.key === m && y.noDeath !== undefined) ? { drillTo: `map:${m}` } : {}) }));
+  const rest = d.slice(FIGHT_ROWS);
+  if (rest.length) rows.push({ label: plural(rest.length, 'other map'), points: rest.reduce((a, [, x]) => a + x, 0) });
+  const moved = p.gain === 0 ? 'no difference' : `${p.gain < 0 ? '−' : '+'}${pts(p.gain)} ±${pts(Number.isFinite(p.margin) ? p.margin : 0)} points (95%)`;
+  return {
+    id: `stress:${t.id}`,
+    kind: 'stress',
+    title: `If ${t.bad}`,
+    value: s.chance,
+    format: 'chance',
+    margin: s.margin,
+    lead: `The flawless chance if ${t.bad}: this plan re-run under the bad case of the stated blind spot “${spot.label}”.`,
+    math: [
+      t.how,
+      `The plan and its lineups are the same; only the plays change. Both are played on the same ${plural(p.runs, 'run')} (the same rolls): ${pct(r.chance)} as the model reads it, ${pct(s.chance)} under the bad case, ${moved}.`,
+      'The real chance is likely between them: the headline takes the blind spot’s reading, this its bad case.',
+      `Simulation error: ±${pts(s.margin)} (95%).`,
+    ],
+    ...(rows.length ? { rowsTitle: 'Where it loses, by map', rows } : {}),
+    blindSpots: blindSpotsTouching('stress').filter((b) => b.id !== t.blindSpot),
+  };
 }
 
 // ---- worth ----

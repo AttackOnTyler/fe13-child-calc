@@ -31,7 +31,8 @@
  * - HP is carried: damage stays until an action buys it back. A staff reaches a pair with the chance the assumed army
  *   spread gives (`MapPlayInput.spread`), and heals its expected HP.
  * - `enemyPhase`: arrivals free to act (Hard and up), then each exposed front takes one attack from the worst foe left
- *   for it (one worst attacker per pair, a stated blind spot), each foe attacking once.
+ *   for it (one worst attacker per pair, a stated blind spot), each foe attacking once. A blind spot's bad case
+ *   (`stress`, #211) plays two attackers per front, or no Rally.
  * - Tallies per unit (combats, kills per foe group, combats paired with each partner) feed EXP (#186, #195) and
  *   supports (#188); the per-turn log (fights, acts, stances, exposed fronts) feeds the Why panel and the stance plan.
  *
@@ -176,7 +177,16 @@ export type MapPlayInput = {
    * nobody is that small counts as lost, #186), ending `lost`. Absent: play the map out.
    */
   readonly stopBelow?: number;
+  /** A stated blind spot's bad case (#211, the stress test), played instead of the model's reading. Absent: the model's. */
+  readonly stress?: StressCase;
 };
+
+/**
+ * The bad case of a stated blind spot that can be stressed (#211): `two-attackers` (one worst attacker per pair), each
+ * exposed front takes up to two attacks on enemy phase, from the two foes worst for it, each foe still attacking once;
+ * `no-rally` (Rally reaches every pair), a Rally reaches no pair, so its holder never rallies and acts otherwise.
+ */
+export type StressCase = 'two-attackers' | 'no-rally';
 
 /** Who lands kills (#195): a lower unit chips or waits for a higher one; normal by default. */
 export type ExpPriority = 'high' | 'normal' | 'low';
@@ -683,7 +693,11 @@ class MapState {
       } else if (r.unit && r.npc) alone(r.unit, 1, Infinity);
     }
     const idle = new Set(input.idle ?? []);
-    this.kits = this.units.map((u) => (idle.has(u.id) ? { ...kitOf(u, input.spread), staves: [], dances: false, rally: undefined } : kitOf(u, input.spread)));
+    // Under the Rally stress (#211) a Rally reaches nobody: no one rallies.
+    const noRally = input.stress === 'no-rally';
+    this.kits = this.units.map((u) =>
+      idle.has(u.id) ? { ...kitOf(u, input.spread), staves: [], dances: false, rally: undefined } : noRally ? { ...kitOf(u, input.spread), rally: undefined } : kitOf(u, input.spread),
+    );
     if (input.priority) {
       for (const u of this.units) this.ranks.push(RANK[input.priority[u.id] ?? 'normal']);
       this.ranked = this.ranks.some((r) => r !== this.ranks[0]);
@@ -1811,18 +1825,27 @@ class MapState {
     for (const f of attackers) byGroup.set(f.g, [...(byGroup.get(f.g) ?? []), f]);
     // The foe that attacks from a group is its healthiest.
     for (const list of byGroup.values()) list.sort((a, b) => b.hp - a.hp);
-    const options = fronts.flatMap((gi) => [...byGroup.entries()].map(([g, list]) => ({ gi, g, s: this.exchangeOf(gi, list[0]!, 'enemy').survive })));
-    options.sort((a, b) => a.s - b.s || a.gi - b.gi || a.g - b.g);
-    const hit = new Set<number>();
-    for (const o of options) {
-      if (hit.has(o.gi)) continue;
-      const list = byGroup.get(o.g)!;
-      const f = list.find((x) => x.hp > 0);
-      if (!f) continue;
-      list.splice(list.indexOf(f), 1);
-      hit.add(o.gi);
-      this.fight(o.gi, f, this.exchangeOf(o.gi, f, 'enemy'), 'enemy');
-      if (this.checkVictory()) return;
+    // Under the attackers' stress (#211) each front takes a second attack, from the foes left, after every front's first.
+    const rounds = this.input.stress === 'two-attackers' ? 2 : 1;
+    for (let round = 0; round < rounds; round++) {
+      const options = fronts.flatMap((gi) =>
+        [...byGroup.entries()].flatMap(([g, list]) => {
+          const f = list.find((x) => x.hp > 0);
+          return f ? [{ gi, g, s: this.exchangeOf(gi, f, 'enemy').survive }] : [];
+        }),
+      );
+      options.sort((a, b) => a.s - b.s || a.gi - b.gi || a.g - b.g);
+      const hit = new Set<number>();
+      for (const o of options) {
+        if (hit.has(o.gi)) continue;
+        const list = byGroup.get(o.g)!;
+        const f = list.find((x) => x.hp > 0);
+        if (!f) continue;
+        list.splice(list.indexOf(f), 1);
+        hit.add(o.gi);
+        this.fight(o.gi, f, this.exchangeOf(o.gi, f, 'enemy'), 'enemy');
+        if (this.checkVictory()) return;
+      }
     }
   }
 

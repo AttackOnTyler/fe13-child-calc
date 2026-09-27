@@ -5,6 +5,7 @@
  *
  * Data that holds an assumed value references an assumption id (`Assumed`) and is read through `assumed()`.
  */
+import type { StressCase } from './sim/map-play';
 import {
   FEW_CONQUEROR,
   FEW_INHERITANCE,
@@ -854,5 +855,35 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
       'the paired error, and a milestone’s chance is a share of the runs.',
     lean: 'either',
     touches: ['flawless', 'milestone'],
+  },
+];
+
+/**
+ * The blind spots that can be stressed (#211; spec #175, The Why panel): each one's bad case, which the plan is re-run
+ * under (`RunSimInput.stress`) for the headline's stress-test range ("42.0%, as low as 31.8% if two attackers reach
+ * each exposed pair"). The rest have no bad case the simulation can play without map positions.
+ */
+export type StressTest = {
+  readonly id: StressCase;
+  /** The stated blind spot it stresses. */
+  readonly blindSpot: BlindSpotId;
+  /** The bad case, in words after "if": "two attackers reach each exposed pair". */
+  readonly bad: string;
+  /** What the bad case plays, in a sentence. */
+  readonly how: string;
+};
+
+export const STRESS_TESTS: readonly StressTest[] = [
+  {
+    id: 'two-attackers',
+    blindSpot: 'one-worst-attacker',
+    bad: 'two attackers reach each exposed pair',
+    how: 'Each exposed pair takes two enemy-phase attacks instead of one, from the two foes left worst for it (each foe still attacks once), after every pair’s first.',
+  },
+  {
+    id: 'no-rally',
+    blindSpot: 'rally-reaches-every-pair',
+    bad: 'Rally reaches no pair',
+    how: 'No Rally reaches anyone: a Rally skill’s holder never rallies and acts otherwise (fights, heals or waits).',
   },
 ];
