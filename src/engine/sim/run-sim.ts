@@ -3,8 +3,8 @@
  * and internal level; ADR 0001). Every map from the next one to the endpoint is played (`playMap`) by the plan's lineup
  * for it; what changes the route between maps is sampled: each unit's EXP from its combats (`combatExp` at its internal
  * level), and its level-ups one at a time from its growths (personal plus class), clamped at its effective caps. Each
- * simulated run carries the product of its maps' no-death chances; the flawless chance is their mean, with its
- * simulation error (±, 95%).
+ * simulated run carries the product of its maps' no-death chances (a map its play can't win in `MAX_TURNS` counts as
+ * lost: the plan isn't shown to clear it); the flawless chance is their mean, with its simulation error (±, 95%).
  *
  * The plan: each map's lineup is today's suggested deployment (`suggestDeployment`, as the preparation page picks it)
  * over the army as a projection with average growths would have it on that map. It is chosen once and every run plays
@@ -87,6 +87,7 @@ import type { SimItem } from './sustain';
 import { STAT_BOOSTERS, TONICS, itemByName, statItemGain, type GameItem } from '../../game-data/items';
 import type { StockItem } from '../supply';
 import { buyDown, endpointKit, forgedWeapon, freshWeapon, mapUpkeep, type KitPiece, type MapUpkeep } from './upkeep';
+import { classWeaponKinds } from '../supply';
 
 export type Weapon = NonNullable<Fighter['weapon']>;
 
@@ -428,6 +429,11 @@ export type RunSimMapResult = {
   /** The expected turns, weighted the same way; undefined when no run reaches it. */
   readonly turns: number | undefined;
   /**
+   * The share of those runs (weighted the same way) in which the play ran out of turns with the map unwon (`stalled`):
+   * the plan isn't shown to clear it there, so those runs count it as lost (`noDeath` reads 0 for them).
+   */
+  readonly stalled: number | undefined;
+  /**
    * Gold at the map's end (#190), its sure income added, over the runs that play it with nobody lost before it;
    * undefined when none does.
    */
@@ -630,8 +636,10 @@ const RANKS = ['E', 'D', 'C', 'B', 'A', 'S'];
  * (a base class D, C from Lv 10; an advanced or special class B, A from Lv 10).
  */
 function wields(u: Live, item: GameItem): boolean {
+  if (item.only) return false;
+  // Stones have no rank: whoever's class takes them wields them.
   const need = RANKS.indexOf(item.rank ?? '');
-  if (need < 0 || item.only) return false;
+  if (need < 0) return !item.rank;
   const byLevel = (u.tier === 'base' ? 1 : 3) + (u.level >= 10 ? 1 : 0);
   let held = -1;
   for (const g of u.gear) if (g.weapon.item.kind === item.kind) held = Math.max(held, RANKS.indexOf(g.weapon.item.rank ?? ''));
@@ -1149,10 +1157,35 @@ function beforeMap(state: RunState, step: RunSimMap, at: number, assumptions: As
   const stop = !!step.armory?.length;
   if (shop && stop) rebuy(state, step, shop);
   changeClasses(state, step, at, assumptions['class-change-internal-level']);
+  if (prep) handOver(state);
   if (prep) drinkTonics(state, step, assumptions);
   // On the way, the gold the plan's seals still to buy need stays in hand.
   if (shop?.kit && stop) buyKit(state, shop.kit(), shop.endpoint ? 0 : sealReserve(state), shop.endpoint ? 'kit' : 'arms');
   return new Map(step.mapOnly.map((a) => [a.id, liveOf(a)]));
+}
+
+/**
+ * Weapons a unit holds but can't wield (Chapter 2's Miriel carries Vaike's Iron Axe; a class change leaves a kind
+ * behind) go, in the preparations, to a unit that can and holds none of that kind: the unarmed first, then in army order.
+ */
+function handOver(state: RunState) {
+  const units = [...state.army.values()];
+  const kinds = new Map(units.map((u) => [u, classWeaponKinds(className(u.classId, u.base.gender))]));
+  const holds = (u: Live, kind: string) => u.gear.some((g) => g.uses > 0 && g.weapon.item.kind === kind);
+  for (const from of units) {
+    for (let k = from.gear.length - 1; k >= 0; k--) {
+      const g = from.gear[k]!;
+      const kind = g.weapon.item.kind;
+      if (g.uses <= 0 || kinds.get(from)!.has(kind) || g.weapon.item.only) continue;
+      const takers = units.filter((u) => u !== from && kinds.get(u)!.has(kind) && !holds(u, kind));
+      const to = takers.find((u) => !u.gear.some((x) => x.uses > 0)) ?? takers[0];
+      if (!to) continue;
+      from.gear.splice(k, 1);
+      to.gear.push(g);
+      refresh(from);
+      refresh(to);
+    }
+  }
 }
 
 /** The gold kept for the plan's class changes still to make that the seals held don't cover. */
@@ -1436,36 +1469,7 @@ function planner(input: RunSimInput, seed: number, assumptions: Assumptions): Pl
         kits.push([]);
         continue;
       }
-      const pools = new Map<Foe, readonly string[]>(step.map.foes.map((g) => [g.foe, g.pool ?? []]));
-      const here = (u: RosterUnit) => state.army.has(u) || extra.has(u);
-      const leads = (u: RosterUnit) => step.forced.includes(u) || (state.army.get(u) ?? extra.get(u))!.base.role === 'lead';
-      // The plan pairs each couple it marries until they marry (#188), the one that leads in front.
-      const pinned = [...state.couples.values()]
-        .filter(([a, b]) => here(a) && here(b) && !state.married.has(a) && !state.married.has(b))
-        .map(([a, b]) => (leads(b) && !leads(a) ? { lead: b, back: a } : { lead: a, back: b }));
-      const max = step.deploy || state.army.size + extra.size;
-      const planned = input.lineups?.[k];
-      // The pins' rules on this map (#200): the greedy lineup starts from their pairs and leaves out who's kept out;
-      // either lineup then keeps them.
-      const rules = input.pins?.[k];
-      const kept = { max, forced: step.forced, here };
-      const rank = (a: RosterUnit, b: RosterUnit) => rankIn(state, a, b);
-      let d = planned
-        ? plannedDeployment(pinnedLineup(planned, rules, kept), step.forced, max, here, rank)
-        : suggestDeployment({
-            candidates: candidatesOf(state, extra),
-            forced: step.forced,
-            pinned: [...(rules ?? []).flatMap((r) => (r.partner && (r.position === 'lead' || r.position === 'back') ? [r.position === 'lead' ? { lead: r.unit, back: r.partner } : { lead: r.partner, back: r.unit }] : [])), ...pinned],
-            ...(rules?.some((r) => r.position === 'out') ? { excluded: new Set(rules.filter((r) => r.position === 'out').map((r) => r.unit)) } : {}),
-            max,
-            foes: step.map.foes.map((g) => g.foe),
-            pool: (f) => pools.get(f) ?? [],
-          });
-      if (!planned && rules) {
-        const greedy: LineupPlan = { pairs: d.pairs.map((p) => ({ lead: p.lead, ...(p.back ? { back: p.back } : {}) })), solo: d.solo };
-        const fixed = pinnedLineup(greedy, rules, kept);
-        if (rulesBroken(greedy, rules, step.forced, here) > 0) d = plannedDeployment(fixed, step.forced, max, here, rank);
-      }
+      const d = deploymentFor(state, input, k, extra);
       // An armory stop's kit (#190; on the way, the realism pass): the projection buys it all (its gold is unlimited),
       // so the lineups after it are worked out armed as the runs will be.
       kits[k] = step.armory?.length ? kitFor(state, step, d, k === last) : [];
@@ -1482,6 +1486,45 @@ function planner(input: RunSimInput, seed: number, assumptions: Assumptions): Pl
     wear: (i) => (walk(i), wear[i]!),
     kit: (i) => (walk(i), kits[i]!),
   };
+}
+
+/**
+ * The lineup a map is played with, from where the army stands (`state`): the plan's (#198), else the greedy one
+ * (`suggestDeployment`, each couple the plan marries paired until it marries, #188), both keeping the pins' rules (#200).
+ */
+function deploymentFor(state: RunState, input: RunSimInput, k: number, extra: ReadonlyMap<RosterUnit, Live>): Deployment {
+  const step = input.maps[k]!;
+  const pools = new Map<Foe, readonly string[]>(step.map.foes.map((g) => [g.foe, g.pool ?? []]));
+  const here = (u: RosterUnit) => state.army.has(u) || extra.has(u);
+  const leads = (u: RosterUnit) => step.forced.includes(u) || (state.army.get(u) ?? extra.get(u))!.base.role === 'lead';
+  // The plan pairs each couple it marries until they marry (#188), the one that leads in front.
+  const pinned = [...state.couples.values()]
+    .filter(([a, b]) => here(a) && here(b) && !state.married.has(a) && !state.married.has(b))
+    .map(([a, b]) => (leads(b) && !leads(a) ? { lead: b, back: a } : { lead: a, back: b }));
+  const max = step.deploy || state.army.size + extra.size;
+  const planned = input.lineups?.[k];
+  // The pins' rules on this map (#200): the greedy lineup starts from their pairs and leaves out who's kept out;
+  // either lineup then keeps them.
+  const rules = input.pins?.[k];
+  const kept = { max, forced: step.forced, here };
+  const rank = (a: RosterUnit, b: RosterUnit) => rankIn(state, a, b);
+  let d = planned
+    ? plannedDeployment(pinnedLineup(planned, rules, kept), step.forced, max, here, rank)
+    : suggestDeployment({
+        candidates: candidatesOf(state, extra),
+        forced: step.forced,
+        pinned: [...(rules ?? []).flatMap((r) => (r.partner && (r.position === 'lead' || r.position === 'back') ? [r.position === 'lead' ? { lead: r.unit, back: r.partner } : { lead: r.partner, back: r.unit }] : [])), ...pinned],
+        ...(rules?.some((r) => r.position === 'out') ? { excluded: new Set(rules.filter((r) => r.position === 'out').map((r) => r.unit)) } : {}),
+        max,
+        foes: step.map.foes.map((g) => g.foe),
+        pool: (f) => pools.get(f) ?? [],
+      });
+  if (!planned && rules) {
+    const greedy: LineupPlan = { pairs: d.pairs.map((p) => ({ lead: p.lead, ...(p.back ? { back: p.back } : {}) })), solo: d.solo };
+    const fixed = pinnedLineup(greedy, rules, kept);
+    if (rulesBroken(greedy, rules, step.forced, here) > 0) d = plannedDeployment(fixed, step.forced, max, here, rank);
+  }
+  return d;
 }
 
 /**
@@ -1671,6 +1714,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
   const reach = input.maps.map(() => 0);
   const noDeath = input.maps.map(() => 0);
   const turns = input.maps.map(() => 0);
+  const stalls = input.maps.map(() => 0);
   const atEnd: Endpoint = new Map();
   const bonds: Bonds = { runs: 0, points: new Map(), weddings: new Map() };
   const spots = new Set<BlindSpotId>();
@@ -1742,13 +1786,20 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
       entering[i]!++;
       state.made.forEach((ok, j) => ok && made[i]![j]!++);
       if (step.armory?.length) recordStop(stops[i]!, arriving, receipts);
-      const lineup = lineupOf(state, (lineups[i] ??= plan.lineup(i)), extra, interner);
+      // A map the plan's projection never entered (a child paralogue whose gates held only in some runs) is played by
+      // this run's own lineup.
+      const planned = (lineups[i] ??= plan.lineup(i));
+      const lineup = lineupOf(state, planned === NOBODY ? deploymentFor(state, input, i, extra) : planned, extra, interner);
       const play = playMap(playInput(state, input, i, lineup, input.idle), runSeed(rs, i));
       if (play.noDeath < 1) for (const [u, share] of lossShares(play)) lost.set(u, (lost.get(u) ?? 0) + flawless * (1 - play.noDeath) * share);
+      // A map the play can't win in its turns isn't cleared: the run doesn't get past it (the plan isn't shown to).
+      const stalled = play.ended === 'stalled';
+      const cleared = stalled ? 0 : play.noDeath;
       reach[i]! += flawless;
-      noDeath[i]! += flawless * play.noDeath;
+      noDeath[i]! += flawless * cleared;
       turns[i]! += flawless * play.turns;
-      flawless *= play.noDeath;
+      if (stalled) stalls[i]! += flawless;
+      flawless *= cleared;
       for (const b of play.blindSpots) spots.add(b);
       const earned = afterMap(state, step, i, play, rng, input.difficulty, assumptions, mapUpkeep(step.map, play, lineup, hits, assumptions['tome-miss-use']));
       tallyExp((expTallies[i] ??= { runs: 0, groups: play.groups, units: new Map() }), state, play, earned);
@@ -1777,6 +1828,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
       noDeath: reach[i]! > 0 ? noDeath[i]! / reach[i]! : undefined,
       lineup: lineups[i],
       turns: reach[i]! > 0 ? turns[i]! / reach[i]! : undefined,
+      stalled: reach[i]! > 0 ? stalls[i]! / reach[i]! : undefined,
       gold: golds[i]!.length ? goldSpread(golds[i]!) : undefined,
     })),
     shopping: stops.flatMap((s, i) => (s.runs ? [shoppingStop(input.maps[i]!, s)] : [])),

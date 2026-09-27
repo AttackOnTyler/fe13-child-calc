@@ -672,7 +672,9 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
     why:
       'Exposure is the player’s choice (#183): a front that attacks, or waits as bait, is in the foes’ reach on enemy phase, and one that holds ' +
       'back is not, however fast the foes or small the map. A careful player only exposes a front that very likely lives through it (1% risk at ' +
-      'most), and engages once a turn with the least risk when nothing is that safe. In play, foes that move every turn can reach a unit that ' +
+      'most): it attacks, or waits in reach as bait when it would live through the enemy phase there and counter; when nothing is that safe it ' +
+      'engages once a turn with the least risk. With reinforcements that never stop it goes for the boss from the start, and a map it can’t ' +
+      'win in 50 turns counts as lost. In play, foes that move every turn can reach a unit that ' +
       'hangs back.',
     lean: 'high',
     touches: ['map'],

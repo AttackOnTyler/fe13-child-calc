@@ -161,6 +161,21 @@ describe('gold and the shopping list in the simulated runs (#190)', () => {
     expect(r.maps[2]!.turns).toBe(4);
   });
 
+  it('hands a weapon its holder can’t wield to a unit that can, in the preparations: Vaike’s Iron Axe from Miriel (realism pass)', () => {
+    const fighter = engine.classGrowths('fighter', 'M');
+    const mage = engine.classGrowths('mage', 'F');
+    const vaike = hero({ id: 'vaike', name: 'Vaike', classId: 'fighter', weapons: [], growths: Object.fromEntries(STATS.map((s) => [s, -fighter[s]])) as Record<Stat, number> });
+    const miriel = hero({ id: 'miriel', name: 'Miriel', gender: 'F', classId: 'mage', weapons: [{ item: item('Fire') }, { item: item('Iron Axe') }], growths: Object.fromEntries(STATS.map((s) => [s, -mage[s]])) as Record<Stat, number> });
+    // Vaike alone on map b: armed, he fells the dummies; unarmed he'd stall.
+    const maps = [step(rout('a', [])), step(rout('b', [dummy(3)]), { forced: ['vaike'] })];
+    const r = sim([vaike, miriel], maps, 0);
+    expect(r.maps[1]!.turns).toBe(3);
+    expect(r.exp.find((m) => m.key === 'b')!.units.find((u) => u.unit === 'vaike')!.kills).toEqual({ 'Dummy 20': 3 });
+    // No preparations on the way (the early forced maps): no hand-over yet.
+    const early = sim([vaike, miriel], maps.map((m) => ({ ...m, noPreparations: true })), 0);
+    expect(early.exp.find((m) => m.key === 'b')!.units.find((u) => u.unit === 'vaike')?.kills ?? {}).toEqual({});
+  });
+
   it('arms the lineup on the way with weapons off the shelf within its rank, keeping gold for the plan’s seals (realism pass)', () => {
     // 44 HP: an Iron Sword's round (20 a hit, doubled) leaves it standing; a Steel Sword's (23, doubled) fells it.
     const tough = dummy(2, 44);
@@ -252,5 +267,18 @@ describe('gold and the shopping list in the simulated runs (#190)', () => {
     expect(line.share).toBeLessThan(1);
     expect(r.maps[1]!.gold!.low).toBe(460);
     expect(r.maps[1]!.gold!.high).toBe(1000);
+  });
+});
+
+describe('a map the play can’t win (realism pass)', () => {
+  it('counts a map that runs out of turns unwon as not cleared: the run doesn’t get past it', () => {
+    // A foe the hero can't hurt and that can't hurt it: nobody dies, and the map is never won.
+    const wall: Foe = { ...dummy(1), name: 'Wall', stats: stats(20, 0, 0, 0, 0, 0, 99, 99) };
+    const r = engine.simulateRuns({ army: [hero()], maps: [step(rout('a', [wall])), step(rout('b', [dummy(1)]))], difficulty: 'normal' }, 1, 2);
+    expect(r.maps[0]).toMatchObject({ reach: 1, noDeath: 0, stalled: 1 });
+    expect(r.maps[1]!.reach).toBe(0);
+    expect(r.chance).toBe(0);
+    // A map it wins reads no stall.
+    expect(engine.simulateRuns({ army: [hero()], maps: [step(rout('b', [dummy(1)]))], difficulty: 'normal' }, 1, 2).maps[0]).toMatchObject({ noDeath: 1, stalled: 0 });
   });
 });
