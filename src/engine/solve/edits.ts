@@ -8,15 +8,22 @@
  *   roadmap's other lineups, its order and the passes of children whose parents didn't change.
  * - **Robin:** another asset or flaw, where the run facts leave it open (Robin's gender stays: a gender flip is a
  *   different army, the Robin alternatives' job, #201). Rebuilt the same way.
- * - **The endpoint class and one build skill:** none yet. The simulation doesn't read a plan's classes or builds until
- *   the roadmap plays its milestones (#194), and an edit it can't see would always read "no measurable difference".
- * - **Passed skills:** a parent passes another skill it can pass (not its fixed pass, nor the other parent's).
+ * - **The endpoint class:** a unit promotes to another class its Master Seal reaches (its planned class change, #194,
+ *   and its wishlist class).
+ * - **One build skill:** a unit's build swaps one skill for another its classes teach. The simulation doesn't equip
+ *   builds (they're milestones, #194), so the step reads such an edit as a close call at no cost (`simKey`).
+ * - **Passed skills:** a parent passes another skill it can pass (not its fixed pass, nor the other parent's); the
+ *   simulation passes it only once the parent has learned it (#194).
  * - **Lineups and pairs,** on the maps the best plan loses the most on (its re-score's, riskiest first), as the map's
  *   lineup resolves (named, or the greedy one): a unit fielded on a neighbouring map comes in for one fielded here; two
  *   pairs swap Backs; a pair splits; two units alone pair up. The edited lineup is named on the roadmap from then on.
  * - **Paralogue places:** a child paralogue (a movable step) moves one map earlier or later, never past the endpoint.
- * - **Seals, item uses and side goals:** none yet: the roadmap's seals are read from #194, item uses from #193, side
- *   goals from #191; each adds its edits here.
+ * - **Seals:** a planned class change is needed by an earlier map (a quarter, half or three quarters of the way), or
+ *   by the endpoint.
+ * - **Item uses and side goals:** none yet: item uses come with #193, side goals' chase/skip edits with #191's pins.
+ *
+ * **Non-starters first (#194):** while the best plan has a couple that can't reach S by its deadline, the edits that
+ * could fix it come first: its child's paralogue moved later (`placedForSupports`), then the marriages touching it.
  */
 import { SKILLS, type SkillId } from '../../game-data/skills';
 import { MAPS } from '../../game-data/chapters';
@@ -25,9 +32,17 @@ import { STATS, type Stat } from '../../game-data/stats';
 import { flawlessInput } from '../flawless';
 import { remainingMapOrder } from '../map-order';
 import { rosterUnits, stateOf, unitName, type Couple, type RosterUnit } from '../roster';
+import { CHILD_UNITS, type ChildId } from '../../game-data/children';
+import { CLASS_SKILLS } from '../../game-data/skills';
+import type { ClassId } from '../../game-data/classes';
+import type { Gender } from '../../game-data/stats';
+import { className, promotionsOf } from '../classes';
+import { sealReaches } from '../sim/class-changes';
+import { mapsToS } from '../milestones';
+import { pairThresholds, pointsOfRank } from '../sim/support-growth';
 import { latestEntry, type Run } from '../run';
 import type { Plan, PlanLineup, PlanRobin, WishlistChild } from './plan';
-import { UNAVAILABLE, genderOf, pairingsOf, planFor, robinRef, type SeedContext, type SeedOptions } from './seed';
+import { UNAVAILABLE, genderOf, pairingsOf, placedForSupports, planFor, robinRef, type SeedContext, type SeedOptions } from './seed';
 import type { Edit, EditHints } from './step';
 
 const STAT_NAMES: Readonly<Record<Stat, string>> = { hp: 'HP', str: 'Str', mag: 'Mag', skl: 'Skl', spd: 'Spd', lck: 'Lck', def: 'Def', res: 'Res' };
@@ -51,8 +66,13 @@ function rebuilt(run: Run, ctx: SeedContext, options: SeedOptions, prev: Plan, r
     const p = prev.wishlist.children.find((x) => sameParents(x, c));
     return p ? { ...c, passes: p.passes } : c;
   });
-  return { ...next, wishlist: { ...next.wishlist, children }, roadmap: { ...next.roadmap, order, lineups } };
+  // The class changes the plan had for units still in it stay as they were (a seal edit's timing, a class edit).
+  const seals = next.roadmap.seals.map((x) => prev.roadmap.seals.find((y) => y.unit === x.unit && y.seal === x.seal) ?? x);
+  return { ...next, wishlist: { ...next.wishlist, children }, roadmap: { ...next.roadmap, order, lineups, seals } };
 }
+
+/** Zero or one edit. */
+const opt = (e: Edit | undefined): Edit[] => (e ? [e] : []);
 
 /** A plan with one map's lineup named on its roadmap. */
 function withLineup(plan: Plan, lineup: PlanLineup): Plan {
@@ -72,6 +92,7 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
   const gender = facts.gender ?? plan.robin.gender;
   const name = (u: RosterUnit) => unitName(u, null);
   const order = remainingMapOrder(run);
+  const movableKey = (k: string) => order.steps.some((x) => x.key === k && x.movable);
   const mapLabel = (key: string) => {
     const s = order.steps.find((x) => x.key === key);
     const m = s && MAPS.find((d) => d.id === s.map);
@@ -98,30 +119,116 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
   const singles = units.filter((u) => u.kind !== 'child' && !married.has(u.id) && open(u.id)).map((u) => u.id);
   const men = singles.filter((u) => genderOf(u, gender) === 'M');
   const women = singles.filter((u) => genderOf(u, gender) === 'F');
-  const marriageEdit = (drop: readonly Couple[], add: readonly Couple[], label: string): Edit => {
+  // A couple that can't reach S by the endpoint wherever the paralogues go (it's fielded too late for its curve): a
+  // non-starter in any plan (#194), so no edit marries it.
+  const maps = base.input.maps;
+  const last = maps.length - 1;
+  const from = new Map<RosterUnit, number>(base.input.army.map((a) => [a.id, 0]));
+  maps.forEach((m, i) => {
+    for (const a of m.joining) if (!from.has(a.id)) from.set(a.id, i);
+    for (const a of m.later) if (!from.has(a.id)) from.set(a.id, i + 1);
+  });
+  const rankOf = (a: RosterUnit, b: RosterUnit) =>
+    base.input.army.find((x) => x.id === a)?.supports.find((x) => x.partner === b)?.rank ?? base.input.army.find((x) => x.id === b)?.supports.find((x) => x.partner === a)?.rank;
+  const hopeless = ([a, b]: Couple) => {
+    const t = pairThresholds(a, b, gender);
+    if (!t) return false;
+    const r = rankOf(a, b);
+    const need = mapsToS(t, r ? pointsOfRank(r, t) : 0, ctx.assumptions['support-past-threshold']);
+    const earliest = Math.max(from.get(a) ?? Infinity, from.get(b) ?? Infinity);
+    return need === undefined || earliest + need > last;
+  };
+  const marriageEdit = (drop: readonly Couple[], add: readonly Couple[], label: string): Edit | undefined => {
+    if (add.some(hopeless)) return undefined;
     const kept = couples.filter((c) => !drop.some((d) => couplesKey([d]) === couplesKey([c])));
     const next = [...kept, ...add];
     return { kind: 'marriage', key: `marriage:${couplesKey(next)}`, label, make: () => rebuilt(run, ctx, options, plan, plan.robin, next) };
   };
   const marries = (m: RosterUnit, w: RosterUnit) => `${name(m)} marries ${name(w)}`;
+
+  // A non-starter's fixes first: its child's paralogue later, then the marriages that touch it.
+  const stuck = new Set(hints.stuck);
+  if (stuck.size) {
+    const placed = placedForSupports(run, ctx.assumptions, plan);
+    if (placed.roadmap.order.join() !== plan.roadmap.order.join()) {
+      const later = placed.roadmap.order.filter((k, i) => plan.roadmap.order.indexOf(k) < i && movableKey(k));
+      yield {
+        kind: 'place',
+        key: `place:${placed.roadmap.order.join(',')}`,
+        label: `Play ${later.map(mapLabel).join(', ') || 'the child paralogues'} later, so each couple reaches S first`,
+        make: () => placed,
+      };
+    }
+    for (let i = 0; i < free.length; i++)
+      for (let j = i + 1; j < free.length; j++) {
+        const [m1, w1] = free[i]!;
+        const [m2, w2] = free[j]!;
+        if ((stuck.has(m1) || stuck.has(m2)) && legal(m1, w2) && legal(m2, w1)) yield* opt(marriageEdit([free[i]!, free[j]!], [[m1, w2], [m2, w1]], `${marries(m1, w2)} and ${marries(m2, w1)}`));
+      }
+    for (const [m, w] of free) {
+      if (!stuck.has(m) && !stuck.has(w)) continue;
+      for (const u of women) if (legal(m, u)) yield* opt(marriageEdit([[m, w]], [[m, u]], `${marries(m, u)} instead of ${name(w)}`));
+      for (const u of men) if (legal(u, w)) yield* opt(marriageEdit([[m, w]], [[u, w]], `${marries(u, w)} instead of ${name(m)}`));
+    }
+  }
+
   for (let i = 0; i < free.length; i++)
     for (let j = i + 1; j < free.length; j++) {
       const [m1, w1] = free[i]!;
       const [m2, w2] = free[j]!;
-      if (legal(m1, w2) && legal(m2, w1)) yield marriageEdit([free[i]!, free[j]!], [[m1, w2], [m2, w1]], `${marries(m1, w2)} and ${marries(m2, w1)}`);
+      if (legal(m1, w2) && legal(m2, w1)) yield* opt(marriageEdit([free[i]!, free[j]!], [[m1, w2], [m2, w1]], `${marries(m1, w2)} and ${marries(m2, w1)}`));
     }
   for (const [m, w] of free) {
-    for (const u of women) if (legal(m, u)) yield marriageEdit([[m, w]], [[m, u]], `${marries(m, u)} instead of ${name(w)}`);
-    for (const u of men) if (legal(u, w)) yield marriageEdit([[m, w]], [[u, w]], `${marries(u, w)} instead of ${name(m)}`);
+    for (const u of women) if (legal(m, u)) yield* opt(marriageEdit([[m, w]], [[m, u]], `${marries(m, u)} instead of ${name(w)}`));
+    for (const u of men) if (legal(u, w)) yield* opt(marriageEdit([[m, w]], [[u, w]], `${marries(u, w)} instead of ${name(m)}`));
   }
-  for (const m of men) for (const w of women) if (legal(m, w)) yield marriageEdit([], [[m, w]], marries(m, w));
+  for (const m of men) for (const w of women) if (legal(m, w)) yield* opt(marriageEdit([], [[m, w]], marries(m, w)));
 
   // Robin: another asset or flaw, where the run facts leave it open.
   const robinEdit = (r: PlanRobin, label: string): Edit => ({ kind: 'robin', key: `robin:${r.asset}-${r.flaw}`, label, make: () => rebuilt(run, ctx, options, plan, r, couples) });
   if (!facts.asset) for (const asset of STATS) if (asset !== plan.robin.asset && asset !== plan.robin.flaw) yield robinEdit({ ...plan.robin, asset }, `Robin’s asset: ${STAT_NAMES[asset]}`);
   if (!facts.flaw) for (const flaw of STATS) if (flaw !== plan.robin.flaw && flaw !== plan.robin.asset) yield robinEdit({ ...plan.robin, flaw }, `Robin’s flaw: ${STAT_NAMES[flaw]}`);
 
-  // The endpoint class and one build skill: none until #194 plays them.
+  // Each unit's class entering the roadmap, and its gender: the army, its recruits, the plan's children.
+  const entering = new Map<RosterUnit, { classId: ClassId; gender: Gender }>();
+  for (const a of [...base.input.army, ...base.input.maps.flatMap((m) => [...m.joining, ...m.later])]) if (!entering.has(a.id)) entering.set(a.id, { classId: a.classId, gender: a.gender });
+  for (const c of plan.wishlist.children)
+    if (!entering.has(c.child)) entering.set(c.child, { classId: CHILD_UNITS[c.child as ChildId].defaultClassSet[0]!, gender: CHILD_UNITS[c.child as ChildId].gender });
+  if (!entering.has('robin')) entering.set('robin', { classId: 'tactician', gender });
+  const cls = (id: ClassId, g: Gender) => className(id, g);
+
+  // The endpoint class: another promotion its Master Seal reaches.
+  for (const seal of plan.roadmap.seals) {
+    const from = entering.get(seal.unit);
+    if (!from || seal.seal !== 'master') continue;
+    for (const to of promotionsOf(from.classId)) {
+      if (to === seal.classId || !sealReaches(from.classId, to, from.gender, 'master')) continue;
+      yield {
+        kind: 'class',
+        key: `class:${seal.unit}:${to}`,
+        label: `${name(seal.unit)} promotes to ${cls(to, from.gender)} instead of ${cls(seal.classId, from.gender)}`,
+        make: () => ({
+          ...plan,
+          wishlist: { ...plan.wishlist, units: plan.wishlist.units.map((w) => (w.unit === seal.unit && w.classId === seal.classId ? { ...w, classId: to } : w)) },
+          roadmap: { ...plan.roadmap, seals: plan.roadmap.seals.map((x) => (x === seal ? { ...x, classId: to } : x)) },
+        }),
+      };
+    }
+  }
+
+  // One build skill: another its classes teach.
+  for (const w of plan.wishlist.units) {
+    const from = entering.get(w.unit)?.classId;
+    const taught = [...new Set([w.classId, ...(from ? [from] : [])].flatMap((c) => (CLASS_SKILLS[c] ?? []).map((x) => x.skill)))].filter((id) => !w.build.includes(id));
+    for (const [slot, now] of w.build.entries())
+      for (const id of taught)
+        yield {
+          kind: 'build',
+          key: `build:${w.unit}:${slot}:${id}`,
+          label: `${name(w.unit)}’s build: ${SKILLS[id]?.name ?? id} instead of ${SKILLS[now]?.name ?? now}`,
+          make: () => ({ ...plan, wishlist: { ...plan.wishlist, units: plan.wishlist.units.map((x) => (x === w ? { ...x, build: x.build.map((b, i) => (i === slot ? id : b)) } : x)) } }),
+        };
+  }
 
   // Passed skills: each planned pass, swapped for another the parent can pass.
   const robin = robinRef(plan.robin);
@@ -210,5 +317,21 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
     }
   }
 
-  // Seals (#194), item uses (#193) and side goals (#191): none yet.
+  // Seals: a class change needed by an earlier map, or by the endpoint.
+  const n = keys.length;
+  const marks = [...new Set([Math.floor(n / 4), Math.floor(n / 2), Math.floor((3 * n) / 4), n - 1])].filter((i) => i >= 0 && i < n).map((i) => keys[i]!);
+  for (const seal of plan.roadmap.seals) {
+    const g = entering.get(seal.unit)?.gender ?? gender;
+    for (const key of marks) {
+      if (key === seal.key) continue;
+      yield {
+        kind: 'seal',
+        key: `seal:${seal.unit}:${seal.classId}:${key}`,
+        label: `${name(seal.unit)} reaches ${cls(seal.classId, g)} by ${mapLabel(key)}`,
+        make: () => ({ ...plan, roadmap: { ...plan.roadmap, seals: plan.roadmap.seals.map((x) => (x === seal ? { ...x, key } : x)) } }),
+      };
+    }
+  }
+
+  // Item uses (#193) and side goals (#191): none yet.
 }

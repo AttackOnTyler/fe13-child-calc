@@ -17,13 +17,13 @@ const plan = (name: string): Plan => ({
 const nameOf = (p: Plan) => p.wishlist.endpoint;
 
 /** Each plan's chance, the noise every plan shares on a run, and a plan whose own noise averages out. */
-const BASE: Record<string, number> = { start: 0.5, better: 0.7, even: 0.5, worse: 0.2, lowCeiling: 0.45, best2: 0.8 };
+const BASE: Record<string, number> = { start: 0.5, better: 0.7, even: 0.5, worse: 0.2, lowCeiling: 0.45, best2: 0.8, fix: 0.45, fixBetter: 0.72, broken: 0.99, same: 0.5 };
 const shared = (r: number) => ((r * 7919) % 11) / 50 - 0.1;
 const own = (name: string, r: number) => (name === 'even' ? (r % 2 ? 0.3 : -0.3) : 0);
 
 type Calls = { samples: string[]; rescores: { plan: string; seed: number; runs: number }[] };
 
-function fake(edits: Record<string, [EditKind, string][]>, ceilings: Record<string, number> = {}): { deps: SearchDeps; calls: Calls } {
+function fake(edits: Record<string, [EditKind, string][]>, ceilings: Record<string, number> = {}, stuck: Record<string, number> = {}): { deps: SearchDeps; calls: Calls } {
   const calls: Calls = { samples: [], rescores: [] };
   const deps: SearchDeps = {
     seed: () => plan('start'),
@@ -39,6 +39,9 @@ function fake(edits: Record<string, [EditKind, string][]>, ceilings: Record<stri
       return { chance: BASE[nameOf(p)]!, margin: 0, runs, samples: [], maps: [{ key: 'm1', label: 'M1', reach: 1, noDeath: BASE[nameOf(p)]!, lineup: undefined, turns: 1, gold: undefined }] } as unknown as FlawlessChance;
     },
     ceiling: (p) => ceilings[nameOf(p)],
+    nonStarters: (p) => Array.from({ length: stuck[nameOf(p)] ?? 0 }, (_, i) => [`a${i}`, `b${i}`] as unknown as readonly ['chrom', 'sumia']),
+    // 'same' reads exactly as the start does.
+    simKey: (p) => (nameOf(p) === 'same' ? 'start' : nameOf(p)),
   };
   return { deps, calls };
 }
@@ -110,6 +113,25 @@ describe('the local search (#199)', () => {
     // A ceiling above the best found is tried.
     const kept = fake({ start: [['marriage', 'better']] }, { better: 0.9 });
     expect(nameOf(solveStep(input(), kept.deps, 6).best)).toBe('better');
+  });
+
+  it('fixes a non-starter first, never takes one more, and never proposes a plan with one (#194)', () => {
+    const stuck = { start: 1, better: 1, broken: 2 };
+    const { deps, calls } = fake({ start: [['lineup', 'broken'], ['pair', 'better'], ['place', 'fix']], better: [['place', 'fixBetter']] }, {}, stuck);
+    const step = solveStep(input(), deps, 6);
+    expect(calls.samples).not.toContain('broken');
+    expect(deps.nonStarters!(step.best)).toHaveLength(0);
+    expect(step.proposals.length).toBeGreaterThan(0);
+    for (const p of step.proposals) expect(deps.nonStarters!(p.plan)).toHaveLength(0);
+    for (const c of step.closeCalls) expect(deps.nonStarters!(c.plan)).toHaveLength(0);
+  });
+
+  it('reads an edit the simulation can’t see as a close call, at no cost', () => {
+    const { deps, calls } = fake({ start: [['build', 'same']] });
+    const step = solveStep(input(), deps, 6);
+    expect(calls.samples).not.toContain('same');
+    expect(step.closeCalls).toEqual([expect.objectContaining({ label: 'to same', gain: 0, margin: 0, runs: 0 })]);
+    expect(step.converged).toBe(true);
   });
 
   it('resumes from its cursor: many small steps reach what one big step does', () => {

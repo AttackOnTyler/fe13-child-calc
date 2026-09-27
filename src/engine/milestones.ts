@@ -130,7 +130,7 @@ const SKILL_BY_NAME = new Map(Object.entries(SKILLS).map(([id, s]) => [s.name, i
 const pairId = (a: string, b: string) => (a < b ? `${a}+${b}` : `${b}+${a}`);
 
 /** Maps together from `points` to S, one rank a map at most under the clamp; undefined when the pair has no S. */
-function mapsToS(t: NonNullable<ReturnType<typeof pairThresholds>>, points: number, rule: Assumptions['support-past-threshold']): number | undefined {
+export function mapsToS(t: NonNullable<ReturnType<typeof pairThresholds>>, points: number, rule: Assumptions['support-past-threshold']): number | undefined {
   let maps = 0;
   for (const r of RANKS) {
     const need = t[r];

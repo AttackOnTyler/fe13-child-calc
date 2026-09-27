@@ -46,6 +46,8 @@ import { ceilingArmy, effectiveCaps, fullClass } from '../sim/ceiling';
 import type { RunSimInput } from '../sim/run-sim';
 import { forgedWeapon, freshWeapon, kitForgeCost } from '../sim/upkeep';
 import { plannedSeals } from '../sim/class-changes';
+import { milestones, type SupportMilestone } from '../milestones';
+import { remainingMapOrder } from '../map-order';
 import type { BuildMatch, ChildResult, Pairing, ParentRef, RobinRef } from '../types';
 import type { PageSubject } from '../unit-page';
 import { hungarian } from './hungarian';
@@ -239,6 +241,62 @@ export function endpointCoverage(run: Run, ctx: SeedContext, child: ChildId, par
 
 /** The seed for a run (see the module comment). */
 export function seedPlan(run: Run, ctx: SeedContext, options: SeedOptions = {}): Plan {
+  // Non-starters (#194, #199): a couple that can't reach S before its deadline brings no child. Move its child's
+  // paralogue later where it can move; a couple still stuck isn't matched again (pins and records stay).
+  const forbidden = new Set<string>();
+  const pinned = new Set((options.pins ?? []).map((p) => coupleKey(p.couple)));
+  for (let i = 0; ; i++) {
+    const plan = placedForSupports(run, ctx.assumptions, seedOnce(run, ctx, options, forbidden));
+    const stuck = nonStarters(run, ctx.assumptions, plan).filter((c) => !pinned.has(coupleKey(c)));
+    if (!stuck.length) return plan;
+    if (i >= SEED_FIXES) {
+      // Still stuck: those couples don't marry in the plan (they never would reach S in a run either).
+      const drop = new Set(stuck.map(coupleKey));
+      return placedForSupports(run, ctx.assumptions, planFor(run, ctx, options, plan.robin, plan.wishlist.marriages.filter((c) => !drop.has(coupleKey(c)))));
+    }
+    for (const c of stuck) forbidden.add(coupleKey(c));
+  }
+}
+
+/** Rounds of re-matching the seed spends on non-starters. */
+const SEED_FIXES = 4;
+
+/** A couple as a key, either order. */
+export const coupleKey = ([a, b]: readonly [RosterUnit, RosterUnit]) => (a < b ? `${a}+${b}` : `${b}+${a}`);
+
+/** The couples of a plan that are non-starters (#194): they can't reach S before their deadline. */
+export function nonStarters(run: Run, assumptions: Assumptions, plan: Plan): (readonly [RosterUnit, RosterUnit])[] {
+  return milestones(run, plan, assumptions).flatMap((m) => (m.kind === 'support' && m.nonStarter ? [m.pair] : []));
+}
+
+/**
+ * The plan with each non-starter's child paralogue moved later on the order, where it's movable, far enough for the
+ * couple's support to be reached first (and never past the endpoint): one couple at a time, reading the milestones
+ * again after each move.
+ */
+export function placedForSupports(run: Run, assumptions: Assumptions, plan: Plan): Plan {
+  const movable = new Set(remainingMapOrder(run).steps.filter((st) => st.movable).map((st) => st.key));
+  // A move can push another paralogue back ahead of its pair: each may move again, a few times at most.
+  const tried = new Set<string>();
+  for (let n = 0; n < 2 * movable.size + 2; n++) {
+    const m = milestones(run, plan, assumptions).find(
+      (x): x is SupportMilestone => x.kind === 'support' && x.nonStarter && !x.fixed && x.window.earliest !== undefined && movable.has(x.window.deadline.key) && !tried.has(`${x.window.deadline.key}@${x.window.deadline.index}`),
+    );
+    if (!m) return plan;
+    const key = m.window.deadline.key;
+    tried.add(`${key}@${m.window.deadline.index}`);
+    const order = plan.roadmap.order.filter((k) => k !== key);
+    // Entered at the start of the map at `at`: the pair needs `maps` maps together from its earliest.
+    const at = Math.min(m.window.earliest!.index + m.window.maps, order.length - 1);
+    if (at <= m.window.deadline.index) continue;
+    order.splice(at, 0, key);
+    plan = { ...plan, roadmap: { ...plan.roadmap, order } };
+  }
+  return plan;
+}
+
+/** One seed (see the module comment), never matching a `forbidden` couple. */
+function seedOnce(run: Run, ctx: SeedContext, options: SeedOptions, forbidden: ReadonlySet<string>): Plan {
   const facts = run.roster.run;
   const base = flawlessInput(run, ctx.assumptions, options.roleOf, []);
   const model = coverageModel(base.input, base.input.cleared ?? []);
@@ -298,7 +356,7 @@ export function seedPlan(run: Run, ctx: SeedContext, options: SeedOptions = {}):
     partners.set(CHROM_FALLBACK_PARTNER, ['chrom']);
     const open = (u: RosterUnit) => !taken.has(u) && alive(u) && (u === CHROM_FALLBACK_PARTNER || fielded.has(u));
     const pool = [...units.filter((u) => u.kind !== 'child').map((u) => u.id), CHROM_FALLBACK_PARTNER as RosterUnit].filter(open);
-    const legal = (h: RosterUnit, w: RosterUnit) => (partners.get(h) ?? []).includes(w);
+    const legal = (h: RosterUnit, w: RosterUnit) => (partners.get(h) ?? []).includes(w) && !forbidden.has(coupleKey([h, w]));
     const robinFixed = fixed.find((c) => c.includes('robin'))?.find((u) => u !== 'robin');
     const edge = (h: RosterUnit, w: RosterUnit) => (h === 'robin' || w === 'robin' ? robinWith(h === 'robin' ? w : h).value - alone.value : coupleValue([h, w], robinRef(combos[0]!)));
     const men = pool.filter((u) => genderOf(u, g) === 'M');

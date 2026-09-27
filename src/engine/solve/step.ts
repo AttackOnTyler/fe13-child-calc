@@ -7,8 +7,8 @@
  * **An evaluation is one simulated run of one plan** (a run that loses a unit early is cheap; one that reaches the
  * endpoint of the Full route costs about 0.3–0.45 s today). A step spends its budget in pieces: a batch of runs for one
  * plan, never more than the budget left, except the re-score (below), which is one piece and may overrun a step's
- * budget when it's the step's first piece (so a small budget still gets there). A ceiling check (pruning, below) counts
- * as one evaluation.
+ * budget when it's the step's first piece (so a small budget still gets there). Building an edit's plan and reading
+ * its milestones and ceiling (below) counts as one evaluation.
  *
  * **The local search** tries single edits on the flawless chance, in the spec's order each round (`EDIT_KINDS`): the
  * marriages and Robin; the endpoint class, one build skill and the passed skills; the lineups, pairs, paralogue places,
@@ -25,6 +25,11 @@
  * **Pruning (the ceiling):** a set of marriages (or a Robin) whose ceiling (the endpoint's flawless chance at caps,
  * which no plan with those marriages can beat) is below the best found (its chance on the search's runs, less its
  * margin) isn't evaluated; it's listed in `pruned`.
+ *
+ * **Non-starters (#194):** an edit that leaves more couples unable to reach S by their deadline than the best plan has
+ * is dropped unsimulated; one that leaves fewer is kept whatever its chance does (fixing a marriage that can't happen
+ * comes first), and its fixes are tried first. A plan with a non-starter is never offered, as a proposal or a close
+ * call. An edit the simulation can't see (`simKey`: a build skill, today) is a close call at no cost.
  *
  * **Proposals never replace the adopted plan:** the step never changes the plan it's given; each kept edit is offered
  * as a proposal with its gain over the adopted plan on the same runs, best first.
@@ -77,8 +82,11 @@ export type Edit = {
   readonly make: () => Plan;
 };
 
-/** What the edits read besides the plan: the maps the best plan loses the most on, riskiest first. */
-export type EditHints = { readonly riskiest: readonly string[] };
+/**
+ * What the edits read besides the plan: the maps the best plan loses the most on, riskiest first, and the units of its
+ * non-starter couples (#194), whose fixes come first.
+ */
+export type EditHints = { readonly riskiest: readonly string[]; readonly stuck: readonly RosterUnit[] };
 
 export type SolveStepInput = {
   readonly run: Run;
@@ -132,6 +140,13 @@ export type SearchDeps = {
   readonly rescore: (plan: Plan, seed: number, runs: number) => FlawlessChance;
   /** A plan's ceiling (undefined when there's none). */
   readonly ceiling: (plan: Plan) => number | undefined;
+  /** A plan's non-starter couples (#194): marriages that can't reach S by their deadline. None by default. */
+  readonly nonStarters?: (plan: Plan) => readonly (readonly [RosterUnit, RosterUnit])[];
+  /**
+   * What the simulation reads of a plan, as a key: two plans with the same key have the same flawless chance on every
+   * run, so an edit that keeps it is a close call at no cost. By default the whole plan.
+   */
+  readonly simKey?: (plan: Plan) => string;
 };
 
 const keyOf = (p: Plan) => JSON.stringify(p);
@@ -153,6 +168,7 @@ function freshState(start: Plan): SearchState {
     trial: null,
     scored: false,
     riskiest: [],
+    stuck: null,
     converged: false,
   };
 }
@@ -173,12 +189,18 @@ export function solveStep(input: SolveStepInput, deps: SearchDeps, display: numb
   let chance: FlawlessChance | undefined;
   const fresh = rescoreSeed(input.seed);
 
+  const stuckOf = (plan: Plan) => deps.nonStarters?.(plan) ?? [];
+  const simKey = deps.simKey ?? keyOf;
+  // The best plan's non-starters: an edit with more is never taken, one with fewer is taken first.
+  s.stuck ??= stuckOf(s.best).map((c) => [...c]);
   /** The next edit of the best plan not yet tried this round; undefined when the round is done. */
   const nextEdit = () => {
     const tried = new Set(s.tried);
-    for (const e of deps.edits(s.best, { riskiest: s.riskiest })) if (!tried.has(e.key)) return e;
+    for (const e of deps.edits(s.best, { riskiest: s.riskiest, stuck: [...new Set(s.stuck!.flat())] as RosterUnit[] })) if (!tried.has(e.key)) return e;
     return undefined;
   };
+  /** A plan is offered (a proposal, a close call) only with no non-starter. */
+  const offered = (plan: Plan) => stuckOf(plan).length === 0;
 
   while (!s.converged && spent < budget) {
     const left = budget - spent;
@@ -209,10 +231,23 @@ export function solveStep(input: SolveStepInput, deps: SearchDeps, display: numb
         else Object.assign(s, { round: s.round + 1, tried: [], improved: false });
         continue;
       }
+      // Building an edit and reading its milestones (and a comp's ceiling) is one evaluation, so a step that only
+      // drops edits still ends within its budget.
       const plan = e.make();
-      if (PRUNABLE.has(e.kind)) {
-        // A ceiling check is one evaluation: prune a comp that can't beat the best found.
-        spent += 1;
+      spent += 1;
+      const stuck = stuckOf(plan).map((c) => [...c]);
+      if (stuck.length > s.stuck!.length) {
+        s.tried.push(e.key);
+        continue;
+      }
+      if (stuck.length === s.stuck!.length && simKey(plan) === simKey(s.best)) {
+        // The simulation can't tell it apart: no measurable difference, at no cost.
+        s.tried.push(e.key);
+        if (offered(plan)) s.closeCalls = [...s.closeCalls.filter((c) => c.key !== e.key), { key: e.key, plan, label: e.label, gain: 0, margin: 0, runs: 0 }];
+        continue;
+      }
+      if (PRUNABLE.has(e.kind) && stuck.length === s.stuck!.length) {
+        // Prune a comp that can't beat the best found.
         const c = deps.ceiling(plan);
         const found = scoreOf(s.bestSamples);
         if (c !== undefined && c < found.chance - found.margin) {
@@ -221,7 +256,7 @@ export function solveStep(input: SolveStepInput, deps: SearchDeps, display: numb
           continue;
         }
       }
-      s.trial = { kind: e.kind, key: e.key, label: e.label, plan, samples: [], target: start };
+      s.trial = { kind: e.kind, key: e.key, label: e.label, plan, samples: [], target: start, stuck };
       continue;
     }
     const t = s.trial;
@@ -232,7 +267,9 @@ export function solveStep(input: SolveStepInput, deps: SearchDeps, display: numb
       continue;
     }
     const p = paired(s.bestSamples.slice(0, t.target), t.samples);
-    const v = verdictOf(p);
+    // Fixing a non-starter comes first: a plan with fewer is kept whatever its chance does.
+    const fixes = (t.stuck?.length ?? 0) < s.stuck!.length;
+    const v = fixes ? 'better' : verdictOf(p);
     if (v === 'unclear' && t.target < cap) {
       t.target = Math.min(cap, t.target * 2);
       continue;
@@ -243,13 +280,17 @@ export function solveStep(input: SolveStepInput, deps: SearchDeps, display: numb
       if (!s.startSamples) s.startSamples = s.bestSamples;
       s.best = t.plan;
       s.bestSamples = t.samples;
+      s.stuck = t.stuck ?? [];
       s.kept.push(t.label);
       const vs = paired(s.startSamples, s.bestSamples);
-      s.proposals.push({ plan: t.plan, label: t.label, edits: [...s.kept], gain: vs.gain, margin: vs.margin, runs: vs.runs });
-      s.proposals.sort((a, b) => b.gain - a.gain);
+      // Never a proposal with a non-starter: the plan it fixes on the way is kept, not offered.
+      if (!s.stuck.length) {
+        s.proposals.push({ plan: t.plan, label: t.label, edits: [...s.kept], gain: vs.gain, margin: vs.margin, runs: vs.runs });
+        s.proposals.sort((a, b) => b.gain - a.gain);
+      }
       s.improved = true;
       s.scored = false;
-    } else if (v === 'unclear') {
+    } else if (v === 'unclear' && !t.stuck?.length) {
       s.closeCalls = [...s.closeCalls.filter((c) => c.key !== t.key), { key: t.key, plan: t.plan, label: t.label, gain: p.gain, margin: p.margin, runs: p.runs }];
     }
   }

@@ -149,10 +149,15 @@ describe('the roadmap readout (#194)', () => {
     expect(r.rows[robin]).toContain(' · at risk: ');
     const wasted = { ...plan, wishlist: { ...plan.wishlist, children: plan.wishlist.children.map((c) => (c.child === 'kjelle' ? { ...c, passes: ['luna', 'luna'] as const } : c)) } };
     expect(roadmapReadout(engine, fresh, wasted).rows).toContain('Stahl learns Luna (Great Knight Lv 5) and equips it last before Paralogue 8, for Kjelle · wasted: the other parent passes it too');
-    // Olivia joins in Chapter 11: too late to reach S with Donnel before Paralogue 6 where the route puts it.
-    const olivia = milestones.findIndex((m) => m.id === 'support:donnel+olivia');
-    if (olivia >= 0) expect(r.rows[olivia]).toBe('Donnel and Olivia reach S before Paralogue 6 · non-starter: 8 maps together needed, from Chapter 11 on');
-    expect(r.rows.filter((x) => x.includes('non-starter'))).toHaveLength(milestones.filter((m) => m.kind === 'support' && m.nonStarter).length);
+    // Olivia joins in Chapter 11: too late to reach S with Donnel before Paralogue 6 where the route puts it (the seed
+    // moves it later, #199; here, the route's template order and that marriage).
+    const stuckPlan = engine.seedPlan(fresh, { pins: [{ kind: 'marriage', couple: ['donnel', 'olivia'] }] });
+    const template = { ...stuckPlan, roadmap: { ...stuckPlan.roadmap, order: engine.mapOrder(fresh).steps.map((s) => s.key) } };
+    const t = roadmapReadout(engine, fresh, template);
+    const tm = engine.milestones(fresh, template);
+    const olivia = tm.findIndex((m) => m.id === 'support:donnel+olivia');
+    expect(t.rows[olivia]).toBe('Donnel and Olivia reach S before Paralogue 6 · non-starter: 8 maps together needed, from Chapter 11 on');
+    expect(t.rows.filter((x) => x.includes('non-starter'))).toHaveLength(tm.filter((m) => m.kind === 'support' && m.nonStarter).length);
   });
 });
 

@@ -90,8 +90,9 @@ describe('the seed (#198)', () => {
     // Chrom passes Aether to a daughter whatever the plan, and every other parent passes a skill.
     expect(children.find((c) => c.child === 'lucina')!.passes[0]).toBe('aether');
     expect(children.filter((c) => c.parents[1] !== 'maiden').every((c) => c.passes.every((p) => p !== null))).toBe(true);
-    // The roadmap follows the map order and names the endpoint's lineup: the wishlist's.
-    expect(seed.roadmap.order).toEqual(engine.mapOrder(fresh).steps.map((s) => s.key));
+    // The roadmap follows the map order (child paralogues where the plan places them) and names the endpoint's lineup: the wishlist's.
+    const movable = new Set(engine.mapOrder(fresh).steps.filter((s) => s.movable).map((s) => s.key));
+    expect(seed.roadmap.order.filter((k) => !movable.has(k))).toEqual(engine.mapOrder(fresh).steps.map((s) => s.key).filter((k) => !movable.has(k)));
     expect(seed.roadmap.lineups.map((l) => l.key)).toEqual(['endgame']);
     const fielded = seed.roadmap.lineups[0]!.pairs.flatMap((p) => [p.lead, ...(p.back ? [p.back] : [])]).concat(seed.roadmap.lineups[0]!.solo);
     expect(fielded).toEqual(units.map((u) => u.unit));
@@ -106,6 +107,14 @@ describe('the seed (#198)', () => {
       if (s) expect(s.classId).toBe(u.classId);
     }
     expect(seals.find((s) => s.unit === 'chrom')).toEqual({ unit: 'chrom', classId: 'great-lord', seal: 'master', key: seed.wishlist.endpoint });
+  });
+
+  it('leaves no marriage a non-starter: a paralogue moves later, else the couple isn’t matched (#194, #199)', () => {
+    const stuck = (plan: Plan) => engine.milestones(fresh, plan).filter((m) => m.kind === 'support' && m.nonStarter);
+    expect(stuck(seed)).toEqual([]);
+    // Every child paralogue is still played, in some order, and the endpoint is last.
+    expect([...seed.roadmap.order].sort()).toEqual(engine.mapOrder(fresh).steps.map((s) => s.key).sort());
+    expect(seed.roadmap.order.at(-1)).toBe('endgame');
   });
 
   it('is plain JSON, and the same for the same run', () => {
@@ -190,6 +199,9 @@ describe('the stepping call (#198, #199)', () => {
       expect(Math.abs(c.gain)).toBeLessThanOrEqual((2 * c.margin) / 1.96 + 1e-12);
     }
     for (const p of [s.best, ...s.closeCalls.map((c) => c.plan), ...s.proposals.map((p) => p.plan)]) expect(spouseIn(p, 'vaike')).toBe('sully');
+    // Nothing offered has a non-starter (#194).
+    for (const p of [...s.closeCalls.map((c) => c.plan), ...s.proposals.map((p) => p.plan)])
+      expect(engine.milestones(late, p).filter((m) => m.kind === 'support' && m.nonStarter && !(m.pair.includes('vaike') && m.pair.includes('sully')))).toEqual([]);
   });
 
   it('never replaces the adopted plan: improvements are proposals', () => {
