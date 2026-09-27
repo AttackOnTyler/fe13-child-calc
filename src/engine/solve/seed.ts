@@ -49,6 +49,7 @@ import type { RunSimInput } from '../sim/run-sim';
 import { forgedWeapon, freshWeapon, kitForgeCost } from '../sim/upkeep';
 import { plannedSeals } from '../sim/class-changes';
 import { milestones, type SupportMilestone } from '../milestones';
+import { defaultPriorities } from '../exp-forecast';
 import { remainingMapOrder } from '../map-order';
 import type { BuildMatch, ChildResult, Pairing, ParentRef, RobinRef } from '../types';
 import type { PageSubject } from '../unit-page';
@@ -252,11 +253,11 @@ export function seedPlan(run: Run, ctx: SeedContext, options: SeedOptions = {}):
   for (let i = 0; ; i++) {
     const plan = placedForSupports(run, ctx.assumptions, seedOnce(run, ctx, options, forbidden));
     const stuck = nonStarters(run, ctx.assumptions, plan).filter((c) => !pinned.has(coupleKey(c)));
-    if (!stuck.length) return plan;
+    if (!stuck.length) return withPriorities(run, ctx, options, plan);
     if (i >= SEED_FIXES) {
       // Still stuck: those couples don't marry in the plan (they never would reach S in a run either).
       const drop = new Set(stuck.map(coupleKey));
-      return placedForSupports(run, ctx.assumptions, planFor(run, ctx, options, plan.robin, plan.wishlist.marriages.filter((c) => !drop.has(coupleKey(c)))));
+      return withPriorities(run, ctx, options, placedForSupports(run, ctx.assumptions, planFor(run, ctx, options, plan.robin, plan.wishlist.marriages.filter((c) => !drop.has(coupleKey(c))))));
     }
     for (const c of stuck) forbidden.add(coupleKey(c));
   }
@@ -456,6 +457,17 @@ function keptAtEndpoint(army: ReturnType<typeof ceilingArmy>, rules: readonly Li
   const pairs = kept.pairs.map((p) => d.pairs.find((x) => x.lead === p.lead && x.back === p.back) ?? { lead: p.lead, back: p.back, support: null, coverage: 0 });
   const deployed = [...pairs.flatMap((p) => (p.back ? [p.lead, p.back] : [p.lead])), ...kept.solo];
   return { ...army, lineup: { ...d, pairs, solo: [...kept.solo], deployed } };
+}
+
+/**
+ * A plan with the default EXP priorities (#195) for its milestones and map order, so its flawless chance plays them
+ * (and reads as its EXP forecast does).
+ */
+export function withPriorities(run: Run, ctx: SeedContext, options: SeedOptions, plan: Plan): Plan {
+  const { roadmap } = plan;
+  const bare: Plan = { ...plan, roadmap: { order: roadmap.order, lineups: roadmap.lineups, seals: roadmap.seals, items: roadmap.items } };
+  const priorities = defaultPriorities(milestones(run, bare, ctx.assumptions), flawlessInput(run, ctx.assumptions, options.roleOf, undefined, bare).input);
+  return priorities.length ? { ...bare, roadmap: { ...bare.roadmap, priorities } } : bare;
 }
 
 /**

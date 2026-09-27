@@ -17,6 +17,9 @@
  * - **Lineups and pairs,** on the maps the best plan loses the most on (its re-score's, riskiest first), as the map's
  *   lineup resolves (named, or the greedy one): a unit fielded on a neighbouring map comes in for one fielded here; two
  *   pairs swap Backs; a pair splits; two units alone pair up. The edited lineup is named on the roadmap from then on.
+ * - **EXP priorities (#195):** one unit's priority over a span: a span the plan has is dropped (the unit plays normal
+ *   there) or turned the other way; a wishlist unit or a parent with no span is raised to high from the map it joins
+ *   to a quarter, half or three quarters of the way (never the endpoint: a span over the whole run is everyone's).
  * - **Paralogue places:** a child paralogue (a movable step) moves one map earlier or later, never past the endpoint.
  * - **Seals:** a planned class change is needed by an earlier map (a quarter, half or three quarters of the way), or
  *   by the endpoint.
@@ -51,7 +54,7 @@ import { sealReaches } from '../sim/class-changes';
 import { mapsToS } from '../milestones';
 import { pairThresholds, pointsOfRank } from '../sim/support-growth';
 import { latestEntry, type Run } from '../run';
-import type { Plan, PlanItem, PlanLineup, PlanRobin, WishlistChild } from './plan';
+import type { Plan, PlanItem, PlanLineup, PlanPriority, PlanRobin, WishlistChild } from './plan';
 import { UNAVAILABLE, genderOf, pairingsOf, placedForSupports, planFor, robinRef, type SeedContext, type SeedOptions } from './seed';
 import type { Edit, EditHints } from './step';
 import { brokenPins, lineupRules, rulesBroken } from './pins';
@@ -79,7 +82,8 @@ function rebuilt(run: Run, ctx: SeedContext, options: SeedOptions, prev: Plan, r
   });
   // The class changes the plan had for units still in it stay as they were (a seal edit's timing, a class edit).
   const seals = next.roadmap.seals.map((x) => prev.roadmap.seals.find((y) => y.unit === x.unit && y.seal === x.seal) ?? x);
-  return { ...next, wishlist: { ...next.wishlist, children }, roadmap: { ...next.roadmap, order, lineups, seals } };
+  // The EXP priorities stay as they were (spans by map key): the priority edits move them.
+  return { ...next, wishlist: { ...next.wishlist, children }, roadmap: { ...next.roadmap, order, lineups, seals, ...(prev.roadmap.priorities ? { priorities: prev.roadmap.priorities } : {}) } };
 }
 
 /**
@@ -330,9 +334,33 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
       }
   }
 
+  // EXP priorities (#195): a span dropped or turned; a unit with none raised from its join map.
+  const keys = plan.roadmap.order;
+  const spans = plan.roadmap.priorities ?? [];
+  const withSpans = (next: readonly PlanPriority[]): Plan => ({ ...plan, roadmap: { ...plan.roadmap, priorities: next } });
+  const spanText = (p: PlanPriority) => (p.from === p.to ? `on ${mapLabel(p.from)}` : `from ${mapLabel(p.from)} to ${mapLabel(p.to)}`);
+  const priorityEdit = (what: string, label: string, next: readonly PlanPriority[]): Edit => ({ kind: 'priority', key: `priority:${what}`, label, make: () => withSpans(next) });
+  for (const p of spans) {
+    const tag = `${p.unit}:${p.from}-${p.to}`;
+    const rest = spans.filter((x) => x !== p);
+    yield priorityEdit(`${tag}:normal`, `${name(p.unit)} at normal EXP priority ${spanText(p)}`, rest);
+    const other = p.priority === 'high' ? 'low' : 'high';
+    yield priorityEdit(`${tag}:${other}`, `${name(p.unit)} at ${other} EXP priority ${spanText(p)}`, spans.map((x) => (x === p ? { ...x, priority: other } : x)));
+  }
+  const quarters = [...new Set([Math.floor(keys.length / 4), Math.floor(keys.length / 2), Math.floor((3 * keys.length) / 4)])].filter((i) => i > 0 && i < keys.length - 1);
+  const raisable = [...new Set([...plan.wishlist.units.map((w) => w.unit), ...plan.wishlist.children.flatMap((c) => c.parents.filter((u): u is RosterUnit => u !== 'maiden'))])];
+  for (const u of raisable) {
+    const at = from.get(u);
+    if (at === undefined || spans.some((x) => x.unit === u)) continue;
+    for (const to of quarters) {
+      if (to < at) continue;
+      const p: PlanPriority = { unit: u, priority: 'high', from: keys[at]!, to: keys[to]! };
+      yield priorityEdit(`${u}:${p.from}-${p.to}:high`, `${name(u)} at high EXP priority ${spanText(p)}`, [...spans, p]);
+    }
+  }
+
   // Paralogue places: a child paralogue one map earlier or later.
   const movable = new Set(order.steps.filter((s) => s.movable).map((s) => s.key));
-  const keys = plan.roadmap.order;
   for (const [i, k] of keys.entries()) {
     if (!movable.has(k)) continue;
     for (const j of [i - 1, i + 1]) {
