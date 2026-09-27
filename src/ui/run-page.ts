@@ -869,7 +869,7 @@ export function flawlessSection(ctx: HeadlineContext, inInbox = false): HTMLElem
     const shownMarks = inInbox ? r?.why?.notes : r?.why?.found;
     return h(
       'details',
-      { class: 'banner flawless' },
+      { ...guide('flawless-headline'), class: 'banner flawless' },
       h('summary', {}, h('b', {}, ...(r ? marked(r.text, r.why?.text) : ['Flawless chance: working it out…']))),
       r?.detail ? h('p', { class: 'muted small' }, r.detail) : null,
       r?.rows.length ? h('ol', { class: 'small' }, ...r.rows.map((x, i) => h('li', {}, ...marked(x, r.why?.rows[i])))) : null,
@@ -1145,7 +1145,7 @@ function robinSection(ctx: RunContext, inInbox = false): HTMLElement | null {
     return h(
       'details',
       // Kept open or closed across redraws; in the inbox it starts open (Robin is the first decision).
-      { class: 'banner robin', ...((robinView?.el.isConnected ? robinView.el.hasAttribute('open') : inInbox) ? { open: 'open' } : {}) },
+      { ...guide('robin-card'), class: 'banner robin', ...((robinView?.el.isConnected ? robinView.el.hasAttribute('open') : inInbox) ? { open: 'open' } : {}) },
       h('summary', {}, h('b', {}, r.title)),
       h(
         'div',

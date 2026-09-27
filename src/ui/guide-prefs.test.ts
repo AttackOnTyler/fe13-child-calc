@@ -1,48 +1,45 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EMPTY_ROSTER } from '../engine';
-import {
-  DEFAULT_GUIDE_PREFS,
-  closeWelcome,
-  collapseDock,
-  dismissLoss,
-  hasSavedRun,
-  loadGuidePrefs,
-  parseGuidePrefs,
-  pickJourney,
-  reopenGuide,
-  saveGuidePrefs,
-  takeLoss,
-  welcomeShows,
-  type GuidePrefs,
-} from './guide-prefs';
+import { DEFAULT_GUIDE_PREFS, closeWelcome, hasSavedRun, loadGuidePrefs, parseGuidePrefs, saveGuidePrefs, welcomeShows, type GuidePrefs } from './guide-prefs';
 import { clearRoster, saveRoster } from './roster-store';
 
-const used: GuidePrefs = { seen: true, journey: 'loss', dock: 'pill', lossEvents: ['dead:frederick', 'married:lonqu+cordelia'] };
+const seen: GuidePrefs = { seen: true };
+/** What `guide:v1` held before #213: the journey, the dock and the loss prompt's events. */
+const old = { seen: true, journey: 'loss', dock: 'pill', lossEvents: ['dead:frederick'] };
 
 describe('guide preferences', () => {
-  it('read back as saved', () => {
-    expect(parseGuidePrefs(JSON.parse(JSON.stringify(used)))).toEqual(used);
+  it('keep only seen (#213)', () => {
+    expect(DEFAULT_GUIDE_PREFS).toEqual({ seen: false });
+    expect(parseGuidePrefs(JSON.parse(JSON.stringify(seen)))).toEqual(seen);
   });
 
-  it('fall back to the defaults, field by field, when missing or corrupt', () => {
-    expect(DEFAULT_GUIDE_PREFS).toEqual({ seen: false, journey: null, dock: 'closed', lossEvents: [] });
+  it('read an old save as its seen alone, ignoring the retired journey, dock and loss events', () => {
+    expect(parseGuidePrefs(old)).toEqual({ seen: true });
+    expect(parseGuidePrefs({ journey: 'fresh', dock: 'open' })).toEqual({ seen: false });
+  });
+
+  it('fall back to unseen when missing or corrupt', () => {
     expect(parseGuidePrefs(null)).toEqual(DEFAULT_GUIDE_PREFS);
     expect(parseGuidePrefs('junk')).toEqual(DEFAULT_GUIDE_PREFS);
-    expect(parseGuidePrefs({ seen: 'yes', journey: 'tour', dock: 'floating', lossEvents: 'dead:frederick' })).toEqual(DEFAULT_GUIDE_PREFS);
-    expect(parseGuidePrefs({ seen: true, journey: 'explore' })).toEqual({ ...DEFAULT_GUIDE_PREFS, seen: true, journey: 'explore' });
-    // Loss events keep only strings, once each.
-    expect(parseGuidePrefs({ lossEvents: ['dead:frederick', 3, 'dead:frederick', null] }).lossEvents).toEqual(['dead:frederick']);
+    expect(parseGuidePrefs([true])).toEqual(DEFAULT_GUIDE_PREFS);
+    expect(parseGuidePrefs({ seen: 'yes' })).toEqual(DEFAULT_GUIDE_PREFS);
   });
 
   it('show the welcome box by itself only before it was seen and with no saved run', () => {
     expect(welcomeShows(DEFAULT_GUIDE_PREFS, false)).toBe(true);
     expect(welcomeShows(DEFAULT_GUIDE_PREFS, true)).toBe(false);
-    expect(welcomeShows({ ...DEFAULT_GUIDE_PREFS, seen: true }, false)).toBe(false);
+    expect(welcomeShows(seen, false)).toBe(false);
+  });
+
+  it('mark the welcome box seen on any answer', () => {
+    expect(closeWelcome(DEFAULT_GUIDE_PREFS)).toEqual(seen);
+    expect(closeWelcome(seen)).toBe(seen);
   });
 
   describe('in storage', () => {
+    let store: Map<string, string>;
     beforeEach(() => {
-      const store = new Map<string, string>();
+      store = new Map<string, string>();
       vi.stubGlobal('localStorage', {
         getItem: (k: string) => store.get(k) ?? null,
         setItem: (k: string, v: string) => void store.set(k, v),
@@ -53,19 +50,29 @@ describe('guide preferences', () => {
 
     it('read back as saved, and survive Clear all', () => {
       expect(loadGuidePrefs()).toEqual(DEFAULT_GUIDE_PREFS);
-      saveGuidePrefs(used);
+      saveGuidePrefs(seen);
       saveRoster({ ...EMPTY_ROSTER, run: { ...EMPTY_ROSTER.run, gender: 'M' } });
       clearRoster();
-      expect(loadGuidePrefs()).toEqual(used);
+      expect(loadGuidePrefs()).toEqual(seen);
+    });
+
+    it('migrate an old save: its seen is kept, and the next save drops the retired fields', () => {
+      localStorage.setItem('fe13-child-calc:guide:v1', JSON.stringify(old));
+      const loaded = loadGuidePrefs();
+      expect(loaded).toEqual({ seen: true });
+      saveGuidePrefs(loaded);
+      expect(JSON.parse(store.get('fe13-child-calc:guide:v1')!)).toEqual({ seen: true });
+    });
+
+    it('save only seen, even when handed more', () => {
+      saveGuidePrefs({ ...seen, dock: 'open' } as GuidePrefs);
+      expect(JSON.parse(store.get('fe13-child-calc:guide:v1')!)).toEqual({ seen: true });
     });
 
     it('count nothing but a saved run as a saved run', () => {
       expect(hasSavedRun()).toBe(false);
-      saveGuidePrefs(used);
+      saveGuidePrefs(seen);
       expect(hasSavedRun()).toBe(false);
-    });
-
-    it('count a saved roster as a saved run', () => {
       saveRoster(EMPTY_ROSTER);
       expect(hasSavedRun()).toBe(true);
     });
@@ -82,38 +89,8 @@ describe('guide preferences', () => {
         },
       });
       expect(loadGuidePrefs()).toEqual(DEFAULT_GUIDE_PREFS);
-      expect(() => saveGuidePrefs(used)).not.toThrow();
+      expect(() => saveGuidePrefs(seen)).not.toThrow();
       expect(hasSavedRun()).toBe(false);
     });
-  });
-});
-
-describe('guide choices', () => {
-  it('picking a journey marks the welcome box seen and opens the dock on it', () => {
-    expect(pickJourney(DEFAULT_GUIDE_PREFS, 'fresh')).toEqual({ ...DEFAULT_GUIDE_PREFS, seen: true, journey: 'fresh', dock: 'open' });
-    expect(pickJourney(used, 'fresh').lossEvents).toEqual(used.lossEvents);
-  });
-
-  it('closing the welcome box marks it seen and picks nothing', () => {
-    expect(closeWelcome(DEFAULT_GUIDE_PREFS)).toEqual({ ...DEFAULT_GUIDE_PREFS, seen: true });
-  });
-
-  it('? Guide reopens the dock on the last journey, or the welcome box if none was ever picked', () => {
-    expect(reopenGuide(DEFAULT_GUIDE_PREFS)).toBe('welcome');
-    expect(reopenGuide({ ...used, dock: 'closed' })).toEqual({ ...used, dock: 'open' });
-  });
-
-  it('taking the loss prompt switches the dock to After a loss and notes its events; dismissing only notes them', () => {
-    const onFresh: GuidePrefs = { ...used, journey: 'fresh', dock: 'pill' };
-    expect(takeLoss(onFresh, ['dead:gregor'])).toEqual({ ...onFresh, journey: 'loss', dock: 'open', lossEvents: [...used.lossEvents, 'dead:gregor'] });
-    expect(dismissLoss(onFresh, ['dead:gregor', 'dead:frederick'])).toEqual({ ...onFresh, lossEvents: [...used.lossEvents, 'dead:gregor'] });
-  });
-
-  it('on a phone an open dock collapses to its pill; a pill or a closed dock stays as it is', () => {
-    expect(collapseDock({ ...used, dock: 'open' })).toEqual({ ...used, dock: 'pill' });
-    const pill: GuidePrefs = { ...used, dock: 'pill' };
-    expect(collapseDock(pill)).toBe(pill);
-    const closed: GuidePrefs = { ...used, dock: 'closed' };
-    expect(collapseDock(closed)).toBe(closed);
   });
 });

@@ -1,6 +1,6 @@
 /**
  * The inbox before the Lock (#204; spec #175, The inbox, Run view and Wishlist tab; variant D on
- * `prototype/wishlist-editing`): the fresh-run journey as one list of what needs the player, in order:
+ * `prototype/wishlist-editing`): the start of a run as one list of what needs the player, in order:
  *
  * 1. the headline flawless chance with its ± and the ceiling (the Run view's flawless section);
  * 2. Robin, the first decision (the Robin alternatives, #201: the best of each gender solved, the others with their
@@ -30,6 +30,7 @@ import { SKILLS } from '../game-data/skills';
 import { STAT_LABELS } from '../game-data/stats';
 import { chanceText, differenceText } from './chance';
 import { h } from './dom';
+import { guide } from './guide';
 import { startSolve, type UnitEditView } from './solve-client';
 import { milestoneShort, pinText, type RunContext, type SolveProgress } from './run-page';
 import { setComparison, whyNumber, whyText, type WhyMark } from './why';
@@ -1101,7 +1102,7 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
   live = { run, ctx, parts };
   listEdits(ctx, progressOf.get(run));
   askChecksFor(ctx, progressOf.get(run));
-  return h('section', { class: 'inbox' }, card?.el ?? null, title.el, headline, robin, top.el, search, end.el);
+  return h('section', { ...guide('inbox'), class: 'inbox' }, card?.el ?? null, title.el, headline, robin, top.el, search, end.el);
 }
 
 /**

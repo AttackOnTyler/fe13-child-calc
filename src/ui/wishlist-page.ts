@@ -495,7 +495,7 @@ export function wishlistPage(ctx: WishlistContext): HTMLElement[] {
       status ? h('p', { class: 'muted small' }, status) : null,
       h(
         'table',
-        { class: 'grid wl-sheet', 'aria-label': r.title },
+        { ...guide('wishlist-army'), class: 'grid wl-sheet', 'aria-label': r.title },
         h('thead', {}, h('tr', {}, h('th', {}, 'Lead / Solo'), h('th', {}, 'Back'))),
         h(
           'tbody',
