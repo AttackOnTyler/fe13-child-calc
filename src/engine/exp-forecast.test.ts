@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, STATS, addEntry, createEngine, editEntry, itemByName, latestEntry, runFromRoster, withRun, type ArmyUnit, type ClassId, type Foe, type MilestoneCheck, type Run, type RunSimInput, type RunSimMap, type SimMap, type Snapshot, type Stat } from './index';
+import { planEdits } from './solve/edits';
+import { priorityByMap } from './sim/run-sim';
+import { EMPTY_ROSTER, STATS, addEntry, createEngine, editEntry, itemByName, latestEntry, resolveAssumptions, runFromRoster, withRun, type ArmyUnit, type ClassId, type Foe, type MilestoneCheck, type Run, type RunSimInput, type RunSimMap, type SimMap, type Snapshot, type Stat } from './index';
 
 /**
  * The EXP forecast and EXP priority (#195): hand-built armies on maps of foes that never fight back, whose EXP can be
@@ -160,5 +162,48 @@ describe('a plan’s EXP forecast through the facade (#195)', () => {
     const key = all[all.length - 2]!;
     const withHigh = { ...plan, roadmap: { ...plan.roadmap, priorities: [{ unit: 'chrom' as const, priority: 'high' as const, from: key, to: key }] } };
     expect(engine.expForecast(run, withHigh, { runs: 1 }).exp[0]!.units[0]!.priority).toBe('high');
+  });
+});
+
+describe('the EXP priority in the solve (#195, #199)', () => {
+  const facts = withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal', gender: 'M', asset: 'mag', flaw: 'hp' });
+  const fresh = runFromRoster(facts);
+  const seed = engine.seedPlan(fresh);
+
+  it('seeds the default priorities, so the flawless chance and the EXP forecast play the same', () => {
+    expect(seed.roadmap.priorities).toEqual(engine.defaultPriorities(fresh, seed));
+    expect(seed.roadmap.priorities!.length).toBeGreaterThan(0);
+  });
+
+  it('offers priority edits: a span dropped or turned, and a unit with none raised from its join map', () => {
+    const ctx = { assumptions: resolveAssumptions({}), result: () => undefined, childBuild: () => undefined, unitBuild: () => undefined, rank: () => 0 };
+    const edits = [...planEdits(fresh, ctx, {}, seed, { riskiest: [], stuck: [] }, () => [])].filter((e) => e.kind === 'priority');
+    const span = seed.roadmap.priorities![0]!;
+    const byKey = new Map(edits.map((e) => [e.key, e]));
+    expect(new Set(edits.map((e) => e.key)).size).toBe(edits.length);
+    const dropped = byKey.get(`priority:${span.unit}:${span.from}-${span.to}:normal`)!.make();
+    expect(dropped.roadmap.priorities).not.toContainEqual(span);
+    const turned = byKey.get(`priority:${span.unit}:${span.from}-${span.to}:low`)!.make();
+    expect(turned.roadmap.priorities).toContainEqual({ ...span, priority: 'low' });
+    const raised = edits.find((e) => e.key.endsWith(':high'))!.make();
+    expect(raised.roadmap.priorities!.length).toBe(seed.roadmap.priorities!.length + 1);
+    // Nothing else changes.
+    expect({ ...raised, roadmap: { ...raised.roadmap, priorities: [] } }).toEqual({ ...seed, roadmap: { ...seed.roadmap, priorities: [] } });
+  });
+
+  it('lets span pins win where they overlap a priority span: a unit pinned out, or as a Back, has none there (#200)', () => {
+    const maps = [{ key: 'a' }, { key: 'b' }, { key: 'c' }];
+    const spans = [{ unit: 'robin' as const, priority: 'high' as const, from: 'a', to: 'c' }];
+    expect(priorityByMap(maps, spans, [undefined, [{ unit: 'robin', position: 'back', partner: 'chrom' }], [{ unit: 'robin', position: 'lead' }]])).toEqual([{ robin: 'high' }, undefined, { robin: 'high' }]);
+    expect(priorityByMap(maps, spans, [[{ unit: 'robin', position: 'out' }], undefined, undefined])).toEqual([undefined, { robin: 'high' }, { robin: 'high' }]);
+  });
+
+  it('never suggests a change against a span pin: no pair where a pin keeps the unit elsewhere (#200)', () => {
+    const maps = [step('a', [dummy(4)]), step('b', [dummy(4)]), step('c', [dummy(4)]), step('d', [])];
+    const both = { pairs: [], solo: ['chrom', 'robin'] } as const;
+    const input: RunSimInput = { army: [chrom, robin], maps, difficulty: 'normal', lineups: [both, both, both, undefined], milestones: [skill('robin', 'solidarity', 2), skill('chrom', 'charm', 3)] };
+    expect(engine.suggestChanges(input, 'skill:robin:solidarity:build', 1, 2).map((c) => c.pin.kind)).toEqual(['pair']);
+    const pinned: RunSimInput = { ...input, pins: [[{ unit: 'robin', position: 'solo' }], undefined, undefined, undefined] };
+    expect(engine.suggestChanges(pinned, 'skill:robin:solidarity:build', 1, 2)).toEqual([]);
   });
 });

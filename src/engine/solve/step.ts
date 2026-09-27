@@ -74,7 +74,7 @@ export const EDIT_COST_BUDGET = { provisional: 4, settled: 2 * SEARCH_RUNS.cap }
 export const rescoreSeed = (seed: number): number => (seed ^ 0x5eed) >>> 0;
 
 /** The kinds of edit, in the order the search tries them each round (spec #175, The joint solve). */
-export const EDIT_KINDS = ['marriage', 'robin', 'class', 'build', 'pass', 'lineup', 'pair', 'place', 'seal', 'item', 'side-goal'] as const;
+export const EDIT_KINDS = ['marriage', 'robin', 'class', 'build', 'pass', 'lineup', 'pair', 'priority', 'place', 'seal', 'item', 'side-goal'] as const;
 export type EditKind = (typeof EDIT_KINDS)[number];
 
 /** A single edit of a plan: what it changes (`key`, unique within a plan), how it reads, and the edited plan. */
