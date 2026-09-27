@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createEngine, itemByName, matchup, resolveAssumptions, type Fighter, type Foe, type SimFoeGroup, type SimGroup, type SimMap, type SimUnit } from './index';
+import { createEngine, itemByName, matchup, resolveAssumptions, type Fighter, type Foe, type SimFoeGroup, type SimGroup, type SimMap, type SimUnit, type SupportLevel } from './index';
 
 /**
  * The map simulation (#181), on small hand-built chapters whose answer can be worked by hand: one unit or pair, one or
@@ -44,14 +44,16 @@ describe('the map simulation’s no-death chance (#181)', () => {
     const q = m.foeHit / 100;
     expect(q).toBeGreaterThan(0);
     expect(q).toBeLessThan(1);
-    // Player phase: the hero strikes, the Brute's counter kills with q, the hero's follow-up. Enemy phase: the
-    // Brute strikes first (q again), then the hero's counter and follow-up finish it: a rout on turn 1.
+    // Attacking first would risk the Brute's counter (q) and then its enemy-phase attack (q again); waiting in its reach
+    // (a bait, #183) risks q alone. Turn 1: the Brute strikes (q), the hero's counter and follow-up take 20 of its 40
+    // HP. Turn 2: the hero strikes, the counter (q), the follow-up fells it: a rout on turn 2.
     const play = engine.playMap({ map: rout([group(brute)]), lineup: [solo(hero)] }, 1);
     expect(play.noDeath).toBeCloseTo((1 - q) ** 2, 12);
-    expect(play).toMatchObject({ turns: 1, ended: 'rout' });
-    expect(play.log[0]!.fights.map((f) => [f.phase, f.lead, f.foe, f.kill])).toEqual([
-      ['player', 'hero', 'Brute', false],
-      ['enemy', 'hero', 'Brute', true],
+    expect(play).toMatchObject({ turns: 2, ended: 'rout' });
+    expect(play.log[0]!.acts).toEqual([{ kind: 'bait', unit: 'hero' }]);
+    expect(play.log.map((t) => t.fights.map((f) => [f.phase, f.lead, f.foe, f.kill]))).toEqual([
+      [['enemy', 'hero', 'Brute', false]],
+      [['player', 'hero', 'Brute', true]],
     ]);
     expect(play.units.hero).toMatchObject({ combats: 2, kills: { Brute: 1 } });
   });
@@ -255,5 +257,99 @@ describe('sustain, Dance, Rally and staff reach (#182)', () => {
     const t0 = performance.now();
     for (let i = 0; i < 50; i++) engine.playMap(input, i);
     expect((performance.now() - t0) / 50).toBeLessThan(5);
+  });
+});
+
+describe('stances and exposure (#183)', () => {
+  // Hits 20 a strike on an unguarded Def 0 unit (Str 13 + Iron Axe's 7), always (Hawkeye), never crits; 40 HP, Def 0: one
+  // round of the hero's (20 a hit, doubled) fells it.
+  const biter = (str: number, more: Partial<Foe> = {}): Foe => ({ ...brute, name: 'Biter', stats: stats(40, str, 0, 0, 0, 60, 0, 0), skills: ['Hawkeye'], ...more });
+  // A back with no weapon whose Def 30 gives the lead +3 Def paired up (and nothing else).
+  const wall: Fighter = { ...shield, name: 'Wall', stats: stats(20, 0, 0, 0, 0, 0, 30, 0) };
+  const post: Foe = { ...brute, name: 'Post', weapon: undefined, count: 4, stats: { ...brute.stats, hp: 10, def: 0 } };
+  const twin: Fighter = { ...hero, name: 'Twin' };
+  const pair = (lead: Fighter, back: Fighter, support: SupportLevel | null = 'S'): SimGroup => ({ lead: unit(lead), back: unit(back), support });
+
+  it('keeps a pair together when its lead would die alone: pair-up Def and Dual Guard on the one that fights', () => {
+    const map = rout([group(biter(13))]);
+    // Alone, the Biter's counter (20) kills the hero: it can neither attack nor wait for it, and dies when it closes in.
+    const alone = engine.playMap({ map, lineup: [solo(hero)] }, 1);
+    expect(alone.noDeath).toBe(0);
+    // Paired with the Wall (+3 Def), the hit is 17: the hero fells the Biter and lives.
+    const together = engine.playMap({ map, lineup: [pair(hero, wall)] }, 1);
+    expect(together).toMatchObject({ noDeath: 1, turns: 1, ended: 'rout' });
+    expect(together.log[0]!.stances).toEqual([{ pair: 'hero', stance: 'together', front: 'hero' }]);
+    // Combats together count for supports (#188): as front and as back.
+    expect(together.units.hero!.together).toEqual({ wall: 1 });
+    expect(together.units.wall!.together).toEqual({ hero: 1 });
+  });
+
+  it('splits a pair that can safely split, and gains the actions: Separate costs the front’s action that turn', () => {
+    const map = rout([group(post)]);
+    const split = engine.playMap({ map, lineup: [pair(hero, twin)] }, 1);
+    // Turn 1: the hero drops the twin beside it (its action), the twin fells one Post. Turn 2: both act, two Posts.
+    // Turn 3: the last one. A unit alone takes four turns. Apart, they stand adjacent at the default spread's rate (one\r
+    // distance in ten is 1 tile).
+    expect(split.log.map((t) => t.stances)).toEqual([
+      [{ pair: 'hero', stance: 'adjacent', adjacency: 0.1, change: 'separate' }],
+      [{ pair: 'hero', stance: 'adjacent', adjacency: 0.1 }],
+      [{ pair: 'hero', stance: 'adjacent', adjacency: 0.1 }],
+    ]);
+    expect(split.log.map((t) => t.fights.filter((f) => f.phase === 'player').map((f) => f.lead))).toEqual([['twin'], ['hero', 'twin'], ['hero']]);
+    expect(split).toMatchObject({ turns: 3, ended: 'rout', noDeath: 1 });
+    expect(engine.playMap({ map, lineup: [solo(hero)] }, 1).turns).toBe(4);
+    // Apart, combats aren't together: supports don't grow from them.
+    expect(split.units.hero!.together).toEqual({});
+    // Attack Stance adjacency comes from the army spread: nobody within 1 tile, the pair is plainly apart.
+    const far = engine.playMap({ map, lineup: [pair(hero, twin)], spread: [5] }, 1);
+    expect(far.log[1]!.stances).toEqual([{ pair: 'hero', stance: 'apart' }]);
+    expect(split.blindSpots).toContain('attack-stance-adjacency');
+    expect(engine.playMap({ map, lineup: [pair(hero, wall)] }, 1).blindSpots).not.toContain('attack-stance-adjacency');
+  });
+
+  it('switches the sturdier unit to the front for free, and it fights that turn', () => {
+    // The Biter hits 25: 23 on the frail lead even paired up (dead), 5 on the tough back.
+    const frail: Fighter = { ...hero, name: 'Frail' };
+    const tough: Fighter = { ...hero, name: 'Tough', stats: stats(40, 15, 0, 60, 40, 0, 20, 0) };
+    const play = engine.playMap({ map: rout([group(biter(17))]), lineup: [pair(frail, tough)] }, 1);
+    expect(play.log[0]!.stances).toEqual([{ pair: 'frail', stance: 'together', front: 'tough', change: 'switch' }]);
+    expect(play.log[0]!.fights.map((f) => [f.phase, f.lead, f.back, f.kill])).toEqual([['player', 'tough', 'frail', true]]);
+    expect(play).toMatchObject({ noDeath: 1, turns: 1 });
+  });
+
+  it('pairs up again before a wave that would kill either unit alone: Pair Up costs the mover’s action', () => {
+    // Def 10 each: alone a Biter's 30 leaves 20 (dead at 20 HP); paired, +1 Def leaves 19.
+    const a: Fighter = { ...hero, name: 'Ann', stats: stats(20, 15, 0, 60, 40, 0, 10, 0) };
+    const b: Fighter = { ...a, name: 'Bea' };
+    const map = rout([group({ ...post, count: 6 })], [{ label: 'Turn 3', turns: [3], joins: 'enemy-phase', groups: [group(biter(23))] }]);
+    const play = engine.playMap({ map, lineup: [pair(a, b)] }, 1);
+    expect(play.log.slice(0, 3).map((t) => t.stances[0]!.change)).toEqual(['separate', undefined, 'pair-up']);
+    expect(play.log[2]!.stances[0]).toMatchObject({ stance: 'together' });
+    expect(play.log[2]!.fights.filter((f) => f.phase === 'player')).toHaveLength(1);
+    expect(play.noDeath).toBe(1);
+    expect(play.ended).toBe('rout');
+  });
+
+  it('holds a unit back out of reach when it can’t fight safely, and lets a sturdy one take the attacks', () => {
+    // Two Biters that kill the frail unit and barely scratch the tank.
+    const frail: Fighter = { ...hero, name: 'Frail' };
+    const tank: Fighter = { ...hero, name: 'Tank', stats: stats(40, 15, 0, 60, 40, 0, 20, 0) };
+    const play = engine.playMap({ map: rout([group(biter(17, { count: 2 }))]), lineup: [solo(tank), solo(frail)] }, 1);
+    expect(play.noDeath).toBe(1);
+    expect(play.ended).toBe('rout');
+    expect(play.log.every((t) => !t.exposed.includes('frail'))).toBe(true);
+    expect(play.units.frail!.combats).toBe(0);
+    expect(play.blindSpots).toContain('held-back-out-of-reach');
+    expect(engine.blindSpots().find((s) => s.id === 'held-back-out-of-reach')!.lean).toBe('high');
+    expect(engine.blindSpots().find((s) => s.id === 'attack-stance-adjacency')!.lean).toBe('low');
+  });
+
+  it('keeps a play cheap on a real map with pairs', () => {
+    const chrom: Fighter = { name: 'Chrom', className: 'Lord', stats: stats(40, 25, 0, 25, 25, 20, 20, 10), skills: [], weapon: weapon('Iron Sword') };
+    const input = { map: engine.simMap('chapter-2', 'lunatic'), lineup: [pair(chrom, { ...hero, stats: stats(35, 20, 0, 30, 25, 15, 15, 5) }, 'C'), pair(twin, { ...wall, name: 'Wall2' })] };
+    engine.playMap(input, 1);
+    const t0 = performance.now();
+    for (let i = 0; i < 20; i++) engine.playMap(input, i);
+    expect((performance.now() - t0) / 20).toBeLessThan(5);
   });
 });

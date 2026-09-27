@@ -129,11 +129,13 @@ const weaponStats = (w: Fighter['weapon']) => (w ? forgedStats(w.item, w.forge ?
 
 /**
  * One lead + back pair against one foe. `lunaticPlus` lists the Lunatic+ skills to assume (the map's pool) when the
- * foe's were not recorded; recorded skills come in `foe.skills`.
+ * foe's were not recorded; recorded skills come in `foe.skills`. With `paired` false the back is an adjacent ally
+ * (Attack Stance, #183): Dual Strike, Dual Guard and Dual Support as the Support unit, but no pair-up stats (SF Dual
+ * System).
  */
-export function matchup(lead: Fighter, back: Fighter | undefined, support: SupportLevel | null, foe: Foe, lunaticPlus: readonly string[] = []): Matchup {
+export function matchup(lead: Fighter, back: Fighter | undefined, support: SupportLevel | null, foe: Foe, lunaticPlus: readonly string[] = [], paired = true): Matchup {
   const notes: string[] = [];
-  const bonus = back ? pairUpBonus(back, support) : {};
+  const bonus = back && paired ? pairUpBonus(back, support) : {};
   const st = (s: Stat) => lead.stats[s] + (s === 'hp' ? 0 : (bonus[s as ModStat] ?? 0));
   const skills = new Set([...foe.skills, ...lunaticPlus]);
   if (lunaticPlus.length) notes.push(`Lunatic+: assumes ${lunaticPlus.join(', ')}`);
@@ -275,10 +277,10 @@ export function foesOf(map: { readonly enemies: Readonly<Partial<Record<ChapterD
 }
 
 /** The best of a unit's weapons against a foe: most damage, then hit. */
-export function bestWeapon(fighter: Fighter, weapons: readonly NonNullable<Fighter['weapon']>[], back: Fighter | undefined, support: SupportLevel | null, foe: Foe, lunaticPlus: readonly string[]): { weapon: Fighter['weapon']; result: Matchup } | undefined {
+export function bestWeapon(fighter: Fighter, weapons: readonly NonNullable<Fighter['weapon']>[], back: Fighter | undefined, support: SupportLevel | null, foe: Foe, lunaticPlus: readonly string[], paired = true): { weapon: Fighter['weapon']; result: Matchup } | undefined {
   let best: { weapon: Fighter['weapon']; result: Matchup } | undefined;
   for (const weapon of weapons) {
-    const result = matchup({ ...fighter, weapon }, back, support, foe, lunaticPlus);
+    const result = matchup({ ...fighter, weapon }, back, support, foe, lunaticPlus, paired);
     const key = (r: Matchup) => (r.oneRounds ? 1e6 : 0) + (r.survives ? 1e5 : 0) + r.damage * r.hits * 100 + r.hit;
     if (!best || key(result) > key(best.result)) best = { weapon, result };
   }

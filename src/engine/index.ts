@@ -125,7 +125,7 @@ export { coverage, deployCount, deployMax, deployRoleOf, forcedOn, suggestDeploy
 export { childParalogueGates, isChildParalogue, type ChildParalogueGate, type ParalogueGateState } from './child-paralogues';
 export { type MapWaves, type Wave, type WaveGroup } from './waves';
 export { type ArmySpread, type SimItem } from './sim/sustain';
-export { MAX_TURNS, type MapPlay, type MapPlayInput, type SimAct, type SimFight, type SimFoeGroup, type SimGroup, type SimMap, type SimTurn, type SimUnit, type SimUnitTally, type SimWave } from './sim/map-play';
+export { EXPOSURE_RISK, MAX_TURNS, type MapPlay, type MapPlayInput, type SimAct, type SimFight, type SimFoeGroup, type SimGroup, type SimMap, type SimStance, type SimTurn, type SimUnit, type SimUnitTally, type SimWave } from './sim/map-play';
 export { simLineup, type SimMapOptions } from './sim/sim-map';
 export { PROMOTION_RULE, levelCap, type ArmyUnit, type ChildRecruit, type RunSim, type RunSimInput, type RunSimMap, type RunSimMapResult, type StatSpread, type UnitForecast, type SupportForecast, type MarriageForecast } from './sim/run-sim';
 export { TOP_PAIR_POINTS, combatPoints, mapSupportGains, type SupportGain, type Together } from './sim/support-growth';
