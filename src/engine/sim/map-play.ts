@@ -551,6 +551,8 @@ class MapState {
   ended: MapPlay['ended'] | undefined;
   /** Whether anything moved this turn: a foe hurt or felled, HP restored, or an arrival. A turn without is a stall. */
   progress = false;
+  /** The fronts whose Rally was weighed this turn (see `bestRally`). */
+  private rallyWeighed = new Set<number>();
   /** Whether the target boss was attacked on this turn's player phase (see `pressBoss`). */
   bossHit = false;
   /** Whether any pair stood apart (the Attack Stance blind spot applies). */
@@ -1240,6 +1242,7 @@ class MapState {
       });
     }
     this.bonus = this.front.map(() => undefined);
+    this.rallyWeighed = new Set();
   }
 
   /** Whether an unarmed unit has something to do apart: a staff with uses, a Dance or a Rally. */
@@ -1280,13 +1283,45 @@ class MapState {
     return { ex, risk: 1 - ex.survive * after, exact: after >= floor };
   }
 
-  /** A planned Rally: a Rally skill's holder rallies first, before anyone fights, while foes are left to fight. */
+  /**
+   * A Rally, before anyone fights, when it's worth the rallier's action (the second realism pass): its bonus on the
+   * fronts still to act (their best attacks, risk and enemy phase after included, with the bonus against without) is
+   * worth more than what the rallier would do instead (its own safe attack or sustain). A rallier with nothing else to
+   * do rallies: it costs nothing. Each holder is weighed once a turn.
+   */
   bestRally(ctx: PolicyContext): Action | undefined {
     if (!this.foes.length || this.front.length < 2) return undefined;
     for (let gi = 0; gi < this.front.length; gi++) {
-      if (!ctx.acted.has(gi) && this.kitOf(gi).rally) return { kind: 'rally', group: gi, value: 1 };
+      if (ctx.acted.has(gi) || this.rallyWeighed.has(gi)) continue;
+      const bonus = this.kitOf(gi).rally;
+      if (!bonus) continue;
+      this.rallyWeighed.add(gi);
+      if (this.rallyWorth(gi, bonus, ctx)) return { kind: 'rally', group: gi, value: 1 };
     }
     return undefined;
+  }
+
+  /** Whether front `gi`'s Rally is worth its action now (see `bestRally`). */
+  private rallyWorth(gi: number, bonus: RallyBonus, ctx: PolicyContext): boolean {
+    const others = [...this.front.keys()].filter((t) => t !== gi && !ctx.acted.has(t) && !this.npcFronts.has(t) && this.armed(t));
+    if (!others.length) return false;
+    // Each front's best attack at any risk, valued as the policy values it (a safer attack is worth more), or nothing.
+    const fresh = (): PolicyContext => ({ ...ctx, memo: new Map(), sustain: new Map() });
+    const worth = (c: PolicyContext) => others.reduce((v, t) => v + Math.max(0, this.bestAttackOf(t, c, 1)?.value ?? 0), 0);
+    const own = Math.max(0, this.armed(gi) ? (this.bestAttackOf(gi, fresh())?.value ?? 0) : 0, this.sustainOf(gi, fresh())?.value ?? 0);
+    // Nothing else to do: the Rally costs nothing (HP it saves over the turns isn't in the worth below).
+    if (own <= EPS) return true;
+    const before = worth(fresh());
+    const was = this.bonus;
+    this.bonus = this.bonus.map((b, t) => (t === gi ? b : b ? mergeRally(b, bonus) : bonus));
+    this.dropRallied();
+    this.dropSurvival();
+    const after = worth(fresh());
+    this.bonus = was;
+    this.dropRallied();
+    this.dropSurvival();
+    const gain = after - before;
+    return gain > EPS && gain > own;
   }
 
   private kitOf(gi: number): Kit {

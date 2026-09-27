@@ -262,6 +262,17 @@ describe('sustain, Dance, Rally and staff reach (#182)', () => {
     expect(rallied.blindSpots).toContain('rally-reaches-every-pair');
   });
 
+  it('rallies only when the bonus is worth more than the rallier’s own action: a fighter whose Rally helps nobody fights', () => {
+    // The Rally reaches only a cleric who never fights: the rallier's action is worth more spent on the Brute.
+    const fighter: Fighter = { ...hero, skills: ['Rally Defence'] };
+    const lineup = [{ lead: unit(fighter), support: null }, { lead: unit(cleric), support: null }];
+    const play = engine.playMap({ map: rout([group(brute)]), lineup }, 1);
+    expect(play.log.flatMap((t) => t.acts).some((a) => a.kind === 'rally')).toBe(false);
+    const plain = engine.playMap({ map: rout([group(brute)]), lineup: [solo(hero), { lead: unit(cleric), support: null }] }, 1);
+    expect(play.noDeath).toBe(plain.noDeath);
+    expect(play.turns).toBe(plain.turns);
+  });
+
   it('keeps a play cheap', () => {
     const input = { map, lineup: [solo(tank), { lead: staffUnit(cleric, 'Physic'), support: null }, { lead: unit(dancer), support: null }] };
     engine.playMap(input, 1);
