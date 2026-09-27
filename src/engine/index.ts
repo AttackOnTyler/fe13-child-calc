@@ -1593,6 +1593,6 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     flawlessChance: (run, options) => flawlessChance(run, assumptions, options),
     simulateRuns: (input, seed, runs) => simulateRuns(input, seed, runs, assumptions),
     ceiling: (run, options) => flawlessCeiling(run, assumptions, options),
-    simulateCeiling,
+    simulateCeiling: (input, seed, runs) => simulateCeiling(input, seed, runs, assumptions),
   };
 }

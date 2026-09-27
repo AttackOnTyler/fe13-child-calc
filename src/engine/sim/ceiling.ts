@@ -4,7 +4,8 @@
  * could reach, so the solve can drop a plan whose ceiling is below the best found.
  *
  * The army at the endpoint is the one the run simulation would field there: the army today plus every recruit on the
- * way (`joining`, `later`) and the endpoint's own setups. #187's children join the same way once they're on the maps.
+ * way (`joining`, `later`), the endpoint's own setups, and every child the plan's marriages produce on a map before
+ * the endpoint (`children`, #187), in its start class with the skills it inherits from its parents' in the plan.
  * Each unit is at its full build: a base class promoted as the run simulation's promotion rule picks (the promotion
  * raising its class bases most), every stat at its effective cap (the class's max stats plus its
  * modifiers, plus 10 but HP with Limit Breaker), with its recorded skills and weapons (`kit-as-recorded`). No spread:
@@ -12,20 +13,23 @@
  * endpoint with.
  *
  * A map whose foes carry no weapon in the chapter data (Apotheosis's did until its lower-case item templates were
- * parsed, #189) can't hurt anyone in the simulation. The ceiling names such maps (`unarmed`) and has no chance when the endpoint is
- * one, rather than a 100% nothing earned.
+ * parsed, #189) can't hurt anyone in the simulation. The ceiling names such maps (`unarmed`) and has no chance when
+ * the endpoint is one, rather than a 100% nothing earned.
  */
 import { CLASSES, type ClassData, type ClassId } from '../../game-data/classes';
 import { STATS, type Gender, type Modifiers, type Stat } from '../../game-data/stats';
-import type { BlindSpotId, RunBlindSpotId } from '../assumptions';
+import { CHILD_UNITS } from '../../game-data/children';
+import type { SkillId } from '../../game-data/skills';
+import type { Assumptions, BlindSpotId, RunBlindSpotId } from '../assumptions';
 import { classBaseStats } from '../child-join';
+import { childSkills, type SkillParent } from '../child-skills';
 import { classMaxStats, className, promotionsOf } from '../classes';
 import { suggestDeployment, type DeployCandidate, type Deployment } from '../deploy';
 import type { RosterUnit } from '../roster';
 import type { Foe } from '../solver';
 import { playMap, type SimMap } from './map-play';
 import { runSeed } from './random';
-import type { ArmyUnit, RunSimInput } from './run-sim';
+import type { ArmyUnit, ChildRecruit, RunSimInput } from './run-sim';
 import { simLineup } from './sim-map';
 
 /** A unit as the ceiling fields it: its class after promotion, and its stats at its effective caps. */
@@ -34,6 +38,7 @@ export type CeilingUnit = {
   readonly name: string;
   readonly className: string;
   readonly stats: Readonly<Record<Stat, number>>;
+  readonly skills: readonly string[];
 };
 
 export type Ceiling = {
@@ -83,8 +88,46 @@ function capped(a: ArmyUnit): DeployCandidate & { readonly shown: CeilingUnit } 
     role: a.role,
     fighter: { name: a.name, className: name, stats, skills: a.skills, weapon: a.weapons[0] },
     weapons: a.weapons,
+    ...(a.items?.length ? { items: a.items } : {}),
     supports: a.supports,
-    shown: { id: a.id, name: a.name, className: name, stats },
+    shown: { id: a.id, name: a.name, className: name, stats, skills: a.skills },
+  };
+}
+
+/**
+ * A child the plan produces, as the army unit its caps are read from (#187): its start class (Morgan's other parent's,
+ * else its first class) and the skills it inherits from its parents' skills in the plan (`childSkills`). Its stats
+ * are left at 0: the ceiling reads only its caps. Undefined when a parent isn't in the plan's army.
+ */
+function childUnit(c: ChildRecruit, army: ReadonlyMap<RosterUnit, ArmyUnit>, assumptions: Assumptions): ArmyUnit | undefined {
+  const side = (u: RosterUnit | 'maiden', fixed: SkillId | undefined): SkillParent | undefined => {
+    if (u === 'maiden') return 'maiden';
+    const p = army.get(u);
+    return p ? { skills: p.skills, ...(fixed ? { fixed } : {}) } : undefined;
+  };
+  const a = side(c.parents[0], c.fixed?.[0]);
+  const b = side(c.parents[1], c.fixed?.[1]);
+  const child = CHILD_UNITS[c.id];
+  const classId = c.startClass ?? child.defaultClassSet[0];
+  if (!a || !b || !classId) return undefined;
+  const { skills } = childSkills({ child: c.id, parents: [a, b], startClass: classId, level: 10 }, assumptions);
+  return {
+    id: c.id,
+    name: c.name,
+    gender: child.gender,
+    classId,
+    level: 10,
+    exp: 0,
+    count: 0,
+    bonus: 0,
+    stats: Object.fromEntries(STATS.map((s) => [s, 0])) as Record<Stat, number>,
+    growths: c.growths,
+    modifiers: c.modifiers,
+    skills,
+    weapons: c.weapons,
+    ...(c.items ? { items: c.items } : {}),
+    supports: [],
+    role: c.role,
   };
 }
 
@@ -96,12 +139,19 @@ const armed = (map: SimMap) => [...map.foes, ...map.waves.flatMap((w) => w.group
  * endpoint `runs` times, run `r` on the seed the flawless chance's run `r` plays it with, so both draw the same skills;
  * the other difficulties have nothing to draw and play it once.
  */
-export function simulateCeiling(input: RunSimInput, seed: number, runs: number): Ceiling | undefined {
+export function simulateCeiling(input: RunSimInput, seed: number, runs: number, assumptions: Assumptions): Ceiling | undefined {
   const last = input.maps.length - 1;
   const end = input.maps[last];
   if (!end) return undefined;
   const army = new Map<RosterUnit, ArmyUnit>();
-  for (const a of [...input.army, ...input.maps.slice(0, last).flatMap((m) => [...m.joining, ...m.later]), ...end.joining, ...end.mapOnly]) if (!army.has(a.id)) army.set(a.id, a);
+  const before = input.maps.slice(0, last);
+  for (const a of [...input.army, ...before.flatMap((m) => [...m.joining, ...m.later]), ...end.joining, ...end.mapOnly]) if (!army.has(a.id)) army.set(a.id, a);
+  // Children read on a map before the endpoint have joined by then; one read on the endpoint joins after it.
+  const children = before.flatMap((m) => m.children ?? []);
+  for (const c of children) {
+    const u = army.has(c.id) ? undefined : childUnit(c, army, assumptions);
+    if (u) army.set(u.id, u);
+  }
   const fielded = [...army.values()].map(capped);
   const pools = new Map<Foe, readonly string[]>(end.map.foes.map((g) => [g.foe, g.pool ?? []]));
   const lineup = suggestDeployment({
@@ -125,6 +175,7 @@ export function simulateCeiling(input: RunSimInput, seed: number, runs: number):
     chance = sum / n;
   }
   blindSpots.add('kit-as-recorded');
+  if (children.length) blindSpots.add('plan-marriages-made');
   return {
     key: end.key,
     label: end.label,
