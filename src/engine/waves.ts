@@ -31,7 +31,10 @@ export type WaveGroup = {
   /** A note FEW nests under the group. */
   readonly note?: string;
   readonly boss?: boolean;
-  /** The chapter data's enemy table lists it too, with the starting foes (Lost Bloodlines' turn-1 arrivals): count it once. */
+  /**
+   * The chapter data's enemy table lists it among the starting foes: count it once. A named arrival whose row is past
+   * FEW's reinforcement divider (Lost Bloodlines' turn-1 arrivals) isn't: it comes with its wave (#184).
+   */
   readonly inEnemyTable?: boolean;
   /**
    * The group as a foe for the map solver, `count` included; undefined when the map has no group of that class on the
@@ -132,7 +135,7 @@ type Read = { readonly group: Draft } | typeof ABSENT | typeof FAIL;
 /** A named foe from the map's own tables (enemies first, then bosses). */
 function named(map: ChapterData, d: ChapterDifficulty, name: string): Draft | undefined {
   const enemy = (map.enemies[d] ?? []).find((g) => g.name === name);
-  if (enemy) return { count: 1, class: enemy.class, name, items: enemy.items, inEnemyTable: true, source: enemy };
+  if (enemy) return { count: 1, class: enemy.class, name, items: enemy.items, ...(enemy.reinforcement ? {} : { inEnemyTable: true }), source: enemy };
   const boss = (map.bosses[d] ?? []).find((b) => b.name === name);
   return boss ? { count: 1, class: boss.class, name, items: boss.items, boss: true, source: boss } : undefined;
 }
@@ -183,12 +186,25 @@ function readGroups(map: ChapterData, d: ChapterDifficulty, line: string): { rea
   return 'group' in r ? { groups: [r.group] } : r;
 }
 
-/** The chapter data's group to take a wave group's stats from: same class, same weapon if one has it, else highest level. */
+/**
+ * The chapter data's group to take a wave group's stats from: same class, same weapon if one has it, else highest
+ * level; FEW's own reinforcement rows first (#184), and never a boss's row while another will do (Death's Embrace's
+ * Berserkers aren't Algol).
+ */
 function statSource(map: ChapterData, d: ChapterDifficulty, g: Draft): EnemyGroup | BossRow | undefined {
   if (g.source) return g.source;
-  const same = (map.enemies[d] ?? []).filter((e) => e.class === g.class);
+  const bosses = new Set((map.bosses[d] ?? []).map((b) => `${b.class}|${statValue(b.stats.hp)}`));
+  const all = (map.enemies[d] ?? []).filter((e) => e.class === g.class);
+  const plain = all.filter((e) => !bosses.has(`${e.class}|${statValue(e.stats.hp)}`));
+  const pool = plain.length ? plain : all;
+  const reinforcing = pool.filter((e) => e.reinforcement);
   const weapons = new Set(g.items.map((i) => i.name));
-  return same.find((e) => e.items.some((i) => weapons.has(i.name))) ?? [...same].sort((a, b) => statValue(b.level) - statValue(a.level))[0];
+  for (const same of [reinforcing, pool]) {
+    const hit = same.find((e) => e.items.some((i) => weapons.has(i.name)));
+    if (hit) return hit;
+  }
+  const by = reinforcing.length ? reinforcing : pool;
+  return [...by].sort((a, b) => statValue(b.level) - statValue(a.level))[0];
 }
 
 const isWeapon = (name: string) => ['sword', 'lance', 'axe', 'bow', 'tome', 'stone', 'beaststone'].includes(itemByName(name)?.kind ?? '');
@@ -205,7 +221,7 @@ function finish(map: ChapterData, d: ChapterDifficulty, g: Draft): WaveGroup {
 /** The map's starting enemy groups on a difficulty, bosses left out (as `foesOf` does). */
 function startingGroups(map: ChapterData, d: ChapterDifficulty): readonly EnemyGroup[] {
   const bosses = new Set((map.bosses[d] ?? []).map((b) => `${b.class}|${statValue(b.stats.hp)}`));
-  return (map.enemies[d] ?? []).filter((e) => !bosses.has(`${e.class}|${statValue(e.stats.hp)}`));
+  return (map.enemies[d] ?? []).filter((e) => !e.reinforcement && !bosses.has(`${e.class}|${statValue(e.stats.hp)}`));
 }
 
 type Line = { readonly indent: number; readonly text: string };

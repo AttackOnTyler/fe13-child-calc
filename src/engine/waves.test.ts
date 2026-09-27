@@ -53,11 +53,20 @@ describe('reinforcement waves (#178)', () => {
     expect(engine.mapWaves('chapter-11', 'normal').notes).toEqual(['All reinforcements are halted when Gangrel is defeated.']);
   });
 
-  it('reads named arrivals from the map’s own tables, marked when the enemy table already lists them', () => {
+  it('reads named arrivals from the map’s own tables, with the wave when their rows are FEW’s reinforcements (#184)', () => {
     const [turn1] = engine.mapWaves('lost-bloodlines-1', 'normal').waves;
     expect(turn1!.turns).toEqual([1]);
     expect(turn1!.groups.map((g) => `${g.name} (${g.class})`).slice(0, 2)).toEqual(['Ethlyn (Valkyrie)', 'Quan (Paladin)']);
-    expect(turn1!.groups.every((g) => g.inEnemyTable && g.foe)).toBe(true);
+    // Their rows are past the table's reinforcement divider: not starting foes, so they come with the wave.
+    expect(turn1!.groups.every((g) => !g.inEnemyTable && g.foe)).toBe(true);
+    expect(engine.simMap('lost-bloodlines-1', 'normal').foes.map((g) => g.foe.name)).not.toContain('Ethlyn');
+  });
+
+  it('takes a reinforcement’s stats from FEW’s reinforcement rows, never from a boss of its class (#184)', () => {
+    // Death's Embrace: its Berserker reinforcements are Risen, not Algol (a Berserker boss, who leaves on turn 10).
+    const berserkers = engine.mapWaves('deaths-embrace', 'normal').waves.flatMap((w) => w.groups).filter((g) => g.class === 'Berserker');
+    expect(berserkers.length).toBeGreaterThan(0);
+    expect(berserkers.every((g) => g.foe!.name === 'Risen')).toBe(true);
   });
 
   it('keeps Endgame’s unlimited reinforcements: every turn from 2, four a turn (eight on Lunatic), like the starting foes', () => {

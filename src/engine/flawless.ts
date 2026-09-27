@@ -39,6 +39,7 @@ import type { Fighter } from './solver';
 import type { SimItem } from './sim/sustain';
 import { classIdByName, openStock, sealAvailability, sealsHeld } from './supply';
 import { simMapById } from './sim/sim-map';
+import type { SimMap, SimUnit } from './sim/map-play';
 import { simulateCeiling, type Ceiling } from './sim/ceiling';
 import { simulateRuns, type ArmyUnit, type ChildRecruit, type RunSim, type RunSimInput, type RunSimMap } from './sim/run-sim';
 
@@ -264,6 +265,9 @@ export function flawlessInput(
     const mapOnly: ArmyUnit[] = [];
     const later: ArmyUnit[] = [];
     const children: ChildRecruit[] = [];
+    // The map's own recruits (#184) the run takes, each with the unit it joins as (none for a child: its stats come
+    // from its parents in each run); the rest aren't recruited here.
+    const onMap = new Map<string, { readonly played: boolean; readonly unit?: SimUnit }>();
     for (const r of data.recruits) {
       const u = r.unit === 'Morgan' ? gender && (gender === 'M' ? 'morgan-f' : 'morgan-m') : unitNamed(r.unit);
       if (!u || (u === 'robin' && !gender) || !alive(u)) continue;
@@ -272,6 +276,7 @@ export function flawlessInput(
       if (u in CHILD_UNITS) {
         const snapshot = recruitSnapshot(u, run, r, snap, assumptions);
         const options = spousesFor(CHILD_UNITS[u as ChildId].fixedParent).flatMap((sp) => childRecruit(u as ChildId, snapshot, sp) ?? []);
+        onMap.set(u, { played: false });
         if (options.length) {
           children.push(...options);
           seenUnits.add(u);
@@ -279,7 +284,11 @@ export function flawlessInput(
         } else if (!notSimulated.some((l) => l.unit === u)) notSimulated.push({ unit: u, why: 'child' });
         continue;
       }
-      const a = armyUnit(u, recruitSnapshot(u, run, r, snap, assumptions), 0, undefined);
+      const rs = recruitSnapshot(u, run, r, snap, assumptions);
+      const a = armyUnit(u, rs, 0, undefined);
+      const f = fighterOf(unitName(u, gender), rs);
+      // Its join data (with its staves and potions); without recorded stats, the chapter data's.
+      onMap.set(u, { played: true, ...(a && f ? { unit: { id: u, fighter: f.fighter, weapons: f.weapons, ...(f.items.length ? { items: f.items } : {}) } } : {}) });
       if (!a) continue;
       if (onlyHere) mapOnly.push(a);
       else {
@@ -293,7 +302,7 @@ export function flawlessInput(
     const m: RunSimMap = {
       key: step.key,
       label: `${data.label}${step.secret ? ' (secret route)' : ''}`,
-      map: simMapById(step.map, difficulty, { seen: run.seen?.[step.map] ?? {}, ...(step.map === 'apotheosis' ? { route: step.secret ? 'secret' : 'normal' } : {}) }),
+      map: recruitsOn(simMapById(step.map, difficulty, { seen: run.seen?.[step.map] ?? {}, ...(step.map === 'apotheosis' ? { route: step.secret ? 'secret' : 'normal' } : {}) }), onMap),
       deploy: endpoint ? order.endpoint.deploy : deployCount(data.conditions[table]?.deploy ?? '', opening.map((a) => a.name)),
       forced: [...forcedOn(step.map), ...opening.map((a) => a.id)],
       joining,
@@ -332,6 +341,29 @@ export const sureIncome = (map: ChapterData): number => mapGold(map).reduce((a, 
 function sureSeals(map: ChapterData): { master: number; second: number } {
   const count = (seal: string) => map.items.filter((r) => r.item === seal && !r.play).length;
   return { master: count('Master Seal'), second: count('Second Seal') };
+}
+
+/**
+ * A map's recruits as the run takes them (#184): only those it recruits there, each played as its join data (a child
+ * joins unplayed); one the run doesn't recruit is left out, so a foe recruit stays a foe. A foe that leaves once
+ * talked to stays.
+ */
+function recruitsOn(map: SimMap, onMap: ReadonlyMap<string, { readonly played: boolean; readonly unit?: SimUnit }>): SimMap {
+  if (!map.recruits) return map;
+  const recruits = map.recruits.flatMap((r) => {
+    if (r.departs) return [r];
+    const o = onMap.get(r.id);
+    if (!o) return [];
+    if (!o.played) {
+      const { unit: _, ...rest } = r;
+      return [rest];
+    }
+    // An NPC all map (Tiki, asleep) plays as the chapter has it; one the army will field, as it joins.
+    const npcAllMap = r.npc && !r.talk && r.arrives === undefined;
+    return [o.unit && !npcAllMap ? { ...r, unit: o.unit } : r];
+  });
+  const { recruits: _, ...rest } = map;
+  return recruits.length ? { ...rest, recruits } : rest;
 }
 
 /** Each couple once, from a map of spouses both ways. */

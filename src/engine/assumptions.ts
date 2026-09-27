@@ -490,11 +490,22 @@ export const isDefaultValue = (id: AssumptionId, value: unknown) =>
  * The stated blind spots (#181; spec #175, The Why panel): what the simulation leaves out or simplifies on purpose,
  * where no source can settle it and no setting changes it. Each carries its **lean**, the way it can push the numbers
  * it touches: may read high, may read low, or either way. Later tickets add theirs (stats treated as independent, no
- * taxiing or ferrying, no kills by NPC allies, Ch 3's door keys, simulation
- * error) and retire placeholders they replace. The assumed army spread (#182) is an assumption (`army-spread`): it has
- * a setting.
+ * taxiing or ferrying, simulation error) and retire placeholders they replace. The assumed army spread (#182) is an
+ * assumption (`army-spread`): it has a setting. #184 adds the third party's: NPC kills, NPCs kept out of reach, talks
+ * that reach their recruit, and Chapter 3's door keys.
  */
-export type BlindSpotId = 'one-worst-attacker' | 'held-back-out-of-reach' | 'equal-share-of-actions' | 'rally-reaches-every-pair' | 'attack-stance-adjacency' | 'likely-result' | 'bosses-hold';
+export type BlindSpotId =
+  | 'one-worst-attacker'
+  | 'held-back-out-of-reach'
+  | 'equal-share-of-actions'
+  | 'rally-reaches-every-pair'
+  | 'attack-stance-adjacency'
+  | 'likely-result'
+  | 'bosses-hold'
+  | 'npc-kills'
+  | 'npc-screened'
+  | 'talk-reaches'
+  | 'door-keys';
 
 /** The run simulation's own blind spots (#186): how it walks the army from one map to the next. */
 export type RunBlindSpotId = 'promotes-at-cap' | 'lead-takes-exp' | 'supports-from-pair-combats' | 'kit-as-recorded' | 'sure-income-only' | 'kit-by-matchups-won';
@@ -630,5 +641,41 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
       'per gold, after its rebuys and seals. Scoring each piece by flawless points (the full solve, #199) may keep a different set.',
     lean: 'either',
     touches: ['flawless'],
+  },
+  {
+    id: 'npc-kills',
+    label: 'NPC allies don’t attack',
+    why:
+      'In the ally phase an NPC with a weapon walks into the foes’ reach, as its AI does, and fights back on enemy phase, but its own ' +
+      'attacks aren’t played: foes it would fell stay for the army.',
+    lean: 'low',
+    touches: ['map'],
+  },
+  {
+    id: 'npc-screened',
+    label: 'NPCs kept out of reach',
+    why:
+      'An NPC with no weapon whose death is a failure (Chapter 6’s Emmeryn, a recruit who joins if it survives) stands where the chapter ' +
+      'puts it, and is assumed out of the foes’ reach while the army moves the map on: a turn it can’t, they reach it. The play has no map ' +
+      'positions to know when foes slip past (Chapter 6’s Thieves opening her door).',
+    lean: 'high',
+    touches: ['map'],
+  },
+  {
+    id: 'talk-reaches',
+    label: 'Talkers reach their recruits',
+    why:
+      'A talk recruit joins on the turn the solve sends a talker (the first turn by default): the talker spends its action that turn, and ' +
+      'is assumed to reach the recruit. The walk there, and the foes in the way, aren’t played.',
+    lean: 'high',
+    touches: ['map'],
+  },
+  {
+    id: 'door-keys',
+    label: 'Door keys kept',
+    why:
+      'Chapter 3 is also lost when both Door Keys are lost before a door is opened. The play has no doors or keys: the keys are assumed kept.',
+    lean: 'high',
+    touches: ['map'],
   },
 ];

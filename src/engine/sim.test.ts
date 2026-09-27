@@ -353,3 +353,136 @@ describe('stances and exposure (#183)', () => {
     expect((performance.now() - t0) / 20).toBeLessThan(5);
   });
 });
+
+describe('the third party, forced units and joins (#184)', () => {
+  // A foe the hero can't hurt: 60 HP, Def 30; it kills anything it hits (Str 30 + Iron Axe), and always hits (Hawkeye).
+  const wall: Foe = { ...brute, name: 'Wall', stats: { ...brute.stats, hp: 60, def: 30 }, skills: ['Hawkeye'] };
+  const post: Foe = { ...brute, name: 'Post', weapon: undefined, count: 2, stats: { ...brute.stats, hp: 10, def: 0 } };
+  // An NPC the army must keep alive, with no weapon and 1 HP.
+  const saint: Fighter = { name: 'Saint', className: 'Sage', stats: stats(1, 0, 5, 5, 5, 5, 0, 5), skills: [], weapon: undefined };
+
+  it('reads the chapter data: the starting field without its reinforcements or those gone before turn 1', () => {
+    const c9 = engine.simMap('chapter-9', 'normal');
+    // 17 on the field (Tharja among them): Gangrel and Aversa leave before the first turn, the 6 reinforcements come on turn 5.
+    expect(c9.foes.reduce((n, g) => n + g.foe.count, 0)).toBe(17);
+    expect(c9.foes.map((g) => g.foe.name)).not.toContain('Gangrel');
+    expect(c9.foes.map((g) => g.foe.name)).not.toContain('Aversa');
+    expect(c9.waves.flatMap((w) => w.groups).reduce((n, g) => n + g.foe.count, 0)).toBe(6);
+    expect(engine.simMap('chapter-9', 'lunatic').foes.reduce((n, g) => n + g.foe.count, 0)).toBe(21);
+    // Libra and Tharja join when Chrom talks to them: Libra an NPC until then, Tharja a foe.
+    expect(c9.recruits?.map((r) => [r.id, r.talk?.by, r.npc ?? false, r.foe])).toEqual([
+      ['libra', ['chrom'], true, undefined],
+      ['tharja', ['chrom'], false, 'Tharja'],
+    ]);
+    expect(c9.recruits?.every((r) => r.unit?.fighter.stats.hp)).toBe(true);
+    // Chapter 6: Emmeryn is an ally whose death is a failure; Panne arrives on turn 2; Gaius is a foe until Chrom talks.
+    const c6 = engine.simMap('chapter-6', 'normal');
+    expect(c6.allies?.map((a) => a.unit.id)).toEqual(['emmeryn']);
+    expect(c6.recruits?.map((r) => [r.id, r.arrives, r.foe])).toEqual([
+      ['panne', 2, undefined],
+      ['gaius', undefined, 'Gaius'],
+    ]);
+    // A foe that leaves on its own: Death's Embrace's Algol, on turn 10; one that leaves once Robin talks to it.
+    expect(engine.simMap('deaths-embrace', 'normal').foes.find((g) => g.foe.name === 'Algol')?.leaves).toBe(10);
+    expect(engine.simMap('the-future-past-1', 'normal').recruits).toEqual([{ id: 'Morgan (M)', talk: { by: ['robin'], times: 1 }, foe: 'Morgan (M)', departs: true }]);
+  });
+
+  it('counts an ally NPC’s death against the no-death chance; scenery NPCs aren’t played', () => {
+    // The shield can't hurt the Wall and moves nothing: the foes close in on everyone, the Saint too.
+    const kept = engine.playMap({ map: { ...rout([group(wall)]), allies: [{ unit: unit(saint) }] }, lineup: [solo(shield)] }, 1);
+    expect(kept.noDeath).toBe(0);
+    expect(kept.units.saint!.combats).toBe(1);
+    expect(kept.blindSpots).toEqual(expect.arrayContaining(['npc-kills', 'npc-screened']));
+    const scenery = engine.playMap({ map: rout([group(wall)]), lineup: [solo(shield)] }, 1);
+    expect(scenery.noDeath).toBe(1);
+    // While the army moves the map on, the unarmed NPC stays out of reach.
+    const busy = engine.playMap({ map: { ...rout([group(post)]), allies: [{ unit: unit(saint) }] }, lineup: [solo(hero)] }, 1);
+    expect(busy).toMatchObject({ noDeath: 1, ended: 'rout' });
+  });
+
+  it('puts an armed NPC in the foes’ reach in the ally phase, and its death counts', () => {
+    // The Biter hits 20 always: the 20 HP guard dies countering it; nobody in the army is in reach.
+    const biter: Foe = { ...brute, name: 'Biter', stats: stats(40, 13, 0, 0, 0, 60, 0, 0), skills: ['Hawkeye'] };
+    const guard: Fighter = { ...hero, name: 'Guard', stats: stats(20, 0, 0, 0, 0, 0, 0, 0) };
+    const play = engine.playMap({ map: { ...rout([group(biter)]), recruits: [{ id: 'guard', unit: unit(guard), npc: true }] }, lineup: [solo(shield)] }, 1);
+    expect(play.log[0]!.exposed).toContain('guard');
+    expect(play.noDeath).toBe(0);
+  });
+
+  it('gives a mid-map arrival no action before its turn', () => {
+    const map: SimMap = { ...rout([group({ ...post, count: 4 })]), recruits: [{ id: 'twin', unit: unit({ ...hero, name: 'Twin' }), arrives: 3 }] };
+    const play = engine.playMap({ map, lineup: [solo(hero)] }, 1);
+    // Turns 1–2: the hero alone fells one Post a turn; turn 3 the twin arrives and both act.
+    expect(play.log.map((t) => t.fights.filter((f) => f.phase === 'player').map((f) => f.lead))).toEqual([['hero'], ['hero'], ['hero', 'twin']]);
+    expect(play.log[2]!.joins).toEqual(['twin']);
+    expect(play.units.twin!.combats).toBe(1);
+  });
+
+  it('recruits a foe on the turn the solve sends a talker: never attacked, not routed, then fights for the army', () => {
+    // The Turncoat can't be hurt by the hero (Def 30): as a foe it could never be routed.
+    const turncoat: Foe = { ...wall, name: 'Turncoat' };
+    const recruit: Fighter = { ...hero, name: 'Turncoat' };
+    const map: SimMap = { ...rout([group(turncoat), group({ ...post, count: 3 })]), recruits: [{ id: 'turncoat', unit: unit(recruit), talk: { by: ['hero'], times: 1 }, foe: 'Turncoat' }] };
+    const play = engine.playMap({ map, lineup: [solo(hero)] }, 1);
+    // Turn 1: the hero talks (its action); the Turncoat acts from turn 2, felling Posts with the hero.
+    expect(play.log[0]!.acts).toEqual([{ kind: 'talk', unit: 'hero', target: 'turncoat' }]);
+    expect(play.log[0]!.joins).toEqual(['turncoat']);
+    expect(play.log[1]!.fights.filter((f) => f.phase === 'player').map((f) => f.lead)).toEqual(['hero', 'turncoat']);
+    expect(play).toMatchObject({ ended: 'rout', noDeath: 1, turns: 3 });
+    expect(play.units.hero!.kills).toEqual({ Post: 2 });
+    expect(play.blindSpots).toContain('talk-reaches');
+    // A later turn from the solve: no talk before it.
+    const later = engine.playMap({ map, lineup: [solo(hero)], talks: { turncoat: 2 } }, 1);
+    expect(later.log[0]!.acts).toEqual([]);
+    expect(later.log[1]!.acts).toEqual([{ kind: 'talk', unit: 'hero', target: 'turncoat' }]);
+    // Nobody who can talk to it in the lineup: it stays a foe, and this army can't rout it.
+    const none = engine.playMap({ map: { ...map, recruits: [{ ...map.recruits![0]!, talk: { by: ['chrom'], times: 1 } }] }, lineup: [solo(hero)] }, 1);
+    expect(none.ended).toBe('stalled');
+  });
+
+  it('takes three talks for Gangrel, each a talker’s action', () => {
+    const c = engine.simMap('paralogue-18', 'normal').recruits!.find((r) => r.id === 'gangrel')!;
+    expect(c.talk).toEqual({ by: ['chrom'], times: 3 });
+  });
+
+  it('states the Chapter 3 door keys as a blind spot', () => {
+    expect(engine.simMap('chapter-3', 'normal').blindSpots).toEqual(['door-keys']);
+    const ids = engine.blindSpots().map((b) => b.id);
+    expect(ids).toEqual(expect.arrayContaining(['npc-kills', 'npc-screened', 'talk-reaches', 'door-keys']));
+    expect(engine.blindSpots().find((b) => b.id === 'npc-kills')!.lean).toBe('low');
+  });
+
+  // A plausible army for Chapters 6–9, unpromoted around Lv 10–15.
+  const shepherd = (name: string, className: string, s: ReturnType<typeof stats>, weapons: string[]): SimGroup => {
+    const ws = weapons.map(weapon);
+    return { lead: { id: name.toLowerCase(), fighter: { name, className, stats: s, skills: [], weapon: ws[0] }, weapons: ws }, support: null };
+  };
+  const army = (): SimGroup[] => [
+    shepherd('Chrom', 'Lord', stats(32, 15, 1, 17, 17, 14, 11, 3), ['Steel Sword', 'Iron Sword']),
+    shepherd('Robin', 'Tactician', stats(30, 13, 14, 15, 15, 9, 11, 9), ['Steel Sword', 'Thunder']),
+    shepherd('Frederick', 'Great Knight', stats(36, 17, 2, 15, 12, 10, 17, 5), ['Steel Lance', 'Steel Axe']),
+    shepherd('Sully', 'Cavalier', stats(28, 12, 1, 14, 15, 10, 11, 6), ['Steel Lance', 'Iron Sword']),
+    shepherd('Vaike', 'Fighter', stats(34, 16, 0, 13, 12, 8, 10, 1), ['Steel Axe']),
+    shepherd('Stahl', 'Cavalier', stats(32, 14, 0, 12, 12, 10, 11, 2), ['Steel Sword', 'Steel Lance']),
+    shepherd('Kellam', 'Knight', stats(30, 12, 0, 10, 8, 6, 18, 5), ['Steel Lance']),
+    shepherd('Miriel', 'Mage', stats(24, 2, 12, 12, 12, 8, 5, 9), ['Elfire']),
+  ];
+
+  it('plays Chapter 6 with Emmeryn to keep alive', () => {
+    const play = engine.playMap({ map: engine.simMap('chapter-6', 'normal'), lineup: army() }, 1);
+    expect(play.ended).toBe('rout');
+    expect(play.units.emmeryn).toBeDefined();
+    expect(play.noDeath).toBeGreaterThan(0.5);
+    // Gaius joins when Chrom talks to him.
+    expect(play.log[0]!.acts).toContainEqual({ kind: 'talk', unit: 'chrom', target: 'gaius' });
+  });
+
+  it('plays Chapter 9: its talk recruits join and the map is routed', () => {
+    const play = engine.playMap({ map: engine.simMap('chapter-9', 'normal'), lineup: army() }, 1);
+    expect(play.ended).toBe('rout');
+    expect(play.turns).toBeLessThan(20);
+    expect(play.log.flatMap((t) => t.joins)).toEqual(['libra', 'tharja']);
+    expect(play.groups.find((g) => g.name === 'Tharja')?.felled ?? 0).toBe(0);
+    expect(play.noDeath).toBeGreaterThan(0.5);
+  });
+});
