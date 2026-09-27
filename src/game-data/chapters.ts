@@ -19,7 +19,18 @@ export const CHAPTER_DIFFICULTIES: readonly ChapterDifficulty[] = ['normal', 'ha
 export type MapKind = 'story' | 'paralogue' | 'xenologue';
 
 export type StatText = Readonly<Record<'hp' | 'str' | 'mag' | 'skl' | 'spd' | 'lck' | 'def' | 'res' | 'mov', string>>;
-export type MapItem = { readonly name: string; readonly drop?: boolean; readonly forged?: boolean };
+/**
+ * An item a foe holds. A forged weapon's forge is as its FEW page states it (#189): the forged weapon's Mt and Hit from
+ * its hover note (`forgedTo`), or the bonus the page states for its forged weapons (`forge`: Apotheosis's +8 Mt, +20 Hit;
+ * Chapters 11–13's +4 Mt, +10 Hit; per difficulty where a note says so). No page states a forged Crit.
+ */
+export type MapItem = {
+  readonly name: string;
+  readonly drop?: boolean;
+  readonly forged?: boolean;
+  readonly forgedTo?: { readonly mt: number; readonly hit: number };
+  readonly forge?: { readonly mt: number; readonly hit: number };
+};
 
 /** A group of like enemies on one difficulty: FEW's `ChapUnitCellFE13` row. */
 export type EnemyGroup = {

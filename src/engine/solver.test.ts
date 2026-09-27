@@ -1,6 +1,34 @@
 import { describe, expect, it } from 'vitest';
 import { createEngine, dangerFlags, foeKey, foesOf, itemByName, matchup, pairUpBonus, statValue, type Fighter, type Foe } from './index';
 
+describe('foes’ forged weapons (#189)', () => {
+  const eng = createEngine();
+  const group = (items: object[]) => ({ enemies: { lunatic: [{ name: 'X', class: 'Hero', level: '10', count: '1', stats: { hp: '30', str: '10', mag: '0', skl: '10', spd: '10', lck: '0', def: '5', res: '0', mov: '6' }, items }] }, bosses: {} }) as unknown as Parameters<typeof foesOf>[0];
+  const silver = itemByName('Silver Sword')!;
+
+  it('take the forged Mt and Hit a page states, or add the forge bonus it states', () => {
+    expect(foesOf(group([{ name: 'Silver Sword', forged: true, forgedTo: { mt: 15, hit: 95 } }]), 'lunatic')[0]!.weapon).toMatchObject({ name: 'Silver Sword', mt: 15, hit: 95, crit: silver.crit });
+    expect(foesOf(group([{ name: 'Silver Sword', forged: true, forge: { mt: 8, hit: 20 } }]), 'lunatic')[0]!.weapon).toMatchObject({ mt: silver.mt! + 8, hit: silver.hit! + 20 });
+    expect(foesOf(group([{ name: 'Silver Sword', forged: true, forge: { mt: 0, hit: 0 } }]), 'lunatic')[0]!.weapon).toBe(silver);
+    expect(foesOf(group([{ name: 'Silver Sword' }]), 'lunatic')[0]!.weapon).toBe(silver);
+  });
+
+  it('arm Apotheosis’s foes with forged weapons', () => {
+    const apo = eng.maps().find((m) => m.id === 'apotheosis')!;
+    const general = foesOf(apo, 'lunatic').find((f) => f.className === 'General' && f.stats.str === 75)!;
+    const lance = itemByName('Silver Lance')!;
+    expect(general.weapon).toMatchObject({ name: 'Silver Lance', mt: lance.mt! + 8, hit: lance.hit! + 20 });
+    expect(general.skills).toContain('Pavise+');
+  });
+
+  it('count a boss’s own enemy-table row once, keeping foes that only share its class and HP', () => {
+    const apo = eng.maps().find((m) => m.id === 'apotheosis')!;
+    const wave1 = foesOf({ ...apo, enemies: { lunatic: apo.enemies.lunatic!.filter((g) => g.wave === 'Wave 1') }, bosses: { lunatic: apo.bosses.lunatic!.filter((b) => b.wave === 'Wave 1') } }, 'lunatic');
+    // The boss General (Str 75), the four other Generals (Str 60) and the two War Clerics: all 80 HP.
+    expect(wave1.map((f) => `${f.className} ${f.count}${f.boss ? ' boss' : ''}`)).toEqual(['General 1 boss', 'General 4', 'War Cleric 2']);
+  });
+});
+
 const engine = createEngine();
 const map = (id: string) => engine.maps().find((m) => m.id === id)!;
 const stats = (hp: number, str: number, mag: number, skl: number, spd: number, lck: number, def: number, res: number) => ({ hp, str, mag, skl, spd, lck, def, res });
