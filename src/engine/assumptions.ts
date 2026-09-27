@@ -472,11 +472,11 @@ export const isDefaultValue = (id: AssumptionId, value: unknown) =>
  * The stated blind spots (#181; spec #175, The Why panel): what the simulation leaves out or simplifies on purpose,
  * where no source can settle it and no setting changes it. Each carries its **lean**, the way it can push the numbers
  * it touches: may read high, may read low, or either way. Later tickets add theirs (stats treated as independent, no
- * taxiing or ferrying, Attack Stance adjacency from the spread, no kills by NPC allies, Ch 3's door keys, simulation
+ * taxiing or ferrying, no kills by NPC allies, Ch 3's door keys, simulation
  * error) and retire placeholders they replace. The assumed army spread (#182) is an assumption (`army-spread`): it has
  * a setting.
  */
-export type BlindSpotId = 'one-worst-attacker' | 'equal-share-of-actions' | 'rally-reaches-every-pair' | 'likely-result' | 'bosses-hold';
+export type BlindSpotId = 'one-worst-attacker' | 'held-back-out-of-reach' | 'equal-share-of-actions' | 'rally-reaches-every-pair' | 'attack-stance-adjacency' | 'likely-result' | 'bosses-hold';
 
 /** The run simulation's own blind spots (#186): how it walks the army from one map to the next. */
 export type RunBlindSpotId = 'promotes-at-cap' | 'lead-takes-exp' | 'supports-from-pair-combats' | 'kit-as-recorded';
@@ -496,7 +496,7 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
     label: 'One worst attacker per pair',
     why:
       'With no map positions, each exposed pair takes one enemy-phase attack, from the foe left that is worst for it, each foe attacking once; ' +
-      'units with no weapon (healers, dancers) stay out of reach. Two or more attackers can reach one pair in play.',
+      'units alone with no weapon (healers, dancers) stay out of reach. Two or more attackers can reach one pair in play.',
     lean: 'high',
     touches: ['map'],
   },
@@ -571,5 +571,26 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
     why: 'Each unit fights with the weapons its latest entry records (a recruit with those it joins with): weapons never wear out, and nothing is bought or forged on the way.',
     lean: 'either',
     touches: ['flawless'],
+  },
+  {
+    id: 'held-back-out-of-reach',
+    label: 'Held-back units stay out of reach',
+    why:
+      'Exposure is the player’s choice (#183): a front that attacks, or waits as bait, is in the foes’ reach on enemy phase, and one that holds ' +
+      'back is not, however fast the foes or small the map. A careful player only exposes a front that very likely lives through it (1% risk at ' +
+      'most), and engages once a turn with the least risk when nothing is that safe. In play, foes that move every turn can reach a unit that ' +
+      'hangs back.',
+    lean: 'high',
+    touches: ['map'],
+  },
+  {
+    id: 'attack-stance-adjacency',
+    label: 'Attack Stance adjacency from the spread',
+    why:
+      'A pair apart stands adjacent (Attack Stance: Dual Strike, Dual Guard and Dual Support from the partner, but no pair-up stats) at the ' +
+      'rate the assumed army spread puts two units 1 tile apart, and alone the rest of the time. With no map positions, the play can’t know ' +
+      'when a player keeps a split pair side by side; a careful player often does.',
+    lean: 'low',
+    touches: ['map'],
   },
 ];
