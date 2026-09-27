@@ -89,6 +89,7 @@ import { FIXED_INHERITANCE, RALLY_SKILLS } from '../game-data/skills';
 import { STAFF_CLASSES } from '../game-data/classes';
 import { remainingMapOrder, type MapOrder } from './map-order';
 import type { Run } from './run';
+export { dismissMigrationNote, importRun, migrateRun } from './run-migration';
 import type {
   AssumptionStatus,
   BuildMatch,
@@ -148,7 +149,7 @@ export { TOP_PAIR_POINTS, combatPoints, mapSupportGains, type SupportGain, type 
 export { FLAWLESS_RUNS, FLAWLESS_SEED, fighterOf, type FlawlessChance, type FlawlessOptions, type NotSimulated } from './flawless';
 export { effectiveCaps, type Ceiling, type CeilingUnit } from './sim/ceiling';
 export type { LineupPlan } from './sim/run-sim';
-export { mapSpanPin, marriagePins } from './solve/plan';
+export { isMarriagePin, isRuleOut, mapSpanPin, marriagePins } from './solve/plan';
 export { pinKey, withPin, withoutPins, type LineupRule } from './solve/pins';
 export type { KeepPin, MarriagePin, SideGoalPin, SpanPin, SpanPosition } from './solve/plan';
 export { NO_PREPARATIONS } from '../game-data/chapters';
@@ -172,7 +173,6 @@ export {
   exportRun,
   flaggedEntries,
   heldProblems,
-  importRun,
   latestEntry,
   marriedUnits,
   nextMaps,
@@ -192,6 +192,9 @@ export {
   type LaterRecruit,
   type MapOffer,
   type PrepUnits,
+  type CalibrationRow,
+  type LearnedCorrections,
+  type MigrationNote,
   type Run,
   type RunEntry,
   type Snapshot,
@@ -1924,7 +1927,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       const ctx = seedContext(run);
       const options = { pins, ...(roleOf ? { roleOf } : {}) };
       const lunaticPlus = run.roster.run.difficulty === 'lunatic-plus';
-      const pinnedKeys = new Set(pins.flatMap((p) => (p.kind === 'marriage' ? [coupleKey(p.couple)] : [])));
+      const pinnedKeys = new Set(pins.flatMap((p) => (p.kind === 'marriage' && !p.forbid ? [coupleKey(p.couple)] : [])));
       // An adopted plan from before a pin was set is made to keep it.
       const input = { ...given, run, ...(given.plan ? { plan: keptPins(run, ctx, options, given.plan) } : {}) };
       const forcedAt = (plan: Plan) => {

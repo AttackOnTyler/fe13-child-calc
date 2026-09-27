@@ -56,7 +56,7 @@ import type { PageSubject } from '../unit-page';
 import { hungarian } from './hungarian';
 import { seedItems } from './items';
 import { pinnedLineup, type LineupRule } from './pins';
-import type { Plan, PlanLineup, PlanPin, PlanRobin, WishlistChild, WishlistUnit } from './plan';
+import { isMarriagePin, isRuleOut, type Plan, type PlanLineup, type PlanPin, type PlanRobin, type WishlistChild, type WishlistUnit } from './plan';
 
 /** What the seed needs from the engine: pairings as it resolves them, and builds from the play context's templates. */
 export type SeedContext = {
@@ -248,8 +248,9 @@ export function endpointCoverage(run: Run, ctx: SeedContext, child: ChildId, par
 export function seedPlan(run: Run, ctx: SeedContext, options: SeedOptions = {}): Plan {
   // Non-starters (#194, #199): a couple that can't reach S before its deadline brings no child. Move its child's
   // paralogue later where it can move; a couple still stuck isn't matched again (pins and records stay).
-  const forbidden = new Set<string>();
-  const pinned = new Set((options.pins ?? []).flatMap((p) => (p.kind === 'marriage' ? [coupleKey(p.couple)] : [])));
+  // The player's rule-outs (#205) are never matched either.
+  const forbidden = new Set((options.pins ?? []).flatMap((p) => (isRuleOut(p) ? [coupleKey(p.couple)] : [])));
+  const pinned = new Set((options.pins ?? []).flatMap((p) => (isMarriagePin(p) ? [coupleKey(p.couple)] : [])));
   for (let i = 0; ; i++) {
     const plan = placedForSupports(run, ctx.assumptions, seedOnce(run, ctx, options, forbidden));
     const stuck = nonStarters(run, ctx.assumptions, plan).filter((c) => !pinned.has(coupleKey(c)));
@@ -311,7 +312,7 @@ function seedOnce(run: Run, ctx: SeedContext, options: SeedOptions, forbidden: R
   const married = new Set<RosterUnit>([...recorded.flat(), ...(recordedChrom ? ['chrom' as const] : [])]);
   const pinned: Couple[] = [];
   for (const pin of options.pins ?? []) {
-    if (pin.kind !== 'marriage') continue;
+    if (!isMarriagePin(pin)) continue;
     const [a, b] = pin.couple;
     if (married.has(a) || married.has(b) || pinned.some((c) => c.includes(a) || c.includes(b))) continue;
     pinned.push([a, b]);

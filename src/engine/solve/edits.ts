@@ -54,7 +54,7 @@ import { sealReaches } from '../sim/class-changes';
 import { mapsToS } from '../milestones';
 import { pairThresholds, pointsOfRank } from '../sim/support-growth';
 import { latestEntry, type Run } from '../run';
-import type { Plan, PlanItem, PlanLineup, PlanPriority, PlanRobin, WishlistChild } from './plan';
+import { isMarriagePin, isRuleOut, type Plan, type PlanItem, type PlanLineup, type PlanPriority, type PlanRobin, type WishlistChild } from './plan';
 import { UNAVAILABLE, genderOf, pairingsOf, placedForSupports, planFor, robinRef, type SeedContext, type SeedOptions } from './seed';
 import type { Edit, EditHints } from './step';
 import { brokenPins, lineupRules, rulesBroken } from './pins';
@@ -95,9 +95,12 @@ function rebuilt(run: Run, ctx: SeedContext, options: SeedOptions, prev: Plan, r
 export function keptPins(run: Run, ctx: SeedContext, options: SeedOptions, plan: Plan): Plan {
   const pins = options.pins ?? [];
   if (!brokenPins(plan, pins)) return plan;
-  const missing = pins.flatMap((p) => (p.kind === 'marriage' && !plan.wishlist.marriages.some((c) => c.includes(p.couple[0]) && c.includes(p.couple[1])) ? [p.couple] : []));
+  const missing = pins.flatMap((p) => (isMarriagePin(p) && !plan.wishlist.marriages.some((c) => c.includes(p.couple[0]) && c.includes(p.couple[1])) ? [p.couple] : []));
   const taken = new Set(missing.flat());
-  const marriages = [...plan.wishlist.marriages.filter((c) => !c.some((u) => taken.has(u))), ...missing];
+  // A ruled-out couple the plan marries (#205) is dropped.
+  const out = pins.filter(isRuleOut);
+  const ruledOut = (c: readonly [RosterUnit, RosterUnit]) => out.some((p) => c.includes(p.couple[0]) && c.includes(p.couple[1]));
+  const marriages = [...plan.wishlist.marriages.filter((c) => !c.some((u) => taken.has(u)) && !ruledOut(c)), ...missing];
   let next = rebuilt(run, ctx, options, plan, plan.robin, marriages);
   const end = next.wishlist.endpoint;
   const rules = lineupRules(pins, next.roadmap.order);
@@ -140,13 +143,14 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
   const recorded: Couple[] = (base.input.married ?? []).flatMap(([a, b]) => (b === 'maiden' ? [] : [[a, b] as const]));
   const fixed = new Set<RosterUnit>(recorded.flat());
   if ((base.input.married ?? []).some(([a, b]) => a === 'chrom' && b === 'maiden')) fixed.add('chrom');
-  for (const pin of options.pins ?? []) if (pin.kind === 'marriage' && !pin.couple.some((u) => fixed.has(u))) pin.couple.forEach((u) => fixed.add(u));
+  for (const pin of options.pins ?? []) if (isMarriagePin(pin) && !pin.couple.some((u) => fixed.has(u))) pin.couple.forEach((u) => fixed.add(u));
+  const ruledOut = new Set((options.pins ?? []).flatMap((p) => (isRuleOut(p) ? [[...p.couple].sort().join('+')] : [])));
   const snap = latestEntry(run)?.snapshot;
   const fielded = new Set<RosterUnit>([...base.input.army.map((a) => a.id), ...base.input.maps.flatMap((m) => [...m.joining, ...m.later].map((a) => a.id)), 'robin']);
   const units = rosterUnits({ ...facts, gender });
   const partners = new Map<RosterUnit, readonly RosterUnit[]>(units.map((u) => [u.id, u.partners]));
   const open = (u: RosterUnit) => !fixed.has(u) && fielded.has(u) && !UNAVAILABLE.has(stateOf(run.roster, u)) && snap?.states[u] !== 'dead';
-  const legal = (m: RosterUnit, w: RosterUnit) => (partners.get(m) ?? []).includes(w);
+  const legal = (m: RosterUnit, w: RosterUnit) => (partners.get(m) ?? []).includes(w) && !ruledOut.has([m, w].sort().join('+'));
   const couples = plan.wishlist.marriages;
   const free = couples
     .filter((c) => !c.includes(CHROM_FALLBACK_PARTNER as RosterUnit) && c.every(open))

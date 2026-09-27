@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, addEntry, createEngine, editEntry, latestEntry, recordMarriage, runFromRoster, withRenown, withRun, withShopLine, withSideGoalPin, withSideGoalSecured, withItemPin, withItemsUsed, unitName, type Route, type RosterUnit, type Run, type Snapshot, type UnitSnapshot } from '../engine';
-import { childStatsNote, flawlessReadout, heldText, itemPlanReadout, itemsUsedReadout, mapOrderReadout, solvedReadout, parseHeldText, parseSupportsText, roadmapReadout, shoppingReadout, sideGoalPlanReadout, sideGoalsReadout, supportsText } from './run-page';
+import { EMPTY_ROSTER, addEntry, createEngine, dismissMigrationNote, editEntry, exportRun, latestEntry, migrateRun, recordMarriage, runFromRoster, withPin, withRenown, withRun, withShopLine, withSideGoalPin, withSideGoalSecured, withSpouse, withItemPin, withItemsUsed, unitName, type Route, type RosterUnit, type Run, type Snapshot, type UnitSnapshot } from '../engine';
+import { childStatsNote, flawlessReadout, heldText, itemPlanReadout, itemsUsedReadout, mapOrderReadout, migrationNoteReadout, solvedReadout, parseHeldText, parseSupportsText, roadmapReadout, shoppingReadout, sideGoalPlanReadout, sideGoalsReadout, supportsText } from './run-page';
 import { chanceText } from './chance';
 
 describe('the map order readout (#179)', () => {
@@ -310,5 +310,27 @@ describe('the item plan on the Run view and Record results’ items used (#193)'
     const recorded = itemsUsedReadout(engine, withItemsUsed(done, entry, [], 2), entry, plan);
     expect(recorded.note).toBe('As you recorded it: tick what was used.');
     expect(recorded.items).toContainEqual(expect.objectContaining({ item: 'Energy Drop', used: false }));
+  });
+});
+
+describe('the migration note (#205)', () => {
+  const v1 = { ...JSON.parse(exportRun(runFromRoster(withSpouse(withRun(EMPTY_ROSTER, { gender: 'M' }), 'chrom', 'sumia', 'pinned')))), version: 1 };
+  const run = migrateRun(v1, { priorities: { lucina: 3, owain: 2 } });
+
+  it('lists what was kept and dropped, and offers a keep-in for each child the priorities rated high', () => {
+    expect(migrationNoteReadout(run)).toEqual({
+      kept: ['Marriage pin: Chrom and Sumia'],
+      dropped: ['Priorities: Lucina 3, Owain 2'],
+      keepIn: [
+        { unit: 'lucina', text: 'Keep Lucina in' },
+        { unit: 'owain', text: 'Keep Owain in' },
+      ],
+    });
+  });
+
+  it('drops a keep-in once taken, and goes once dismissed', () => {
+    const kept = withPin(run, { kind: 'keep', unit: 'lucina', keep: 'in' });
+    expect(migrationNoteReadout(kept)!.keepIn.map((k) => k.unit)).toEqual(['owain']);
+    expect(migrationNoteReadout(dismissMigrationNote(kept))).toBeUndefined();
   });
 });

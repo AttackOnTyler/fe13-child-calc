@@ -12,6 +12,7 @@ import { removeClassChange, tierOfClass, withClassChange, withCountOverride, typ
 import { entryAfterShopping, goldAfterShopping, removeShopLine, shopPrice, withShopLine, type ShopKind, type ShopLine } from '../engine';
 import { withRenown, withSideGoalPin, withSideGoalSecured, type SideGoalDecision, type SideGoalId } from '../engine';
 import { runItemPins, withItemPin, withItemsUsed } from '../engine';
+import { dismissMigrationNote, withPin } from '../engine';
 import { CHILD_UNITS } from '../game-data/children';
 import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
 import { h } from './dom';
@@ -856,6 +857,7 @@ function chapterLog(ctx: RunContext): HTMLElement {
         }),
       ),
     ),
+    migrationNoteSection(ctx),
     nextMapSection(ctx),
     flawlessSection(ctx),
     sideGoalsSection(ctx),
@@ -889,6 +891,41 @@ function chapterLog(ctx: RunContext): HTMLElement {
       h('span', { class: 'muted small' }, 'A new entry starts as a copy of the last; the map’s recruits are filled in from their join data, a child’s from its parents.'),
     ),
     ...newest.map((e, i) => entryBlock(ctx, e, i === 0, flagged.has(e.id))),
+  );
+}
+
+/**
+ * The one-time migration note (#205), as the Run view shows it until dismissed: what of the old plan was kept as pins
+ * and what was dropped, and a keep-in pin to take for each child the former priorities rated high (those already kept
+ * in or out left off). Undefined when there's no note.
+ */
+export function migrationNoteReadout(run: Run): { readonly kept: readonly string[]; readonly dropped: readonly string[]; readonly keepIn: readonly { readonly unit: RosterUnit; readonly text: string }[] } | undefined {
+  const note = run.migration;
+  if (!note) return undefined;
+  const kept = new Set((run.pins ?? []).flatMap((p) => (p.kind === 'keep' ? [p.unit] : [])));
+  const keepIn = note.keepIn.filter((u) => !kept.has(u)).map((unit) => ({ unit, text: `Keep ${unitName(unit, run.roster.run.gender)} in` }));
+  return { kept: note.kept, dropped: note.dropped, keepIn };
+}
+
+function migrationNoteSection(ctx: RunContext): HTMLElement | null {
+  const r = migrationNoteReadout(ctx.run);
+  if (!r) return null;
+  const list = (title: string, rows: readonly string[]) => (rows.length ? h('div', {}, h('b', {}, title), h('ul', {}, ...rows.map((x) => h('li', {}, x)))) : null);
+  return h(
+    'div',
+    { class: 'banner migration-note' },
+    h('b', {}, 'Your run moved to endpoint-first planning'),
+    list('Kept as pins', r.kept),
+    list('Dropped', r.dropped),
+    r.keepIn.length
+      ? h(
+          'div',
+          { class: 'row' },
+          h('span', { class: 'muted small' }, 'Your old priorities rated these children high: keep them in the wishlist?'),
+          ...r.keepIn.map((k) => h('button', { class: 'mini', onclick: () => ctx.setRun(withPin(ctx.run, { kind: 'keep', unit: k.unit, keep: 'in' })) }, k.text)),
+        )
+      : null,
+    h('div', { class: 'row' }, h('button', { class: 'ghost small', onclick: () => ctx.setRun(dismissMigrationNote(ctx.run)) }, 'Got it')),
   );
 }
 

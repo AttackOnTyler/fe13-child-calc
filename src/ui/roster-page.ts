@@ -44,7 +44,7 @@ export type RosterContext = {
   readonly setRoster: (next: Roster) => void;
   /** Sets the roster after a Deploy or deployment-role edit, noting the edit for the guide. */
   readonly setDeployment: (next: Roster) => void;
-  /** Wipes the roster (after the user confirms); scoring settings are left alone. */
+  /** Wipes the run, `run:v2` (after the user confirms); scoring settings and checked rules are left alone. */
   readonly clearAll: () => void;
   /** The children ledger edits the same priorities and plan presets as the Plan sidebar. */
   readonly plan: ChildPlanControls;
@@ -347,9 +347,9 @@ export function rosterPage(ctx: RosterContext): HTMLElement[] {
       'button',
       {
         class: 'clear-all',
-        title: 'Wipe run facts, unit states and marriages (scoring settings are kept)',
+        title: 'Wipe the whole run: run facts, unit states, marriages, pins and the chapter log (scoring settings and checked rules are kept)',
         onclick: () => {
-          if (confirm('Clear the whole roster: run facts, unit states and marriages? Scoring settings and your chapter log’s units, gold and convoy are kept.')) ctx.clearAll();
+          if (confirm('Clear the whole run: run facts, unit states, marriages, pins and the chapter log? Export it first from the Run view to keep it. Scoring settings and checked rules are kept.')) ctx.clearAll();
         },
       },
       'Clear all',

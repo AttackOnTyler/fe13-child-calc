@@ -125,7 +125,8 @@ export type Plan = {
  * already happened (a couple the log marries, a span that's all played, a side goal on a recorded map) or on a unit
  * that is dead or missed is dropped (`livePins`). Stored on the run (`Run.pins`; side goals in `Run.sideGoals`).
  *
- * - **Marriage:** a couple the player wants.
+ * - **Marriage:** a couple the player wants; or, with `forbid`, a couple ruled out (#205: today's Plan page rule-outs),
+ *   which no plan marries. Either way the same choice (`pinKey`), so pinning a ruled-out couple replaces the rule-out.
  * - **Span:** a position (Lead, Back, Solo, or out of the lineup) or a pair (with `partner`) kept over a span of the
  *   map order: one map (`to` = `from`, the preparation page's default: `mapSpanPin`), a range, or from a map on (`to`
  *   absent: to the endpoint). "Robin leads Prologue–Ch 9"; "Chrom backs Robin from Ch 5".
@@ -139,7 +140,17 @@ export type Plan = {
  */
 export type PlanPin = MarriagePin | SpanPin | KeepPin | SideGoalPin | ItemPin;
 
-export type MarriagePin = { readonly kind: 'marriage'; readonly couple: readonly [RosterUnit, RosterUnit] };
+export type MarriagePin = {
+  readonly kind: 'marriage';
+  readonly couple: readonly [RosterUnit, RosterUnit];
+  /** A rule-out: the couple never marries in a plan. */
+  readonly forbid?: true;
+};
+
+/** A marriage pin the plan must make (not a rule-out). */
+export const isMarriagePin = (p: PlanPin): p is MarriagePin => p.kind === 'marriage' && !p.forbid;
+/** A marriage pin ruling its couple out. */
+export const isRuleOut = (p: PlanPin): p is MarriagePin => p.kind === 'marriage' && p.forbid === true;
 
 /** Where a span pin keeps its unit: a position, or out of the lineup. */
 export type SpanPosition = Position | 'out';
@@ -254,8 +265,8 @@ export type SolveCursor = {
 };
 
 /**
- * The roster's pinned marriages as marriage pins, each couple once: what the player kept on today's Plan page, until
- * the pins move into the plan's edits (#205). A lost pin (either unit dead, missed or benched) isn't one.
+ * The roster's pinned marriages as marriage pins, each couple once: what the player kept on today's Plan page since
+ * `run:v2` migrated the saved ones into `Run.pins` (#205), until #212 retires that page. A lost pin (either unit dead, missed or benched) isn't one.
  */
 export function marriagePins(roster: Roster): MarriagePin[] {
   const out: MarriagePin[] = [];
