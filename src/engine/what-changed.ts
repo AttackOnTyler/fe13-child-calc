@@ -12,6 +12,7 @@
  * It's dismissed with "got it" (`Run.dismissedChanges`, by entry id). What it cost (#208) prices each event on the map
  * (`whatItCost`, what-it-cost.ts).
  */
+import { expFactors, forecastPercentile } from './corrections';
 import type { FlawlessChance } from './flawless';
 import { remainingMapOrder } from './map-order';
 import type { ReadingKind, Readings } from './readings';
@@ -27,7 +28,9 @@ export function forecastBefore(run: Run, chance: FlawlessChance, readings?: Read
   const first = chance.maps[0];
   if (!first) return undefined;
   const map = remainingMapOrder(run).steps.find((s) => s.key === first.key)?.map ?? first.key;
-  const exp = chance.exp.find((m) => m.key === first.key)?.units.map((u) => ({ unit: u.unit, exp: u.exp, level: { ...u.level } })) ?? [];
+  // The learned correction each unit was forecast under (#196), for learning to take back out.
+  const factors = expFactors(run);
+  const exp = chance.exp.find((m) => m.key === first.key)?.units.map((u) => ({ unit: u.unit, exp: u.exp, level: { ...u.level }, ...(factors[u.unit] ? { factor: factors[u.unit] } : {}) })) ?? [];
   // The plan's spending at the armory stop after the map (#208), before the map after it: each purchase by its share.
   const stop = chance.maps[1] && chance.shopping.find((s) => s.key === chance.maps[1]!.key);
   const spend = stop ? stop.lines.reduce((a, l) => a + l.cost * l.share, 0) : 0;
@@ -66,6 +69,8 @@ export type ExpAgainstForecast = {
   readonly spread: { readonly low: number; readonly median: number; readonly high: number };
   /** Below the forecast's 10th percentile, inside its 10th–90th (to 5 EXP), or above its 90th. */
   readonly against: 'below' | 'inside' | 'above';
+  /** Its level's percentile in the forecast's spread, 0–1 (#196, `forecastPercentile`). */
+  readonly percentile: number;
 };
 
 export type WhatChanged = {
@@ -101,7 +106,7 @@ export function whatChanged(run: Run, now: { readonly chance?: { readonly chance
     const level = u.level + u.exp / 100;
     // Within half a tenth of a level (5 EXP) of the spread reads inside: the card writes levels to a tenth.
     const against = level < x.level.low - 0.05 ? 'below' : level > x.level.high + 0.05 ? 'above' : 'inside';
-    return [{ unit: x.unit, earned, forecast: x.exp, level, spread: x.level, against }];
+    return [{ unit: x.unit, earned, forecast: x.exp, level, spread: x.level, against, percentile: forecastPercentile(level, x.level) }];
   });
   const before = new Map((f?.readings ?? []).map((r) => [r.unit, r]));
   const readings = (now.readings?.readings ?? []).flatMap((r) => {

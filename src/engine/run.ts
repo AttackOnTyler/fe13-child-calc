@@ -109,7 +109,11 @@ export type EntryForecast = {
   readonly map: string;
   readonly noDeath?: number;
   readonly spend?: number;
-  readonly exp: readonly { readonly unit: RosterUnit; readonly exp: number; readonly level: { readonly low: number; readonly median: number; readonly high: number } }[];
+  /**
+   * Each unit's forecast EXP on the map and its level spread; `factor`: the learned correction it was forecast under
+   * (#196; absent: none), which learning takes back out to read against the uncorrected forecast.
+   */
+  readonly exp: readonly { readonly unit: RosterUnit; readonly exp: number; readonly level: { readonly low: number; readonly median: number; readonly high: number }; readonly factor?: number }[];
   readonly readings: readonly { readonly unit: RosterUnit; readonly reading: 'on-track' | 'at-risk' | 'behind'; readonly pending?: true }[];
 };
 
@@ -753,7 +757,14 @@ function parseEntryForecast(v: unknown): EntryForecast | undefined {
   const n = (x: unknown) => typeof x === 'number' && Number.isFinite(x);
   const exp = (Array.isArray(v.exp) ? v.exp : []).flatMap((x): EntryForecast['exp'][number][] =>
     isObject(x) && isText(x.unit) && n(x.exp) && isObject(x.level) && n(x.level.low) && n(x.level.median) && n(x.level.high)
-      ? [{ unit: x.unit as RosterUnit, exp: x.exp as number, level: { low: x.level.low as number, median: x.level.median as number, high: x.level.high as number } }]
+      ? [
+          {
+            unit: x.unit as RosterUnit,
+            exp: x.exp as number,
+            level: { low: x.level.low as number, median: x.level.median as number, high: x.level.high as number },
+            ...(n(x.factor) && (x.factor as number) > 0 && x.factor !== 1 ? { factor: x.factor as number } : {}),
+          },
+        ]
       : [],
   );
   const readings = (Array.isArray(v.readings) ? v.readings : []).flatMap((x): EntryForecast['readings'][number][] =>

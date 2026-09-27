@@ -622,7 +622,7 @@ export function whatChangedReadout(engine: Engine, run: Run, progress: SolveProg
   // A unit with no EXP forecast or earned (a Back that never struck, a unit left idle) has nothing to compare.
   const exp = w.exp.filter((x) => x.forecast >= 0.5 || x.earned).map(
     (x) =>
-      `${name(x.unit)}: ${x.earned === undefined ? 'EXP not comparable (a class change)' : `${x.earned} EXP`} against ${Math.round(x.forecast)} forecast; level ${lv(x.level)}, ${x.against === 'inside' ? 'inside' : x.against === 'below' ? 'below' : 'above'} the forecast’s ${lv(x.spread.low)}–${lv(x.spread.high)}`,
+      `${name(x.unit)}: ${x.earned === undefined ? 'EXP not comparable (a class change)' : `${x.earned} EXP`} against ${Math.round(x.forecast)} forecast; level ${lv(x.level)}, ${x.against === 'inside' ? 'inside' : x.against === 'below' ? 'below' : 'above'} the forecast’s ${lv(x.spread.low)}–${lv(x.spread.high)} (p${Math.round(x.percentile * 100)})`,
   );
   const readings = w.readings.map((r) => `${name(r.unit)}: ${READING_WORDS[r.before]}${r.wasPending ? '?' : ''} → ${READING_WORDS[r.after]}${r.pending ? '?' : ''}`);
   const dismissed = new Set(run.dismissedProposals ?? []);

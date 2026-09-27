@@ -22,6 +22,7 @@ import { mapsView, type MapsContext } from './maps-page';
 import { beforeTheLock, inboxNudge, inboxProgress, inboxView, robinName, robinToLock } from './inbox';
 import { GAME_OVER_UNITS, forecastBefore, openLosses, proposalId, recordMissed, unrecordLoss, withEntryForecast, type Comparison, type WhatItCost } from '../engine';
 import { setComparison, whyText, type WhyMark } from './why';
+import { calibration, learnCorrections, withCorrectionsOff, withLearned } from '../engine';
 
 export type RunContext = {
   readonly engine: Engine;
@@ -606,6 +607,73 @@ function sideGoalsSection(ctx: RunContext): HTMLElement {
       ),
     ),
     h('span', { class: 'muted small' }, 'Chasing costs actions on the map (a Thief killed, a village visited, a chest opened, a villager guarded) by the turn it would be lost; the flawless chance shows the share of runs that secure each one.'),
+  );
+}
+
+/** The Run view's forecast learning (#196), as the page writes it. */
+export type ForecastLearningReadout = {
+  /** The learned corrections as a stated assumption, or switched off. */
+  readonly assumption: string;
+  readonly off: boolean;
+  /** Each unit's factor with its evidence and each recorded result's percentile. */
+  readonly corrections: readonly string[];
+  readonly calibration: string;
+  /** The fall log against the no-death forecast (#208); undefined with no map recorded against one. */
+  readonly falls: string | undefined;
+};
+
+/**
+ * The learned EXP corrections and calibration (#196): each unit's factor (as the runs apply it) with the maps, EXP and
+ * forecast it was learned from and its recorded results' percentiles; the share of recorded results inside the
+ * forecast's 10th–90th percentile and their mean percentile; and the falls against the no-death forecast.
+ */
+export function forecastLearningReadout(run: Run): ForecastLearningReadout {
+  const gender = run.roster.run.gender;
+  const off = !!run.corrections?.off;
+  const factors = run.corrections?.units ?? {};
+  const rows = run.calibration ?? [];
+  const p = (x: number) => `p${Math.round(x * 100)}`;
+  const corrections = learnCorrections(run).flatMap((c) => {
+    const factor = factors[c.unit];
+    if (factor === undefined) return [];
+    const ps = rows.filter((r) => r.unit === c.unit).map((r) => p(r.percentile));
+    return [`${unitName(c.unit, gender)} ×${factor.toFixed(2)} (${c.maps} map${c.maps === 1 ? '' : 's'}: ${c.earned} EXP against ${c.forecast} forecast${ps.length ? `; recorded at ${ps.join(', ')}` : ''})`];
+  });
+  const c = calibration(run);
+  return {
+    assumption: off ? 'Learned EXP corrections, switched off: the forecast reads uncorrected.' : 'Learned EXP corrections, assumed on every map after the last recorded one:',
+    off,
+    corrections,
+    calibration: c.results
+      ? `Calibration: ${c.inside} of ${c.results} recorded result${c.results === 1 ? '' : 's'} inside the forecast’s 10th–90th percentile (about 80% if it’s honest); mean percentile ${p(c.meanPercentile!)} (about p50 if unbiased).`
+      : 'Calibration: no recorded result against a forecast yet.',
+    falls: c.falls.maps ? `Falls: ${c.falls.observed} of ${c.falls.maps} map${c.falls.maps === 1 ? '' : 's'} with a fall or death, against ${c.falls.expected.toFixed(1)} expected by the no-death forecast.` : undefined,
+  };
+}
+
+/** The forecast learning section (#196): corrections as a stated assumption with its switch, and the calibration line. */
+function forecastLearningSection(ctx: RunContext): HTMLElement {
+  const r = forecastLearningReadout(ctx.run);
+  return h(
+    'details',
+    { class: 'banner forecast-learning' },
+    h('summary', {}, h('b', {}, 'Forecast learning'), h('span', { class: 'muted small' }, ` · ${r.corrections.length ? `${r.corrections.length} correction${r.corrections.length === 1 ? '' : 's'}${r.off ? ' (off)' : ''}` : 'no corrections'}`)),
+    h('div', { class: 'small' }, r.calibration),
+    r.falls ? h('div', { class: 'small' }, r.falls) : null,
+    r.corrections.length
+      ? h(
+          'div',
+          { class: 'small' },
+          h('div', {}, r.assumption),
+          ...r.corrections.map((t) => h('div', { class: r.off ? 'muted' : '' }, t)),
+          h(
+            'label',
+            { class: 'small', title: 'Compare the forecast with and without what the recorded maps taught it' },
+            h('input', { type: 'checkbox', checked: !r.off, onchange: (ev) => ctx.setRun(withCorrectionsOff(ctx.run, !(ev.target as HTMLInputElement).checked)) }),
+            ' Apply the learned corrections',
+          ),
+        )
+      : h('span', { class: 'muted small' }, 'Each recorded map teaches each unit an EXP factor against the forecast kept on its entry (shrunk toward ×1, ×0.5–×2).'),
   );
 }
 
@@ -1252,7 +1320,8 @@ function recordResults(ctx: RunContext, e: RunEntry, step: number): HTMLElement 
       { class: 'row' },
       h('button', { class: 'ghost', disabled: step === 0, onclick: () => ctx.setRecording({ entry: e.id, step: step - 1 }) }, '← Back'),
       last
-        ? h('button', { onclick: () => (ctx.setRecording(undefined), ctx.setOpenEntry(undefined)) }, 'Done')
+        ? // The map's end teaches the forecast (#196): corrections and calibration relearned from the log.
+          h('button', { onclick: () => (ctx.setRun(withLearned(ctx.run)), ctx.setRecording(undefined), ctx.setOpenEntry(undefined)) }, 'Done')
         : h('button', { onclick: () => ctx.setRecording({ entry: e.id, step: step + 1 }) }, 'Next →'),
       h('span', { class: 'muted small' }, 'Anything you skip keeps its copied value.'),
     ),
@@ -1415,6 +1484,7 @@ function chapterLog(ctx: RunContext): HTMLElement {
     // after it (#206) titled "Before <map>", What changed above it, and Robin (what the lock cost) below Next map.
     ...(beforeTheLock(run) ? [inboxView(ctx, flawlessSection(ctx, true), robinSection(ctx, true)), nextMapSection(ctx)] : [inboxView(ctx, flawlessSection(ctx, true), null), nextMapSection(ctx), robinSection(ctx)]),
     sideGoalsSection(ctx),
+    forecastLearningSection(ctx),
     mapOrderSection(ctx),
     h(
       'div',
@@ -1507,7 +1577,7 @@ function entryBlock(ctx: RunContext, e: RunEntry, latest: boolean, flagged: bool
         ? h('span', { class: 'chip small warn', title: 'A unit’s level reset here: open the entry to record the class change' }, '⚠ class change to record')
         : null,
       !latest || ctx.run.entries.length > 1
-        ? h('button', { class: 'mini', title: 'Remove this entry', onclick: () => confirm('Remove this entry?') && ctx.setRun(removeEntry(ctx.run, e.id)) }, '✕')
+        ? h('button', { class: 'mini', title: 'Remove this entry', onclick: () => confirm('Remove this entry?') && ctx.setRun(withLearned(removeEntry(ctx.run, e.id))) }, '✕')
         : null,
     ),
     open ? snapshotEditor(ctx, e) : null,

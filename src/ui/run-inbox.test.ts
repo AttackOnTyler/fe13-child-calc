@@ -5,6 +5,7 @@ import {
   createEngine,
   editEntry,
   forecastBefore,
+  forecastPercentile,
   latestEntry,
   proposalId,
   recordFallen,
@@ -143,7 +144,7 @@ describe('What changed (#206)', () => {
     const w = whatChangedReadout(engine, played, { ...progress, chance: { ...chance, chance: 0.3, margin: 0.04 } })!;
     expect(w.title).toBe(`What changed on ${label(map)}`);
     expect(w.chance).toBe('Flawless chance: 42.0% ±5.0 before → 30.0% ±4.0 now (−12.0 points)');
-    expect(w.exp).toEqual([`Chrom: ${100 + 30 - was.exp} EXP against 120 forecast; level ${(was.level + 1.3).toFixed(1)}, ${was.level + 1.3 > 2.9 ? 'above' : 'inside'} the forecast’s 1.2–2.9`]);
+    expect(w.exp).toEqual([`Chrom: ${100 + 30 - was.exp} EXP against 120 forecast; level ${(was.level + 1.3).toFixed(1)}, ${was.level + 1.3 > 2.9 ? 'above' : 'inside'} the forecast’s 1.2–2.9 (p${Math.round(forecastPercentile(was.level + 1.3, { low: 1.2, median: 2.1, high: 2.9 }) * 100)})`]);
     expect(w.readings).toEqual(['Chrom: on track → behind']);
     expect(w.improvements).toBe('The re-solve found 1 improvement: in the inbox below.');
     // Before the re-solve reads it; recorded with no headline worked out.
