@@ -328,7 +328,7 @@ button.skill.linkish { padding: 0 6px; font-size: 11px; }
 .lstatus.missed, .lstatus.dead { color: var(--neg); }
 .grid.ledger tr.ledger-dead td.uname, .grid.ledger tr.ledger-missed td.uname { text-decoration: line-through; color: var(--muted); }
 
-/* Guide: welcome box, checklist dock and its pill, and the highlight a step's jump leaves on its control. */
+/* Guide: welcome box, its panel (Plan a run's steps or Going deeper), and the highlight a jump leaves on its control. */
 .topbar .guide-open { margin-left: auto; }
 .topbar .guide-open ~ .validation-toggle { margin-left: 0; }
 .gw-scrim { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; background: #000a; }
@@ -338,15 +338,8 @@ button.skill.linkish { padding: 0 6px; font-size: 11px; }
 .gw p { margin: 0; }
 .gw-choice { display: grid; gap: 2px; text-align: left; padding: 10px 12px; }
 .gw-choice:hover, .gw-choice:focus-visible { border-color: var(--accent); }
-.gw-look { justify-self: start; }
 .gd { position: fixed; right: 316px; bottom: 16px; z-index: 45; width: 340px; max-height: min(72vh, 640px); overflow: auto; padding: 10px 12px; background: #1d2330; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 30px #000a; }
-.gd-pillbox { width: auto; max-width: 340px; padding: 0; overflow: visible; display: grid; justify-items: end; gap: 6px; background: transparent; border: 0; box-shadow: none; }
-.gd-pill { padding: 6px 12px; border-radius: 999px; background: #1d2330; box-shadow: 0 8px 30px #000a; }
-.gd-loss { display: flex; gap: 6px; align-items: center; margin: 6px 0 0; padding: 4px 4px 4px 8px; background: #1d2330; border: 1px solid var(--warn); border-radius: 6px; }
-.gd-loss .gd-link { margin-right: auto; }
-.gd-pillbox .gd-loss { margin: 0; box-shadow: 0 8px 30px #000a; }
 .gd-head { display: flex; gap: 6px; align-items: center; }
-.gd-head .seg button.on { border-color: var(--accent); color: var(--accent); }
 .gd-count { margin-left: auto; }
 .gd-ask { margin: 6px 0 4px; }
 .gd-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 1px; }
@@ -358,13 +351,11 @@ button.skill.linkish { padding: 0 6px; font-size: 11px; }
 .gd li.open .gd-title { color: var(--accent); }
 .gd-take { margin: 0 2px 6px 24px; }
 .gd-path { margin-bottom: 2px; }
-.gd-note { margin: 2px 2px 6px 24px; padding-left: 6px; border-left: 2px solid var(--line); }
 .gd-links { display: grid; justify-items: start; margin: 0 2px 6px 24px; }
 .gd-link { border: 0; background: transparent; padding: 1px 0; color: var(--accent); text-align: left; }
 .gd-link:hover { text-decoration: underline; }
 .gd-deeper { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
-.gd-deeper-head { display: block; width: 100%; margin: 0 0 4px; padding: 2px; border: 0; background: transparent; text-align: left; font-size: 13px; font-weight: 600; color: var(--text); }
-button.gd-deeper-head:hover { background: var(--hover); }
+.gd-deeper-head { margin: 0 0 4px; padding: 2px; font-size: 13px; font-weight: 600; color: var(--text); }
 .gd-deeper-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
 .gd-q { padding: 2px; border-radius: 4px; }
 .gd-q-head { display: flex; gap: 6px; align-items: baseline; justify-content: space-between; }
@@ -377,13 +368,10 @@ button.gd-deeper-head:hover { background: var(--hover); }
 .gd-terms dd { margin: 0 0 4px 10px; }
 .guide-spot { outline: 2px solid var(--accent) !important; outline-offset: 3px; border-radius: 4px; animation: guide-spot 1.8s ease-out; }
 @keyframes guide-spot { 0%, 60% { box-shadow: 0 0 0 6px #5aa9ff55; } 100% { box-shadow: 0 0 0 0 transparent; } }
-/* Phone: the open dock is its own bottom sheet; its pill sits just above the Scoring sheet's handle. */
+/* Phone: the guide’s panel is its own bottom sheet, closed when the Scoring sheet opens or a jump needs the screen. */
 @media (max-width: 700px) {
   .gd { left: 0; right: 0; bottom: 0; width: auto; max-height: 75vh; border-radius: 10px 10px 0 0; border-bottom: 0; box-shadow: 0 -8px 24px #0008; }
-  .gd.gd-pillbox { left: auto; right: 8px; bottom: 46px; max-width: calc(100vw - 16px); max-height: none; border-radius: 0; box-shadow: none; }
   .gd-head { flex-wrap: wrap; }
-  /* The open Scoring sheet has the screen: the pill waits for it to close (? Guide still opens the dock). */
-  .shell:has(.panel.open) ~ .guide-layer .gd-pillbox { display: none; }
 }
 
 /* Units view and unit pages (#101) */

@@ -1,19 +1,50 @@
 /**
- * The guide's Going deeper questions as data: each has a one-line answer (or, for Why this spouse?, three steps), a
- * jump to the view and control that answers it, and a Terms fold for the drill-down-only words. Entries never tick.
+ * The guide's Going deeper questions as data: each has a one-line answer (or ordered lines), a jump to the view and
+ * control that answers it, and a Terms fold for the drill-down-only words. Entries never tick. `? Guide` opens them,
+ * grouped into Your run and Exploring (#213; spec #175, the guide): `DEEPER_GROUPS` puts every entry in one group.
  */
 import type { ChildId } from '../engine';
 import type { GuideTarget } from './guide';
-import { BASIS_LABELS, EXPLORER_NOTE, LABELS, OPINION_NOTE } from './labels';
+import { BASIS_LABELS, EXPLORER_NOTE, LABELS, LEDGER_UI, OPINION_NOTE, STATE_UI } from './labels';
+import { CONTEXT_LABELS } from './scoring-prefs';
 
-export type DeeperId = 'strongest' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners' | 'robin-preview' | 'front-door-pairings' | 'unit-opinion' | 'map-data' | 'chapter-log' | 'record-results' | 'matchups' | 'threats' | 'deployment' | 'supply' | 'how-to-run';
+export type DeeperId =
+  | 'start'
+  | 'robin-choice'
+  | 'inbox-before'
+  | 'wishlist'
+  | 'why'
+  | 'inbox-after'
+  | 'loss'
+  | 'strongest'
+  | 'pairing-build'
+  | 'robin'
+  | 'preset'
+  | 'scoring'
+  | 'play-context'
+  | 'assumption'
+  | 'unit-class-tree'
+  | 'unit-partners'
+  | 'robin-preview'
+  | 'front-door-pairings'
+  | 'unit-opinion'
+  | 'map-data'
+  | 'chapter-log'
+  | 'record-results'
+  | 'matchups'
+  | 'threats'
+  | 'deployment'
+  | 'supply'
+  | 'how-to-run';
 
 /**
  * Where an entry's jump goes: the All children leaderboard, a child's table (the one `guideChild` picks, with its Robin
- * row open for `robinRow`), the Validation panel, the Scoring sidebar on the current view, or Lon'qu's unit page. Then it highlights `target`.
+ * row open for `robinRow`), the Validation panel, the Scoring sidebar on the current view, Lon'qu's unit page, Robin's
+ * page, a child's front door, the Prologue's map page, the Run view (`log`: its inbox, Next map and chapter log), the
+ * Wishlist tab, Roster, or nowhere (`here`: a header control, on every view). Then it highlights `target`.
  */
 export type DeeperJump = {
-  readonly to: 'leaderboard' | 'child' | 'validation' | 'scoring' | 'unit' | 'robin' | 'door' | 'map' | 'log';
+  readonly to: 'leaderboard' | 'child' | 'validation' | 'scoring' | 'unit' | 'robin' | 'door' | 'map' | 'log' | 'wishlist' | 'roster' | 'here';
   readonly target: GuideTarget;
   readonly robinRow?: true;
 };
@@ -31,8 +62,10 @@ export type DeeperEntry = {
   readonly terms: readonly DeeperTerm[];
 };
 
-const { runFacts, allChildren, skills, assumption, validation, spdToTarget, spdBeyond, lock } = LABELS;
+const { runFacts, allChildren, skills, assumption, validation, spdToTarget, spdBeyond, lock, roster, married, ledgerStatus, playContext } = LABELS;
 const bases = Object.values(BASIS_LABELS).join(' / ');
+const stateLabel = (s: keyof typeof STATE_UI) => `${STATE_UI[s].icon} ${STATE_UI[s].label}`;
+const ledgerLabel = (s: keyof typeof LEDGER_UI) => `${LEDGER_UI[s].mark} ${LEDGER_UI[s].label}`;
 
 const PAIRING: DeeperTerm = {
   term: 'pairing',
@@ -44,6 +77,86 @@ const SCORE: DeeperTerm = {
 };
 
 export const DEEPER: readonly DeeperEntry[] = [
+  {
+    id: 'start',
+    question: 'Where do I start a run?',
+    answer: [
+      `${roster} › ${runFacts}: your run’s difficulty (Normal to Lunatic+), mode (Classic: the fallen stay dead; Casual: they come back) and route: ` +
+        `${CONTEXT_LABELS['main-story']}, or ${CONTEXT_LABELS['full-route']} (the non-grind DLC woven into the campaign, ending at Apotheosis).`,
+      `Robin’s gender, asset and flaw are ${runFacts} too: once set, the other Robins and Morgans drop out. Set them if you know your Robin; otherwise leave them open, and the Run view’s Robin card compares Robins for you.`,
+      `The route sets the explorer’s ${playContext} to match. Change the ${playContext} to explore another one: the wishlist always reads its build templates from the route.`,
+      `The rest of ${roster} is your army’s hard facts: each unit’s state (${stateLabel('available')}, ${stateLabel('not-recruited')}, ${stateLabel('missed')}, ${stateLabel('dead')}) and each marriage that happened (${married}). Record results keeps them up to date as you play.`,
+    ],
+    jump: { to: 'roster', target: 'run-facts' },
+    terms: [{ term: 'Run facts', def: 'What you’ve decided about the run: difficulty, mode, route, and Robin’s gender, asset and flaw.' }],
+  },
+  {
+    id: 'robin-choice',
+    question: 'Which Robin should my run use?',
+    answer: [
+      'The Run view’s inbox opens on the Robin card: Compare Robins works out, in the background, the best plan with each Robin, and shows each one’s flawless chance against your plan’s.',
+      `Choose takes a Robin’s whole wishlist as your plan. ${lock} Robin and start writes that Robin into ${runFacts} and locks only Robin: the rest of the wishlist stays editable and re-solves after every map. Unlock reopens it.`,
+      'The no-Robin option solves the best plan with Robin no one’s parent (no Morgan): how much Robin’s marriage is worth.',
+    ],
+    jump: { to: 'log', target: 'robin-card' },
+    terms: [{ term: 'Robin Lock', def: `Writing the chosen Robin into ${runFacts} before the Prologue. It locks Robin only.` }],
+  },
+  {
+    id: 'inbox-before',
+    question: 'What needs me before the run starts?',
+    answer: [
+      'The Run view’s inbox, “Before the run: what needs you”, is one list in order. First the flawless chance with its ± and the ceiling, then the Robin card.',
+      'The search’s improvements, as proposals: Accept adopts the plan, Dismiss hides it. Close calls have no measurable difference: Take it if you like it better.',
+      '“Anything else you want different?” searches every edit, keeping a unit in or out among them, each with its cost in flawless points: Pin it makes it a pin every plan keeps, Make it changes your plan.',
+      'Your edits lists what you pinned and made, with the pins’ combined cost and an Undo each. Then the wishlist in one line, and Lock Robin and start last.',
+    ],
+    jump: { to: 'log', target: 'inbox' },
+    terms: [
+      { term: 'flawless chance', def: 'The chance your plan reaches and clears its endpoint with no unit dying, from the next map on. Every plan is ranked by it.' },
+      { term: 'ceiling', def: 'The endpoint’s flawless chance with every wishlist unit at its effective caps: no plan for that army can beat it.' },
+      { term: 'edit', def: 'One change to a plan: a marriage, Robin, a class, a build skill, a passed skill, a lineup, a pair, an EXP priority, a paralogue’s place or a seal.' },
+      { term: 'pin', def: 'A hard constraint every plan keeps: a marriage, a span, keep-in or keep-out, a carrier, a side goal, the Robin Lock. Its cost is what it takes off the flawless chance.' },
+    ],
+  },
+  {
+    id: 'wishlist',
+    question: 'What is my run working towards?',
+    answer: [
+      'The Wishlist tab (beside Run in the rail) is the endpoint army: Lead and Back rows, each unit with its class, 5-skill build, worth, parents and the skills they pass, and its reading (on track, at risk or behind). The rail’s count is the units not on track.',
+      'Click a unit to list every edit that touches it with its cost, keeping it in or out among them; making one is the same as in the inbox.',
+      'Also in the plan lists units the plan needs off the endpoint lineup (a parent there for its child). Reserves are in order, each naming the loss it mainly covers.',
+      `The children ledger lists each child with its fixed parent, the wishlist’s parents and the skills they pass, and its ${ledgerStatus}: ${ledgerLabel('wished')}, ${ledgerLabel('out')}, ${ledgerLabel('married')}, ${ledgerLabel('missed')} or ${ledgerLabel('dead')}.`,
+    ],
+    jump: { to: 'wishlist', target: 'wishlist-army' },
+    terms: [
+      { term: 'wishlist', def: 'The endpoint army your plan works towards: who fields, paired with whom, in which class and build, and the marriages that make its children.' },
+      { term: 'worth', def: 'How many points of flawless chance the plan loses without the unit, its slot refilled and the roadmap re-solved. A parent’s includes its children.' },
+      { term: 'reserve', def: 'A wishlist unit beyond the endpoint’s deploy count, in the order they step in when a wishlist unit is lost or falls behind.' },
+    ],
+  },
+  {
+    id: 'why',
+    question: 'Where does this number come from?',
+    answer: [
+      'Every number on the Run view and the Wishlist tab is a link (dotted underline): click it and the Why panel opens beside the page.',
+      'It gives the value, one sentence on what it is, its math and the rows that moved it. A row drills further, with breadcrumbs back, until the trail stops and says why.',
+      'It lists the blind spots touching the number, each with its lean: ▲ may read high, ▼ may read low, or ◆ either way. Its Stated assumptions tab lists every blind spot.',
+    ],
+    jump: { to: 'log', target: 'flawless-headline' },
+    terms: [{ term: 'blind spot', def: 'Something the simulated runs don’t model, stated with where it bites and which way it leans.' }],
+  },
+  {
+    id: 'loss',
+    question: 'A unit died, a recruit was missed, or a marriage went off the plan: what now?',
+    answer: [
+      `Record it: Record results marks a death, a missed recruit and a marriage for you. Outside a map, ${roster}’s state strip marks ${stateLabel('dead')} or ${stateLabel('missed')}, and the spouse picker records a marriage that happened (${married}), an off-plan one too.`,
+      `${stateLabel('dead')} and ${stateLabel('missed')} are gone for good, and pairings that need the unit are blocked. Mark ${stateLabel('missed')} only once recruiting is truly impossible; ${stateLabel('not-recruited')} rules out nothing.`,
+      'The inbox then puts one loss item on top: what the loss broke, the flawless chance before it and after its re-solve (the reserve covering the unit steps in; marriages, passed skills and the roadmap re-solve around the gap), and what the re-solve changes. Nothing changes until you accept it or keep your plan.',
+      `Died after their S-support? The app assumes their child can still be recruited; that rule is unverified (${assumption}), and you can override it in ${validation}. The Wishlist tab’s children ledger shows each child’s ${ledgerStatus}.`,
+    ],
+    jump: { to: 'roster', target: 'state-strip' },
+    terms: [{ term: 'loss item', def: 'The inbox’s one entry after a recorded death, missed recruit or off-plan marriage: its re-solve, with the flawless chance before and after, never applied until accepted.' }],
+  },
   {
     id: 'strongest',
     question: 'Who’s strongest overall?',
@@ -106,6 +219,16 @@ export const DEEPER: readonly DeeperEntry[] = [
       { term: 'Mixed', def: 'A preset that scores whichever of Str or Mag is higher and ignores the other.' },
       { term: 'weights', def: 'How much each stat point counts in a preset’s score. ↺ Reset goes back to the curated weights.' },
     ],
+  },
+  {
+    id: 'play-context',
+    question: `What does the ${playContext} change?`,
+    answer:
+      `What the explorer (the pairing tables, unit pages and front doors) builds for: ${CONTEXT_LABELS.apotheosis}, ${CONTEXT_LABELS['main-story']} (Lunatic/+), ` +
+      `${CONTEXT_LABELS['full-route']} or ${CONTEXT_LABELS.all}. It sets the default target breakpoint and whether DLC classes are reachable. It starts from your run’s route; ` +
+      'another one only changes what you explore, never your run: the wishlist reads its build templates from the route.',
+    jump: { to: 'here', target: 'play-context' },
+    terms: [],
   },
   {
     id: 'assumption',
@@ -215,7 +338,6 @@ export const DEEPER: readonly DeeperEntry[] = [
     question: 'What do I do after clearing a map?',
     answer: [
       'Next map, near the top of Run (under the inbox, “what needs you”: before the run until Robin is locked, then “Before <map>”), offers what your route has opened: the story’s next chapter first, then paralogues (a child’s only once Chapter 13 is cleared, its parent is recorded married — a pin doesn’t count — and its map can be reached; the SpotPass ones with a note that the downloads may be gone), then on a Full route the DLC. Grind maps are never offered: log them as “other”. A map Next map doesn’t offer (a child paralogue played before its marriage was recorded) can still be logged with Add entry.',
-      'After the Lock the inbox above Next map lists what needs you before that map: units at risk, each with the one change that brings its milestone back (a span pin or an EXP priority, made in one click); units behind, each with a re-solve proposal (the roadmap first, a wishlist change only when it does better); the re-solve’s proposals, marked required once your plan can no longer be met (a unit it needs lost, a marriage off it, a support that can’t be reached); the map’s actions (a pair’s earliest or last start, a skill to equip, a seal to pick up or buy, a class change due); and the checks the map offers, by stakes (the flawless points that turn on the rule, from the plan re-run under its other reading), with checks worth setting up when a rule’s stakes pass about 1 point and no map left sets it up: the edit that does, at its cost. A death, a missed recruit or a marriage off the plan puts one loss item on top: what it broke, the flawless chance before the loss and after its re-solve (the reserve covering the unit steps in; marriages, passed skills and the roadmap re-solve), and what the re-solve changes. Nothing changes until you accept it (or keep your plan); until then Prepare says your plan predates the loss. Next map counts the open items as a nudge: you can always play anyway. Your edits and “anything else” stay below.',
       'Record results makes the map’s entry, a copy of the last, and walks you through what changed: deployed units, the map’s recruits (pre-filled; mark one you didn’t recruit as Missed), deaths and marriages, convoy and gold as the map ended, shopping, side goals and renown, items used, then the checks the map offered.',
       'The Shopping step records what you bought, sold and forged after the map, each with its gold (pre-filled at the game’s price: worth for a buy, by uses left for a sale, by forge steps for a forge; type your own to override). The entry’s gold stays gold at the map’s end; gold after shopping is worked out, split into upkeep (more of an item you already held), seals and kit. The next entry, the preparation page and the flawless chance’s runs all start from the army as it left the shop.',
       'The Side goals and renown step ticks each side goal on the map (escaping Thieves, burnable villages, Chapter 18’s falling chests, a paralogue’s result) you secured, pre-filled when every item it holds turned up against the entry before. Renown is asked once for the run: the renown the file started with, then the rewards already claimed; after that it’s +10 per story map (paralogues and DLC maps count 0, an assumption), and the flawless chance places each reward on the map that reaches it. The Run view’s Side goals list pins any goal ahead to always take or skip; otherwise the plan chases one that costs at most one action a turn.',
@@ -226,13 +348,25 @@ export const DEEPER: readonly DeeperEntry[] = [
       'On Chapter 11, if Chrom has no recorded marriage, it asks who the game married him to at the map’s end: a candidate not married to someone else (a lost one included), or the Maiden. It pre-selects one only when his logged support ranks decide it (a single candidate at his highest rank, C or above: a rank counts only once its conversation is viewed); otherwise the game decided by support points the app can’t see (Olivia wins from 2 points with him when nobody else has a C, so she needs no rank), so pick who he married. The answer is recorded as a marriage.',
       'A child who joins gets its stats from its parents as the entry before the map logs them: the fixed parent and its spouse (Morgan: Robin and Robin’s spouse; Lucina: Chrom’s recorded wife, the Maiden’s side counting as 0). If either parent’s stats are missing there, the recruits step names that parent and leaves the child’s stats blank.',
       'On Classic a unit that falls is dead for good: a loss, with its loss item in the inbox. On Casual it comes back after the map with its place in the plan and its children, so it’s no loss: record the fall anyway, and it’s logged to check the forecast’s no-death chances, and What it cost prices the rest of the map it missed. Chrom or Robin falling is a Game Over: you reload and play the map again, so there’s nothing to record and Record results offers no button for them. A fall, death or miss recorded by mistake has an Undo. Anything you skip keeps its copied value.',
-      'Recording a map re-solves your plan for about 5 seconds; what it finds arrives as proposals in the inbox, never applied on its own. A What changed card sits above the inbox until you press “Got it”: the flawless chance before the map and after (after a death it stays forward-only: no further deaths from here, with the army that’s left), each unit’s EXP against the forecast (with its percentile in the forecast’s spread: p50 is the median), the readings that moved, the improvements found, and What it cost: each event on the map in flawless points, priced on the same runs as if it hadn’t happened (a death or miss and what it broke, a milestone missed with a link to its re-solve, a fall, a level ahead of or behind the forecast, and one row when you spent more gold than the plan, naming the endpoint kit pieces it costs), rows under 0.1 points rolled up.',
       'Each map you finish recording (Done) teaches the forecast: every unit it fielded gets a learned EXP correction, the EXP it earned on the recorded maps against what was forecast, shrunk toward ×1 by one map’s worth so a lucky map can’t swing it, and kept within ×0.5–×2. It’s a stated assumption applied only to the maps after the last recorded one; the Run view’s Forecast learning section lists each factor with its evidence and has a switch to compare the forecast without it. Its calibration line counts the recorded results inside the forecast’s 10th–90th percentile (about 80% when the forecast is honest) and their mean percentile (about p50 when it’s unbiased), with the maps where someone fell or died against the no-death forecast.',
     ],
     jump: { to: 'log', target: 'next-map' },
     terms: [
       { term: 'next map', def: 'A map your route and the maps you’ve cleared have opened.' },
       { term: 'map played', def: 'The map an entry records: a chapter, paralogue, xenologue, or “other”.' },
+    ],
+  },
+  {
+    id: 'inbox-after',
+    question: 'What needs me before the next map?',
+    answer: [
+      'Recording a map re-solves your plan for about 5 seconds; what it finds arrives as proposals in the inbox, never applied on its own. A What changed card sits above the inbox until you press “Got it”: the flawless chance before the map and after (after a death it stays forward-only: no further deaths from here, with the army that’s left), each unit’s EXP against the forecast (with its percentile in the forecast’s spread: p50 is the median), the readings that moved, the improvements found, and What it cost: each event on the map in flawless points, priced on the same runs as if it hadn’t happened (a death or miss and what it broke, a milestone missed with a link to its re-solve, a fall, a level ahead of or behind the forecast, and one row when you spent more gold than the plan, naming the endpoint kit pieces it costs), rows under 0.1 points rolled up.',
+      'After the Lock the inbox above Next map lists what needs you before that map: units at risk, each with the one change that brings its milestone back (a span pin or an EXP priority, made in one click); units behind, each with a re-solve proposal (the roadmap first, a wishlist change only when it does better); the re-solve’s proposals, marked required once your plan can no longer be met (a unit it needs lost, a marriage off it, a support that can’t be reached); the map’s actions (a pair’s earliest or last start, a skill to equip, a seal to pick up or buy, a class change due); and the checks the map offers, by stakes (the flawless points that turn on the rule, from the plan re-run under its other reading), with checks worth setting up when a rule’s stakes pass about 1 point and no map left sets it up: the edit that does, at its cost. You answer a check in Record results’ Checks step once the map is played. A death, a missed recruit or a marriage off the plan puts one loss item on top: what it broke, the flawless chance before the loss and after its re-solve (the reserve covering the unit steps in; marriages, passed skills and the roadmap re-solve), and what the re-solve changes. Nothing changes until you accept it (or keep your plan); until then Prepare says your plan predates the loss. Next map counts the open items as a nudge: you can always play anyway. Your edits and “anything else” stay below.',
+    ],
+    jump: { to: 'log', target: 'inbox' },
+    terms: [
+      { term: 'milestone', def: 'Something the adopted roadmap needs true by a point on the map order: a pair’s support rank, a skill learned, a child recruited or a class reached.' },
+      { term: 'reading', def: 'A unit against its worst open milestone: on track (80% or more), at risk (one change brings it back to 80%) or behind (no single change can; it gets a re-solve proposal).' },
     ],
   },
   {
@@ -312,6 +446,18 @@ export const DEEPER: readonly DeeperEntry[] = [
     ],
     jump: { to: 'map', target: 'how-to-run' },
     terms: [{ term: 'chapter guide', def: 'Named sources’ tactics for each map, kept apart from the chapter data’s facts.' }],
+  },
+];
+
+/** Going deeper's groups, in the order `? Guide` shows them: every entry in exactly one (#213). */
+export const DEEPER_GROUPS: readonly { readonly title: string; readonly ids: readonly DeeperId[] }[] = [
+  {
+    title: 'Your run',
+    ids: ['start', 'robin-choice', 'inbox-before', 'wishlist', 'why', 'matchups', 'deployment', 'threats', 'supply', 'record-results', 'inbox-after', 'loss', 'chapter-log', 'map-data', 'how-to-run', 'assumption'],
+  },
+  {
+    title: 'Exploring',
+    ids: ['strongest', 'pairing-build', 'robin', 'preset', 'scoring', 'play-context', 'unit-class-tree', 'unit-partners', 'robin-preview', 'front-door-pairings', 'unit-opinion'],
   },
 ];
 

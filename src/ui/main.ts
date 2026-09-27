@@ -64,9 +64,9 @@ import {
 import { h } from './dom';
 import { guide } from './guide';
 import { guideChild } from './guide-deeper';
-import { guideFacts, lossPrompt, noteLosses, settleLosses } from './guide-facts';
-import { collapseDock, hasSavedRun, loadGuidePrefs, saveGuidePrefs, welcomeShows, type GuidePrefs } from './guide-prefs';
-import { guideButton, guideLayer, type GuideContext } from './guide-ui';
+import { guideFacts } from './guide-facts';
+import { hasSavedRun, loadGuidePrefs, saveGuidePrefs, welcomeShows, type GuidePrefs } from './guide-prefs';
+import { guideButton, guideLayer, hideGuide, type GuideContext } from './guide-ui';
 import { BASIS_LABELS, EXPLORER_NOTE, LABELS, SCORING_ROLE_UI } from './labels';
 import { loadCheckedRules, overridesOf, ruleEvidence, saveCheckedRules, withOverrides, type CheckedRules } from './checked-rules';
 import {
@@ -101,11 +101,11 @@ import { CHILD_UNITS } from '../game-data/children';
 import { unitLink, type OpenUnit } from './unit-links';
 import { loadRun, saveRun } from './roster-store';
 
-/** Phone width, where the Scoring panel and the open guide dock are bottom sheets (the stylesheet's breakpoint). */
+/** Phone width, where the Scoring panel and the guide's panel are bottom sheets (the stylesheet's breakpoint). */
 const phone = (): boolean => matchMedia('(max-width: 700px)').matches;
 
-/** The guide's preferences: survive Clear all. On a phone the dock starts as its pill, whatever was left open. */
-let guidePrefs: GuidePrefs = phone() ? collapseDock(loadGuidePrefs()) : loadGuidePrefs();
+/** The guide's preferences (only whether the welcome was seen): survive Clear all. */
+let guidePrefs: GuidePrefs = loadGuidePrefs();
 /** The welcome box is showing: by itself only for a new visitor, read before anything this visit saves. */
 let welcomeOpen = welcomeShows(guidePrefs, hasSavedRun());
 
@@ -120,8 +120,6 @@ let prefs: ScoringPrefs = loadPrefs(engine);
 /** The run (#116): the chapter log; the roster is its view (unit states and spouses from the latest entry). */
 let run: Run = loadRun();
 let roster: Roster = rosterOf(run);
-// Losses already saved aren't new: the loss prompt is for those recorded from here on.
-guidePrefs = noteLosses(roster, guidePrefs);
 
 // View state only; all domain answers come from the engine.
 /** A child's table, or the All children leaderboard. */
@@ -213,16 +211,10 @@ const openCards = new Set<string>();
 /** The scoring panel as a bottom sheet (phone width only). */
 let sheetOpen = false;
 
-/** On a phone, collapses the open guide dock (a bottom sheet there) to its pill. */
-function collapseDockOnPhone(): void {
-  const collapsed = phone() ? collapseDock(guidePrefs) : guidePrefs;
-  if (collapsed !== guidePrefs) saveGuidePrefs((guidePrefs = collapsed));
-}
-
-/** Opens the Scoring sheet; on a phone the guide dock collapses to its pill, as only one sheet is open at a time. */
+/** Opens the Scoring sheet; on a phone the guide's panel closes, as only one sheet is open at a time. */
 function openScoring(): void {
   sheetOpen = true;
-  collapseDockOnPhone();
+  if (phone()) hideGuide();
 }
 /** The Pair-up Spd helper's inputs: a support class, rank and raw Spd. */
 let helper: { cls: ClassId; rank: SupportRank; rawSpd: number } = { cls: 'swordmaster', rank: 'S', rawSpd: 30 };
@@ -2191,28 +2183,21 @@ function contextSelect(): HTMLElement {
 
 const guideContext = (): GuideContext => ({
   prefs: guidePrefs,
-  facts: guideFacts(roster, prefs.context),
-  loss: lossPrompt(roster, guidePrefs),
+  facts: guideFacts(roster),
   welcome: welcomeOpen,
   setPrefs: (next) => {
     guidePrefs = next;
     welcomeOpen = false;
     saveGuidePrefs(guidePrefs);
-    // On a phone the open dock is a bottom sheet: the Scoring sheet closes under it.
-    if (phone() && next.dock === 'open' && sheetOpen) {
-      sheetOpen = false;
-      return renderParts(['panel']);
-    }
     renderGuide();
   },
-  showWelcome: () => {
-    welcomeOpen = true;
-    if (view === 'roster') return renderGuide();
-    view = 'roster';
-    renderParts(['rail', 'main', 'panel']);
-  },
   go: (next) => {
-    if (view === next) return renderGuide();
+    // The Run view opens on its inbox: no map, preparation page or Maps list in front of it.
+    if (next === 'run') {
+      mapOpen = preparing = undefined;
+      showingMaps = false;
+    }
+    if (view === next) return renderParts(['main']);
     view = next;
     renderParts(['rail', 'main', 'panel']);
   },
@@ -2224,9 +2209,10 @@ const guideContext = (): GuideContext => ({
       view = 'run';
       mapOpen = 'prologue';
       shown = 'the Prologue';
-    } else if (jump.to === 'log') {
+    } else if (jump.to === 'wishlist' || jump.to === 'roster') view = jump.to;
+    else if (jump.to === 'log') {
       view = 'run';
-      mapOpen = undefined;
+      mapOpen = preparing = undefined;
       showingMaps = false;
     } else if (jump.to === 'unit' || jump.to === 'robin' || jump.to === 'door') {
       unitBack = { view, unit: undefined, scroll: mainScroll() };
@@ -2254,22 +2240,17 @@ const guideContext = (): GuideContext => ({
   },
   makeRoom: (target) => {
     if (!phone()) return;
-    collapseDockOnPhone();
+    hideGuide();
     sheetOpen = regions.panel?.querySelector(`[data-guide="${target}"]`) != null;
     renderParts(['panel']);
   },
   refresh: renderGuide,
 });
 
-/**
- * The guide follows every change: its ticks read the roster, plan preferences and play context, and losses recorded
- * where the loss prompt can't show are noted as seen.
- */
+/** The guide follows every change: Plan a run's ticks read the roster's Run facts. */
 function renderGuide(): void {
   const layer = regions.guide;
   if (!layer) return;
-  const settled = settleLosses(roster, guidePrefs);
-  if (settled !== guidePrefs) saveGuidePrefs((guidePrefs = settled));
   const scrollTop = layer.querySelector('.gd')?.scrollTop ?? 0;
   layer.replaceChildren(...guideLayer(guideContext()));
   const dock = layer.querySelector('.gd');

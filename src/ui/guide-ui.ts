@@ -1,51 +1,48 @@
 /**
- * The guide's UI: the welcome box, the checklist dock (open, or collapsed to its progress pill) with its Going deeper
- * questions, and the header's `? Guide`. It reads guide facts and guide prefs, and points at controls only through their
- * `data-guide` anchors.
+ * The guide's UI (#213): the welcome box a new visitor sees (Plan a run or Just explore), Plan a run's two steps, and
+ * the Going deeper panel the header's `? Guide` opens, grouped into Your run and Exploring. It reads guide facts and
+ * guide prefs, and points at controls only through their `data-guide` anchors. Which panel shows is view state: only
+ * the welcome's `seen` is stored.
  */
 import { h } from './dom';
 import type { GuideTarget } from './guide';
-import { DEEPER, deeperEntry, deeperView, type DeeperEntry, type DeeperId, type DeeperJump } from './guide-deeper';
+import { DEEPER_GROUPS, deeperEntry, deeperView, type DeeperEntry, type DeeperId, type DeeperJump } from './guide-deeper';
 import type { GuideFacts } from './guide-facts';
-import { JOURNEYS, VIEW_NAMES, journeyProgress, stepDone, type GuideJourney, type GuideView, type JourneyStep } from './guide-journeys';
-import { closeWelcome, dismissLoss, pickJourney, reopenGuide, takeLoss, type DockState, type GuidePrefs, type Journey } from './guide-prefs';
+import { closeWelcome, type GuidePrefs } from './guide-prefs';
+import { JUST_EXPLORE, PLAN_A_RUN, VIEW_NAMES, startProgress, stepDone, type GuideView, type StartStep } from './guide-welcome';
 import { LABELS } from './labels';
 
 export type GuideContext = {
   readonly prefs: GuidePrefs;
   readonly facts: GuideFacts;
-  /** The losses the loss prompt offers After a loss for; none hides it. */
-  readonly loss: readonly string[];
   /** The welcome box is showing. */
   readonly welcome: boolean;
   /** Saves new guide prefs; the welcome box closes, as every change is a choice made past it. */
   readonly setPrefs: (next: GuidePrefs) => void;
-  readonly showWelcome: () => void;
   /** Switches the app to a view and renders it. */
   readonly go: (view: GuideView) => void;
   /** Takes a Going deeper jump and renders it; for a child's table, returns the child's name. */
   readonly goDeeper: (jump: DeeperJump) => string | undefined;
   /**
-   * Makes room to see a control the guide jumps to: on a phone the dock collapses to its pill, and the Scoring sheet
-   * opens for a control inside it, or closes for one outside it.
+   * Makes room to see a control the guide jumps to: on a phone the guide's panel (a bottom sheet there) closes, and the
+   * Scoring sheet opens for a control inside it, or closes for one outside it.
    */
   readonly makeRoom: (target: GuideTarget) => void;
   /** Renders the guide again, after a change to its own view state. */
   readonly refresh: () => void;
 };
 
-/** The journey the dock shows: the last one picked, while its content exists. */
-const journeyOf = (prefs: GuidePrefs): GuideJourney => (prefs.journey !== null && prefs.journey in JOURNEYS ? (prefs.journey as GuideJourney) : 'fresh');
-
-/** The step whose takeaway the dock shows (view state): the last one clicked, else the first not yet done. */
-let focused: { journey: GuideJourney; index: number } | undefined;
-
-/** Going deeper is expanded inside a journey (view state; Explore always shows it). */
-let deeperOpen = false;
+/** The guide's panel (view state): none, Plan a run's steps, or Going deeper. */
+let shown: 'none' | 'plan' | 'deeper' = 'none';
+/** Plan a run's step whose takeaway shows (view state): the last one clicked, else the first not yet done. */
+let focused: number | undefined;
 /** Terms folds left open, by entry. */
 const openTerms = new Set<DeeperId>();
 /** The child the last Going deeper jump showed, named under its entry. */
 let deeperShown: { id: DeeperId; text: string } | undefined;
+
+/** Closes the guide's panel: on a phone, where it's a bottom sheet, when the Scoring sheet opens. */
+export const hideGuide = (): void => void (shown = 'none');
 
 const HIGHLIGHT_MS = 1800;
 
@@ -65,99 +62,66 @@ function spot(el: HTMLElement | null, block: ScrollLogicalPosition): void {
 }
 
 /** Switches to the step's view (rendered at once), then scrolls to and highlights its control. */
-function jump(ctx: GuideContext, step: JourneyStep): void {
+function jump(ctx: GuideContext, step: { readonly view: GuideView; readonly target: GuideTarget }): void {
   ctx.go(step.view);
   ctx.makeRoom(step.target);
   highlight(step.target);
 }
 
+/** The header's `? Guide`: opens Going deeper, or closes it. */
 export function guideButton(ctx: () => GuideContext): HTMLElement {
   return h(
     'button',
     {
       class: 'ghost guide-open',
-      title: 'Open the usage guide',
+      title: 'Going deeper: questions about your run and exploring',
       onclick: () => {
-        const c = ctx();
-        const next = reopenGuide(c.prefs);
-        if (next === 'welcome') c.showWelcome();
-        else c.setPrefs(next);
+        shown = shown === 'deeper' ? 'none' : 'deeper';
+        ctx().refresh();
       },
     },
     LABELS.guide,
   );
 }
 
-/** The welcome box's journeys; Just look around opens Explore. */
-const WELCOME_CHOICES: readonly { readonly journey: Journey; readonly title: string; readonly ask: string }[] = [
-  { journey: 'fresh', title: 'Plan a fresh run', ask: 'I’m starting a run: who should everyone marry?' },
-  { journey: 'loss', title: 'Re-plan after a loss', ask: 'A unit died, a recruit was missed, or a marriage went off-plan.' },
-];
-
-const setDock = (ctx: GuideContext, dock: DockState) => ctx.setPrefs({ ...ctx.prefs, dock });
-
 function welcomeBox(ctx: GuideContext): HTMLElement {
-  const pick = (journey: Journey) => () => {
-    focused = undefined;
-    ctx.setPrefs(pickJourney(ctx.prefs, journey));
-    ctx.go('roster');
-  };
   const close = () => ctx.setPrefs(closeWelcome(ctx.prefs));
+  const plan = () => {
+    shown = 'plan';
+    focused = undefined;
+    close();
+    jump(ctx, PLAN_A_RUN.steps[0]!);
+  };
+  const explore = () => {
+    shown = 'none';
+    close();
+    jump(ctx, JUST_EXPLORE);
+  };
+  const choice = (title: string, ask: string, onclick: () => void) => h('button', { class: 'gw-choice', onclick }, h('b', {}, title), h('span', { class: 'muted small' }, ask));
   const box = h(
     'div',
     { class: 'gw', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'gw-title' },
     h('div', { class: 'gw-head' }, h('h2', { id: 'gw-title' }, 'FE13 Child Calc'), h('button', { class: 'ghost', 'aria-label': 'Close', title: 'Close', onclick: close }, '✕')),
-    h('p', {}, 'Plans every marriage in your Awakening run so each child comes out strong, and re-plans when something goes wrong. What are you here to do?'),
-    ...WELCOME_CHOICES.map((c) => h('button', { class: 'gw-choice', onclick: pick(c.journey) }, h('b', {}, c.title), h('span', { class: 'muted small' }, c.ask))),
-    h('button', { class: 'ghost small gw-look', onclick: pick('explore') }, 'Just look around'),
+    h('p', {}, 'Plans your Awakening run towards a flawless endpoint: who marries whom, who fields, and what to do before each map. What are you here to do?'),
+    choice(PLAN_A_RUN.title, PLAN_A_RUN.ask, plan),
+    choice(JUST_EXPLORE.title, JUST_EXPLORE.ask, explore),
+    h('p', { class: 'muted small' }, `${LABELS.guide} in the header answers questions any time.`),
   );
   const scrim = h('div', { class: 'gw-scrim', onkeydown: (e) => (e as KeyboardEvent).key === 'Escape' && close() }, box);
   setTimeout(() => box.querySelector<HTMLElement>('.gw-choice')?.focus()); // once it's in the page
   return scrim;
 }
 
-/** Picks a journey from the dock: Going deeper starts collapsed. */
-const switchJourney = (ctx: GuideContext, next: GuidePrefs) => {
-  deeperOpen = false;
-  ctx.setPrefs(next);
-};
-
-/** The loss prompt's one line: it offers After a loss, and never switches by itself. */
-function lossLine(ctx: GuideContext): HTMLElement | null {
-  if (!ctx.loss.length) return null;
-  return h(
-    'div',
-    { class: 'gd-loss small', role: 'status' },
-    h('span', {}, 'Lost someone?'),
-    h('button', { class: 'gd-link', onclick: () => switchJourney(ctx, takeLoss(ctx.prefs, ctx.loss)) }, `Switch to ${JOURNEYS.loss.title}`),
-    h('button', { class: 'ghost small', 'aria-label': 'Dismiss', title: 'Dismiss', onclick: () => ctx.setPrefs(dismissLoss(ctx.prefs, ctx.loss)) }, '✕'),
-  );
-}
-
-function pill(ctx: GuideContext, journey: GuideJourney): HTMLElement {
-  const { done, tracked } = journeyProgress(JOURNEYS[journey].steps, ctx.facts);
-  return h(
-    'div',
-    { class: 'gd gd-pillbox' },
-    lossLine(ctx),
-    h(
-      'button',
-      { class: 'gd-pill', title: 'Open the guide', onclick: () => setDock(ctx, 'open') },
-      journey === 'explore' ? '☰ Guide' : `☰ ${JOURNEYS[journey].title} · ${done}/${tracked}`,
-    ),
-  );
-}
-
 const entryId = (id: DeeperId) => `gd-deeper-${id}`;
 
-/** A step's “↳ <question>”: expands Going deeper and scrolls to the entry. */
+/** A step's “↳ <question>”: opens Going deeper and scrolls to the entry. */
 function deeperLink(ctx: GuideContext, id: DeeperId): HTMLElement {
   return h(
     'button',
     {
       class: 'gd-link small',
       onclick: () => {
-        deeperOpen = true;
+        shown = 'deeper';
         ctx.refresh();
         spot(document.getElementById(entryId(id)), 'nearest');
       },
@@ -166,7 +130,7 @@ function deeperLink(ctx: GuideContext, id: DeeperId): HTMLElement {
   );
 }
 
-function stepItem(ctx: GuideContext, journey: GuideJourney, step: JourneyStep, index: number, open: boolean): HTMLElement {
+function stepItem(ctx: GuideContext, step: StartStep, index: number, open: boolean): HTMLElement {
   const done = stepDone(step, ctx.facts);
   return h(
     'li',
@@ -178,29 +142,67 @@ function stepItem(ctx: GuideContext, journey: GuideJourney, step: JourneyStep, i
         'aria-expanded': String(open),
         title: `Go to ${step.where}`,
         onclick: () => {
-          focused = { journey, index };
+          focused = index;
           jump(ctx, step);
         },
       },
-      h('span', { class: 'gd-box', title: done === undefined ? 'Nothing to tick: read and move on' : done ? 'Done' : 'Not done yet' }, done ? '✓' : done === false ? '○' : '·'),
+      h('span', { class: 'gd-box', title: done ? 'Done' : 'Not done yet' }, done ? '✓' : '○'),
       h('span', { class: 'gd-title' }, `${index + 1}. ${step.title}`),
       h('span', { class: 'gd-where muted small' }, VIEW_NAMES[step.view]),
     ),
     open ? h('div', { class: 'gd-take small' }, h('div', { class: 'gd-path muted' }, step.where), step.takeaway) : null,
-    step.note ? h('div', { class: 'gd-note muted small' }, step.note) : null,
     step.deeper ? h('div', { class: 'gd-links' }, ...step.deeper.map((id) => deeperLink(ctx, id))) : null,
+  );
+}
+
+/** The panel's head: its title, a count, and ✕. */
+function panelHead(ctx: GuideContext, title: string, count = ''): HTMLElement {
+  return h(
+    'div',
+    { class: 'gd-head' },
+    h('b', {}, title),
+    h('span', { class: 'muted small gd-count', title: count ? 'Steps done' : '' }, count),
+    h(
+      'button',
+      {
+        class: 'ghost small',
+        'aria-label': 'Close the guide',
+        title: `Close the guide (${LABELS.guide} opens Going deeper)`,
+        onclick: () => {
+          shown = 'none';
+          ctx.refresh();
+        },
+      },
+      '✕',
+    ),
+  );
+}
+
+/** Plan a run: Run facts, then the inbox's Robin card. */
+function planPanel(ctx: GuideContext): HTMLElement {
+  const { steps } = PLAN_A_RUN;
+  const firstOpen = steps.findIndex((s) => !stepDone(s, ctx.facts));
+  const openIndex = focused ?? firstOpen;
+  const { done, of } = startProgress(steps, ctx.facts);
+  return h(
+    'aside',
+    { class: 'gd', 'aria-label': 'Guide' },
+    panelHead(ctx, PLAN_A_RUN.title, `${done}/${of}`),
+    h('p', { class: 'muted small gd-ask' }, PLAN_A_RUN.ask),
+    h('ol', { class: 'gd-list' }, ...steps.map((s, i) => stepItem(ctx, s, i, i === openIndex))),
+    h('p', { class: 'muted small gd-ask' }, 'Then the inbox lists what needs you before each map. ', deeperLink(ctx, 'inbox-after')),
   );
 }
 
 /** A Going deeper entry: its question, answer, jump and Terms fold. It never ticks. */
 function deeperItem(ctx: GuideContext, entry: DeeperEntry): HTMLElement {
-  const { answer, jump } = deeperView(entry, ctx.facts.robinLocked);
-  const go = (to: DeeperJump) => () => {
-    const child = ctx.goDeeper(to);
+  const { answer, jump: to } = deeperView(entry, ctx.facts.robinLocked);
+  const go = (j: DeeperJump) => () => {
+    const child = ctx.goDeeper(j);
     deeperShown = child ? { id: entry.id, text: `Showing ${child}. Pick another in the left rail.` } : undefined;
     ctx.refresh();
-    ctx.makeRoom(to.target);
-    highlight(to.target);
+    ctx.makeRoom(j.target);
+    highlight(j.target);
   };
   const terms = h(
     'details',
@@ -219,7 +221,7 @@ function deeperItem(ctx: GuideContext, entry: DeeperEntry): HTMLElement {
       'div',
       { class: 'gd-q-head' },
       h('b', { class: 'small' }, entry.question),
-      jump ? h('button', { class: 'ghost small gd-jump', title: 'Go there', onclick: go(jump) }, 'Show me') : null,
+      to ? h('button', { class: 'ghost small gd-jump', title: 'Go there', onclick: go(to) }, 'Show me') : null,
     ),
     answer.length > 1 ? h('ol', { class: 'small gd-steps' }, ...answer.map((a) => h('li', {}, a))) : h('div', { class: 'small' }, answer[0]!),
     deeperShown?.id === entry.id ? h('div', { class: 'muted small' }, deeperShown.text) : null,
@@ -227,63 +229,37 @@ function deeperItem(ctx: GuideContext, entry: DeeperEntry): HTMLElement {
   );
 }
 
-/** The Going deeper questions: collapsed at the foot of a journey, always open in Explore. */
-function deeperSection(ctx: GuideContext, explore: boolean): HTMLElement {
-  const open = explore || deeperOpen;
-  const head = explore
-    ? h('h3', { class: 'gd-deeper-head' }, 'Going deeper')
-    : h(
-        'button',
-        {
-          class: 'gd-deeper-head',
-          'aria-expanded': String(open),
-          onclick: () => {
-            deeperOpen = !open;
-            ctx.refresh();
-          },
-        },
-        `${open ? '▾' : '▸'} Going deeper`,
-      );
-  return h(
-    'section',
-    { class: 'gd-deeper', 'aria-label': 'Going deeper' },
-    head,
-    open ? h('ol', { class: 'gd-deeper-list' }, ...DEEPER.map((e) => deeperItem(ctx, e))) : null,
-  );
-}
-
-function dock(ctx: GuideContext, journey: GuideJourney): HTMLElement {
-  const content = JOURNEYS[journey];
-  const firstOpen = content.steps.findIndex((s) => stepDone(s, ctx.facts) !== true);
-  const openIndex = focused?.journey === journey ? focused.index : firstOpen;
-  const { done, tracked } = journeyProgress(content.steps, ctx.facts);
+/** Going deeper: every question, grouped into Your run and Exploring, with Plan a run's steps a click away. */
+function deeperPanel(ctx: GuideContext): HTMLElement {
   return h(
     'aside',
     { class: 'gd', 'aria-label': 'Guide' },
+    panelHead(ctx, 'Going deeper'),
     h(
-      'div',
-      { class: 'gd-head' },
-      h(
-        'span',
-        { class: 'seg', role: 'group', 'aria-label': 'Journey' },
-        ...(Object.keys(JOURNEYS) as GuideJourney[]).map((j) =>
-          h('button', { class: j === journey ? 'on' : '', 'aria-pressed': String(j === journey), onclick: () => switchJourney(ctx, pickJourney(ctx.prefs, j)) }, JOURNEYS[j].title),
-        ),
-      ),
-      h('span', { class: 'muted small gd-count', title: 'Steps done, of those the guide can tick' }, tracked ? `${done}/${tracked}` : ''),
-      h('button', { class: 'ghost small', 'aria-label': 'Collapse', title: 'Collapse to a pill', onclick: () => setDock(ctx, 'pill') }, '—'),
-      h('button', { class: 'ghost small', 'aria-label': 'Close the guide', title: `Close the guide (${LABELS.guide} brings it back)`, onclick: () => setDock(ctx, 'closed') }, '✕'),
+      'button',
+      {
+        class: 'gd-link small',
+        onclick: () => {
+          shown = 'plan';
+          focused = undefined;
+          ctx.refresh();
+        },
+      },
+      `▸ ${PLAN_A_RUN.title}: ${LABELS.runFacts}, then the inbox’s Robin card`,
     ),
-    lossLine(ctx),
-    h('p', { class: 'muted small gd-ask' }, content.ask),
-    content.steps.length ? h('ol', { class: 'gd-list' }, ...content.steps.map((s, i) => stepItem(ctx, journey, s, i, i === openIndex))) : null,
-    deeperSection(ctx, journey === 'explore'),
+    ...DEEPER_GROUPS.map((g) =>
+      h(
+        'section',
+        { class: 'gd-deeper', 'aria-label': g.title },
+        h('h3', { class: 'gd-deeper-head' }, g.title),
+        h('ol', { class: 'gd-deeper-list' }, ...g.ids.map((id) => deeperItem(ctx, deeperEntry(id)))),
+      ),
+    ),
   );
 }
 
-/** The welcome box, or the dock in its state; nothing when the guide is closed. */
+/** The welcome box, or the guide's open panel; nothing when it's closed. */
 export function guideLayer(ctx: GuideContext): HTMLElement[] {
   if (ctx.welcome) return [welcomeBox(ctx)];
-  const journey = journeyOf(ctx.prefs);
-  return ctx.prefs.dock === 'open' ? [dock(ctx, journey)] : ctx.prefs.dock === 'pill' ? [pill(ctx, journey)] : [];
+  return shown === 'plan' ? [planPanel(ctx)] : shown === 'deeper' ? [deeperPanel(ctx)] : [];
 }

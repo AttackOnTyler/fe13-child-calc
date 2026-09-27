@@ -17,16 +17,12 @@ It runs entirely in your browser. There is nothing to install and no account: yo
 ## How to use it
 
 1. Open the [site](https://attackontyler.github.io/fe13-child-calc/).
-2. Open **? Guide** in the header. It walks you through one of three journeys and ticks each step off as you do it:
-   - **Fresh run**: "who should everyone marry?" Set up the run on Roster, then plan.
-   - **After a loss**: a unit died, or a marriage went off-plan. Record what happened and see what the plan becomes.
-   - **Explore**: no steps, just questions that each jump to the view that answers them.
-3. For a fresh run, roughly:
-   1. **Roster › Run facts**: set difficulty, mode and route. The route also sets the **play context** (Apotheosis, Main story, Full route or All), which decides what builds are scored for.
-   2. Set Robin's gender and asset/flaw now, or leave Robin open and let the plan weigh the options.
-   3. Tick who you'll deploy and their role; bench who you won't field.
-   4. **Plan**: read the marriage plan, set each child's priority, pin or rule out marriages, then lock Robin and create them in the game.
-4. As you play, record real marriages and losses on **Roster**, and use **Run** for each map.
+2. On a first visit the welcome offers **Plan a run** (Run facts, then the inbox's Robin card) or **Just explore** (the Table view). Later, **? Guide** in the header opens **Going deeper**: questions grouped into *Your run* and *Exploring*, each jumping to the control that answers it.
+3. To plan a run, roughly:
+   1. **Roster › Run facts**: set difficulty, mode and route. The route also sets the explorer's **play context** (Apotheosis, Main story, Full route or All); the wishlist always reads the route.
+   2. Set Robin's gender and asset/flaw now, or leave Robin open: the **Run** view's inbox opens on the Robin card, which compares Robins by flawless chance.
+   3. Work down the inbox: accept or dismiss the search's proposals, ask for anything else you want different (each edit shows its cost), then **Lock Robin and start**. The **Wishlist** tab shows the endpoint army the plan works towards.
+4. As you play, **Prepare** each map from **Run**, then **Record results**: the inbox then lists what needs you before the next map.
 
 Your run and preferences stay in this browser. **Clear all** on Roster resets the run's facts, unit states and marriages; your scoring and plan preferences survive it.
 

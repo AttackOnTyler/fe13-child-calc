@@ -1,8 +1,9 @@
 /**
  * Anchors that tie the usage guide to real controls. A control the guide points at carries `data-guide="<id>"`, added
  * through `guide()`, so the guide finds it whatever its class names or label text. `guide.test.ts` fails when a target
- * has no anchor left in the UI source. #212 removed the Plan page's anchors and the Roster's Deploy, deployment-role
- * and Bench anchors with their controls, and the guide entries that pointed at them.
+ * has no anchor left in the UI source, and when a guide entry points at one. #212 removed the Plan page's anchors and
+ * the Roster's Deploy, deployment-role and Bench anchors with their controls, and the guide entries that pointed at
+ * them; #213 added the inbox's, the Robin card's, the flawless headline's and the Wishlist tab's army.
  */
 export const GUIDE_TARGETS = [
   // Header
@@ -15,7 +16,12 @@ export const GUIDE_TARGETS = [
   'spouse-picker',
   'married',
   // Wishlist
+  'wishlist-army',
   'children-ledger',
+  // Run view
+  'inbox',
+  'robin-card',
+  'flawless-headline',
   'units-rail',
   'run-rail',
   'chapter-log',
