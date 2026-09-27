@@ -29,6 +29,14 @@ describe('the preparation page’s fighters', () => {
     expect(fighterOf('Nobody', { ...unit, stats: null })).toBeUndefined();
   });
 
+  it('carry its staves and potions with the uses left, for the simulation’s sustain (#182)', () => {
+    const f = fighterOf('Frederick', { ...unit, inventory: [...unit.inventory, { item: 'Heal', uses: 12 }, { item: 'Vulnerary', uses: 0 }] })!;
+    expect(f.items.map((i) => [i.item.name, i.uses])).toEqual([
+      ['Vulnerary', 3],
+      ['Heal', 12],
+    ]);
+  });
+
 });
 
 describe('the next map’s no-death chance (#181)', () => {

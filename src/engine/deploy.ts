@@ -13,6 +13,7 @@ import { deploymentOf, type DeployableUnit, type Roster, type RosterUnit } from 
 import type { RoleAssignment } from './army-fit';
 import { CHILD_UNITS, type ChildId } from '../game-data/children';
 import { itemByName, type GameItem } from '../game-data/items';
+import type { SimItem } from './sim/sustain';
 
 /** A unit the solver can deploy: its role, fighter, weapons and supports. */
 export type DeployCandidate = {
@@ -20,6 +21,8 @@ export type DeployCandidate = {
   readonly role: DeploymentRole;
   readonly fighter: Fighter;
   readonly weapons: readonly NonNullable<Fighter['weapon']>[];
+  /** Staves and other items it can spend uses of on the map (the simulation's sustain, #182). */
+  readonly items?: readonly SimItem[];
   readonly supports: readonly { readonly partner: RosterUnit; readonly rank: SupportLevel }[];
 };
 

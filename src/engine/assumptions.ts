@@ -35,6 +35,9 @@ import {
   SF_BASES,
   SF_CLASS_CAPS,
   SFF_CHILD_BASES,
+  SPEC_MAP_SIMULATION,
+  SF_STAVES,
+  SF_CLASS_BASES,
   type Assumed,
   type Citation,
 } from '../game-data/citations';
@@ -74,6 +77,11 @@ type AssumptionValues = {
    * half the levels), or the user's memory of +1 per class change (the level at use carries on).
    */
   'class-change-internal-level': 'research' | 'plus-one';
+  /**
+   * The assumed army spread: distances (tiles) from a staff user to the pairs on a map, each pair equally likely at any
+   * of them. A staff reaches a pair with the share of them within its user's Mov + range.
+   */
+  'army-spread': readonly number[];
 };
 
 export type AssumptionId = keyof AssumptionValues;
@@ -118,6 +126,12 @@ function parseGrowths(raw: unknown): Growths | undefined {
 function parseBreakpoints(raw: unknown): readonly number[] | undefined {
   if (!Array.isArray(raw) || raw.length === 0) return undefined;
   return raw.every((x, i) => isInt(x) && x > 0 && x < 100 && (i === 0 || x > raw[i - 1])) ? [...(raw as number[])] : undefined;
+}
+
+/** Distances in tiles, at least one, 1–99 each (repeats allowed: two pairs at one distance); kept ascending. */
+function parseDistances(raw: unknown): readonly number[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > 60) return undefined;
+  return raw.every((x) => isInt(x) && x > 0 && x < 100) ? [...(raw as number[])].sort((a, b) => a - b) : undefined;
 }
 
 const ZERO_GROWTHS: Growths = { hp: 0, str: 0, mag: 0, skl: 0, spd: 0, lck: 0, def: 0, res: 0 };
@@ -358,6 +372,25 @@ export const ASSUMPTION_REGISTRY: { readonly [K in AssumptionId]: AssumptionDef<
     parse: (raw) => (raw === 'research' || raw === 'plus-one' ? raw : undefined),
     affects: 'each unit’s internal level on the chapter log, and the EXP it earns',
   }),
+  'army-spread': entry({
+    id: 'army-spread',
+    label: 'The assumed army spread',
+    why:
+      'The map simulation has no map positions, so whether a staff reaches a pair is a chance: each pair is taken as equally likely at any of ' +
+      'these distances (tiles) from the staff user, and a staff reaches the ones within its user’s Mov plus its range (Heal, Mend and Recover ' +
+      'adjacent; Physic, Fortify and Rescue Mag ÷ 2). No source gives how far an army spreads; the default is a loose formation, 1 to 10 tiles. ' +
+      'It is one input, so a map’s real distance to each pair can replace it.',
+    sources: [SPEC_MAP_SIMULATION, SF_STAVES, SF_CLASS_BASES],
+    default: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    alternatives: [
+      { label: 'Tight formation: 1 to 6 tiles', value: [1, 2, 3, 4, 5, 6] },
+      { label: 'Spread out: 1 to 15 tiles', value: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] },
+    ],
+    input: 'list',
+    format: (v) => v.join('/'),
+    parse: parseDistances,
+    affects: 'whether a staff reaches a pair in the map simulation (each map’s no-death chance)',
+  }),
 };
 
 export const ASSUMPTION_IDS = Object.keys(ASSUMPTION_REGISTRY) as AssumptionId[];
@@ -384,11 +417,12 @@ export const isDefaultValue = (id: AssumptionId, value: unknown) =>
 /**
  * The stated blind spots (#181; spec #175, The Why panel): what the simulation leaves out or simplifies on purpose,
  * where no source can settle it and no setting changes it. Each carries its **lean**, the way it can push the numbers
- * it touches: may read high, may read low, or either way. Later tickets add theirs (the assumed army spread, stats
- * treated as independent, Rally reaching every pair, no taxiing or ferrying, Attack Stance adjacency from the spread,
- * no kills by NPC allies, Ch 3's door keys, simulation error) and retire placeholders they replace.
+ * it touches: may read high, may read low, or either way. Later tickets add theirs (stats treated as independent, no
+ * taxiing or ferrying, Attack Stance adjacency from the spread, no kills by NPC allies, Ch 3's door keys, simulation
+ * error) and retire placeholders they replace. The assumed army spread (#182) is an assumption (`army-spread`): it has
+ * a setting.
  */
-export type BlindSpotId = 'one-worst-attacker' | 'equal-share-of-actions' | 'full-hp-each-turn' | 'likely-result' | 'bosses-hold';
+export type BlindSpotId = 'one-worst-attacker' | 'equal-share-of-actions' | 'rally-reaches-every-pair' | 'likely-result' | 'bosses-hold';
 
 export type BlindSpot = {
   readonly id: BlindSpotId;
@@ -413,15 +447,17 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
     id: 'equal-share-of-actions',
     label: 'An equal share of actions per turn',
     why:
-      'Each pair or unit alone gets one action a turn, whoever it is: nothing says who can reach which foe, so a fast flier and an armoured ' +
+      'Each pair or unit alone gets one action a turn (a Dance gives one more), whoever it is: nothing says who can reach which foe, so a fast flier and an armoured ' +
       'unit act alike, and every foe is in reach of every action.',
     lean: 'either',
     touches: ['map'],
   },
   {
-    id: 'full-hp-each-turn',
-    label: 'Every unit starts each turn at full HP',
-    why: 'Healing isn’t spent from actions yet (staff, Vulnerary, Rescue come with sustain), so damage taken is healed by the next turn for free.',
+    id: 'rally-reaches-every-pair',
+    label: 'Rally reaches every pair',
+    why:
+      'A unit with a Rally skill equipped rallies first each turn, with its own action, and the bonus is taken to reach every other pair for ' +
+      'that turn’s fights. In play a Rally reaches only the units within 3 tiles.',
     lean: 'high',
     touches: ['map'],
   },
@@ -430,7 +466,8 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
     label: 'Each fight plays out at its likely result',
     why:
       'The play goes on from each exchange’s likely result given nobody died (the lead’s expected HP; the foe falls when that’s more likely ' +
-      'than not), while the chance of dying in it is exact. A foe left standing by bad luck can attack again.',
+      'than not), while the chance of dying in it is exact. A foe left standing by bad luck can attack again. A heal restores its expected ' +
+      'HP (the heal times the chance the staff reaches), and a Rescue happens when it more likely reaches than not.',
     lean: 'either',
     touches: ['map'],
   },

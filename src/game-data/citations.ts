@@ -95,6 +95,11 @@ export const RESEARCH_EXP: Citation = {
   label: 'Research: EXP rules (#138)',
   url: `${RESEARCH}/research/exp-rules/research/exp-rules.md`,
 };
+export const SPEC_MAP_SIMULATION: Citation = {
+  label: 'Spec: Endpoint-first planning, The map simulation (#175, #159)',
+  url: 'https://github.com/AttackOnTyler/fe13-child-calc/issues/175',
+};
+export const SF_STAVES: Citation = { label: 'SF staves', url: 'https://serenesforest.net/awakening/inventory/staves/' };
 export const RESEARCH_INTERNAL_LEVEL: Citation = {
   label: 'What the chapter log records for the internal level (#149)',
   url: 'https://github.com/AttackOnTyler/fe13-child-calc/issues/149',
