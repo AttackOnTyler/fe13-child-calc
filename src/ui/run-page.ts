@@ -3,8 +3,9 @@
  * holds a snapshot: every unit's class, level, EXP, stats, skills, inventory and supports, plus the convoy and gold.
  * A new entry copies the one before; editing a past entry never reaches later ones, which are flagged instead.
  */
-import type { Assumptions, ChildId, Engine, HeldItem, MapOrderStep, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitSnapshot } from '../engine';
+import type { Assumptions, ChildId, Engine, HeldItem, MapOrderStep, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
 import { EMPTY_SNAPSHOT, SUPPORT_LEVELS, addEntry, childJoinFrom, chromWedding, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, withUnit } from '../engine';
+import { removeClassChange, tierOfClass, withClassChange, withCountOverride, type Seal } from '../engine';
 import { CHILD_UNITS } from '../game-data/children';
 import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
 import { h } from './dom';
@@ -148,7 +149,7 @@ function recordResults(ctx: RunContext, e: RunEntry, step: number): HTMLElement 
   const body = (() => {
     switch (step) {
       case 0:
-        return [h('p', { class: 'muted small' }, 'Update who levelled, promoted or reclassed. Leave the rest: it’s copied from last time.'), unitTable(ctx, e, veterans, true)];
+        return [h('p', { class: 'muted small' }, 'Update who levelled, promoted or reclassed. Leave the rest: it’s copied from last time.'), unitTable(ctx, e, veterans, true), classChanges(ctx, e)];
       case 1: {
         const notes = recruits.map((u) => childStatsNote(ctx.run, e, u, ctx.assumptions)).filter((n): n is string => n !== null);
         return recruits.length
@@ -375,6 +376,9 @@ function entryBlock(ctx: RunContext, e: RunEntry, latest: boolean, flagged: bool
       h('button', { class: 'linkish', 'aria-expanded': String(open), onclick: () => ctx.setOpenEntry(open ? undefined : e.id) }, `${open ? '▾' : '▸'} ${mapLabel(ctx.engine, e)}`),
       h('span', { class: 'muted small' }, `${units} units${e.snapshot.gold !== null ? ` · ${e.snapshot.gold}G` : ''}${latest ? ' · latest' : ''}`),
       flagged ? h('span', { class: 'chip small warn', title: 'An earlier entry was edited after this one was copied from it: check whether the fix applies here too' }, '⚠ earlier entry edited') : null,
+      ctx.engine.classChangeProposals(ctx.run).some((p) => p.entry === e.id)
+        ? h('span', { class: 'chip small warn', title: 'A unit’s level reset here: open the entry to record the class change' }, '⚠ class change to record')
+        : null,
       !latest || ctx.run.entries.length > 1
         ? h('button', { class: 'mini', title: 'Remove this entry', onclick: () => confirm('Remove this entry?') && ctx.setRun(removeEntry(ctx.run, e.id)) }, '✕')
         : null,
@@ -396,10 +400,78 @@ const input = (value: string | number, onset: (v: string) => void, attrs: Record
   h('input', { value: String(value), ...attrs, onchange: (ev) => onset((ev.target as HTMLInputElement).value) });
 const numOrNull = (v: string) => (v.trim() === '' ? null : Number(v));
 
-/** Units' rows in an entry, every field editable; `quick` shows only class, level, promoted and EXP. */
+const TIER_LABELS = { base: 'Base', advanced: 'Advanced', special: 'Special' } as const;
+
+/** The Promoted box as a readout (#185): the tier from the class data, or a flag for a class it doesn't know. */
+const tierCell = (tier: UnitInternalLevel['tier']) =>
+  tier
+    ? h('td', { class: 'muted small', title: 'From the class data (a special class counts as unpromoted)' }, TIER_LABELS[tier])
+    : h('td', { class: 'warn small', title: 'Not a class in the class data: check the spelling. Its tier isn’t guessed.' }, '⚠ unknown class');
+
+/**
+ * The unit's internal level and its Second Seal count (#185). The count box stands in for history the log can't see:
+ * what's typed is the count as of this entry, so the override is that less what the log's class changes add.
+ */
+function internalCell(ctx: RunContext, unit: RosterUnit, lv: UnitInternalLevel | undefined): HTMLElement {
+  if (!lv) return h('td', {});
+  const logged = lv.count - (ctx.run.countOverrides?.[unit] ?? 0);
+  return h(
+    'td',
+    { class: 'small' },
+    h('b', { title: `Level ${lv.level}${lv.tier === 'advanced' ? ' + 20 (advanced)' : ''} + count ${lv.count}, capped by difficulty` }, String(lv.internal ?? '?')),
+    ' (',
+    input(lv.count, (v) => ctx.setRun(withCountOverride(ctx.run, unit, v.trim() === '' ? null : Math.max(0, (Number(v) || 0) - logged))), {
+      class: 'num-in',
+      'aria-label': `${unit} Second Seal count`,
+      title: 'Second Seal count: worked out from the log’s class changes. Set it for history the log can’t see; clear it to go back.',
+    }),
+    ')',
+    lv.unknownHistory
+      ? h('span', { class: 'chip small warn', title: 'First seen in a class it can’t join in: enter its Second Seal count from before the log (0 if it has none). Read as 0 until then.' }, '? count before the log')
+      : null,
+    ...lv.problems.slice(lv.tier ? 0 : 1).map((p) => h('div', { class: 'warn' }, `⚠ ${p}`)),
+  );
+}
+
+/**
+ * Class changes on an entry (#185): the ones the log proposes from a level reset, pre-filled from the entry before and
+ * correctable before they're recorded, then the recorded ones.
+ */
+function classChanges(ctx: RunContext, e: RunEntry): HTMLElement | null {
+  const proposals = ctx.engine.classChangeProposals(ctx.run).filter((p) => p.entry === e.id);
+  const recorded = e.classChanges ?? [];
+  if (!proposals.length && !recorded.length) return null;
+  const name = (u: RosterUnit) => unitName(u, ctx.run.roster.run.gender);
+  const sealName = (s: Seal) => (s === 'master' ? 'Master Seal' : 'Second Seal');
+  return h(
+    'div',
+    { class: 'banner' },
+    h('b', {}, 'Class changes'),
+    ...proposals.map((p) => {
+      let seal = p.seal;
+      let level = p.level;
+      return h(
+        'div',
+        { class: 'row' },
+        `${name(p.unit)}: ${p.from} → ${p.to}, `,
+        h('select', { 'aria-label': `${p.unit} seal`, onchange: (ev) => (seal = (ev.target as HTMLSelectElement).value as Seal) }, ...(['master', 'second'] as const).map((s) => h('option', { value: s, selected: s === p.seal }, sealName(s)))),
+        ' used at Lv ',
+        input(level, (v) => (level = Number(v) || level), { class: 'num-in', 'aria-label': `${p.unit} level at use` }),
+        h('button', { class: 'mini', onclick: () => ctx.setRun(withClassChange(ctx.run, e.id, { ...p, seal, level })) }, 'Record class change'),
+      );
+    }),
+    proposals.length ? h('span', { class: 'muted small' }, 'Seen from a level reset and pre-filled from the last entry, which is right for a seal used before the map. Correct the level for one used mid-map.') : null,
+    ...recorded.map((c, k) =>
+      h('div', { class: 'row small' }, `✓ ${name(c.unit)}: ${c.from} → ${c.to}, ${sealName(c.seal)} at Lv ${c.level}`, h('button', { class: 'mini', title: 'Remove this class change', onclick: () => ctx.setRun(removeClassChange(ctx.run, e.id, k)) }, '✕')),
+    ),
+  );
+}
+
+/** Units' rows in an entry, every field editable; `quick` shows only class, level, tier, EXP and internal level. */
 function unitTable(ctx: RunContext, e: RunEntry, units: readonly RosterUnit[], quick = false): HTMLElement {
   const edit = (f: (s: Snapshot) => Snapshot) => ctx.setRun(editEntry(ctx.run, e.id, f, ctx.now()));
-  const unitRow = (unit: RosterUnit, u: UnitSnapshot) => {
+  const levels = ctx.engine.internalLevels(ctx.run, e.id);
+  const unitRow =(unit: RosterUnit, u: UnitSnapshot) => {
     const set = (patch: Partial<UnitSnapshot>) => edit((sn) => withUnit(sn, unit, { ...u, ...patch }));
     const stat = (st: Stat) =>
       h(
@@ -411,10 +483,12 @@ function unitTable(ctx: RunContext, e: RunEntry, units: readonly RosterUnit[], q
       'tr',
       {},
       h('td', {}, unitName(unit, ctx.run.roster.run.gender)),
-      h('td', {}, input(u.class, (v) => set({ class: v }), { class: 'cls-in', 'aria-label': `${unit} class` })),
+      // Promoted follows the class data; an unknown class keeps the last value.
+      h('td', {}, input(u.class, (v) => set({ class: v, promoted: tierOfClass(v) ? tierOfClass(v) === 'advanced' : u.promoted }), { class: 'cls-in', 'aria-label': `${unit} class` })),
       h('td', {}, input(u.level, (v) => set({ level: Number(v) || 1 }), { class: 'num-in', 'aria-label': `${unit} level` })),
-      h('td', {}, h('input', { type: 'checkbox', checked: u.promoted, title: 'Promoted', onchange: (ev) => set({ promoted: (ev.target as HTMLInputElement).checked }) })),
+      tierCell(levels.get(unit)?.tier),
       h('td', {}, input(u.exp, (v) => set({ exp: Number(v) || 0 }), { class: 'num-in', 'aria-label': `${unit} EXP` })),
+      internalCell(ctx, unit, levels.get(unit)),
       ...(quick
         ? []
         : [
@@ -425,7 +499,7 @@ function unitTable(ctx: RunContext, e: RunEntry, units: readonly RosterUnit[], q
           ]),
     );
   };
-  const heads = ['Unit', 'Class', 'Lv', 'Pro', 'EXP', ...(quick ? [] : [...STATS.map((x) => STAT_LABELS[x]), 'Skills', 'Inventory (item uses [forge +Mt/+Hit/+Crit])', 'Supports'])];
+  const heads = ['Unit', 'Class', 'Lv', 'Tier', 'EXP', 'Internal Lv (count)', ...(quick ? [] : [...STATS.map((x) => STAT_LABELS[x]), 'Skills', 'Inventory (item uses [forge +Mt/+Hit/+Crit])', 'Supports'])];
   return h(
     'div',
     { class: 'scroll-x' },
@@ -456,6 +530,7 @@ function snapshotEditor(ctx: RunContext, e: RunEntry): HTMLElement {
     { ...guide('log-snapshot'), class: 'snapshot small' },
     goldAndConvoy(ctx, e),
     unitTable(ctx, e, units.map(([u]) => u)),
+    classChanges(ctx, e),
     units.some(([, u]) => !u.stats) ? h('div', { class: 'muted' }, 'Blank stats: a child’s stats depend on its parents, so record them from the game.') : null,
     problems(s),
     h('div', { class: 'muted' }, 'Stats as the stat screen shows them, without pair-up. Unit states and marriages are edited on the Roster page; they’re recorded in the latest entry.'),

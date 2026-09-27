@@ -215,12 +215,14 @@ export const DEEPER: readonly DeeperEntry[] = [
       'Run in the rail holds your chapter log: one entry per map you play, newest first, tagged with the map.',
       'Add entry copies the last entry, and fills in the map’s recruits from their join data. A child’s stats are worked out from its parents’ stats and classes in the entry before its map (as they were on entering it); if a parent’s stats aren’t logged there, they stay blank and you record them from the game.',
       'Open an entry to record each unit’s class, level, EXP, stats, skills, inventory with forges, and supports, plus gold and the convoy.',
+      'Each row reads its tier from the class (a name the class data doesn’t know is flagged) and shows the unit’s internal level, worked out from the class changes in the log. Its count box stands in for Second Seals from before the log.',
       'Fixing a past entry never changes later ones: they’re flagged so you can check them. Export and Import save the run as a file.',
     ],
     jump: { to: 'log', target: 'chapter-log' },
     terms: [
       { term: 'chapter log', def: 'A run’s record, one entry per map played, each copied forward from the last.' },
       { term: 'snapshot', def: 'An entry’s record of the army: every unit, the convoy, gold, unit states and marriages.' },
+      { term: 'internal level', def: 'The hidden level EXP is computed from: the level, +20 in an advanced class, plus a count from Second Seals, capped by difficulty.' },
     ],
   },
   {
@@ -229,6 +231,7 @@ export const DEEPER: readonly DeeperEntry[] = [
     answer: [
       'Next map, at the top of Run, offers what your route has opened: the story’s next chapter first, then paralogues (a child’s only once Chapter 13 is cleared, its parent is recorded married — a pin doesn’t count — and its map can be reached; the SpotPass ones with a note that the downloads may be gone), then on a Full route the DLC. Grind maps are never offered: log them as “other”. A map Next map doesn’t offer (a child paralogue played before its marriage was recorded) can still be logged with Add entry.',
       'Record results makes the map’s entry, a copy of the last, and walks you through what changed: deployed units, the map’s recruits (pre-filled), deaths and marriages, then convoy and gold.',
+      'When a unit’s level resets, it proposes a class change (Master or Second Seal, used at the level from the last entry). Correct the seal or level if you used it mid-map, then record it.',
       'On Chapter 11, if Chrom has no recorded marriage, it asks who the game married him to at the map’s end: a candidate not married to someone else (a lost one included), or the Maiden. It pre-selects one only when his logged support ranks decide it (a single candidate at his highest rank, C or above); otherwise the game decided by support points the app can’t see, so pick who he married. The answer is recorded as a marriage.',
       'A child who joins gets its stats from its parents as the entry before the map logs them: the fixed parent and its spouse (Morgan: Robin and Robin’s spouse; Lucina: Chrom’s recorded wife, the Maiden’s side counting as 0). If either parent’s stats are missing there, the recruits step names that parent and leaves the child’s stats blank.',
       'On Classic a unit that falls is dead for good; on Casual it comes back, so nothing is recorded. Anything you skip keeps its copied value.',

@@ -56,7 +56,9 @@ import { runSelfTest } from './self-test';
 import { EMPTY_ROSTER, evaluateBlocking, rosterUnits, stateOf, unitName, type Blocking, type Roster, type RosterUnit, type RunFacts } from './roster';
 import { CANDIDATE_PRESETS, PRESETS, type PresetId, type ScoringRole } from '../curated/presets';
 import { DEFAULT_PRIORITY, childLedger, evaluatePlan, savedPairings, solvePlan, type LedgerEntry, type MarriagePlan, type PlanContext, type PlannedChild } from './plan';
-import type { SavedPlan } from './roster';
+import type { Difficulty, SavedPlan } from './roster';
+import { combatExp, type CombatOutcome, type ExpFoe } from './exp';
+import { classChangeProposals, internalLevels, type ProposedClassChange, type UnitInternalLevel } from './internal-level';
 import { deploymentRoleOf, inPlay } from './composition';
 import { ARMY_FIT_PASS_CAP, armyFit, type RoleAssignment } from './army-fit';
 import { deriveRoles, type Derivation, type RobinGain, type RobinGainSide } from './derive';
@@ -150,6 +152,24 @@ export {
   type UnitSnapshot,
 } from './run';
 export { chromChapter11Wife, chromWedding, type ChromWeddingAsk, type ChromWife } from './chrom-wedding';
+export {
+  COMBAT_EXP_MAX,
+  COUNT_CAP,
+  RALLY_EXP,
+  STAFF_EXP,
+  combatExp,
+  damageExp,
+  danceExp,
+  expFoeOf,
+  internalLevel,
+  killExp,
+  secondSealCount,
+  staffExp,
+  tierOfClass,
+  type CombatOutcome,
+  type ExpFoe,
+} from './exp';
+export { removeClassChange, withClassChange, withCountOverride, type ClassChange, type ProposedClassChange, type Seal, type UnitInternalLevel } from './internal-level';
 export {
   FORGE,
   ITEMS,
@@ -439,6 +459,30 @@ export type Engine = {
    * its best pairing that can still happen with Δ vs the plan, and its status.
    */
   ledger(roster: Roster, settings: PlanSettings): readonly LedgerEntry[];
+  /**
+   * The EXP one combat gives (research/exp-rules; #185). A back earns only from its own Dual Strikes (half its damage
+   * EXP, all of it on a kill, never kill EXP); Veteran's ×1.5 applies only when its holder is in front (C4). The
+   * Lunatic repeat cut starts at the foe's 4th engagement. For the hot loop, call the pure `combatExp` directly.
+   */
+  combatExp(c: CombatExpInput): number;
+  /** Each unit's internal level as of an entry (the latest by default), walked from the log's class changes. */
+  internalLevels(run: Run, entry?: string): ReadonlyMap<RosterUnit, UnitInternalLevel>;
+  /** Class changes the log suggests (a level reset) but doesn't hold, on every entry: Record results proposes them. */
+  classChangeProposals(run: Run): readonly ProposedClassChange[];
+};
+
+/** One combat for `Engine.combatExp`. */
+export type CombatExpInput = {
+  readonly internalLevel: number;
+  readonly foe: ExpFoe;
+  readonly outcome: CombatOutcome;
+  readonly difficulty: Difficulty;
+  /** In a pair: in front (the lead) or the back. Alone when unset. */
+  readonly pair?: 'front' | 'back';
+  /** The unit has Veteran equipped. */
+  readonly veteran?: boolean;
+  /** This combat is the foe's n-th engagement (1 by default). */
+  readonly engagement?: number;
 };
 
 /**
@@ -1471,5 +1515,9 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       const ctx = planContext(roster, settings);
       return childLedger(ctx, solvePlan(ctx), (p) => evaluateBlocking(p, roster, assumptions));
     },
+    combatExp: (c) =>
+      combatExp(c.internalLevel, c.foe, c.outcome, c.pair === 'back', c.difficulty === 'lunatic' || c.difficulty === 'lunatic-plus', c.engagement ?? 1, c.pair === 'front' && c.veteran ? 1.5 : 1),
+    internalLevels: (run, entry) => internalLevels(run, assumptions['class-change-internal-level'], entry),
+    classChangeProposals: (run) => classChangeProposals(run),
   };
 }
