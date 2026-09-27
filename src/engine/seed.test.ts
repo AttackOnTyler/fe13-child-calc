@@ -55,22 +55,23 @@ describe('the seed (#198)', () => {
   });
 
   it('keeps a recorded marriage as a fact, and a marriage pin', () => {
-    // Unrecorded, the seed doesn't marry Chrom to Olivia, nor Vaike to Sully.
-    expect(spouseIn(seed, 'chrom')).not.toBe('olivia');
+    // Record Chrom with a candidate the seed didn't pick (her child with him: Maribelle's Brady, Olivia's Inigo).
+    const wife = spouseIn(seed, 'chrom') === 'maribelle' ? 'olivia' : 'maribelle';
+    const child = wife === 'maribelle' ? 'brady' : 'inigo';
     expect(spouseIn(seed, 'vaike')).not.toBe('sully');
-    const recorded = runFromRoster(withSpouse(facts, 'chrom', 'olivia', 'married'));
+    const recorded = runFromRoster(withSpouse(facts, 'chrom', wife, 'married'));
     const plan = engine.seedPlan(recorded, { pins: [{ kind: 'marriage', couple: ['vaike', 'sully'] }] });
     expect(couple(plan, 'chrom')).toHaveLength(1);
-    expect(spouseIn(plan, 'chrom')).toBe('olivia');
-    expect(couple(plan, 'olivia')).toHaveLength(1);
+    expect(spouseIn(plan, 'chrom')).toBe(wife);
+    expect(couple(plan, wife)).toHaveLength(1);
     expect(spouseIn(plan, 'vaike')).toBe('sully');
-    expect(plan.wishlist.children.find((c) => c.child === 'lucina')?.parents).toEqual(['chrom', 'olivia']);
-    expect(plan.wishlist.children.find((c) => c.child === 'inigo')?.parents).toEqual(['olivia', 'chrom']);
+    expect(plan.wishlist.children.find((c) => c.child === 'lucina')?.parents).toEqual(['chrom', wife]);
+    expect(plan.wishlist.children.find((c) => c.child === child)?.parents).toEqual([wife, 'chrom']);
     // The Plan page's pins are the seed's marriage pins, each couple once.
     expect(marriagePins(withSpouse(facts, 'vaike', 'sully', 'pinned'))).toEqual([{ kind: 'marriage', couple: ['vaike', 'sully'] }]);
     // A pin on a recorded marriage's unit can't hold: the record wins.
     const clash = engine.seedPlan(recorded, { pins: [{ kind: 'marriage', couple: ['chrom', 'sumia'] }] });
-    expect(spouseIn(clash, 'chrom')).toBe('olivia');
+    expect(spouseIn(clash, 'chrom')).toBe(wife);
   });
 
   it('proposes the endpoint’s army as it will fight, with classes and builds, and each child’s parents and passes', () => {
