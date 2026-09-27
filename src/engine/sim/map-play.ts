@@ -239,6 +239,8 @@ export type SimFight = {
   readonly engagement: number;
   /** Paired: the chance the back lands a Dual Strike in the exchange (its half damage EXP, #195). */
   readonly dualStrike?: number;
+  /** Lunatic+: the foe's two drawn skills (each foe draws its own). */
+  readonly drawn?: readonly string[];
 };
 
 /**
@@ -306,7 +308,7 @@ export type MapPlay = {
   readonly units: Readonly<Record<string, SimUnitTally>>;
   readonly groups: readonly { readonly key: string; readonly name: string; readonly className: string; readonly count: number; readonly felled: number }[];
   readonly log: readonly SimTurn[];
-  /** The Lunatic+ skills drawn for each foe group without recorded skills. */
+  /** The Lunatic+ skills drawn for each foe group without recorded skills, over its foes (each draws its own two: `SimFight.drawn`). */
   readonly skills: Readonly<Record<string, readonly string[]>>;
   /** The stated blind spots this number rests on. */
   readonly blindSpots: readonly BlindSpotId[];
@@ -624,6 +626,8 @@ class MapState {
   /** Bumped whenever the survivals are dropped: an attack's exposure worked out before then is worked out again. */
   private riskVersion = 0;
   private readonly drawn: (readonly string[])[] = [];
+  /** Each group's first group of its kind (itself, or the group a Lunatic+ copy was made from; see `instanceGroup`). */
+  private readonly baseOf: number[] = [];
   private readonly waveGroup = new Map<SimFoeGroup, number>();
   /** The foe groups on the field from the start (the boss opens once they're gone, unless the solve picks a turn). */
   private readonly starting = new Set<number>();
@@ -755,23 +759,66 @@ class MapState {
   private groupIndex(g: SimFoeGroup): number {
     const known = this.waveGroup.get(g);
     if (known !== undefined) return known;
-    const drawn = g.pool?.length ? this.rng.sample(g.pool.filter((s) => !g.foe.skills.includes(s)), LUNATIC_PLUS_DRAWS) : [];
-    if (g.pool?.length) this.skills[g.key] = drawn;
+    const i = this.addGroup(g, this.draw(g));
+    this.waveGroup.set(g, i);
+    return i;
+  }
+
+  /** Each foe group's count and felled, a group's Lunatic+ copies (see `instanceGroup`) counted with it. */
+  groupTotals(): MapPlay['groups'] {
+    const out = new Map<string, { key: string; name: string; className: string; count: number; felled: number }>();
+    this.groups.forEach((g, i) => {
+      const t = out.get(g.key);
+      if (t) {
+        t.count += this.spawned[i]!;
+        t.felled += this.felled[i]!;
+      } else out.set(g.key, { key: g.key, name: g.foe.name, className: g.foe.className, count: this.spawned[i]!, felled: this.felled[i]! });
+    });
+    return [...out.values()];
+  }
+
+  /** A foe's Lunatic+ skills: two from its group's pool, less the skills it has (none without a pool). */
+  private draw(g: SimFoeGroup): readonly string[] {
+    return g.pool?.length ? this.rng.sample(g.pool.filter((s) => !g.foe.skills.includes(s)), LUNATIC_PLUS_DRAWS) : [];
+  }
+
+  private addGroup(g: SimFoeGroup, drawn: readonly string[], base?: number): number {
+    if (g.pool?.length) this.skills[g.key] = [...new Set([...(this.skills[g.key] ?? []), ...drawn])];
     this.groups.push(g);
     this.drawn.push(drawn);
+    this.baseOf.push(base ?? this.groups.length - 1);
     this.spawned.push(0);
     this.felled.push(0);
     this.left.push(0);
     this.claimed.push([]);
     this.claimers.push([]);
-    this.waveGroup.set(g, this.groups.length - 1);
-    return this.groups.length - 1;
+    const i = this.groups.length - 1;
+    if (base !== undefined && this.starting.has(base)) this.starting.add(i);
+    return i;
+  }
+
+  /**
+   * The group a new foe of group `g` joins (the second realism pass): on Lunatic+ each foe draws its own two skills
+   * (FEW Difficulty: every enemy gains two), so a foe whose draw differs from its group's first joins a copy of the
+   * group with that draw (same key: its fights, kills and EXP read as the group's). The group's first foe keeps the
+   * draw made when the group was first seen.
+   */
+  private instanceGroup(g: number): number {
+    const grp = this.groups[g]!;
+    if (!grp.pool?.length || !this.spawned[g]) return g;
+    const drawn = this.draw(grp);
+    const k = [...drawn].sort().join(',');
+    for (let i = 0; i < this.groups.length; i++) if (this.baseOf[i] === g && [...this.drawn[i]!].sort().join(',') === k) return i;
+    return this.addGroup(grp, drawn, g);
   }
 
   private spawn(g: number, count: number) {
-    for (let i = 0; i < count; i++) this.foes.push({ g, hp: this.groups[g]!.foe.stats.hp });
-    this.spawned[g]! += count;
-    this.left[g]! += count;
+    for (let i = 0; i < count; i++) {
+      const at = this.instanceGroup(g);
+      this.foes.push({ g: at, hp: this.groups[at]!.foe.stats.hp });
+      this.spawned[at]!++;
+      this.left[at]!++;
+    }
     this.foeVersion++;
     if (count > 0) this.progress = true;
   }
@@ -1034,7 +1081,7 @@ class MapState {
       const b = this.tallies.get(back.id)!;
       b.together[lead.id] = (b.together[lead.id] ?? 0) + 1;
     }
-    this.fights.push({ phase, lead: lead.id, ...(back ? { back: back.id } : {}), foe: key, survive: ex.survive, kill, dealt, engagement, ...(dualStrike > 0 ? { dualStrike } : {}) });
+    this.fights.push({ phase, lead: lead.id, ...(back ? { back: back.id } : {}), foe: key, survive: ex.survive, kill, dealt, engagement, ...(dualStrike > 0 ? { dualStrike } : {}), ...(this.drawn[f.g]!.length ? { drawn: this.drawn[f.g]! } : {}) });
   }
 
   /**
@@ -2298,7 +2345,7 @@ export function playMap(input: MapPlayInput, seed: number): MapPlay {
     turns: s.turn,
     ended: s.ended ?? 'stalled',
     units,
-    groups: s.groups.map((g, i) => ({ key: g.key, name: g.foe.name, className: g.foe.className, count: s.spawned[i]!, felled: s.felled[i]! })),
+    groups: s.groupTotals(),
     log: s.log,
     skills: s.skills,
     blindSpots: spots,

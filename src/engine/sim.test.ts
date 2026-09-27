@@ -122,6 +122,16 @@ describe('the map simulation’s no-death chance (#181)', () => {
     // Averaged over runs, still seeded.
     expect(engine.mapNoDeath(input, 3, 8)).toBe(engine.mapNoDeath(input, 3, 8));
   });
+
+  it('draws Lunatic+ skills for each foe, not once for its group: a group of eight reads as one, its fights as each foe', () => {
+    const pool = ['Pass', 'Hawkeye', 'Luna+', 'Vantage+'];
+    const weak: Foe = { ...brute, name: 'Imp', count: 8, weapon: undefined, stats: stats(10, 0, 0, 0, 0, 60, 0, 0) };
+    const play = engine.playMap({ map: rout([group(weak, { pool })]), lineup: [solo(hero)] }, 3);
+    expect(play.groups).toEqual([{ key: 'Imp', name: 'Imp', className: 'Fighter', count: 8, felled: 8 }]);
+    const draws = new Set(play.log.flatMap((t) => t.fights.map((f) => [...f.drawn!].sort().join(','))));
+    expect(draws.size).toBeGreaterThan(1);
+    expect(play.units.hero!.kills).toEqual({ Imp: 8 });
+  });
 });
 
 describe('a map from the chapter data (#181)', () => {
