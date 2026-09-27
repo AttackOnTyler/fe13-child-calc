@@ -6,9 +6,12 @@
  * Four kinds:
  * - **support**: a couple the plan marries reaches S, as a window counted in maps: the earliest start (the first map
  *   both can be fielded), the latest start (the deadline less the maps the pair's curve needs from its recorded rank,
- *   one rank a map at 3 points), and the deadline (its first recruited child's paralogue entry; Chrom's wife's is the
- *   end of Chapter 11 and can't move; a couple with no child to recruit, the endpoint). Earliest after latest is a
- *   **non-starter**.
+ *   one rank a map at 3 points), and the deadline (its first recruited child's paralogue entry; a couple with no child
+ *   to recruit, the endpoint). Earliest after latest is a **non-starter**. Chrom's wife needs no S: she must win the
+ *   game's Chapter 11 rule (`chromWifeByPoints`), fixed at the end of Chapter 11, and the wedding makes it an S. Sumia,
+ *   Sully, Maribelle or Robin (F) aim for a C with him viewed before Chapter 11 (the window's deadline is its start),
+ *   which beats Olivia and every rival without one. Olivia aims for 2 points on Chapter 11 itself (3 combats as his
+ *   Support Unit) with no rival's C viewed: a rival's recorded C makes it a non-starter.
  * - **skill**: a skill learned, for a build (by the endpoint, the only map whose build the roadmap names) or passed at
  *   a child's paralogue entry from the parent's last active slot. A pass the child already has (its start class's), or
  *   the same skill from both parents, is **wasted**. A skill already learned, and a fixed pass, need no milestone.
@@ -25,13 +28,14 @@ import { CHILD_UNITS, type ChildId } from '../game-data/children';
 import { MAPS } from '../game-data/chapters';
 import { CLASS_SKILLS, SKILLS, type SkillId } from '../game-data/skills';
 import type { ClassId } from '../game-data/classes';
-import { CHROM_WEDDING_MAP } from '../game-data/supports';
+import { CHROM_WEDDING_CANDIDATES, CHROM_WEDDING_MAP } from '../game-data/supports';
+import { CHROM_WEDDING_ORDER } from './chrom-wedding';
 import type { Assumptions } from './assumptions';
 import { startSkills } from './child-skills';
 import { className } from './classes';
 import { flawlessInput } from './flawless';
 import type { RosterUnit } from './roster';
-import type { Run, SupportLevel } from './run';
+import { rosterOf, type Run, type SupportLevel } from './run';
 import { pairThresholds, pointsOfRank } from './sim/support-growth';
 import type { ArmyUnit, ChildRecruit, RunSimInput } from './sim/run-sim';
 import { SUPPORT_POINTS_PER_MAP } from './support-curves';
@@ -84,6 +88,13 @@ export type SupportMilestone = Common & {
   readonly nonStarter: boolean;
   /** Chrom's wife: the end of Chapter 11, whatever the roadmap does. */
   readonly fixed: boolean;
+  /**
+   * Chrom's wife: what winning the game's Chapter 11 rule takes (the window counts maps to it; the wedding makes the S).
+   * `viewed-c`: a C with him viewed before Chapter 11 is entered. `olivia-points`: Olivia's 2 points with him by the end
+   * of Chapter 11, with no rival's C viewed. `rivals`: the other candidates not married to someone else; `shutOutBy`:
+   * those whose C with him is already recorded (viewed), which makes Olivia's a non-starter.
+   */
+  readonly wedding?: { readonly needs: 'viewed-c' | 'olivia-points'; readonly rivals: readonly RosterUnit[]; readonly shutOutBy?: readonly RosterUnit[] };
   /** The children the marriage is for, the plan's recruits. */
   readonly children: readonly ChildId[];
 };
@@ -129,10 +140,10 @@ const SEAL_ITEM = { master: 'Master Seal', second: 'Second Seal' } as const;
 const SKILL_BY_NAME = new Map(Object.entries(SKILLS).map(([id, s]) => [s.name, id as SkillId]));
 const pairId = (a: string, b: string) => (a < b ? `${a}+${b}` : `${b}+${a}`);
 
-/** Maps together from `points` to S, one rank a map at most under the clamp; undefined when the pair has no S. */
-export function mapsToS(t: NonNullable<ReturnType<typeof pairThresholds>>, points: number, rule: Assumptions['support-past-threshold']): number | undefined {
+/** Maps together from `points` to `rank` (S by default), one rank a map at most under the clamp; undefined when the pair has none. */
+function mapsTo(t: NonNullable<ReturnType<typeof pairThresholds>>, points: number, rule: Assumptions['support-past-threshold'], rank: SupportLevel = 'S'): number | undefined {
   let maps = 0;
-  for (const r of RANKS) {
+  for (const r of RANKS.slice(0, RANKS.indexOf(rank) + 1)) {
     const need = t[r];
     if (need === undefined) return undefined;
     while (points < need) {
@@ -209,31 +220,42 @@ export function milestones(run: Run, plan: Plan, assumptions: Assumptions): Mile
   }
 
   // Supports: each couple the plan still has to marry.
+  const recordedRank = (a: RosterUnit, b: RosterUnit) =>
+    [units.get(a), units.get(b)].flatMap((u) => u?.supports.filter((s) => s.partner === (u.id === a ? b : a)).map((s) => s.rank) ?? []).sort((x, y) => RANKS.indexOf(y) - RANKS.indexOf(x))[0];
+  const spouses = rosterOf(run).spouses;
+  const candidates = CHROM_WEDDING_ORDER.filter((c) => (CHROM_WEDDING_CANDIDATES as readonly string[]).includes(c) || (c === 'robin' && robin === 'F'));
+  const wedding = maps.findIndex((m) => m.map.id === CHROM_WEDDING_MAP);
   for (const [a, b] of input.couples ?? []) {
     const t = pairThresholds(a, b, robin);
     if (!t) continue;
-    const rank = [units.get(a), units.get(b)].flatMap((u) => u?.supports.filter((s) => s.partner === (u.id === a ? b : a)).map((s) => s.rank) ?? []).sort((x, y) => RANKS.indexOf(y) - RANKS.indexOf(x))[0];
-    const need = mapsToS(t, rank ? pointsOfRank(rank, t) : 0, assumptions['support-past-threshold']);
+    const rank = recordedRank(a, b);
+    const fixed = (a === 'chrom' || b === 'chrom') && wedding >= 0;
+    const wife = a === 'chrom' ? b : a;
+    const rivals = fixed ? candidates.filter((c) => c !== wife && !(spouses[c]?.bond === 'married' && spouses[c]!.partner !== 'chrom')) : [];
+    const needs = !fixed ? undefined : wife === 'olivia' ? ('olivia-points' as const) : ('viewed-c' as const);
+    // Olivia's 2 points take Chapter 11 itself; a viewed C, the maps to C before it.
+    const need = needs === 'olivia-points' ? 1 : mapsTo(t, rank ? pointsOfRank(rank, t) : 0, assumptions['support-past-threshold'], needs ? 'C' : 'S');
     if (need === undefined) continue;
     const children = plan.wishlist.children.filter((c) => recruited.has(c.child) && c.parents.includes(a) && c.parents.includes(b)).map((c) => c.child);
-    const wedding = maps.findIndex((m) => m.map.id === CHROM_WEDDING_MAP);
-    const fixed = (a === 'chrom' || b === 'chrom') && wedding >= 0;
-    const deadline = fixed ? point(wedding, 'end') : children.length ? point(Math.min(...children.map((c) => recruited.get(c)!))) : endpoint;
+    const at = fixed ? point(wedding, 'end') : children.length ? point(Math.min(...children.map((c) => recruited.get(c)!))) : endpoint;
+    const deadline = needs === 'viewed-c' ? point(wedding) : at;
     const fa = from.get(a);
     const fb = from.get(b);
     const earliest = fa === undefined || fb === undefined ? undefined : Math.max(fa, fb);
     const latest = deadline.index + (deadline.when === 'end' ? 1 : 0) - need;
-    const nonStarter = earliest === undefined || earliest > latest || earliest > last;
+    const shutOutBy = needs === 'olivia-points' ? rivals.filter((c) => recordedRank('chrom', c) !== undefined) : [];
+    const nonStarter = earliest === undefined || earliest > latest || earliest > last || shutOutBy.length > 0;
     out.push({
       kind: 'support',
       id: `support:${pairId(a, b)}`,
-      at: deadline,
+      at,
       units: [a, b],
       pair: [a, b],
       rank: 'S',
       window: { earliest: earliest !== undefined && earliest <= last ? point(earliest) : undefined, latest: latest >= 0 && latest <= last ? point(latest) : undefined, deadline, maps: need },
       nonStarter,
       fixed,
+      ...(needs ? { wedding: { needs, rivals, ...(shutOutBy.length ? { shutOutBy } : {}) } } : {}),
       children,
     });
   }
@@ -334,3 +356,7 @@ function classMilestones(
     };
   });
 }
+
+/** Maps together from `points` to S, one rank a map at most under the clamp; undefined when the pair has no S. */
+export const mapsToS = (t: NonNullable<ReturnType<typeof pairThresholds>>, points: number, rule: Assumptions['support-past-threshold']): number | undefined =>
+  mapsTo(t, points, rule, 'S');

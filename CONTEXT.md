@@ -96,8 +96,12 @@ The ordered maps a roadmap plays to its endpoint. Its template comes from the ro
 _Avoid_: Route (the Route is Main story or Full route), schedule
 
 **Milestone**:
-Something the adopted roadmap needs true before an event on its map order: a map, a point inside a map, a child's paralogue entry, or the endpoint. One of four kinds: a pair's support rank, a skill learned (for a build, or passed at paralogue entry from the last active slot), a child recruited, or a class reached (naming the seal it uses). Derived from the roadmap, never written by the player; ordered by where its event falls, preconditions first. A support milestone is a window counted in maps: earliest start, latest start, deadline.
+Something the adopted roadmap needs true before an event on its map order: a map, a point inside a map, a child's paralogue entry, or the endpoint. One of four kinds: a pair's support rank, a skill learned (for a build, or passed at paralogue entry from the last active slot), a child recruited, or a class reached (naming the seal it uses). Derived from the roadmap, never written by the player; ordered by where its event falls, preconditions first. A support milestone is a window counted in maps: earliest start, latest start, deadline. Chrom's wife's is winning Chrom's wedding instead of an S.
 _Avoid_: Goal, checkpoint, level-by-map target
+
+**Chrom's wedding**:
+The game marrying an unmarried Chrom when Chapter 11 is cleared, which makes the pair an S. Candidates married to someone else are out, and the rest need 1 point with him; with none, the Maiden. Olivia at 2 points wins if no other candidate has a viewed C. Otherwise the highest viewed rank wins, then the fewest points to the next rank, then Sumia > Sully > Maribelle > Robin (F) > Olivia. A rank counts once its conversation is viewed, so a rank reached on Chapter 11 itself doesn't count.
+_Avoid_: Forced S, Chrom's auto-marriage
 
 **Milestone chance**:
 The share of simulated runs in which a milestone is met before its deadline map starts, with the median level there for a level milestone. Read from the same simulation as the flawless chance.

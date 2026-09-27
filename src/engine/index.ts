@@ -191,7 +191,7 @@ export {
   type SupportLevel,
   type UnitSnapshot,
 } from './run';
-export { CHROM_WEDDING_TIE_ORDERS, chromChapter11Wife, chromWedding, chromWifeByPoints, type ChromStanding, type ChromWeddingAsk, type ChromWife } from './chrom-wedding';
+export { CHROM_WEDDING_ORDER, OLIVIA_WEDDING_POINTS, chromChapter11Wife, chromWedding, chromWifeByPoints, type ChromStanding, type ChromWeddingAsk, type ChromWife } from './chrom-wedding';
 export {
   COMBAT_EXP_MAX,
   COUNT_CAP,

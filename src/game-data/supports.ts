@@ -36,20 +36,24 @@ export const S_SUPPORTS: Readonly<Partial<Record<UnitId, readonly UnitId[]>>> = 
 };
 
 /**
- * Chrom's forced marriage (#154; research/child-recruitment §3.3 and C7, research/support-growth §4.1). At the end of
- * Chapter 11 an unmarried Chrom marries the candidate (Sumia, Sully, Maribelle, Olivia, Robin (F)) he has the highest
- * support rank with, and gets an S. He marries the Maiden only if he has (almost) no support with any of them (under 1
- * point with each) or all of them are married. A candidate lost in Classic can still be picked.
- * Sources: FEW Inheritance https://fireemblemwiki.org/w/index.php?oldid=752340, SF Support Basics
- * https://serenesforest.net/awakening/characters/supports/support-basics/, JP-112 https://w.atwiki.jp/fireemblem3ds/pages/112.html
- * (and its mirror JP-89 https://w.atwiki.jp/kakuseife/pages/89.html).
- *
- * Two details are unsettled, and the app records ranks, not points, so Record results can't decide them; the simulation
- * (#188) reads them from its points as assumptions (`chrom-wedding-olivia`, `chrom-wedding-tie-order`):
- * - Olivia's threshold. SF Support Basics: Olivia if he has at least 2 points with her and no C with anyone else.
- *   JP-27 (https://w.atwiki.jp/fireemblem3ds/pages/27.html): she needs at least C.
- * - Ties. SF Support Basics: the fewest points to the next rank, then Sumia > Sully > Maribelle > Robin > Olivia.
- *   JP-89: probably Sumia > Maribelle > Sully > Olivia > Robin (F).
+ * Chrom's forced marriage (#154; research/chrom-wedding, research/child-recruitment §3.3). With no S partner when
+ * Chapter 11 is cleared, Chrom marries a candidate (Sumia, Sully, Maribelle, Olivia, Robin (F)) by his supports with
+ * them, and the marriage is a real S; he needs no S with her. The rule, from SF's controlled tests (points are whole
+ * points after the map's rounding, Chapter 11's own counted; a rank is one whose conversation was viewed, so none
+ * reached on Chapter 11 itself, as there's no world-map stop before the wedding):
+ * 1. A candidate married to someone else is out; the rest need at least 1 point. None left: the Maiden.
+ * 2. Olivia with at least 2 points wins if no other candidate has a viewed C, whatever points they have.
+ * 3. Otherwise the highest viewed rank wins (A > B > C > none), then the fewest points to the next rank (a rank reached
+ *    but not viewed is 0 to go), then Sumia > Sully > Maribelle > Robin (F) > Olivia.
+ * A candidate lost in Classic can probably still be picked (JP-112, 天馬騎士団; FEW says skipped, uncited): the
+ * `chrom-wedding-lost-candidate` assumption.
+ * Sources: SF Support Basics https://serenesforest.net/awakening/characters/supports/support-basics/, the SF forum tests
+ * it condenses (topics 39984 https://forums.serenesforest.net/topic/39984-chrom-chapter-1112-marriage-priority-discussion-thread/
+ * and 40418 https://forums.serenesforest.net/topic/40418-chroms-marriage-priority-notes-on-supports/), FEW Inheritance
+ * https://fireemblemwiki.org/w/index.php?oldid=752340, FEW Chrom oldid 772811, FEW Maiden oldid 660417, FEW Olivia
+ * oldid 736476, JP-112 https://w.atwiki.jp/fireemblem3ds/pages/112.html (and its mirror JP-89
+ * https://w.atwiki.jp/kakuseife/pages/89.html). JP-27 (https://w.atwiki.jp/fireemblem3ds/pages/27.html) gives another tie
+ * order, "probably", and says Olivia needs a C; SF's tests refute both.
  *
  * The Maiden is a possible mother for Lucina but not an S-support partner.
  */

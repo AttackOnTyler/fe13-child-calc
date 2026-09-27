@@ -43,7 +43,8 @@ import {
   SF_CLASS_BASES,
   RESEARCH_SUPPORT_GROWTH,
   SF_SUPPORT_BASICS,
-  JP_SUPPORTS,
+  FEW_CHROM,
+  FEW_MAIDEN,
   type Assumed,
   type Citation,
 } from '../game-data/citations';
@@ -90,10 +91,8 @@ type AssumptionValues = {
   'army-spread': readonly number[];
   /** Support points past a rank whose conversation isn't viewed yet: they stop at its threshold (one rank a map), or carry. */
   'support-past-threshold': 'clamp' | 'bank';
-  /** What an unmarried Chrom needs with Olivia, with no C with anyone, to marry her at the end of Chapter 11. */
-  'chrom-wedding-olivia': 'two-points' | 'rank-c';
-  /** Chrom's end-of-Chapter 11 tie order, after the fewest points to the next rank. */
-  'chrom-wedding-tie-order': 'sf' | 'jp';
+  /** A candidate lost in Classic before Chrom's wedding at the end of Chapter 11: the game can still pick her, or skips her. */
+  'chrom-wedding-lost-candidate': 'still-picked' | 'skipped';
   /** A tome's miss: it spends a use (the series rule for tomes and staves), or it's free like a physical miss. */
   'tome-miss-use': 'costs-a-use' | 'free';
   /** A booster a parent drank before its child's paralogue entry: it feeds the child's join stats, or it doesn't. */
@@ -429,34 +428,21 @@ export const ASSUMPTION_REGISTRY: { readonly [K in AssumptionId]: AssumptionDef<
     parse: (raw) => (raw === 'clamp' || raw === 'bank' ? raw : undefined),
     affects: 'support growth in the simulated runs, and how many maps together each rank takes',
   }),
-  'chrom-wedding-olivia': entry({
-    id: 'chrom-wedding-olivia',
-    label: 'Chrom marrying Olivia at the end of Chapter 11',
+  'chrom-wedding-lost-candidate': entry({
+    id: 'chrom-wedding-lost-candidate',
+    label: 'A lost candidate at Chrom’s Chapter 11 wedding',
     why:
-      'An unmarried Chrom marries the candidate he has the highest rank with at the end of Chapter 11. Olivia joins in Chapter 11 itself, ' +
-      'so she rarely has a rank. SF says he marries her with at least 2 points with her and no C with anyone else; the JP 2ch wiki says ' +
-      'she needs a C like the others. The app records ranks, not points, so only the simulation reads it.',
-    sources: [SF_SUPPORT_BASICS, JP_SUPPORTS, RESEARCH_SUPPORT_GROWTH],
-    default: 'two-points',
-    alternatives: [{ label: 'A C with her (JP 2ch wiki)', value: 'rank-c' }],
+      'An unmarried Chrom marries a candidate by his supports with them at the end of Chapter 11. Two JP wiki main texts say a candidate ' +
+      'lost in Classic can still be the one (JP-112: killing her is useless; 天馬騎士団: losing her after the support grew is too late), ' +
+      'which fits how the game treats a lost parent elsewhere. FEW’s Chrom and Maiden pages skip dead candidates, uncited, and nobody ' +
+      'has tested it (research/chrom-wedding C4). A flawless run loses nobody, so only a recorded loss reads it.',
+    sources: [JP_CHILDREN, JP_PK_CHILDREN, FEW_CHROM, FEW_MAIDEN, RESEARCH_DEATH_AFTER_MARRIAGE],
+    default: 'still-picked',
+    alternatives: [{ label: 'Skipped, like a candidate married to someone else (FEW)', value: 'skipped' }],
     input: 'choice',
-    format: (v) => (v === 'two-points' ? '2 points with her and no C with anyone (SF)' : 'A C with her (JP 2ch wiki)'),
-    parse: (raw) => (raw === 'two-points' || raw === 'rank-c' ? raw : undefined),
-    affects: 'who Chrom marries at the end of Chapter 11 in the simulated runs',
-  }),
-  'chrom-wedding-tie-order': entry({
-    id: 'chrom-wedding-tie-order',
-    label: 'Chrom’s end-of-Chapter 11 tie order',
-    why:
-      'When Chrom’s highest rank is shared, SF gives it to the candidate with the fewest points to the next rank, then Sumia > Sully > ' +
-      'Maribelle > Robin > Olivia; the JP 2ch wiki’s mirror gives, probably, Sumia > Maribelle > Sully > Olivia > Robin (F).',
-    sources: [SF_SUPPORT_BASICS, JP_CHILDREN_MIRROR, RESEARCH_SUPPORT_GROWTH],
-    default: 'sf',
-    alternatives: [{ label: 'Sumia > Maribelle > Sully > Olivia > Robin (JP 2ch wiki)', value: 'jp' }],
-    input: 'choice',
-    format: (v) => (v === 'sf' ? 'Sumia > Sully > Maribelle > Robin > Olivia (SF)' : 'Sumia > Maribelle > Sully > Olivia > Robin (JP 2ch wiki)'),
-    parse: (raw) => (raw === 'sf' || raw === 'jp' ? raw : undefined),
-    affects: 'who Chrom marries at the end of Chapter 11 in the simulated runs',
+    format: (v) => (v === 'still-picked' ? 'Still picked by her supports (JP wikis)' : 'Skipped (FEW)'),
+    parse: (raw) => (raw === 'still-picked' || raw === 'skipped' ? raw : undefined),
+    affects: 'who Record results offers and pre-selects as Chrom’s wife, and who the simulated runs can marry him to',
   }),
   'tome-miss-use': entry({
     id: 'tome-miss-use',

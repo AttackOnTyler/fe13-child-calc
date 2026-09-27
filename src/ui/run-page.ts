@@ -122,6 +122,19 @@ export function roadmapReadout(engine: Engine, run: Run, plan: Plan): { readonly
     switch (m.kind) {
       case 'support': {
         const { earliest, latest, maps } = m.window;
+        if (m.wedding) {
+          const wife = m.pair[0] === 'chrom' ? m.pair[1] : m.pair[0];
+          const head = `Chrom marries ${name(wife)} at the end of ${m.at.label} (fixed)`;
+          const span = `${maps} map${maps === 1 ? '' : 's'}`;
+          if (m.wedding.needs === 'olivia-points') {
+            const rivals = listOf(m.wedding.rivals.map(name));
+            if (m.wedding.shutOutBy) return `${head} · non-starter: ${listOf(m.wedding.shutOutBy.map(name))} already has a C with him viewed`;
+            if (m.nonStarter) return `${head} · non-starter: ${name(wife)} isn’t fielded on ${m.at.label}`;
+            return `${head}: 2 points with him on ${m.at.label} (3 combats as his Support Unit)${rivals ? `, with no C with him viewed for ${rivals}` : ''}`;
+          }
+          if (m.nonStarter) return `${head} · non-starter: a C with him viewed before ${m.at.label} needs ${span} together${earliest ? `, from ${earliest.label} on` : ''}`;
+          return `${head}: a C with him viewed before ${m.at.label}; ${maps ? `start fighting together between ${earliest!.label} and ${latest!.label} (${span})` : 'viewed already'}`;
+        }
         const head = `${name(m.pair[0])} and ${name(m.pair[1])} reach ${m.rank} ${before(m.at)}${m.fixed ? ' (fixed)' : ''}`;
         if (m.nonStarter) return `${head} · non-starter: ${maps} maps together needed${earliest ? `, from ${earliest.label} on` : ''}`;
         return `${head}: start fighting together between ${earliest!.label} and ${latest!.label} (${maps} maps)`;
@@ -724,7 +737,7 @@ function recordResults(ctx: RunContext, e: RunEntry, step: number): HTMLElement 
  * married to someone else and the Maiden are offered; one is pre-selected only when his logged ranks decide it.
  */
 function chromWeddingRow(ctx: RunContext, e: RunEntry): HTMLElement | null {
-  const ask = chromWedding(ctx.run, e.id);
+  const ask = chromWedding(ctx.run, e.id, ctx.assumptions?.['chrom-wedding-lost-candidate']);
   if (!ask) return null;
   const name = (u: RosterUnit) => unitName(u, ctx.run.roster.run.gender);
   let wife: RosterUnit | '' = ask.preselect ?? '';
@@ -750,8 +763,8 @@ function chromWeddingRow(ctx: RunContext, e: RunEntry): HTMLElement | null {
       ask.preselect === 'maiden'
         ? 'Every candidate is married to someone else, so he marries the Maiden.'
         : ask.preselect
-        ? 'He marries the candidate he has the highest support rank with; his logged ranks point to this one.'
-        : 'He marries the candidate he has the highest support with, or the Maiden if he has almost none with any. The game decides by support points the app can’t see: pick who he married.',
+        ? 'He marries the candidate he has the highest viewed support rank with; his logged ranks point to this one.'
+        : 'He marries the candidate he has the highest viewed support rank with; with no rank to decide it, the game goes by support points the app can’t see (Olivia wins from 2 points with him if nobody else has a C, and it’s the Maiden if he has almost none with any): pick who he married.',
     ),
   );
 }

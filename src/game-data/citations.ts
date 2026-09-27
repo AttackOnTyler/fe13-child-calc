@@ -90,8 +90,29 @@ export const RESEARCH_SUPPORT_GROWTH: Citation = {
   url: `${RESEARCH}/research/support-growth/research/support-growth.md`,
 };
 export const SF_SUPPORT_BASICS: Citation = { label: 'SF Support Basics', url: 'https://serenesforest.net/awakening/characters/supports/support-basics/' };
-/** The JP 2ch wiki's supports page: Chrom marries Olivia at the end of Chapter 11 only from a C. */
+/**
+ * The JP 2ch wiki's recruiting page: Chrom's Chapter 11 wedding by the highest support; its tie order ("probably") and
+ * its line that Olivia needs a C are refuted by SF's tests (SFF-39984).
+ */
 export const JP_SUPPORTS: Citation = { label: 'JP 2ch wiki supports (p.27)', url: 'https://w.atwiki.jp/fireemblem3ds/pages/27.html' };
+/** SF forum tests of Chrom's Chapter 11 wedding (May 2013): unviewed Cs don't count, 1 point is enough alone, Olivia's jump at 2. */
+export const SFF_CHROM_WEDDING_TESTS: Citation = {
+  label: 'SF Forums: Chrom Chapter 11/12 marriage priority (topic 39984)',
+  url: 'https://forums.serenesforest.net/topic/39984-chrom-chapter-1112-marriage-priority-discussion-thread/',
+};
+/** VincentASM's write-up SF Support Basics condenses: points compared after rounding, Olivia first from half her C. */
+export const SFF_CHROM_WEDDING_RULE: Citation = {
+  label: 'SF Forums: Chrom’s marriage priority + notes on supports (topic 40418)',
+  url: 'https://forums.serenesforest.net/topic/40418-chroms-marriage-priority-notes-on-supports/',
+};
+/** FEW Chrom: his wife is the highest-ranked candidate "not dead" or married to someone else (uncited on the dead). */
+export const FEW_CHROM: Citation = { label: 'FEW Chrom (oldid 772811)', url: 'https://fireemblemwiki.org/w/index.php?oldid=772811' };
+/** FEW Maiden: Chrom marries her with no support points with any candidate, or all dead or married. */
+export const FEW_MAIDEN: Citation = { label: 'FEW Maiden (oldid 660417)', url: 'https://fireemblemwiki.org/w/index.php?oldid=660417' };
+/** FEW Olivia: marrying her to Chrom means keeping him from the others and maximising Chapter 11 with her. */
+export const FEW_OLIVIA_WEDDING: Citation = { label: 'FEW Olivia (oldid 736476)', url: 'https://fireemblemwiki.org/w/index.php?oldid=736476' };
+/** FEW Inheritance at the revision read for Chrom's wedding: the highest support at the end of Chapter 11, else the Maiden. */
+export const FEW_INHERITANCE_WEDDING: Citation = { label: 'FEW Inheritance (oldid 752340)', url: 'https://fireemblemwiki.org/w/index.php?oldid=752340' };
 export const RESEARCH_GOLD: Citation = {
   label: 'Research: the gold economy (#158)',
   url: `${RESEARCH}/research/gold-economy/research/gold-economy.md`,

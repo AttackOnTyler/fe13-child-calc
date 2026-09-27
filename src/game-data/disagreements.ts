@@ -21,6 +21,15 @@ import {
   FEW_LUCINA_STATS,
   FEW_THIEF,
   FEW_WALHART,
+  JP_CHILDREN,
+  JP_CHILDREN_MIRROR,
+  JP_PK_CHILDREN,
+  JP_SUPPORTS,
+  SF_SUPPORT_BASICS,
+  SFF_CHROM_WEDDING_RULE,
+  SFF_CHROM_WEDDING_TESTS,
+  FEW_INHERITANCE_WEDDING,
+  FEW_OLIVIA_WEDDING,
   JP_CAPS,
   JP_CLASSES,
   JP_PK,
@@ -157,5 +166,31 @@ export const RESOLVED_DISAGREEMENTS: readonly ResolvedDisagreement[] = [
     winning: { value: 'Chapter 15 cleared, or P6 open and reached (Chapter 14 cleared or P12 open)', sources: [FEW_PARALOGUE_7, JP_PARALOGUES] },
     losing: [{ value: 'Access to Chapter 16, or Paralogue 6 and/or 12', sources: [SF_GAIDEN] }],
     why: 'FEW and the JP P7 page both reach P7 through P6; P12 alone doesn’t (research/child-recruitment C6, #152).',
+  },
+  {
+    id: 'chrom-wedding-tie-order',
+    item: 'Chrom’s Chapter 11 wedding: the tie order',
+    winning: { value: 'Fewest points to the next rank, then Sumia > Sully > Maribelle > Robin (F) > Olivia', sources: [SF_SUPPORT_BASICS, SFF_CHROM_WEDDING_TESTS, SFF_CHROM_WEDDING_RULE] },
+    losing: [{ value: 'Probably Sumia > Maribelle > Sully > Olivia > Robin (F)', sources: [JP_SUPPORTS, JP_CHILDREN_MIRROR] }],
+    why: 'SF’s order was tested case by case, Sully against Maribelle directly; the JP wiki labels its order a guess (research/chrom-wedding C1).',
+  },
+  {
+    id: 'chrom-wedding-olivia',
+    item: 'Chrom’s Chapter 11 wedding: what Olivia needs',
+    winning: {
+      value: '1 point to count, like everyone; 2 points win it when no other candidate has a viewed C',
+      sources: [SF_SUPPORT_BASICS, SFF_CHROM_WEDDING_TESTS, SFF_CHROM_WEDDING_RULE, FEW_OLIVIA_WEDDING],
+    },
+    losing: [{ value: 'A C with Chrom', sources: [JP_SUPPORTS, JP_PK_CHILDREN] }],
+    why:
+      'She joins on Chapter 11 and no conversation can be viewed before the wedding, so a C would make Chrom × Olivia impossible, yet ' +
+      'the JP wikis themselves say it can happen; SF’s testers married her from 1 paired fight alone and beat pending Cs at 14/9 (research/chrom-wedding C2).',
+  },
+  {
+    id: 'chrom-wedding-viewed',
+    item: 'Chrom’s Chapter 11 wedding: what counts as a rank',
+    winning: { value: 'Only a viewed conversation; a rank reached but not viewed is no rank, 0 points to go', sources: [SFF_CHROM_WEDDING_TESTS, SFF_CHROM_WEDDING_RULE] },
+    losing: [{ value: 'A C support level obtained (ambiguous)', sources: [SF_SUPPORT_BASICS, FEW_INHERITANCE_WEDDING, JP_CHILDREN] }],
+    why: 'With every candidate at a pending C, the testers still got Olivia, then the tie order (research/chrom-wedding C3).',
   },
 ];
