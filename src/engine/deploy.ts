@@ -72,8 +72,11 @@ export function coverage(c: DeployCandidate, back: DeployCandidate | undefined, 
   return score;
 }
 
+/** The deploy counts from which the suggested deployment keeps one more healer's slot (see `suggestDeployment`). */
+const HEALER_SLOTS = [6, 12];
+
 /**
- * The suggested deployment: forced units always; then pairs, each lead (lead role, best coverage first) with the
+ * The suggested deployment: forced units always; a healer's slot from six slots, a second from twelve; then pairs, each lead (lead role, best coverage first) with the
  * battery (or else any unit) that raises its coverage most; then Staff/Rally and dancers; then, while room remains,
  * the best-covering unit left leads whatever its role (#133); within the deploy count. `pinned` pairs (the player's
  * edits) are kept as given, but a back an earlier pin already took leaves the later lead alone. A forced unit can't be
@@ -109,6 +112,18 @@ export function suggestDeployment(input: {
   };
   /** The slots deploying a unit costs: none once it's deployed. */
   const slotCost = (c: DeployCandidate) => (deployed.includes(c.unit) ? 0 : 1);
+  // A careful player keeps a healer's slot before the fighting fills the room (the realism pass): one healer from six
+  // slots, two from twelve. HP only comes back with an action (#182), and an army without a staff wears down. A healer
+  // pinned into a pair goes with its pin; the healers kept stay free to heal (nobody takes them as a back).
+  const healing = new Set<RosterUnit>();
+  const inPins = new Set((input.pinned ?? []).flatMap((p) => [p.lead, ...(p.back ? [p.back] : [])]));
+  const healers = HEALER_SLOTS.filter((n) => input.max >= n).length;
+  const kept = Math.max(0, healers - deployed.filter((u) => byId.get(u)?.role === 'staff').length);
+  for (const c of [...byId.values()].filter((c) => !deployed.includes(c.unit) && c.role === 'staff' && !inPins.has(c.unit)).slice(0, kept)) {
+    if (room() <= 0) break;
+    take(c.unit);
+    healing.add(c.unit);
+  }
   for (const p of input.pinned ?? []) {
     const lead = byId.get(p.lead);
     const back = p.back && !paired.has(p.back) ? byId.get(p.back) : undefined;
@@ -122,7 +137,7 @@ export function suggestDeployment(input: {
    * those the room allows: one already deployed alone costs no slot.
    */
   const pairUp = (lead: DeployCandidate) => {
-    const backs = [...byId.values()].filter((c) => c.unit !== lead.unit && !paired.has(c.unit) && c.role !== 'dancer');
+    const backs = [...byId.values()].filter((c) => c.unit !== lead.unit && !paired.has(c.unit) && c.role !== 'dancer' && !healing.has(c.unit));
     const pool2 = backs.some((c) => c.role === 'battery') ? backs.filter((c) => c.role === 'battery') : backs;
     let best: { back: DeployCandidate | undefined; score: number } = { back: undefined, score: solo(lead) };
     for (const back of pool2) {
