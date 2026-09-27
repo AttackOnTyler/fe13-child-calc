@@ -524,8 +524,42 @@ button.gd-deeper-head:hover { background: var(--hover); }
 .next-map .next-first b { font-size: 1.05em; }
 
 /* The next map's no-death chance (#181). */
-.prep-page .no-death { margin: 8px 0 12px; }
 .prep-page .no-death p { margin: 2px 0 0; }
+
+/* The preparation page (#207): pair cards beside a column of the map's sections (variant D of #169). */
+.prep-cols { display: grid; grid-template-columns: minmax(0, 1fr) 440px; gap: 16px; padding: 0 12px 16px; align-items: start; }
+.prep-side { border-left: 1px solid var(--line); padding-left: 14px; min-width: 0; }
+.prep-main { min-width: 0; }
+.prep-main .banner { margin: 8px 0; display: block; }
+.pair-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 8px; margin: 8px 0; }
+.pair-card { border: 1px solid var(--line); border-radius: 6px; background: var(--panel); padding: 8px 10px; min-width: 0; }
+.pc-head { border-bottom: 1px solid var(--line); padding-bottom: 3px; margin-bottom: 4px; }
+.pair-card .mem { padding: 3px 0; }
+.pair-card .mem .mini { margin-left: 6px; }
+.pos-tag { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.pair-card .risk { margin-top: 2px; }
+.chip.warn { color: var(--warn); border-color: #8a6a2c; cursor: default; }
+.chip.bad { color: var(--neg); border-color: #7a3a3a; }
+.stances { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
+.stances span { background: var(--hover); border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+.pair-card .danger { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; border-top: 1px solid var(--line); padding-top: 4px; margin-top: 4px; }
+.pc-foot { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-top: 4px; }
+.pc-foot .linkish, .not-fielded .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; }
+.pc-pins { display: flex; gap: 4px; align-items: center; }
+.pc-pins select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; }
+.prep-box { border: 1px solid var(--line); border-radius: 6px; background: var(--panel); padding: 6px 10px; margin: 8px 0; }
+.prep-box > summary { cursor: pointer; }
+.prep-box h4 { margin: 10px 0 2px; font-size: 13px; }
+.prep-box .grid { width: 100%; }
+.prep-box .grid td { vertical-align: top; white-space: normal; }
+.act { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; border-bottom: 1px dashed var(--line); }
+.act > span { flex: 1; }
+.act.done { opacity: 0.5; text-decoration: line-through; }
+.act.hl { background: rgba(90, 169, 255, 0.12); }
+@media (max-width: 900px) {
+  .prep-cols { grid-template-columns: minmax(0, 1fr); }
+  .prep-side { border-left: 0; padding-left: 0; }
+}
 
 /* The Wishlist tab (#203): the endpoint army as Lead / Back rows, a unit's edits under its row. */
 .wishlist { padding: 0 12px 16px; }

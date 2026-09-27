@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, addEntry, createEngine, deployCount, deployRoleOf, editEntry, foesOf, forcedOn, itemByName, latestEntry, prepUnits, runFromRoster, simLineup, suggestDeployment, unitName, withRun, type Difficulty, type Run, type SimGroup, type Snapshot } from '../engine';
-import { beforeThisMapReadout, expReadout, fighterOf, noDeathReadout, shoppingReadout } from './prep-page';
+import { EMPTY_ROSTER, addEntry, createEngine, deployCount, deployRoleOf, editEntry, foesOf, forcedOn, itemByName, latestEntry, mapSpanPin, prepUnits, runFromRoster, simLineup, suggestDeployment, unitName, withPin, withRun, type Difficulty, type Plan, type Run, type SimGroup, type Snapshot } from '../engine';
+import { PREP_STEPS, fighterOf, noDeathReadout, prepReadout, shoppingReadout, type PrepReadout } from './prep-page';
 
-describe('the shopping list (#190) and expected EXP (#195)', () => {
+describe('the shopping list (#190)', () => {
   const engine = createEngine();
   const facts = withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal', gender: 'M', asset: 'mag', flaw: 'hp' });
   const played = (maps: readonly string[]) => maps.reduce((r, m, i) => addEntry(r, m, i + 1), runFromRoster(facts));
@@ -19,20 +19,6 @@ describe('the shopping list (#190) and expected EXP (#195)', () => {
     expect(s.rows[0]).toEqual(['Chrom', 'Buy Iron Sword (runs dry before the next armory)', '520G', '100%']);
   });
 
-  it('shows the map’s expected EXP: each unit’s priority, EXP, level at the end and the foe groups it takes (#195)', () => {
-    const run = atLatest(played(all.slice(0, -2)), (s) => ({ ...s, units: { chrom: { ...chrom, inventory: [{ item: 'Silver Sword', uses: 30 }] } } }));
-    const s = expReadout(engine, run, 'chapter-25', engine.seedPlan(run), { runs: 2 });
-    expect(s.title).toBe('Expected EXP: Chapter 25');
-    expect(s.note).toMatch(/^Over 2 simulated runs of the plan: EXP from kills, damage, a back’s Dual Strikes, staves and Dances/);
-    expect(s.note).toContain('never a turn-by-turn plan');
-    const [name, priority, exp, level, takes] = s.rows[0]!;
-    expect([name, priority]).toEqual(['Chrom', 'Normal']);
-    expect(Number(exp)).toBeGreaterThan(0);
-    expect(level).toMatch(/^Lv \d+/);
-    expect(takes).toMatch(/×\d+\.\d/);
-    expect(expReadout(engine, played(all), 'endgame', engine.seedPlan(played(all)), { runs: 1 }).rows).toEqual([]);
-  });
-
   it('says when nothing is to be bought: no gold, or nothing left to play', () => {
     const run = atLatest(played(all.slice(0, -2)), (s) => ({ ...s, gold: 0 }));
     expect(shoppingReadout(engine, run, { runs: 1 }).rows).toEqual([]);
@@ -40,27 +26,141 @@ describe('the shopping list (#190) and expected EXP (#195)', () => {
   });
 });
 
-describe('the “before this map” list (#193)', () => {
+/** Every action on the page: the checklist's steps, then On the map. */
+const actionsOf = (r: PrepReadout) => [...r.before.flatMap((s) => s.actions), ...r.onMap];
+
+describe('the preparation page (#207): pair cards beside one checklist', () => {
+  const engine = createEngine();
+  const facts = withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal', gender: 'M', asset: 'mag', flaw: 'hp', mode: 'classic' });
+  const played = (maps: readonly string[]) => maps.reduce((r, m, i) => addEntry(r, m, i + 1), runFromRoster(facts));
+  const order = engine.mapOrder(played([])).steps.map((s) => s.map);
+  const readout = (run: Run, map: string, plan: Plan = engine.seedPlan(run)) => prepReadout(engine, run, map, { plan, forecast: engine.expForecast(run, plan, { runs: 1 }) });
+  const name = (u: string) => unitName(u as never, 'M');
+  // Chapter 3 on a fresh run (the first map with preparations), read once for the tests below.
+  const ch3Run = played(order.slice(0, 4));
+  let ch3: PrepReadout | undefined;
+  const chapter3 = () => (ch3 ??= readout(ch3Run, 'chapter-3'));
+
+  it('plays a forced map with no preparation phase: a banner, the cards and On the map only (#131)', () => {
+    const r = readout(played(['premonition']), 'prologue');
+    expect(r.noPrep).toBe(true);
+    expect(r.banner).toBe('No preparation phase: the game fields Chrom, Robin (M), Lissa and Frederick and starts the map at once. Nothing here is done in menus; it’s a plan for the map itself.');
+    expect(r.before).toEqual([]);
+    expect(r.shopping).toBeUndefined();
+    expect(actionsOf(r).every((a) => a.step === 'map')).toBe(true);
+    // A card for each pair and unit alone: the whole forced lineup, marked as joining here.
+    const members = r.cards.flatMap((c) => c.members);
+    expect(members.map((m) => m.name).sort()).toEqual(['Chrom', 'Frederick', 'Lissa', 'Robin (M)']);
+    expect(members.every((m) => m.forced && m.joins === 'joins')).toBe(true);
+    expect(r.head.noDeath).toMatch(/^No-death chance on this map: /);
+    expect(r.head.flawless).toMatch(/^The plan’s flawless chance: .* ±\d+\.\d$/);
+    expect(r.head.deploy).toBe('deploy 4 of 4 (forced)');
+  });
+
+  it('gives each pair its positions, jobs, EXP priority and expected EXP, milestone, stance plan and threats', () => {
+    const run = ch3Run;
+    const r = chapter3();
+    expect(r.noPrep).toBe(false);
+    expect(r.title).toBe('Prepare: Chapter 3: Warrior Realm');
+    const pairs = r.cards.filter((c) => c.members.length === 2);
+    expect(pairs.length).toBeGreaterThan(0);
+    for (const c of r.cards) {
+      expect(c.members.map((m) => m.position)).toEqual(c.members.length === 2 ? ['Lead', 'Back'] : ['Solo']);
+      expect(c.title).toBe(c.members.map((m) => m.name).join(' + '));
+      for (const m of c.members) {
+        expect(m.job).toMatch(/^(fights|backs|heals|dances|rallies|talks|waits)/);
+        expect(['High', 'Normal', 'Low']).toContain(m.priority);
+        expect(m.exp).toMatch(/^(≈\d+ EXP · Lv \d+|—)/);
+      }
+      // The stance plan, turn by turn, from the play's stances.
+      if (c.members.length === 2) expect(c.stances[0]).toMatchObject({ turns: expect.stringMatching(/^T1/), text: expect.stringMatching(/^(together, .+ in front|side by side|apart)/) });
+      else expect(c.stances).toEqual([]);
+      for (const t of c.threats) expect(t.chance).toMatch(/^(under 0\.1%|\d+\.\d%)$/);
+    }
+    // A unit whose worst round kills it flags its card.
+    for (const t of r.threats.filter((x) => x.worstKills)) {
+      const victim = t.worst.replace(/^.* HP on /, '');
+      const c = r.cards.find((x) => x.members.some((m) => m.name === victim));
+      expect(c?.worstKills).toContain(`HP on ${victim}`);
+    }
+    // Threats: the cautious worst case beside each group's chance of killing someone and who takes it.
+    expect(r.threats.length).toBeGreaterThan(0);
+    for (const t of r.threats) {
+      expect(t.worst).toMatch(/^Worst round \d+ \/ \d+ HP on /);
+      expect(t.chance).toMatch(/^(0%|under 0\.1%|\d+\.\d%)$/);
+    }
+    expect(r.threats.some((t) => t.who !== '—')).toBe(true);
+  });
+
+  it('lists each action once, in the game’s menu order with why, and the cards count and link theirs', () => {
+    const r = chapter3();
+    const acts = actionsOf(r);
+    expect(new Set(acts.map((a) => a.id)).size).toBe(acts.length);
+    const steps = r.before.map((s) => PREP_STEPS.indexOf(s.step));
+    expect(steps).toEqual([...steps].sort((a, b) => a - b));
+    expect(r.before[0]!.label).toBe('Pick units and pair up');
+    for (const a of acts) expect(a.why).not.toBe('');
+    // Each pair is picked and paired up in the menu, with the support it grows (or the lineup) as why.
+    for (const c of r.cards.filter((x) => x.members.length === 2)) {
+      const [lead, back] = c.members;
+      const a = acts.find((x) => x.id === `pair:${lead!.unit}`)!;
+      expect(a.text).toBe(`Pair up ${lead!.name} and ${back!.name}: ${lead!.name} leads`);
+      expect(a.why).toMatch(/^(support .+|the plan’s lineup \(\d+ of \d+\))/);
+    }
+    // A card's to-dos are the actions for its units, by id: nothing is written twice.
+    for (const c of r.cards) expect(c.todo).toEqual(acts.filter((a) => a.units.some((u) => c.members.some((m) => m.unit === u))).map((a) => a.id));
+    // Chrom talks Kellam into joining on the map.
+    expect(r.onMap.find((a) => a.id === 'talk:kellam')).toMatchObject({ step: 'map', text: 'Turn 1: Chrom talks to Kellam', why: 'recruits Kellam' });
+  });
+
+  it('lists the units not fielded with their reason, arrivals among them, and keeps this map’s pins', () => {
+    const run = ch3Run;
+    const r = chapter3();
+    expect(r.notFielded.find((x) => x.unit === 'kellam')?.reason).toMatch(/^arrive/);
+    const fielded = r.cards.flatMap((c) => c.members.map((m) => m.unit));
+    const [lead, back, dropped] = fielded.filter((u) => !r.cards.some((c) => c.members.some((m) => m.unit === u && m.forced)));
+    // Picking a back and dropping a unit are span pins over this map only.
+    const pinned = withPin(withPin(run, mapSpanPin(lead!, 'lead', 'chapter-3', back!)), mapSpanPin(dropped!, 'out', 'chapter-3'));
+    const p = readout(pinned, 'chapter-3');
+    expect(p.cards.find((c) => c.title === `${name(lead!)} + ${name(back!)}`)?.pinned).toBe(true);
+    expect(p.notFielded.find((x) => x.unit === dropped)).toMatchObject({ reason: 'dropped here (a pin over this map only)', dropped: true });
+    expect(p.cards.some((c) => c.members.some((m) => m.unit === dropped))).toBe(false);
+  });
+});
+
+describe('the checklist’s items and armory (#207)', () => {
   const engine = createEngine();
   const facts = withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal', gender: 'M', asset: 'mag', flaw: 'hp' });
   const played = (maps: readonly string[]) => maps.reduce((r, m, i) => addEntry(r, m, i + 1), runFromRoster(facts));
   const all = engine.mapOrder(played([])).steps.map((s) => s.map);
+  const chrom = { class: 'Great Lord', level: 15, promoted: true, reclassed: false, exp: 0, stats: { hp: 60, str: 35, mag: 5, skl: 35, spd: 35, lck: 35, def: 30, res: 20 }, skills: [], supports: [] };
 
-  it('lists the boosters, tonics and handovers the plan uses in this map’s preparations', () => {
-    const run = editEntry(played(all.slice(0, -2)), 'e1', (s) => ({ ...s, convoy: [{ item: 'Levin Sword', uses: 25 }] }), 1);
+  it('buys this map’s shopping-list lines in the armory step, on the card of the unit they’re for', () => {
+    const before = played(all.slice(0, -2));
+    const run = editEntry(before, latestEntry(before)!.id, (s) => ({ ...s, gold: 3000, units: { chrom: { ...chrom, inventory: [{ item: 'Iron Sword', uses: 1 }] } } }), 1);
     const plan = engine.seedPlan(run);
+    const r = prepReadout(engine, run, all[all.length - 2]!, { plan, forecast: engine.expForecast(run, plan, { runs: 2 }) });
+    const armory = r.before.find((s) => s.step === 'armory')!;
+    expect(armory.label).toBe('Armory and forge');
+    expect(armory.actions[0]).toMatchObject({ id: 'shop:0', text: 'Buy Iron Sword for Chrom (520G)', why: 'shopping list: runs dry before the next armory; 100% of runs', units: ['chrom'] });
+    expect(r.cards.find((c) => c.members.some((m) => m.unit === 'chrom'))!.todo).toContain('shop:0');
+  });
+
+  it('puts the item plan’s handovers under Inventory and trade and its boosters and tonics under Use items', () => {
+    const run = editEntry(played(all.slice(0, -2)), 'e1', (s) => ({ ...s, convoy: [{ item: 'Levin Sword', uses: 25 }] }), 1);
+    const seed = engine.seedPlan(run);
     const items = [
       { item: 'Energy Drop', unit: 'chrom' as const, key: 'endgame', source: 'held:Energy Drop#0' },
       { item: 'Strength Tonic', unit: 'chrom' as const, key: 'endgame', source: 'buy' },
       { item: 'Levin Sword', unit: 'robin' as const, key: 'endgame', source: 'held:convoy:Levin Sword#0' },
     ];
-    const r = beforeThisMapReadout(engine, run, 'endgame', { ...plan, roadmap: { ...plan.roadmap, items } });
-    expect(r.rows).toEqual(['Drink Energy Drop: Chrom', 'Drink Strength Tonic: Chrom (buy it first: 150G)', 'Hand over Levin Sword: the convoy → Robin (M)']);
-    expect(beforeThisMapReadout(engine, run, 'chapter-25', { ...plan, roadmap: { ...plan.roadmap, items } })).toEqual({ note: 'The plan uses no items before this map.', rows: [] });
-  });
-
-  it('says a map with no preparation phase uses nothing before it', () => {
-    expect(beforeThisMapReadout(engine, played([]), 'prologue', undefined).note).toBe('No preparation phase: the game fields everyone on this map, so nothing is used before it.');
+    const plan = { ...seed, roadmap: { ...seed.roadmap, items } };
+    const r = prepReadout(engine, run, 'endgame', { plan, forecast: engine.expForecast(run, plan, { runs: 1 }) });
+    const texts = (step: string) => r.before.find((s) => s.step === step)?.actions.map((a) => a.text);
+    expect(texts('trade')).toEqual(['Hand over Levin Sword: the convoy → Robin (M)']);
+    expect(texts('items')!.slice(0, 2)).toEqual(['Drink Energy Drop: Chrom', 'Drink Strength Tonic: Chrom (buy it first: 150G)']);
+    expect(r.before.find((s) => s.step === 'items')!.actions[0]!.why).toBe('item plan: +2 for good');
+    expect(r.before.map((s) => s.step).slice(0, 3)).toEqual(['units', 'trade', 'items']);
   });
 });
 
@@ -113,7 +213,7 @@ describe('the next map’s no-death chance (#181)', () => {
     const strong: SimGroup[] = [{ lead: member('chrom', stats(60, 40, 40, 40, 30, 30)), support: null }];
     const r = noDeathReadout(engine, 'chapter-2', 'lunatic', strong);
     expect(r.text).toBe('No-death chance: 100%');
-    expect(r.detail).toMatch(/^Played turn by turn with this deployment and your latest stats: a rout in \d+ turns?\./);
+    expect(r.detail).toMatch(/^Played turn by turn with this lineup and your latest stats: a rout in \d+ turns?\./);
     const frail: SimGroup[] = [{ lead: member('chrom', stats(18, 7, 6, 6, 4, 5)), support: null }];
     expect(noDeathReadout(engine, 'chapter-2', 'lunatic', frail).text).toMatch(/^No-death chance: (\d+\.\d%|under 0\.1%|0%)( \((loses a unit|flawless) about 1 run in [\d,]+\))?$/);
   });
