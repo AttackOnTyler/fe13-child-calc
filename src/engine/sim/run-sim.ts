@@ -39,6 +39,10 @@
  * skipped; a weapon at 0 uses is gone, a rebuy restores it unforged. Each stop's purchases are reported with the share of
  * runs that made them (`shopping`), and each map's gold at its end as a spread.
  *
+ * Side goals (#191): a map's side goals the plan chases cost actions in its play (`MapPlayInput.chase`); each part whose
+ * actions were spent in time pays the run (its Bullion sold, gold, free seals), and each goal reports the share of runs
+ * that secured all of it (`sideGoals`). A skipped one is never counted. Renown's rewards come in as sure income.
+ *
  * Later tickets extend the same walk:
  * - #194 replaces the promotion rule below (`PROMOTION_RULE`) with the roadmap's class-reached milestones.
  */
@@ -60,7 +64,7 @@ import { CHROM_WEDDING_CANDIDATES, CHROM_WEDDING_MAP } from '../../game-data/sup
 import { chromWifeByPoints, type ChromStanding } from '../chrom-wedding';
 import { SUPPORT_LEVELS } from '../run';
 import { addPoints, mapSupportGains, pairThresholds, pointsOfRank, rankOf } from './support-growth';
-import { playMap, type MapPlay, type SimFoeGroup, type SimGroup, type SimMap, type SimUnit } from './map-play';
+import { playMap, type MapPlay, type SimChase, type SimFoeGroup, type SimGroup, type SimMap, type SimUnit } from './map-play';
 import { createRng, runSeed, type Rng } from './random';
 import type { SimItem } from './sustain';
 import type { GameItem } from '../../game-data/items';
@@ -150,6 +154,16 @@ export type RunSimMap = {
   readonly income?: number;
   /** Seals picked up on the map that no play can lose (#190): held from the next map. */
   readonly seals?: { readonly master: number; readonly second: number };
+  /** Its side goals (#191): each chased or skipped by the plan, paying per part when the play spends its actions in time. */
+  readonly sideGoals?: readonly RunSimSideGoal[];
+};
+
+/** A side goal as a run plays it (#191): chased parts cost actions in the play (`SimChase`); each secured part pays. */
+export type RunSimSideGoal = {
+  readonly id: string;
+  readonly label: string;
+  readonly chase: boolean;
+  readonly parts: readonly { readonly chase: SimChase; readonly gold: number; readonly seals: { readonly master: number; readonly second: number } }[];
 };
 
 export type RunSimInput = {
@@ -273,6 +287,20 @@ export type ShoppingStop = {
   readonly lines: readonly ShoppingLine[];
 };
 
+/** A side goal over the runs (#191). */
+export type SideGoalForecast = {
+  readonly id: string;
+  readonly label: string;
+  /** The map's key. */
+  readonly key: string;
+  readonly chase: boolean;
+  /**
+   * The share of the runs that play its map with nobody lost before it in which every part is secured (0 when
+   * skipped); undefined when no run gets there.
+   */
+  readonly secured: number | undefined;
+};
+
 export type RunSim = {
   /** The flawless chance: the mean over runs of each run's product of no-death chances. */
   readonly chance: number;
@@ -293,6 +321,8 @@ export type RunSim = {
   readonly marriages: readonly MarriageForecast[];
   /** Each armory stop some run reached with nobody lost, in map order, with what the runs bought there (#190). */
   readonly shopping: readonly ShoppingStop[];
+  /** Each side goal on the maps ahead, in map order (#191). */
+  readonly sideGoals: readonly SideGoalForecast[];
   /** The stated blind spots it rests on: the map simulation's, then the run simulation's own. */
   readonly blindSpots: readonly (BlindSpotId | RunBlindSpotId)[];
 };
@@ -305,7 +335,7 @@ export type RunSim = {
 export const PROMOTION_RULE = { level: 20 } as const;
 
 /** The run simulation's own blind spots (see BLIND_SPOTS): what it simplifies between maps. */
-const RUN_BLIND_SPOTS: readonly RunBlindSpotId[] = ['promotes-at-cap', 'lead-takes-exp', 'supports-from-pair-combats', 'sure-income-only', 'kit-by-matchups-won'];
+const RUN_BLIND_SPOTS: readonly RunBlindSpotId[] = ['promotes-at-cap', 'lead-takes-exp', 'supports-from-pair-combats', 'side-goal-actions', 'kit-by-matchups-won'];
 
 /** Special classes (Dancer, Villager, Taguel, Manakete, the DLC classes) level to 30; base and advanced to 20. */
 export const levelCap = (tier: ClassTier): number => (tier === 'special' ? 30 : 20);
@@ -740,6 +770,7 @@ function beforeMap(state: RunState, step: RunSimMap, assumptions: Assumptions, s
  */
 function afterMap(state: RunState, step: RunSimMap, at: number, play: MapPlay, rng: Rng | null, difficulty: Difficulty, assumptions: Assumptions, spent?: MapUpkeep) {
   if (spent) upkeep(state, step, spent);
+  secure(state, step, play);
   earn(state, step.map, play, rng, difficulty, assumptions);
   growSupports(state, play, at, assumptions['support-past-threshold']);
   for (const a of step.later) if (!state.army.has(a.id)) join(state, a);
@@ -747,6 +778,38 @@ function afterMap(state: RunState, step: RunSimMap, at: number, play: MapPlay, r
   state.arriving = [];
   state.cleared.add(step.map.id);
   if (step.map.id === CHROM_WEDDING_MAP) chromWedding(state, at, assumptions);
+}
+
+/** The chased side goals' parts, as the map play takes them (#191); undefined when the plan chases none there. */
+const CHASES = new WeakMap<RunSimMap, readonly SimChase[] | undefined>();
+function chasesOf(step: RunSimMap): readonly SimChase[] | undefined {
+  if (!CHASES.has(step)) {
+    const cs = (step.sideGoals ?? []).flatMap((g) => (g.chase ? g.parts.map((p) => p.chase) : []));
+    CHASES.set(step, cs.length ? cs : undefined);
+  }
+  return CHASES.get(step);
+}
+
+/** The map play's input for a step: the lineup, the couples to keep together (#184) and the side goals chased (#191). */
+function playInput(state: RunState, step: RunSimMap, lineup: readonly SimGroup[]) {
+  const chase = chasesOf(step);
+  return { map: step.map, lineup, bonds: couplesToMarry(state), ...(chase ? { chase } : {}) };
+}
+
+/** Whether a run secured a side goal on the map it played: chased, with every part's actions spent in time. */
+const secured = (g: RunSimSideGoal, play: MapPlay): boolean => g.chase && g.parts.every((p) => play.chased?.[p.chase.id] === true);
+
+/** A side goal's parts secured in the play pay the run (#191): Bullion sold at the next armory, gold, free seals. */
+function secure(state: RunState, step: RunSimMap, play: MapPlay) {
+  for (const g of step.sideGoals ?? []) {
+    if (!g.chase) continue;
+    for (const p of g.parts) {
+      if (play.chased?.[p.chase.id] !== true) continue;
+      state.gold += p.gold;
+      state.masterSealsHeld += p.seals.master;
+      state.secondSealsHeld += p.seals.second;
+    }
+  }
 }
 
 const pairKey = (a: string, b: string) => (a < b ? `${a}+${b}` : `${b}+${a}`);
@@ -935,7 +998,7 @@ function planner(input: RunSimInput, seed: number, assumptions: Assumptions): Pl
           });
       if (k === last && step.armory?.length) kit = kitFor(state, step, d);
       const lineup = lineupOf(state, d, extra, interner);
-      const play = playMap({ map: step.map, lineup, bonds: couplesToMarry(state) }, runSeed(seed, k));
+      const play = playMap(playInput(state, step, lineup), runSeed(seed, k));
       wear.push(mapUpkeep(step.map, play, lineup, null, assumptions['tome-miss-use']));
       afterMap(state, step, k, play, null, input.difficulty, assumptions);
       done.push(d);
@@ -1092,6 +1155,8 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
   // Gold at each map's end, and each armory stop's arrivals and purchases (#190).
   const golds: number[][] = input.maps.map(() => []);
   const stops = input.maps.map(() => ({ runs: 0, gold: [] as number[], lines: new Map<string, { receipt: Receipt; runs: number }>() }));
+  // Runs securing each side goal, by map index and goal (#191); counted over the runs in `golds`.
+  const goals = new Map<string, number>();
   // Each stop's next stop: a rebuy covers what the plan spends until then.
   const nextStop = input.maps.map((_, i) => {
     let j = i + 1;
@@ -1127,7 +1192,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
       if (!extra) continue;
       if (step.armory?.length) recordStop(stops[i]!, arriving, receipts);
       const lineup = lineupOf(state, (lineups[i] ??= plan.lineup(i)), extra, interner);
-      const play = playMap({ map: step.map, lineup, bonds: couplesToMarry(state) }, runSeed(rs, i));
+      const play = playMap(playInput(state, step, lineup), runSeed(rs, i));
       reach[i]! += flawless;
       noDeath[i]! += flawless * play.noDeath;
       turns[i]! += flawless * play.turns;
@@ -1135,6 +1200,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
       for (const b of play.blindSpots) spots.add(b);
       afterMap(state, step, i, play, rng, input.difficulty, assumptions, mapUpkeep(step.map, play, lineup, hits, assumptions['tome-miss-use']));
       golds[i]!.push(state.gold);
+      for (const g of step.sideGoals ?? []) if (secured(g, play)) goals.set(`${i}|${g.id}`, (goals.get(`${i}|${g.id}`) ?? 0) + 1);
     }
     samples.push(flawless < LOST ? 0 : flawless);
   }
@@ -1160,6 +1226,9 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
       gold: golds[i]!.length ? goldSpread(golds[i]!) : undefined,
     })),
     shopping: stops.flatMap((s, i) => (s.runs ? [shoppingStop(input.maps[i]!, s)] : [])),
+    sideGoals: input.maps.flatMap((m, i) =>
+      (m.sideGoals ?? []).map((g) => ({ id: g.id, label: g.label, key: m.key, chase: g.chase, secured: golds[i]!.length ? (goals.get(`${i}|${g.id}`) ?? 0) / golds[i]!.length : undefined })),
+    ),
     units: [...atEnd.entries()].map(([id, e]) => {
       const [cls, { caps, levelCap: top }] = [...e.classes.entries()].sort((a, b) => b[1].runs - a[1].runs)[0]!;
       return {

@@ -20,6 +20,8 @@ import { FORGE, forgeProblem, itemByName } from '../game-data/items';
 import { FIRST_GEN_UNITS, type UnitId } from '../game-data/units';
 import { parseClassChanges, parseCountOverrides, type ClassChange } from './internal-level';
 import { entryAfterShopping, parseShopLines, type ShopLine } from './shopping';
+import { parseSideGoalPlan, parseSideGoalsSecured, type SideGoalId, type SideGoalPlan } from './side-goals';
+import { parseRenown, type RunRenown } from './renown';
 import { EMPTY_ROSTER, parseRoster, withSpouse, withState, type Roster, type RosterUnit, type RunFacts } from './roster';
 
 export type SupportLevel = 'C' | 'B' | 'A' | 'S';
@@ -72,6 +74,8 @@ export type RunEntry = {
    * the map's end; the next entry copies the snapshot after shopping (`entryAfterShopping`).
    */
   readonly shopping?: readonly ShopLine[];
+  /** The side goals on this map secured or not, as Record results set them (#191); absent: pre-filled from the convoy. */
+  readonly sideGoals?: Readonly<Partial<Record<SideGoalId, boolean>>>;
 };
 
 export type Run = {
@@ -84,6 +88,10 @@ export type Run = {
   readonly entries: readonly RunEntry[];
   /** Each unit's Second Seal count from history the log can't see, set by hand (#185). */
   readonly countOverrides?: Readonly<Partial<Record<RosterUnit, number>>>;
+  /** Side goals pinned to always take or skip (#191); the rest follow the default rule. */
+  readonly sideGoals?: SideGoalPlan;
+  /** The file's renown, asked once (#191): its start and the rewards already claimed. */
+  readonly renown?: RunRenown;
 };
 
 export const EMPTY_SNAPSHOT: Snapshot = { units: {}, convoy: [], gold: null, states: {}, spouses: {} };
@@ -506,6 +514,7 @@ export function parseRun(raw: unknown): Run {
     const map = typeof e.map === 'string' && (e.map === 'other' || MAPS.some((m) => m.id === e.map)) ? e.map : 'other';
     const classChanges = parseClassChanges(e.classChanges);
     const shopping = parseShopLines(e.shopping);
+    const sideGoals = parseSideGoalsSecured(e.sideGoals);
     return [
       {
         id: typeof e.id === 'string' && e.id ? e.id : `e${i + 1}`,
@@ -516,6 +525,7 @@ export function parseRun(raw: unknown): Run {
         ...(typeof e.editedAt === 'number' ? { editedAt: e.editedAt } : {}),
         ...(classChanges.length ? { classChanges } : {}),
         ...(shopping.length ? { shopping } : {}),
+        ...(Object.keys(sideGoals).length ? { sideGoals } : {}),
       },
     ];
   });
@@ -526,7 +536,10 @@ export function parseRun(raw: unknown): Run {
   const base: Run = entries.length ? { version: 1, roster: { ...roster, states: {}, spouses: {} }, entries } : runFromRoster(roster);
   const counts = parseCountOverrides(raw.countOverrides);
   const withCounts: Run = Object.keys(counts).length ? { ...base, countOverrides: counts } : base;
-  return Object.keys(seen).length ? { ...withCounts, seen } : withCounts;
+  const pins = parseSideGoalPlan(raw.sideGoals);
+  const renown = parseRenown(raw.renown);
+  const withGoals: Run = { ...withCounts, ...(Object.keys(pins).length ? { sideGoals: pins } : {}), ...(renown ? { renown } : {}) };
+  return Object.keys(seen).length ? { ...withGoals, seen } : withGoals;
 }
 
 /** The run as a file (JSON), read back by importRun. */

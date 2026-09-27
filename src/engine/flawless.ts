@@ -14,6 +14,10 @@
  * Gold and items (#190): the runs start from the latest entry's gold (5,000G before any map is logged), seals and
  * weapons' uses, after its recorded shopping (#192: gold at the map's end less buys and forges, plus sales); each map carries what the open armories sell in its preparations (`openStock` over the maps cleared
  * by then), its sure income (`sureIncome`) and its sure free seals.
+ *
+ * Side goals and renown (#191): each map's side goals are chased or skipped by the run's pins (`Run.sideGoals`), else
+ * the default rule (`chaseByDefault`); renown's rewards (`renownAhead`) join the sure income and seals of the map that
+ * crosses them, and those reached but not claimed are held from the start.
  */
 import { CHILD_UNITS, type ChildId } from '../game-data/children';
 import { MAPS, type ChapterData, type ChapterDifficulty } from '../game-data/chapters';
@@ -41,7 +45,9 @@ import { classIdByName, openStock, sealAvailability, sealsHeld } from './supply'
 import { simMapById } from './sim/sim-map';
 import type { SimMap, SimUnit } from './sim/map-play';
 import { simulateCeiling, type Ceiling } from './sim/ceiling';
-import { simulateRuns, type ArmyUnit, type ChildRecruit, type RunSim, type RunSimInput, type RunSimMap } from './sim/run-sim';
+import { simulateRuns, type ArmyUnit, type ChildRecruit, type RunSim, type RunSimInput, type RunSimMap, type RunSimSideGoal } from './sim/run-sim';
+import { sideGoalChoices } from './side-goals';
+import { renownAhead, rewardsValue, type RenownAhead } from './renown';
 import type { Plan } from './solve/plan';
 
 const WEAPON_KINDS = new Set(['sword', 'lance', 'axe', 'bow', 'tome', 'stone', 'beaststone']);
@@ -96,6 +102,8 @@ export type FlawlessChance = RunSim & {
   readonly endpoint: string;
   /** The latest entry records no gold: the runs start with none (#190). */
   readonly goldUnrecorded: boolean;
+  /** Renown now and the rewards arriving on the maps ahead (#191), counted in the runs' gold and seals. */
+  readonly renown: RenownAhead;
 };
 
 /**
@@ -179,7 +187,7 @@ export function flawlessInput(
   roleOf?: (u: RosterUnit) => DeploymentRole,
   givenMarriages?: readonly Couple[],
   plan?: Plan,
-): { readonly input: RunSimInput; readonly notSimulated: readonly NotSimulated[]; readonly unknownHistory: readonly RosterUnit[]; readonly endpoint: string; readonly goldUnrecorded: boolean } {
+): { readonly input: RunSimInput; readonly notSimulated: readonly NotSimulated[]; readonly unknownHistory: readonly RosterUnit[]; readonly endpoint: string; readonly goldUnrecorded: boolean; readonly renown: RenownAhead } {
   const run = plan ? withPlanRobin(given, plan) : given;
   const marriages = plan ? (plan.wishlist.marriages as readonly Couple[]) : givenMarriages;
   const difficulty: Difficulty = run.roster.run.difficulty ?? 'normal';
@@ -296,7 +304,10 @@ export function flawlessInput(
   // Recruits join as Record results adds them: the first time a map names them, from the snapshot before it.
   const seenUnits = new Set<RosterUnit>(Object.keys(snap.units) as RosterUnit[]);
   const cleared = new Set(run.entries.map((e) => e.map));
-  const maps: RunSimMap[] = order.steps.map((step) => {
+  // Side goals chased or skipped by the plan's pins, else the default rule; renown's rewards on their maps (#191).
+  const choices = sideGoalChoices(run.sideGoals);
+  const renown = renownAhead(run, order.steps, assumptions['paralogue-renown']);
+  const maps: RunSimMap[] = order.steps.map((step, k) => {
     const data = MAPS.find((m) => m.id === step.map)!;
     const joining: ArmyUnit[] = [];
     const mapOnly: ArmyUnit[] = [];
@@ -336,6 +347,16 @@ export function flawlessInput(
     }
     const opening = [...joining, ...mapOnly];
     const endpoint = step.key === order.endpoint.key;
+    const sure = sureSeals(data);
+    const reward = rewardsValue(renown.stops[k]!.rewards);
+    const goals: RunSimSideGoal[] = choices
+      .filter((c) => c.goal.map === step.map)
+      .map(({ goal, decision }) => ({
+        id: goal.id,
+        label: goal.label,
+        chase: decision === 'chase',
+        parts: goal.parts.map((p, i) => ({ chase: { id: `${goal.id}#${i}`, actions: p.actions, by: p.by }, gold: p.gold, seals: p.seals })),
+      }));
     const m: RunSimMap = {
       key: step.key,
       label: `${data.label}${step.secret ? ' (secret route)' : ''}`,
@@ -348,8 +369,9 @@ export function flawlessInput(
       ...(children.length ? { children } : {}),
       masterSeals: sealAvailability(cleared).master === 'armory',
       armory: openStock(cleared).armory,
-      income: sureIncome(data),
-      seals: sureSeals(data),
+      income: sureIncome(data) + reward.gold,
+      seals: { master: sure.master + reward.master, second: sure.second + reward.second },
+      ...(goals.length ? { sideGoals: goals } : {}),
     };
     cleared.add(step.map);
     return m;
@@ -358,21 +380,32 @@ export function flawlessInput(
   // Gold: the latest entry's; a run with no map logged yet starts with the game's 5,000G; otherwise unrecorded reads 0.
   const fresh = run.entries.every((e) => e.map === 'other');
   const goldUnrecorded = snap.gold === null && !fresh;
-  const gold = snap.gold ?? (fresh ? STARTING_GOLD : 0);
-  const decided = new Map(plan?.roadmap.lineups.map((l) => [l.key, l]) ?? []);
-  const lineups = decided.size ? { lineups: maps.map((m) => decided.get(m.key)) } : {};
+  // Renown rewards reached and not yet claimed are held from the start (#191).
+  const waiting = rewardsValue(renown.waiting);
+  const gold = (snap.gold ?? (fresh ? STARTING_GOLD : 0)) + waiting.gold;
   return {
-    input: { army, maps, difficulty, masterSealsHeld: held.master, secondSealsHeld: held.second, gold, cleared: recordedMaps, married: couplesOf(recorded), couples: couplesOf(spouseOf).filter(([a]) => !recorded.has(a)), ...lineups },
+    input: {
+      army,
+      maps,
+      difficulty,
+      masterSealsHeld: held.master + waiting.master,
+      secondSealsHeld: held.second + waiting.second,
+      gold,
+      cleared: recordedMaps,
+      married: couplesOf(recorded),
+      couples: couplesOf(spouseOf).filter(([a]) => !recorded.has(a)),
+    },
     notSimulated,
     unknownHistory,
     endpoint: order.endpoint.key,
     goldUnrecorded,
+    renown,
   };
 }
 
 /**
  * A map's sure income (#190): its Bullion at its sale price and Paralogue 13's gold (`mapGold`), the rows no play can
- * lose (side goals come with #191). Only Bullion is sold; every other item is held.
+ * lose (the loseable ones are side goals, #191). Only Bullion is sold; every other item is held.
  */
 export const sureIncome = (map: ChapterData): number => mapGold(map).reduce((a, r) => a + (r.play ? 0 : r.gold), 0);
 
@@ -411,10 +444,10 @@ const couplesOf = (spouses: ReadonlyMap<RosterUnit, RosterUnit>): [RosterUnit, R
 
 /** The flawless chance of a run from the next map to the endpoint (see `simulateRuns`). */
 export function flawlessChance(run: Run, assumptions: Assumptions, options: FlawlessOptions = {}): FlawlessChance {
-  const { input, notSimulated, unknownHistory, endpoint, goldUnrecorded } = flawlessInput(run, assumptions, options.roleOf, options.marriages, options.plan);
+  const { input, notSimulated, unknownHistory, endpoint, goldUnrecorded, renown } = flawlessInput(run, assumptions, options.roleOf, options.marriages, options.plan);
   const sim = simulateRuns(input, options.seed ?? FLAWLESS_SEED, options.runs ?? FLAWLESS_RUNS, assumptions);
   const passes = options.plan?.wishlist.children.some((c) => c.passes.some((p) => p !== null));
-  return { ...sim, ...(passes ? { blindSpots: [...sim.blindSpots, 'passes-as-planned' as const] } : {}), notSimulated, unknownHistory, endpoint, goldUnrecorded };
+  return { ...sim, ...(passes ? { blindSpots: [...sim.blindSpots, 'passes-as-planned' as const] } : {}), notSimulated, unknownHistory, endpoint, goldUnrecorded, renown };
 }
 
 /**
