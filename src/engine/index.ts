@@ -47,6 +47,10 @@ import { CHAPTER_DISAGREEMENTS, MAPS, lunaticPlusPoolFor, type ChapterData, type
 import { mapWaves, type MapWaves } from './waves';
 import type { RenownReward } from '../game-data/gold';
 import { mapGold, renownGain, renownRewards, type GoldRow } from './gold';
+import { meanNoDeath, playMap, type MapPlay, type MapPlayInput, type SimMap } from './sim/map-play';
+import { simMapById, type SimMapOptions } from './sim/sim-map';
+import { runSeed } from './sim/random';
+import { BLIND_SPOTS, type BlindSpot } from './assumptions';
 import { matchBuilds, matchTemplate, shownMatch, templateSummary, templatesFor } from './builds';
 import type { SkillId } from '../game-data/skills';
 import { createScorer } from './scoring';
@@ -114,6 +118,9 @@ export { classIdByName, classWeaponKinds, openStock, promotionAdvice, sealAvaila
 export { coverage, deployCount, deployMax, deployRoleOf, forcedOn, suggestDeployment, suggestLoadout, type DeployCandidate, type Deployment, type Loadout, type Pair } from './deploy';
 export { childParalogueGates, isChildParalogue, type ChildParalogueGate, type ParalogueGateState } from './child-paralogues';
 export { type MapWaves, type Wave, type WaveGroup } from './waves';
+export { MAX_TURNS, type MapPlay, type MapPlayInput, type SimFight, type SimFoeGroup, type SimGroup, type SimMap, type SimTurn, type SimUnit, type SimUnitTally, type SimWave } from './sim/map-play';
+export { simLineup, type SimMapOptions } from './sim/sim-map';
+export { BLIND_SPOTS, type BlindSpot, type BlindSpotId } from './assumptions';
 export { bestWeapon, classTypes, dangerFlags, foeKey, foeOf, foesOf, matchup, pairUpBonus, statValue, type DangerFlag, type Fighter, type Foe, type Matchup } from './solver';
 export {
   EMPTY_RUN,
@@ -371,6 +378,20 @@ export type Engine = {
    * (each with a foe for the map solver), conditions kept as text, and any line of FEW's not read, text kept.
    */
   mapWaves(map: string, difficulty: MapDifficulty): MapWaves;
+  /**
+   * A map for the simulation (#181): its victory (rout, or the boss to defeat), starting foes and waves on the run's
+   * difficulty (Lunatic+: Lunatic's tables, each foe's two skills drawn from the pool unless recorded in `seen`).
+   */
+  simMap(map: string, difficulty: Difficulty, options?: SimMapOptions): SimMap;
+  /**
+   * Plays one map turn by turn with a lineup (#181): its exact no-death chance, turns, how it ended, each unit's combats,
+   * kills per foe group and combats with each partner, and a per-turn log. The same input and seed give the same play.
+   */
+  playMap(input: MapPlayInput, seed: number): MapPlay;
+  /** The no-death chance averaged over `runs` plays from `seed` (Lunatic+ skills drawn anew each run). */
+  mapNoDeath(input: MapPlayInput, seed: number, runs?: number): number;
+  /** The stated blind spots, each with its lean (may read high, low, or either way). */
+  blindSpots(): readonly BlindSpot[];
   /** A map's chapter-guide entries (#123), grouped by source, each with its source's name and link. */
   chapterGuide(map: string): readonly { readonly source: { readonly id: string; readonly name: string; readonly link: string }; readonly entries: readonly GuideEntry[] }[];
   /**
@@ -1471,6 +1492,10 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       }
       return wavesCache.get(k)!;
     },
+    simMap: simMapById,
+    playMap,
+    mapNoDeath: (input, seed, runs = 1) => meanNoDeath(input, Array.from({ length: Math.max(1, runs) }, (_, i) => (i === 0 ? seed : runSeed(seed, i)))),
+    blindSpots: () => BLIND_SPOTS,
     chapterGuide: (map) => {
       const entries = CHAPTER_GUIDE.filter((e) => e.map === map);
       const sources = [...new Set(entries.map((e) => e.source))];

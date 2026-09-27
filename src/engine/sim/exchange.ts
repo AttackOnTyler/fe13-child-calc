@@ -1,0 +1,162 @@
+/**
+ * One exchange between a pair's lead and one foe, worked out exactly (#181): every strike's hit, crit, Dual Strike and
+ * Dual Guard roll is a branch, and the chance of each ending (the lead's HP, the foe's HP) is summed. The numbers are
+ * the map solver's `matchup`; this only orders the strikes and does the arithmetic.
+ *
+ * Strike order (SF Calculations): the attacker's attack, the defender's counter if its weapon reaches, then the
+ * follow-up of whichever side doubles. A brave weapon's attack is two strikes. Each of the lead's strikes can be followed
+ * by the back's Dual Strike (its own hit, crit and damage); each of the foe's strikes on the lead can be nullified by
+ * Dual Guard. A crit deals triple damage. The combat stops when either side falls.
+ *
+ * Not modelled here (the matchup's notes say so where they apply): Counter's returned damage, Vantage+, plain
+ * Pavise/Aegis procs, other proc skills.
+ */
+import type { GameItem } from '../../game-data/items';
+import type { Matchup } from '../solver';
+
+/** Who starts the exchange: the lead on player phase, the foe on enemy phase. */
+export type Initiator = 'player' | 'enemy';
+
+/** The exchange's result, read the way the play goes on (see `MapPlay`). */
+export type Exchange = {
+  /** The chance the lead survives the exchange. */
+  readonly survive: number;
+  /** Given the lead survives: the chance the foe falls. */
+  readonly kill: number;
+  /** Given the lead survives: its HP after (expected, rounded). */
+  readonly leadHp: number;
+  /** Given the lead survives: the foe's HP after, 0 when it more likely falls than not (else its expected HP, rounded). */
+  readonly foeHp: number;
+  /** Whether the lead struck and whether the foe did (a side with no weapon in reach doesn't). */
+  readonly leadStrikes: boolean;
+  readonly foeStrikes: boolean;
+};
+
+/** A weapon's range as [min, max]; `1~Mag/2` reads as 1~2 (only staves have it). */
+export function rangeOf(item: GameItem | undefined): readonly [number, number] | undefined {
+  if (!item?.range) return undefined;
+  const [lo, hi] = item.range.split('~');
+  const min = parseInt(lo!, 10);
+  const max = hi === undefined ? min : parseInt(hi, 10) || 2;
+  return Number.isFinite(min) ? [min, max] : undefined;
+}
+
+/**
+ * Whether the defender can counter: the attacker picks a distance its weapon reaches and, if it can, one the
+ * defender's can't.
+ */
+export function counters(attacker: GameItem | undefined, defender: GameItem | undefined): boolean {
+  const a = rangeOf(attacker);
+  const d = rangeOf(defender);
+  if (!a || !d) return false;
+  for (let r = a[0]; r <= a[1]; r++) if (r < d[0] || r > d[1]) return false;
+  return true;
+}
+
+type Side = 'lead' | 'foe';
+
+/**
+ * The exchange from the given HPs. `m` is the lead's matchup against the foe (the back's pair-up bonus, Dual Strike and
+ * Dual Guard included); `leadWeapon`/`foeWeapon` decide who reaches whom.
+ */
+export function exchange(m: Matchup, leadWeapon: GameItem | undefined, leadHp: number, foeHp: number, initiator: Initiator): Exchange {
+  const foeWeapon = m.foe.weapon;
+  const leadCan = initiator === 'player' ? !!leadWeapon && !!rangeOf(leadWeapon) : counters(foeWeapon, leadWeapon);
+  const foeCan = initiator === 'enemy' ? !!foeWeapon && m.foeStrikes > 0 : counters(leadWeapon, foeWeapon);
+  const leadPerAttack = m.doubles ? m.hits / 2 : m.hits;
+  const foePerAttack = m.doubled ? m.foeStrikes / 2 : m.foeStrikes;
+  const seq: Side[] = [];
+  const attack = (s: Side) => {
+    if (s === 'lead' ? leadCan : foeCan) for (let i = 0; i < (s === 'lead' ? leadPerAttack : foePerAttack); i++) seq.push(s);
+  };
+  const first: Side = initiator === 'player' ? 'lead' : 'foe';
+  const second: Side = first === 'lead' ? 'foe' : 'lead';
+  attack(first);
+  attack(second);
+  if (m.doubles) attack('lead');
+  else if (m.doubled) attack('foe');
+
+  // States: lead HP × 1024 + foe HP → chance.
+  const K = 1024;
+  // Stats are whole numbers in the game; a fractional one (hand-built input) is rounded down so the state key holds.
+  const dmg = Math.floor(m.damage);
+  const backDmg = Math.floor(m.backDamage);
+  const foeDmg = Math.floor(m.worstHit);
+  let states = new Map<number, number>([[Math.floor(leadHp) * K + Math.floor(foeHp), 1]]);
+  const add = (map: Map<number, number>, l: number, f: number, p: number) => {
+    if (p <= 0) return;
+    const k = Math.max(0, l) * K + Math.max(0, f);
+    map.set(k, (map.get(k) ?? 0) + p);
+  };
+  const hit = m.hit / 100;
+  const crit = m.crit / 100;
+  const dual = m.backDamage > 0 && m.backHit > 0 ? m.dualStrikeRate / 100 : 0;
+  const bHit = m.backHit / 100;
+  const bCrit = m.backCrit / 100;
+  const fHit = m.foeHit / 100;
+  const fCrit = m.foeCrit / 100;
+  const guard = m.dualGuardRate / 100;
+  for (const s of seq) {
+    const next = new Map<number, number>();
+    for (const [k, p] of states) {
+      const l = Math.floor(k / K);
+      const f = k % K;
+      if (l <= 0 || f <= 0) {
+        add(next, l, f, p);
+        continue;
+      }
+      if (s === 'lead') {
+        // The lead's strike: miss, hit or crit; then, if the foe still stands, the back's Dual Strike.
+        const outcomes: [number, number][] = [
+          [f, 1 - hit],
+          [f - dmg, hit * (1 - crit)],
+          [f - dmg * 3, hit * crit],
+        ];
+        for (const [f1, q] of outcomes) {
+          if (q <= 0) continue;
+          if (f1 <= 0 || dual <= 0) {
+            add(next, l, f1, p * q);
+            continue;
+          }
+          add(next, l, f1, p * q * (1 - dual + dual * (1 - bHit)));
+          add(next, l, f1 - backDmg, p * q * dual * bHit * (1 - bCrit));
+          add(next, l, f1 - backDmg * 3, p * q * dual * bHit * bCrit);
+        }
+      } else {
+        // The foe's strike on the lead: Dual Guard, else miss, hit or crit.
+        const lands = 1 - guard;
+        add(next, l, f, p * (guard + lands * (1 - fHit)));
+        add(next, l - foeDmg, f, p * lands * fHit * (1 - fCrit));
+        add(next, l - foeDmg * 3, f, p * lands * fHit * fCrit);
+      }
+    }
+    states = next;
+  }
+  let survive = 0;
+  let kill = 0;
+  let lSum = 0;
+  let fAlive = 0;
+  let fSum = 0;
+  for (const [k, p] of states) {
+    const l = Math.floor(k / K);
+    const f = k % K;
+    if (l <= 0) continue;
+    survive += p;
+    lSum += l * p;
+    if (f <= 0) kill += p;
+    else {
+      fAlive += p;
+      fSum += f * p;
+    }
+  }
+  if (survive <= 0) return { survive: 0, kill: 0, leadHp, foeHp, leadStrikes: leadCan, foeStrikes: foeCan };
+  const killGiven = kill / survive;
+  return {
+    survive: Math.min(1, survive),
+    kill: killGiven,
+    leadHp: Math.round(lSum / survive),
+    foeHp: killGiven >= 0.5 || fAlive <= 0 ? 0 : Math.max(1, Math.round(fSum / fAlive)),
+    leadStrikes: leadCan,
+    foeStrikes: foeCan,
+  };
+}

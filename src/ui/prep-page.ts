@@ -3,8 +3,9 @@
  * from its start (#131), paired with its back (its highest support by default), with its best weapon from its
  * inventory, against one foe at a time on the run's difficulty. Lunatic+ assumes the pool's worst case.
  */
-import type { ChapterDifficulty, Engine, Fighter, Foe, Matchup, PrepUnits, RosterUnit, Run, Snapshot, UnitSnapshot } from '../engine';
-import { EMPTY_SNAPSHOT, REINFORCEMENT_RULE, bestWeapon, dangerFlags, deployCount, foeKey, foesOf, forcedOn, itemByName, latestEntry, openStock, prepUnits, promotionAdvice, sealAvailability, sealsHeld, suggestDeployment, suggestLoadout, supplyList, unitName, withSeenSkills, type DeployCandidate, type DeploymentRole } from '../engine';
+import type { ChapterDifficulty, Difficulty, Engine, Fighter, Foe, Matchup, PrepUnits, RosterUnit, Run, SimGroup, Snapshot, UnitSnapshot } from '../engine';
+import { EMPTY_SNAPSHOT, REINFORCEMENT_RULE, bestWeapon, dangerFlags, deployCount, foeKey, foesOf, forcedOn, itemByName, latestEntry, openStock, prepUnits, promotionAdvice, sealAvailability, sealsHeld, simLineup, suggestDeployment, suggestLoadout, supplyList, unitName, withSeenSkills, type DeployCandidate, type DeploymentRole } from '../engine';
+import { chanceText } from './chance';
 import { CHILD_UNITS } from '../game-data/children';
 import { ROBIN_GROWTHS } from '../game-data/robin';
 import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
@@ -45,7 +46,38 @@ export function fighterOf(name: string, u: UnitSnapshot): { fighter: Fighter; we
   return { fighter: { name, className: u.class, stats: u.stats, skills: u.skills, weapon: weapons[0] }, weapons };
 }
 
-/** Threats (#120): the map's enemy groups and boss on this difficulty, what sets them moving, and reinforcements. */
+/** The seed the preparation page plays the map with: the same page always shows the same chance. */
+const PREP_SEED = 1;
+/** Lunatic+ runs to average the drawn skills over, when a foe's weren't recorded. */
+const LPLUS_RUNS = 16;
+
+const LEAN = { high: 'may read high', low: 'may read low', either: 'either way' } as const;
+
+/**
+ * The next map's no-death chance (#181): the map played turn by turn with this deployment and the latest recorded
+ * stats, in the spec's wording, with how the play ended and the blind spots it rests on.
+ */
+export function noDeathReadout(engine: Engine, map: string, difficulty: Difficulty, lineup: readonly SimGroup[], seen: Readonly<Record<string, readonly string[]>> = {}): { readonly text: string; readonly detail: string } {
+  if (!lineup.length) return { text: 'No-death chance: record your units’ stats in the chapter log to see it.', detail: '' };
+  const input = { map: engine.simMap(map, difficulty, { seen }), lineup };
+  const drawn = input.map.foes.some((f) => f.pool?.length) || input.map.waves.some((w) => w.groups.some((g) => g.pool?.length));
+  const runs = drawn ? LPLUS_RUNS : 1;
+  const chance = engine.mapNoDeath(input, PREP_SEED, runs);
+  const play = engine.playMap(input, PREP_SEED);
+  const turns = `${play.turns} turn${play.turns === 1 ? '' : 's'}`;
+  const end = play.ended === 'rout' ? `a rout in ${turns}` : play.ended === 'boss' ? `the boss falls on turn ${play.turns}` : `the army can’t finish the map (${turns} played)`;
+  const spots = engine.blindSpots().filter((b) => play.blindSpots.includes(b.id));
+  return {
+    text: `No-death chance: ${chanceText(chance)}`,
+    detail:
+      `Played turn by turn with this deployment and your latest stats: ${end}.` +
+      (runs > 1 ? ` Lunatic+ skills not yet recorded are drawn from the pool, over ${runs} runs.` : '') +
+      (input.map.skipped.length ? ` Waves not played (set off by an event): ${input.map.skipped.join('; ')}.` : '') +
+      ` Rests on: ${spots.map((b) => `${b.label.toLowerCase()} (${LEAN[b.lean]})`).join(', ')}.`,
+  };
+}
+
+/** Threats (#120):the map's enemy groups and boss on this difficulty, what sets them moving, and reinforcements. */
 function threats(m: ReturnType<Engine['maps']>[number], foes: readonly Foe[], table: ChapterDifficulty): HTMLElement {
   const groups = m.enemies[table] ?? [];
   return h(
@@ -405,6 +437,8 @@ export function prepPage(ctx: PrepContext): HTMLElement[] {
     pinned,
     excluded: ctx.excluded,
   });
+  // The next map's no-death chance (#181): this deployment, played turn by turn.
+  const noDeath = noDeathReadout(engine, m.id, difficulty, simLineup(deployment, byUnit), seen);
   const lineup = [...deployment.pairs.map((p) => ({ unit: p.lead, backId: p.back })), ...deployment.solo.map((unit) => ({ unit, backId: undefined as RosterUnit | undefined }))];
   const rows = lineup.flatMap(({ unit, backId }) => {
     const c = byUnit.get(unit);
@@ -447,6 +481,7 @@ export function prepPage(ctx: PrepContext): HTMLElement[] {
         h('h2', {}, `Prepare: ${m.label}${m.kind === 'story' ? `: ${m.title}` : ''}`),
         h('div', { class: 'muted small' }, `${difficulty === 'lunatic-plus' ? 'Lunatic+' : table} · ${[`stats from your latest entry`, prep.joining.length ? 'join data for units joining here' : '', prep.mapOnly.length ? 'the map’s own setup for units fielded only here' : ''].filter(Boolean).join(', ')} · no movement planning`),
       ),
+      h('div', { class: 'no-death' }, h('b', {}, noDeath.text), noDeath.detail ? h('p', { class: 'muted small' }, noDeath.detail) : null),
       threats(m, foes, table),
       dangers(units, foes, pool, seen, gender),
       lplus ? checklist(ctx, foes, pool, seen) : null,
