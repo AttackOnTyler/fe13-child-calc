@@ -6,10 +6,10 @@
  * edit never stops the search.
  * Where there's no Worker (tests), `startSolve` returns undefined and the page works the chance out itself.
  */
-import type { Assumptions, Ceiling, CheckedRules, EditCost, ExpForecast, RuleStake, SetupCheck, PinCost, Plan, PlanPin, Readings, ReservesCursor, ReservesStep, RobinCursor, RobinStep, RosterUnit, Run, RunSim, SolveCursor, SolveStep, StressCase, UnitEdit, WhatItCost, WorthCursor, WorthStep } from '../engine';
+import type { Assumptions, Ceiling, CheckedRules, EditCost, EditListing, ExpForecast, RuleStake, SetupCheck, PinCost, Plan, PlanPin, Readings, ReservesCursor, ReservesStep, RobinCursor, RobinStep, RosterUnit, Run, RunSim, SolveCursor, SolveStep, StressCase, WhatItCost, WorthCursor, WorthStep } from '../engine';
 
 /** A unit's edit as the worker posts it (#203): its plan is built and costed in the worker. */
-export type UnitEditView = Pick<UnitEdit, 'kind' | 'key' | 'label' | 'pins'>;
+export type UnitEditView = EditListing;
 
 type Common = {
   readonly id: number;
