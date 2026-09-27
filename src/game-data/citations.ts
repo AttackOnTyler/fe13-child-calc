@@ -76,5 +76,16 @@ export const RESEARCH_DEATH_AFTER_MARRIAGE: Citation = {
   label: 'Research: death after marriage (#17)',
   url: `${RESEARCH}/research/death-after-marriage/docs/research/death-after-marriage.md`,
 };
+export const RESEARCH_CHILD_RECRUITMENT: Citation = {
+  label: 'Research: child recruitment (#140)',
+  url: `${RESEARCH}/research/child-recruitment/research/child-recruitment.md`,
+};
 export const JP_CHILDREN: Citation = { label: 'JP 2ch wiki child units (p.112)', url: 'https://w.atwiki.jp/fireemblem3ds/pages/112.html' };
+/** The mirror wiki's child units page: a passed skill the child already has wastes the slot. */
+export const JP_CHILDREN_MIRROR: Citation = { label: 'JP 2ch wiki child units (p.89)', url: 'https://w.atwiki.jp/kakuseife/pages/89.html' };
+/** The 天馬騎士団 wiki's children page, with player tests in its comments (bottom skill; Stahl × Sully's Kjelle). */
+export const JP_PK_CHILDREN: Citation = {
+  label: '天馬騎士団 FE13 children',
+  url: 'https://www.pegasusknight.com/wiki/fe13/ユニット/絆・結婚システム/子供',
+};
 export const FEW_LUCINA: Citation = { label: 'FEW Lucina (inheritance note)', url: 'https://fireemblemwiki.org/wiki/Lucina' };

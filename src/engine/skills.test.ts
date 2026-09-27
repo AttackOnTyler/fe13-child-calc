@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createEngine, resolveAssumptions, type ChildResult } from './index';
+import { ASSUMPTION_REGISTRY, createEngine, resolveAssumptions, type AssumptionId, type ChildResult } from './index';
 
 const engine = createEngine();
 
@@ -104,6 +104,38 @@ describe('skill-inheritance edge cases', () => {
     expect(before.caveats.join()).toContain('nothing new');
     expect(after.caveats.join()).toContain('next skill up');
     expect(other.pairings()).toEqual(engine.pairings());
+  });
+
+  // research/child-recruitment (#140) C3, G5: JP-PK says one parent's next skill up passes, parent unknown.
+  it('say one parent’s next skill up passes when both parents pass the same skill, without naming which', () => {
+    const settings = { context: 'all', dlc: false } as const;
+    // Stahl and Sully are both Cavaliers: Discipline and Outdoor Fighter are in both pools.
+    const caveats = engine.skillView(get('kjelle|stahl'), settings).caveats.join(' ');
+    expect(caveats).toContain('one parent’s next skill up passes instead');
+    expect(caveats).toContain('which parent isn’t known');
+    expect(caveats).not.toMatch(/second parent|one copy/);
+    const oneCopy = createEngine(resolveAssumptions({ 'inherit-same-skill': 'one-copy' }));
+    expect(oneCopy.skillView(oneCopy.result('kjelle|stahl')!, settings).caveats.join(' ')).toContain('one copy');
+  });
+
+  it('cite the sources that settle them, and label alternatives no source backs', () => {
+    const status = (id: AssumptionId) => engine.assumptions().find((a) => a.id === id)!;
+    const labels = (id: AssumptionId) => status(id).sources.map((s) => s.label).join(' | ');
+    const same = status('inherit-same-skill');
+    expect(same).toMatchObject({ isDefault: true, default: 'One parent’s next skill up passes instead (which parent isn’t known)' });
+    expect(labels('inherit-same-skill')).toContain('天馬騎士団 FE13 children');
+    expect(same.why).toMatch(/Kjelle/);
+    expect(same.why).toMatch(/which parent/);
+    expect(ASSUMPTION_REGISTRY['inherit-same-skill'].alternatives).toEqual([{ label: expect.stringMatching(/unsourced/), value: 'one-copy' }]);
+
+    const last = status('inherit-last-skill');
+    expect(last.current).toBe('The bottom equipped slot');
+    expect(labels('inherit-last-skill')).toContain('JP 2ch wiki child units (p.112)');
+    expect(labels('inherit-last-skill')).toContain('天馬騎士団 FE13 children');
+    expect(last.why).toMatch(/player test/);
+    expect(ASSUMPTION_REGISTRY['inherit-last-skill'].alternatives).toEqual([{ label: expect.stringMatching(/no source of its own/), value: 'most-recent' }]);
+
+    expect(labels('inherit-duplicate-skill')).toContain('(p.89)');
   });
 });
 

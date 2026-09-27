@@ -73,7 +73,7 @@ export const DEEPER: readonly DeeperEntry[] = [
   {
     id: 'pairing-build',
     question: 'What does this pairing build?',
-    answer: `Press ${skills} on any row: its drawer lists the build templates the pairing reaches, the skills it can inherit, and its class skills.`,
+    answer: `Press ${skills} on any row: its drawer lists the build templates the pairing reaches, the skills it can inherit (with notes where inheritance rests on an assumption, such as both parents passing the same skill), and its class skills.`,
     jump: { to: 'child', target: 'skills-drawer' },
     terms: [
       { term: 'build template', def: 'A curated 5-skill loadout for one job, tagged with the play contexts it suits.' },
@@ -126,7 +126,7 @@ export const DEEPER: readonly DeeperEntry[] = [
   {
     id: 'assumption',
     question: `What does ${assumption} mean?`,
-    answer: `A game rule the app couldn’t verify. ${validation} lists each one and lets you override it for your run.`,
+    answer: `A game rule the sources couldn’t verify. ${validation} lists each one with its sources (some are single-source, some have none) and lets you override it for your run.`,
     jump: { to: 'validation', target: 'validation' },
     terms: [],
   },
