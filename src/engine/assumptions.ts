@@ -572,15 +572,23 @@ export type RunBlindSpotId =
   | 'side-goal-actions'
   | 'kit-by-matchups-won'
   | 'arms-on-the-way'
-  | 'loadout-for-the-map';
+  | 'loadout-for-the-map'
+  | 'simulation-error';
+
+/**
+ * What a blind spot touches (#210, the Why panel shows only those touching a number): `map`, the map simulation's
+ * chances (each map's no-death chance and everything built on it: the flawless chance, the ceiling, costs and worth);
+ * `flawless`, the run simulation's walk from map to map (the flawless chance, costs, worth, gold); `fight`, one fight's
+ * kill chance as the play has it; `milestone`, a milestone's chance and the EXP forecast it reads.
+ */
+export type BlindSpotTouch = 'map' | 'flawless' | 'fight' | 'milestone';
 
 export type BlindSpot = {
   readonly id: BlindSpotId | RunBlindSpotId;
   readonly label: string;
   readonly why: string;
   readonly lean: 'high' | 'low' | 'either';
-  /** What it touches: the map simulation's chances (each map's no-death chance and everything built on it), or the flawless chance across the map order. */
-  readonly touches: readonly ('map' | 'flawless')[];
+  readonly touches: readonly BlindSpotTouch[];
 };
 
 export const BLIND_SPOTS: readonly BlindSpot[] = [
@@ -591,7 +599,7 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
       'With no map positions, each exposed pair takes one enemy-phase attack, from the foe left that is worst for it, each foe attacking once; ' +
       'units alone with no weapon (healers, dancers) stay out of reach. Two or more attackers can reach one pair in play.',
     lean: 'high',
-    touches: ['map'],
+    touches: ['map', 'fight'],
   },
   {
     id: 'equal-share-of-actions',
@@ -600,7 +608,7 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
       'Each pair or unit alone gets one action a turn (a Dance gives one more), whoever it is: nothing says who can reach which foe, so a fast flier and an armoured ' +
       'unit act alike, and every foe is in reach of every action.',
     lean: 'either',
-    touches: ['map'],
+    touches: ['map', 'milestone'],
   },
   {
     id: 'rally-reaches-every-pair',
@@ -609,7 +617,7 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
       'A unit with a Rally skill equipped rallies first each turn, with its own action, and the bonus is taken to reach every other pair for ' +
       'that turn’s fights. In play a Rally reaches only the units within 3 tiles.',
     lean: 'high',
-    touches: ['map'],
+    touches: ['map', 'fight'],
   },
   {
     id: 'likely-result',
@@ -619,7 +627,7 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
       'than not), while the chance of dying in it is exact. A foe left standing by bad luck can attack again. A heal restores its expected ' +
       'HP (the heal times the chance the staff reaches), and a Rescue happens when it more likely reaches than not.',
     lean: 'either',
-    touches: ['map'],
+    touches: ['map', 'fight', 'milestone'],
   },
   {
     id: 'bosses-hold',
@@ -638,7 +646,7 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
       'Pavise, Aegis, Counter), Vantage, Miracle, Galeforce’s extra action, Renewal and the stat +2 skills aren’t played for either side. ' +
       'The plan’s build skills are equipped once learned, so a build leaning on procs reads below what it does.',
     lean: 'low',
-    touches: ['map'],
+    touches: ['map', 'fight'],
   },
   {
     id: 'class-change-at-cap',
@@ -649,7 +657,7 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
       'there. Seals found mid-map aren’t used before the map ends, and only sure seals are picked up. Changing class earlier or later ' +
       'moves its stats along the way.',
     lean: 'either',
-    touches: ['flawless'],
+    touches: ['flawless', 'milestone'],
   },
   {
     id: 'exp-from-likely-play',
@@ -660,7 +668,7 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
       'the chance it lands a Dual Strike, never a kill; a partner beside the front in Attack Stance earns none, and Rally none. The EXP ' +
       'priority decides who lands kills, with every foe in reach of every unit: a unit set to wait can always chip instead.',
     lean: 'either',
-    touches: ['flawless'],
+    touches: ['flawless', 'milestone'],
   },
   {
     id: 'supports-from-pair-combats',
@@ -671,7 +679,7 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
       'add nothing, and a unit’s tied pairs go by combats, then name, not by its support list. A marriage is made when the pair reaches S; a ' +
       'child whose fixed parent isn’t married by its paralogue doesn’t join.',
     lean: 'low',
-    touches: ['flawless'],
+    touches: ['flawless', 'milestone'],
   },
   {
     id: 'kit-as-recorded',
@@ -701,7 +709,7 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
       'rate the assumed army spread puts two units 1 tile apart, and alone the rest of the time. With no map positions, the play can’t know ' +
       'when a player keeps a split pair side by side; a careful player often does.',
     lean: 'low',
-    touches: ['map'],
+    touches: ['map', 'fight'],
   },
   {
     id: 'side-goal-actions',
@@ -755,7 +763,7 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
       'In the ally phase an NPC with a weapon walks into the foes’ reach, as its AI does, and fights back on enemy phase, but its own ' +
       'attacks aren’t played: foes it would fell stay for the army.',
     lean: 'low',
-    touches: ['map'],
+    touches: ['map', 'milestone'],
   },
   {
     id: 'npc-screened',
@@ -783,5 +791,15 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
       'Chapter 3 is also lost when both Door Keys are lost before a door is opened. The play has no doors or keys: the keys are assumed kept.',
     lean: 'high',
     touches: ['map'],
+  },
+  {
+    id: 'simulation-error',
+    label: 'Simulation error',
+    why:
+      'The flawless chance is a mean over a few simulated runs (stats, EXP and gold differ run to run): the ± on the headline is its error ' +
+      '(95%). Each map’s no-death chance is exact for the runs that reach it. Edits and worth are compared on the same runs, so their ± is ' +
+      'the paired error, and a milestone’s chance is a share of the runs.',
+    lean: 'either',
+    touches: ['flawless', 'milestone'],
   },
 ];

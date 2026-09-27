@@ -20,7 +20,8 @@ import { h } from './dom';
 import { guide } from './guide';
 import { mapsView, type MapsContext } from './maps-page';
 import { beforeTheLock, inboxNudge, inboxProgress, inboxView, robinName, robinToLock } from './inbox';
-import { GAME_OVER_UNITS, forecastBefore, openLosses, recordMissed, unrecordLoss, withEntryForecast, type WhatItCost } from '../engine';
+import { GAME_OVER_UNITS, forecastBefore, openLosses, proposalId, recordMissed, unrecordLoss, withEntryForecast, type Comparison, type WhatItCost } from '../engine';
+import { setComparison, whyText, type WhyMark } from './why';
 
 export type RunContext = {
   readonly engine: Engine;
@@ -133,7 +134,14 @@ export function mapOrderReadout(engine: Engine, run: Run): { readonly title: str
 }
 
 /** The roadmap as the Run view writes it: its milestones, and each unit's reading (#197) once read. */
-export type RoadmapReadout = { readonly title: string; readonly rows: readonly string[]; readonly readings: readonly string[]; readonly note: string };
+export type RoadmapReadout = {
+  readonly title: string;
+  readonly rows: readonly string[];
+  readonly readings: readonly string[];
+  readonly note: string;
+  /** The numbers in its rows and readings, for the Why panel (#210): each milestone's chance. */
+  readonly marks?: { readonly rows: readonly (readonly WhyMark[])[]; readonly readings: readonly (readonly WhyMark[])[] };
+};
 
 /**
  * The plan's roadmap as the Run view lists it (#194): its milestones in order, one row each, naming what must be true
@@ -195,7 +203,22 @@ export function roadmapReadout(engine: Engine, run: Run, plan: Plan, readings?: 
   const note = readings
     ? `A unit reads on track when its worst milestone’s chance is 80% or more, at risk when one suggested change brings it back to 80% without pushing another below (“at risk?” until the changes are read), and behind when none does or its deadline map has started. Behind first, each by the flawless chance lost (${readings.lostBy === 'worth' ? 'its worth times the share of runs missing it' : 'the share of runs missing its worst milestone'}). Recorded stats show as percentiles of the spread the level-ups since the entry before could roll; they never change a reading.`
     : '';
-  return { title, rows: ms.map(withChance), readings: readings?.readings.map((r) => readingRow(r, ms, gender, labels)) ?? [], note };
+  const rowMarks = ms.map((m): WhyMark[] => {
+    const c = chances.get(m.id);
+    return readings && c !== undefined ? [[chanceText(c), `milestone:${m.id}`]] : [];
+  });
+  return {
+    title,
+    rows: ms.map(withChance),
+    readings: readings?.readings.map((r) => readingRow(r, ms, gender, labels)) ?? [],
+    note,
+    marks: { rows: rowMarks, readings: (readings?.readings ?? []).map(readingMarks) },
+  };
+}
+
+/** A reading's numbers (#210): its worst milestone's chance. */
+export function readingMarks(r: Reading): WhyMark[] {
+  return r.worst?.reached ? [[chanceText(r.worst.chance), `milestone:${r.worst.id}`]] : [];
 }
 
 const READING_TEXT = { 'on-track': 'on track', 'at-risk': 'at risk', behind: 'behind' } as const;
@@ -302,7 +325,21 @@ export type FlawlessReadout = {
   /** The headline's own chance and the readings it shows (#206: a map's record keeps them for What changed). */
   readonly chance?: FlawlessChance;
   readonly readings?: Readings;
+  /**
+   * The numbers in its lines, for the Why panel (#210): the headline's and the ceiling's, each map's no-death chance,
+   * gold and side goals, and what the search found; and the differences it shows, to hand the panel.
+   */
+  readonly why?: {
+    readonly text: readonly WhyMark[];
+    readonly rows: readonly (readonly WhyMark[])[];
+    readonly found: readonly (readonly WhyMark[])[];
+    readonly notes: readonly (readonly WhyMark[])[];
+    readonly comparisons: readonly WhyComparison[];
+  };
 };
+
+/** A difference the page shows, as the Why panel takes it (`setComparison`). */
+export type WhyComparison = { readonly key: string; readonly comparison: Comparison; readonly plans?: { readonly other: Plan; readonly base: Plan } };
 
 /**
  * The headline flawless chance (#186), as the Run view writes it: the seed plan's (#198: its marriages, Robin and
@@ -390,6 +427,34 @@ function readoutOf(
       ]
     : [];
   const status = progress ? (progress.done ? (progress.converged ? ' · searched' : '') : ' · searching…') : '';
+  // The numbers, for the Why panel (#210), and the differences it explains: each against the plan the search started from.
+  const start = progress?.start ?? progress?.best;
+  const comparisons: WhyComparison[] = progress
+    ? [
+        ...progress.proposals.map((p) => ({ key: `proposal:${proposalId(p)}`, comparison: { kind: 'proposal' as const, label: p.edits.join('; '), gain: p.gain, margin: p.margin, runs: p.runs }, ...(start ? { plans: { other: p.plan, base: start } } : {}) })),
+        ...progress.closeCalls.map((c) => ({ key: `close:${c.key}`, comparison: { kind: 'close-call' as const, label: c.label, gain: c.gain, margin: c.margin, runs: c.runs, close: true }, ...(start ? { plans: { other: c.plan, base: start } } : {}) })),
+        ...(progress.pinCost?.pins.length
+          ? [{ key: 'pin-cost', comparison: { kind: 'pin-cost' as const, label: 'Your pins’ cost', gain: progress.pinCost.cost, margin: progress.pinCost.margin, runs: progress.pinCost.runs, close: progress.pinCost.verdict === 'close' || progress.pinCost.verdict === 'unclear' } }]
+          : []),
+      ]
+    : [];
+  const why = {
+    text: [[`${chanceText(r.chance)} ±${points(r.margin)}`, 'flawless'], ...(ceiling?.chance !== undefined ? [[chanceText(ceiling.chance), 'ceiling'] as WhyMark] : [])] as WhyMark[],
+    rows: r.maps.map((m): WhyMark[] => [
+      ...(m.noDeath !== undefined ? [[chanceText(m.noDeath), `map:${m.key}`] as WhyMark] : []),
+      ...(m.noDeath !== undefined && m.gold ? [[goldRange(m.gold), `gold:${m.key}`] as WhyMark] : []),
+      ...r.sideGoals.filter((g) => g.key === m.key && g.chase && g.secured !== undefined).map((g): WhyMark => [`secured ${chanceText(g.secured!)}`, `side-goal:${g.id}`]),
+    ]),
+    found: [] as (readonly WhyMark[])[],
+    notes: notes.map((n): WhyMark[] => (progress?.pinCost && n.startsWith('Your ') ? [[differenceText(progress.pinCost.cost, progress.pinCost.margin, progress.pinCost.verdict === 'close' || progress.pinCost.verdict === 'unclear'), 'edit:pin-cost']] : [])),
+    comparisons,
+  };
+  if (progress)
+    why.found = [
+      ...progress.proposals.map((p): WhyMark[] => [[differenceText(p.gain, p.margin), `edit:proposal:${proposalId(p)}`]]),
+      ...progress.closeCalls.map((c): WhyMark[] => [[differenceText(c.gain, c.margin, true), `edit:close:${c.key}`]]),
+      ...why.notes,
+    ];
   return {
     items: itemPlanReadout(engine, run, plan, r, pins),
     plan,
@@ -410,6 +475,7 @@ function readoutOf(
     ...(readings ? { readings } : {}),
     found: [...improvements, ...notes],
     notes,
+    why,
   };
 }
 
@@ -418,6 +484,8 @@ export type ItemRowView = {
   readonly source: string;
   readonly item: string;
   readonly text: string;
+  /** Its numbers, for the Why panel (#210). */
+  readonly marks?: readonly WhyMark[];
   /** The pin it takes (a booster pin for boosters and Boots, a carrier pin for weapons), its unit if pinned, and its map. */
   readonly pin: { readonly kind: ItemPin['kind']; readonly unit: RosterUnit | undefined; readonly key: string } | undefined;
 };
@@ -458,7 +526,8 @@ export function itemPlanReadout(engine: Engine, run: Run, plan: Plan, chance: Fl
     const at = r.uses[0]?.key ?? (r.after ? steps[steps.findIndex((x) => x.key === r.after) + 1]?.key : steps[0]?.key);
     const pinKind = r.kind === 'booster' || r.kind === 'boots' ? 'booster' : r.kind === 'weapon' ? 'carrier' : undefined;
     const pinned = runItemPins(run).find((x) => x.kind === pinKind && x.item === r.item);
-    return { source: r.source, item: r.item, text, pin: pinKind && at ? { kind: pinKind, unit: pinned?.unit, key: pinned?.key ?? at } : undefined };
+    const marks: WhyMark[] = arrives && r.uses[0] ? [[chanceText(r.arrival!, { miss: 'misses', make: 'arrives' }), `item:${r.uses[0].key}:${r.source}`]] : [];
+    return { source: r.source, item: r.item, text, marks, pin: pinKind && at ? { kind: pinKind, unit: pinned?.unit, key: pinned?.key ?? at } : undefined };
   });
   const tonics = p.tonics.map((t) => `${label(t.key)}: ${t.count} tonic${t.count === 1 ? '' : 's'}, ${goldText(t.gold)}`);
   const used = p.rows.filter((r) => r.uses.length).length;
@@ -483,7 +552,7 @@ function itemPlanSection(ctx: HeadlineContext, r: ItemPlanReadout | undefined, p
       h(
         'div',
         { class: 'row small' },
-        h('span', {}, row.text),
+        h('span', {}, ...whyText(row.text, row.marks ?? [])),
         row.pin
           ? h(
               'select',
@@ -701,26 +770,32 @@ export function solveState(run: Run): { readonly plan: Plan; readonly progress: 
  * 30 s; a re-solve after an edit or a recorded map, about 5 s). Without a worker the page works out the seed plan's. The item plan (#193) reads the same plan and runs.
  */
 export function flawlessSection(ctx: HeadlineContext, inInbox = false): HTMLElement {
-  const draw = (r: FlawlessReadout | undefined) =>
-    h(
+  const draw = (r: FlawlessReadout | undefined) => {
+    // The differences it shows, for the Why panel (#210).
+    for (const c of r?.why?.comparisons ?? []) setComparison(c.key, c.comparison, c.plans);
+    const marked = (text: string, marks: readonly WhyMark[] | undefined) => whyText(text, marks ?? []);
+    const shown = inInbox ? r?.notes : r?.found;
+    const shownMarks = inInbox ? r?.why?.notes : r?.why?.found;
+    return h(
       'details',
       { class: 'banner flawless' },
-      h('summary', {}, h('b', {}, r?.text ?? 'Flawless chance: working it out…')),
+      h('summary', {}, h('b', {}, ...(r ? marked(r.text, r.why?.text) : ['Flawless chance: working it out…']))),
       r?.detail ? h('p', { class: 'muted small' }, r.detail) : null,
-      r?.rows.length ? h('ol', { class: 'small' }, ...r.rows.map((x) => h('li', {}, x))) : null,
+      r?.rows.length ? h('ol', { class: 'small' }, ...r.rows.map((x, i) => h('li', {}, ...marked(x, r.why?.rows[i])))) : null,
       r?.roadmap && (r.roadmap.rows.length || r.roadmap.readings.length)
         ? h(
             'details',
             { class: 'roadmap' },
             h('summary', {}, h('b', {}, r.roadmap.title)),
-            r.roadmap.readings.length ? h('ul', { class: 'small readings' }, ...r.roadmap.readings.map((x) => h('li', {}, x))) : null,
+            r.roadmap.readings.length ? h('ul', { class: 'small readings' }, ...r.roadmap.readings.map((x, i) => h('li', {}, ...marked(x, r.roadmap!.marks?.readings[i])))) : null,
             r.roadmap.note ? h('p', { class: 'muted small' }, r.roadmap.note) : null,
-            h('ol', { class: 'small' }, ...r.roadmap.rows.map((x) => h('li', {}, x))),
+            h('ol', { class: 'small' }, ...r.roadmap.rows.map((x, i) => h('li', {}, ...marked(x, r.roadmap!.marks?.rows[i])))),
           )
         : null,
-      (inInbox ? r?.notes : r?.found)?.length ? h('ul', { class: 'small solve-found' }, ...(inInbox ? r!.notes : r!.found).map((x) => h('li', {}, x))) : null,
+      shown?.length ? h('ul', { class: 'small solve-found' }, ...shown.map((x, i) => h('li', {}, ...marked(x, shownMarks?.[i])))) : null,
       r?.items ? itemPlanSection(ctx, r.items, r.plan) : null,
     );
+  };
   const run = ctx.run;
   const el = draw(READOUTS.get(run));
   const here = { run, el };
@@ -822,6 +897,8 @@ export type RobinReadout = {
   readonly lock?: string;
   /** The no-Robin view, when toggled on. */
   readonly noRobin?: string;
+  /** The numbers in its lines (#210): each solved Robin's cost (by its key), the lock's, the no-Robin view's. */
+  readonly marks?: { readonly solved: Readonly<Record<string, readonly WhyMark[]>>; readonly lock: readonly WhyMark[]; readonly noRobin: readonly WhyMark[]; readonly comparisons: readonly WhyComparison[] };
 };
 
 const PICKS = { gender: (r: PlanRobin) => ` (the best ${r.gender === 'M' ? 'Male' : 'Female'} Robin)`, ceiling: () => ' (its ceiling could beat the best)', requested: () => ' (asked)', locked: () => '' } as const;
@@ -859,6 +936,20 @@ export function robinReadout(engine: Engine, run: Run, step: RobinStep | undefin
       solve: o.status === 'open',
     }));
   const screened = step.options.filter((o) => o.screened).length;
+  // The differences, for the Why panel (#210): each against the reference's plan on the same runs.
+  const refPlan = step.solved.find((s) => s.key === step.reference)?.plan;
+  const comparisons: WhyComparison[] = [];
+  const solvedMarks: Record<string, WhyMark[]> = {};
+  for (const s of step.solved) {
+    if (!s.cost) continue;
+    const close = s.cost.verdict === 'close';
+    comparisons.push({ key: `robin:${s.key}`, comparison: { kind: 'robin', label: `Robin: ${robinName(s.robin)}`, gain: s.cost.gain, margin: s.cost.margin, runs: s.cost.runs, close }, ...(refPlan ? { plans: { other: s.plan, base: refPlan } } : {}) });
+    solvedMarks[s.key] = [[differenceText(s.cost.gain, s.cost.margin, close), `edit:robin:${s.key}`]];
+  }
+  const lc = locked ? step.lockCost : undefined;
+  if (lc) comparisons.push({ key: 'robin-lock', comparison: { kind: 'robin', label: 'What this lock cost', gain: lc.gain, margin: lc.margin, runs: lc.runs } });
+  const nrc = noRobin ? step.noRobin : undefined;
+  if (nrc) comparisons.push({ key: 'no-robin', comparison: { kind: 'robin', label: 'The no-Robin view', gain: nrc.cost.gain, margin: nrc.cost.margin, runs: nrc.cost.runs, close: nrc.cost.verdict === 'close' }, ...(refPlan ? { plans: { other: nrc.plan, base: refPlan } } : {}) });
   const lock = locked
     ? step.lockCost
       ? `What this lock cost: ${differenceText(step.lockCost.gain, step.lockCost.margin)} (${robinName(step.solved.find((s) => s.key === step.lockCost!.key)!.robin)} does better)`
@@ -874,6 +965,12 @@ export function robinReadout(engine: Engine, run: Run, step: RobinStep | undefin
         : 'No-Robin view: working it out…';
   return {
     title,
+    marks: {
+      solved: solvedMarks,
+      lock: lc ? [[differenceText(lc.gain, lc.margin), 'edit:robin-lock']] : [],
+      noRobin: nrc ? [[differenceText(nrc.cost.gain, nrc.cost.margin, nrc.cost.verdict === 'close'), 'edit:no-robin']] : [],
+      comparisons,
+    },
     status: `${screened} of ${step.options.length} options screened by their seed and ceiling${step.converged ? '' : ' · comparing…'}`,
     solved,
     rest,
@@ -955,6 +1052,7 @@ function robinSection(ctx: RunContext, inInbox = false): HTMLElement | null {
   };
   const draw = () => {
     const r = robinReadout(ctx.engine, run, state.step, state.noRobin);
+    for (const c of r.marks?.comparisons ?? []) setComparison(c.key, c.comparison, c.plans);
     const locked = robinLock(run);
     const chosen = robinToLock(run, solveState(run)?.progress);
     return h(
@@ -969,7 +1067,7 @@ function robinSection(ctx: RunContext, inInbox = false): HTMLElement | null {
         h('button', { class: 'mini', title: 'Work out the Robin alternatives in the background (after the headline’s search)', disabled: !!(state.running || state.step?.converged || whenIdle === start), onclick: ask }, state.running ? 'Comparing…' : whenIdle === start ? 'Waiting for the search…' : state.step ? 'Carry on' : 'Compare Robins'),
         locked ? h('button', { class: 'mini ghost', title: 'Unlock Robin: every option is solved again', onclick: () => ctx.setRun(withoutPins(run, [locked])) }, 'Unlock') : null,
       ),
-      r.lock ? h('p', { class: 'small' }, h('b', {}, r.lock)) : null,
+      r.lock ? h('p', { class: 'small' }, h('b', {}, ...whyText(r.lock, r.marks?.lock ?? []))) : null,
       r.solved.length
         ? h(
             'ul',
@@ -978,7 +1076,7 @@ function robinSection(ctx: RunContext, inInbox = false): HTMLElement | null {
               h(
                 'li',
                 {},
-                x.text,
+                ...whyText(x.text, r.marks?.solved[x.key] ?? []),
                 !inInbox
                   ? x.lock
                     ? h('button', { class: 'mini', title: 'Lock this Robin into the run facts and start: only Robin is locked, the rest stays editable', onclick: () => ctx.setRun(withRobinLock(run, x.robin)) }, 'Lock Robin and start')
@@ -1010,7 +1108,7 @@ function robinSection(ctx: RunContext, inInbox = false): HTMLElement | null {
         h('input', { type: 'checkbox', checked: state.noRobin, onchange: (e) => ((state.noRobin = (e.target as HTMLInputElement).checked), state.noRobin && state.step ? ask() : redraw()) }),
         ' No-Robin view',
       ),
-      r.noRobin ? h('p', { class: 'small' }, r.noRobin) : null,
+      r.noRobin ? h('p', { class: 'small' }, ...whyText(r.noRobin, r.marks?.noRobin ?? [])) : null,
     );
   };
   // The headline's search took the worker (one request at a time): carry on from the cursor once it's free.

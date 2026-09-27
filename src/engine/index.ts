@@ -62,6 +62,7 @@ import { SEARCH_RUNS as COST_RUNS } from './solve/step';
 import { simulateCeiling, type Ceiling } from './sim/ceiling';
 import { coupleKey, endpointCoverage, nonStarters, seedPlan, type EndpointCoverage, type SeedContext, type SeedOptions } from './solve/seed';
 import { milestones, type Milestone } from './milestones';
+import { explain as explainNumber, type ExplainContext, type Explanation } from './explain';
 import { editCost, solveStep, type EditCost, type EditCostInput, type PinCost, type PinCostInput, type SolveStep, type SolveStepInput, type UnitEdit } from './solve/step';
 import { keptPins, planEdits } from './solve/edits';
 import { adoptedOf } from './solve/adopted';
@@ -175,6 +176,7 @@ export { READING_SECONDS, SUGGEST_RUNS, growthPercentile, readUnits, type Readin
 export { ON_TRACK, milestoneCheck, type ExpForecast, type ExpForecastOptions, type SuggestedChange, type SuggestedPin } from './exp-forecast';
 export type { EndpointCoverage, SeedOptions } from './solve/seed';
 export type { ClassMilestone, Milestone, MilestonePoint, RecruitMilestone, SealSource, SkillMilestone, SupportMilestone, SupportWindow } from './milestones';
+export { QUIET_POINTS, blindSpotsTouching, milestoneWords, riskSplit, type Comparison, type ExplainContext, type Explanation, type ExplanationFormat, type ExplanationKind, type ExplanationRow } from './explain';
 export { EDIT_COST_BUDGET, EDIT_KINDS, SEARCH_RUNS, rescoreSeed, SOLVE_SECONDS, STEP_BUDGET, type EditCost, type EditCostInput, type EditKind, type PinCost, type PinCostInput, type SolveStep, type SolveStepInput, type UnitEdit } from './solve/step';
 export { FORCED_UNITS, LIKELY_LOSSES, type LikelyLoss, type ReserveReading, type ReservesCursor, type ReservesInput, type ReservesStep, type UnitWorth, type WorthCursor, type WorthInput, type WorthStep } from './solve/worth';
 export { BLIND_SPOTS, type BlindSpot, type BlindSpotId, type RunBlindSpotId } from './assumptions';
@@ -792,6 +794,26 @@ export type Engine = {
    * latest entry isn't a recorded map. Seeded; `runs` defaults to `SEARCH_RUNS.start`.
    */
   whatItCost(run: Run, plan: Plan, options?: SeedOptions & { readonly seed?: number; readonly runs?: number }): WhatItCost | undefined;
+  /**
+   * A number's explanation (#210, the Why panel): its value, what it is, its math, the rows that moved it (each
+   * optionally drilling to a deeper explanation's id), where the trail stops, and the blind spots touching it with their
+   * lean. Ids: `flawless`, `ceiling`, `map:<key>`, `fight:<key>:<turn>:<n>`, `edit:<key>` (a comparison in the context),
+   * `worth:<unit>`, `milestone:<id>`, `exp:<key>:<unit>`, `gold:<key>`, `side-goal:<id>`, `item:<key>:<source>`. The
+   * context is what the page worked the numbers out from (the run and the plan, or a hand-built input, and the
+   * headline's runs); undefined when the id is unknown or its number isn't in the context. Cheap: at most one map is
+   * played (the ceiling's endpoint once, when the context holds none).
+   */
+  explain(id: string, context: ExplainContext): Explanation | undefined;
+  /**
+   * A plan's runs without a unit (#210, a worth's drill-down by lineup span; `idle`: with it fighting but taking none of
+   * its staff, Dance or Rally actions), on the seed and runs given: the input its worth reads.
+   */
+  worthChance(
+    run: Run,
+    plan: Plan,
+    unit: RosterUnit,
+    options?: { readonly seed?: number; readonly runs?: number; readonly idle?: boolean; readonly pins?: readonly PlanPin[]; readonly roleOf?: (u: RosterUnit) => DeploymentRole },
+  ): RunSim;
 };
 
 /** One combat for `Engine.combatExp`. */
@@ -1158,6 +1180,8 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
    */
   /** Hand-built worth variants (#202, `simulateWorth`), kept while the input lives. */
   const handBuilt = new WeakMap<RunSimInput, Map<string, RunSimInput>>();
+  /** The ceilings explanations read (#210), by input, seed and runs. */
+  const ceilings = new WeakMap<RunSimInput, Map<string, Ceiling | undefined>>();
   const planInputs = new WeakMap<Run, { roleOf: ((u: RosterUnit) => DeploymentRole) | undefined; byPlan: Map<string, ReturnType<typeof flawlessInput>> }>();
   const planBuilt = (run: Run, plan: Plan, roleOf: ((u: RosterUnit) => DeploymentRole) | undefined): ReturnType<typeof flawlessInput> => {
     let held = planInputs.get(run);
@@ -2252,6 +2276,37 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     recordedStats: (run, options) => recordedStats(run, assumptions, options),
     planBreaks: (run, plan) => planBreaks(run, plan, milestones(run, plan, assumptions)),
     milestoneMoves: (run, from, to) => milestoneMoves(milestones(run, from, assumptions), milestones(run, to, assumptions)),
+    explain: (id, context) => {
+      const input = context.input ?? (context.run && context.plan ? planInput(context.run, context.plan, context.roleOf) : undefined);
+      const seed = context.seed ?? FLAWLESS_SEED;
+      const runs = context.chance?.runs ?? FLAWLESS_RUNS;
+      const ceilingOf = () => {
+        if (context.ceiling || !input) return context.ceiling;
+        let bySeed = ceilings.get(input);
+        if (!bySeed) ceilings.set(input, (bySeed = new Map()));
+        const k = `${seed}:${runs}`;
+        if (!bySeed.has(k)) bySeed.set(k, simulateCeiling(input, seed, runs, assumptions));
+        return bySeed.get(k);
+      };
+      const ms = context.milestones ?? (id.startsWith('milestone:') && context.run && context.plan ? milestones(context.run, context.plan, assumptions) : []);
+      return explainNumber(id, {
+        assumptions,
+        input,
+        chance: context.chance,
+        seed,
+        gender: context.run?.roster.run.gender ?? context.plan?.robin.gender ?? null,
+        ceiling: ceilingOf,
+        milestones: ms,
+        readings: context.readings,
+        worth: context.worth ?? [],
+        without: context.without ?? {},
+        comparisons: context.comparisons ?? {},
+      });
+    },
+    worthChance: (run, plan, unit, options = {}) => {
+      const v = worthVariants(run, plan, options.roleOf, options.pins);
+      return simulateRuns(v.inputOf(options.idle ? { kind: 'idle', unit } : { kind: 'without', unit }), options.seed ?? FLAWLESS_SEED, options.runs ?? FLAWLESS_RUNS, assumptions);
+    },
     suggestedEdit: (run, plan, pin) =>
       suggestedEdit(plan, pin, pin.kind === 'priority' ? (plan.roadmap.priorities ?? defaultPriorities(milestones(run, plan, assumptions), flawlessInput(run, assumptions, undefined, undefined, plan).input)) : []),
     lossPlan: (run, plan, options = {}) => lossPlanOf(pinnedRun(run, options.pins), plan, options.roleOf),

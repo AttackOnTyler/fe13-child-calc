@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chanceText, differenceText } from './chance';
+import { chanceText, differenceText, killText } from './chance';
 
 describe('chance wording (#181; spec #175’s Why panel wording)', () => {
   it('reads a chance in percent, one decimal', () => {
@@ -41,5 +41,20 @@ describe('difference wording (#199)', () => {
   it('reads a gain in signed points with its paired ±', () => {
     expect(differenceText(0.012, 0.004)).toBe('+1.2 ±0.4');
     expect(differenceText(-0.05, 0.01)).toBe('−5.0 ±1.0');
+  });
+});
+
+describe('a fight’s kill chance (#210)', () => {
+  it('always adds how often it kills someone', () => {
+    expect(killText(0.121)).toBe('12.1% (kills someone about 1 run in 8)');
+    expect(killText(0.5)).toBe('50.0% (kills someone about 1 run in 2)');
+    expect(killText(0.0028)).toBe('0.3% (kills someone about 1 run in 357)');
+  });
+
+  it('caps like any chance', () => {
+    expect(killText(0.0004)).toBe('under 0.1%');
+    expect(killText(0.9995)).toBe('over 99.9%');
+    expect(killText(1)).toBe('100%');
+    expect(killText(0)).toBe('0%');
   });
 });

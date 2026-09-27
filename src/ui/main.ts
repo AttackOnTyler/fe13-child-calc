@@ -101,6 +101,7 @@ import { validationPanel, withOverride } from './validation';
 import { rosterPage } from './roster-page';
 import { unitsView, type UnitsContext } from './unit-page';
 import { runView, solveState } from './run-page';
+import { installWhy, whyOpen, whyPanel, type WhyContext } from './why';
 import { notOnTrack, wishlistPage } from './wishlist-page';
 import { prepPage } from './prep-page';
 import { CHILD_UNITS } from '../game-data/children';
@@ -2545,11 +2546,42 @@ function renderParts(parts: readonly Part[]): void {
   }
   // The Skill card lives in the panel but follows the drawer: refresh the panel when the card would change.
   if (parts.includes('panel') || cardKey() !== card) {
-    replaceRegion('panel', panelEl, panel());
-    panelEl.classList.toggle('open', sheetOpen);
+    // The Why panel (#210) takes the panel beside the Run view and the Wishlist tab while it's open.
+    const why = whyShown();
+    replaceRegion('panel', panelEl, why ? whyPanel(whyContext()) : panel());
+    panelEl.classList.toggle('open', sheetOpen || why);
+    panelEl.closest('.shell')?.classList.toggle('why-open', why);
   }
   renderGuide();
 }
+
+/** The Why panel is open on a page whose numbers it explains (#210). */
+const whyShown = () => (view === 'run' || view === 'wishlist') && whyOpen();
+
+/** What the Why panel reads (#210): the run and how its headline was worked out (the solve's best plan, or the page's). */
+function whyContext(): WhyContext {
+  const s = solveState(run);
+  const p = s?.progress;
+  const headline = p ? { plan: p.best, chance: p.chance, ...(p.readings ? { readings: p.readings } : {}), solved: true } : s?.chance ? { plan: s.plan, chance: s.chance, ...(s.readings ? { readings: s.readings } : {}), solved: false } : undefined;
+  return {
+    engine,
+    assumptions,
+    run,
+    headline,
+    roleOf: runRoleOf(),
+    pins: () => [...marriagePins(roster), ...(run.pins ?? [])],
+    openMap: (id) => {
+      view = 'run';
+      preparing = undefined;
+      showingMaps = true;
+      mapOpen = id;
+      renderParts(['rail', 'main']);
+    },
+  };
+}
+
+// Every number on the Run view and the Wishlist tab opens the Why panel (#210): one handler for them all.
+installWhy(document, () => renderParts(['panel']));
 
 function render(): void {
   const app = document.getElementById('app')!;
