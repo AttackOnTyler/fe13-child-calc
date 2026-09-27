@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { planEdits } from './solve/edits';
 import { EMPTY_ROSTER, NO_PREPARATIONS, STATS, addEntry, createEngine, editEntry, exportRun, fixedPass, importRun, itemByName, resolveAssumptions, runFromRoster, withItemPin, withItemsUsed, withRun, type ArmyUnit, type ChildRecruit, type Foe, type HeldItem, type PlanPin, type Run, type RunSimInput, type RunSimMap, type SimFoeGroup, type SimMap, type Stat } from './index';
 
 /**
@@ -273,13 +272,12 @@ describe('the item plan of a recorded run (#193)', () => {
   });
 });
 
-describe('item edits in the local search (#193, #199)', () => {
+describe('item edits in the solve (#193, #199)', () => {
   const facts = withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal', gender: 'M', asset: 'mag', flaw: 'hp' });
   const run = editEntry(runFromRoster(facts), 'e1', (s) => ({ ...s, convoy: [{ item: 'Energy Drop', uses: 1 }, { item: 'Levin Sword', uses: 25 }] }), 1);
   const plan = engine.seedPlan(run);
-  // The item edits read only the run and the plan: a context that resolves no pairing is enough.
-  const ctx = { assumptions: resolveAssumptions({}), result: () => undefined, childBuild: () => undefined, unitBuild: () => undefined, rank: () => 0 };
-  const itemEdits = (p = plan, pins: readonly PlanPin[] = []) => [...planEdits(run, ctx, { pins }, p, { riskiest: [], stuck: [] }, () => [])].filter((e) => e.kind === 'item');
+  // The item edits the player (and the search) can make, as the inbox's "anything else" lists them.
+  const itemEdits = (p = plan, pins: readonly PlanPin[] = []) => engine.editChoices(run, p, { pins }).filter((e) => e.kind === 'item');
   const drop = plan.roadmap.items.find((p) => p.item === 'Energy Drop')!;
   const steps = engine.mapOrder(run).steps;
 

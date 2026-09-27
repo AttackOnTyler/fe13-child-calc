@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { planEdits } from './solve/edits';
-import { priorityByMap } from './sim/run-sim';
-import { EMPTY_ROSTER, STATS, addEntry, createEngine, editEntry, itemByName, latestEntry, resolveAssumptions, runFromRoster, withRun, type ArmyUnit, type ClassId, type Foe, type MilestoneCheck, type Run, type RunSimInput, type RunSimMap, type SimMap, type Snapshot, type Stat } from './index';
+import { EMPTY_ROSTER, STATS, addEntry, createEngine, editEntry, itemByName, latestEntry, runFromRoster, withPin, withRun, type ArmyUnit, type ClassId, type Foe, type MilestoneCheck, type Run, type RunSimInput, type RunSimMap, type SimMap, type Snapshot, type Stat } from './index';
 
 /**
  * The EXP forecast and EXP priority (#195): hand-built armies on maps of foes that never fight back, whose EXP can be
@@ -175,8 +173,7 @@ describe('the EXP priority in the solve (#195, #199)', () => {
   });
 
   it('offers priority edits: a span dropped or turned, and a unit with none raised from its join map', () => {
-    const ctx = { assumptions: resolveAssumptions({}), result: () => undefined, childBuild: () => undefined, unitBuild: () => undefined, rank: () => 0 };
-    const edits = [...planEdits(fresh, ctx, {}, seed, { riskiest: [], stuck: [] }, () => [])].filter((e) => e.kind === 'priority');
+    const edits = engine.editChoices(fresh, seed).filter((e) => e.kind === 'priority');
     const span = seed.roadmap.priorities![0]!;
     const byKey = new Map(edits.map((e) => [e.key, e]));
     expect(new Set(edits.map((e) => e.key)).size).toBe(edits.length);
@@ -191,10 +188,26 @@ describe('the EXP priority in the solve (#195, #199)', () => {
   });
 
   it('lets span pins win where they overlap a priority span: a unit pinned out, or as a Back, has none there (#200)', () => {
-    const maps = [{ key: 'a' }, { key: 'b' }, { key: 'c' }];
-    const spans = [{ unit: 'robin' as const, priority: 'high' as const, from: 'a', to: 'c' }];
-    expect(priorityByMap(maps, spans, [undefined, [{ unit: 'robin', position: 'back', partner: 'chrom' }], [{ unit: 'robin', position: 'lead' }]])).toEqual([{ robin: 'high' }, undefined, { robin: 'high' }]);
-    expect(priorityByMap(maps, spans, [[{ unit: 'robin', position: 'out' }], undefined, undefined])).toEqual([undefined, { robin: 'high' }, { robin: 'high' }]);
+    // Three maps left: a wishlist unit's EXP priority set high over the two before the endpoint.
+    const all = engine.mapOrder(fresh).steps.map((s) => s.map);
+    const played = all.slice(0, -3).reduce((r, m, i) => addEntry(r, m, i + 1), fresh);
+    // Every unit recorded at Lv 10 with the same fair stats, so each one is played.
+    const fair = { hp: 50, str: 26, mag: 26, skl: 28, spd: 28, lck: 22, def: 22, res: 20 };
+    const late = editEntry(played, latestEntry(played)!.id, (s) => ({ ...s, units: Object.fromEntries(Object.entries(s.units).map(([u, x]) => [u, { ...x!, level: 10, stats: x!.stats && fair }])) }), 1);
+    const plan = engine.seedPlan(late);
+    const [first, last] = all.slice(-3, -1) as [string, string];
+    const unit = plan.wishlist.units.find((w) => w.unit !== 'chrom' && w.unit !== 'robin')!.unit;
+    const high = { ...plan, roadmap: { ...plan.roadmap, priorities: [{ unit, priority: 'high' as const, from: first, to: last }] } };
+    const priorityOf = (run: Run, i: number) => engine.expForecast(run, high, { runs: 1 }).exp.find((m) => m.key === [first, last][i])?.units.find((u) => u.unit === unit)?.priority;
+    expect([priorityOf(late, 0), priorityOf(late, 1)]).toEqual(['high', 'high']);
+    // As Chrom's Back on the first map: no priority there (it lands no kills of its own), high again after.
+    const back = withPin(late, { kind: 'span', unit, position: 'back', partner: 'chrom', from: first, to: first });
+    expect(priorityOf(back, 0)).not.toBe('high');
+    expect(priorityOf(back, 1)).toBe('high');
+    // Pinned out of the first map: none there either.
+    const out = withPin(late, { kind: 'span', unit, position: 'out', from: first, to: first });
+    expect(priorityOf(out, 0)).not.toBe('high');
+    expect(priorityOf(out, 1)).toBe('high');
   });
 
   it('never suggests a change against a span pin: no pair where a pin keeps the unit elsewhere (#200)', () => {
