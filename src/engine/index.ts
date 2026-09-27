@@ -59,6 +59,8 @@ import { deriveRoles, type Derivation, type RobinGain, type RobinGainSide } from
 import type { ChildDeploymentRole } from '../curated/deployment';
 import { FIXED_INHERITANCE, RALLY_SKILLS } from '../game-data/skills';
 import { STAFF_CLASSES } from '../game-data/classes';
+import { remainingMapOrder, type MapOrder } from './map-order';
+import type { Run } from './run';
 import type {
   AssumptionStatus,
   BuildMatch,
@@ -98,6 +100,7 @@ export {
   type Overrides,
 } from './assumptions';
 export { DEFAULT_SPEED, RALLY_OPTIONS, TONIC_SPD } from './speed';
+export { routeMapOrder, type Endpoint, type MapOrder, type MapOrderStep } from './map-order';
 export type { Citation } from '../game-data/citations';
 export { CHAPTER_GUIDE, type GuideEntry } from '../curated/chapter-guide';
 export { classIdByName, classWeaponKinds, openStock, promotionAdvice, sealAvailability, sealsHeld, supplyList, type PromotionAdvice, type SealAvailability, type StockItem, type Supply } from './supply';
@@ -313,6 +316,12 @@ export type Engine = {
   skillCard(result: ChildResult, id: SkillId, settings: SkillViewSettings): SkillCard;
   /** Every map with chapter data, in Maps-list order (#109). */
   maps(): readonly ChapterData[];
+  /**
+   * The map order still to play (#179): the route's template (Full route or Main story) after the latest recorded map,
+   * through the endpoint, with child paralogues marked movable and Infinite Regalia optional, and the endpoint with its
+   * deploy count.
+   */
+  mapOrder(run: Run): MapOrder;
   /** A map's Lunatic+ skill pool by the rule: the whole pool from Chapter 3, four skills before (#109). */
   lunaticPlusPool(map: ChapterData): readonly string[];
   /** FEW/SF disagreements in the chapter data, resolved or open. */
@@ -1363,6 +1372,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     },
     skillCard: (r, id, settings) => skillCard(id, reachFor(r, settings), settings.context, builds(r, settings)),
     maps: () => MAPS,
+    mapOrder: remainingMapOrder,
     lunaticPlusPool: lunaticPlusPoolFor,
     chapterDisagreements: () => CHAPTER_DISAGREEMENTS,
     chapterGuide: (map) => {

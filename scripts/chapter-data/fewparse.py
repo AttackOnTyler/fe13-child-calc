@@ -63,6 +63,8 @@ def clean(s):
     if s is None:
         return None
     s = re.sub(r'<!--.*?-->', '', s, flags=re.S)
+    # A comment cut open by the template's field split (Endgame's title): drop the rest.
+    s = re.sub(r'\s*<!--.*$', '', s, flags=re.S)
     # {{h|shown|note}} -> shown (note)
     for _ in range(3):
         s = re.sub(r'\{\{h\|([^{}|]*)\|([^{}]*)\}\}', r'\1 (\2)', s)
