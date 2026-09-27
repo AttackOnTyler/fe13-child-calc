@@ -36,7 +36,9 @@ describe('the flawless chance readout (#186)', () => {
     const run = played(all.slice(0, -2));
     const r = flawlessReadout(engine, run, { runs: 3 });
     const sim = engine.flawlessChance(run, { runs: 3 });
-    expect(r.text).toBe(`Flawless chance: ${chanceText(sim.chance)} ±${(sim.margin * 100).toFixed(1)}`);
+    const ceiling = engine.ceiling(run, { runs: 3 })!;
+    expect(r.text).toBe(`Flawless chance: ${chanceText(sim.chance)} ±${(sim.margin * 100).toFixed(1)} · ceiling ${chanceText(ceiling.chance!)}`);
+    expect(r.detail).toContain('The ceiling is the chance no unit dies on Endgame with every unit at its effective caps');
     expect(r.detail).toContain('from Chapter 25 to Endgame (2 maps)');
     expect(r.detail).toContain('over 3 simulated runs; the ± is the simulation error (95%)');
     expect(r.detail).toContain('Rests on: one worst attacker per pair (may read high)');
@@ -49,6 +51,16 @@ describe('the flawless chance readout (#186)', () => {
     const run = editEntry(played(all.slice(0, -1)), 'e1', (s) => ({ ...s, units: { ...s.units, chrom: { class: 'Great Lord', level: 5, promoted: true, reclassed: false, exp: 0, stats: { hp: 40, str: 20, mag: 3, skl: 20, spd: 20, lck: 20, def: 15, res: 10 }, skills: [], inventory: [], supports: [] } } }), 1);
     expect(flawlessReadout(engine, run, { runs: 1 }).detail).toContain('Chrom was first logged in a class it can’t join in: the Second Seal count before the log is read as 0');
     expect(flawlessReadout(engine, played(all), { runs: 1 }).text).toBe('Flawless chance: the endpoint is recorded, nothing left to simulate.');
+  });
+
+  it('says there’s no ceiling yet when the endpoint can’t be simulated (Apotheosis)', () => {
+    const full = withRun(EMPTY_ROSTER, { route: 'full-route', difficulty: 'normal', gender: 'M', asset: 'mag', flaw: 'hp' });
+    const order = engine.mapOrder(runFromRoster(full)).steps.map((s) => s.map);
+    // Played up to the last story chapter: Apotheosis (both routes) is what's left.
+    const run = order.slice(0, order.indexOf('apotheosis')).reduce((r, m, i) => addEntry(r, m, i + 1), runFromRoster(full));
+    const r = flawlessReadout(engine, run, { runs: 1 });
+    expect(r.text).toMatch(/ · no ceiling yet$/);
+    expect(r.detail).toContain('Apotheosis and Apotheosis (secret route) aren’t simulated yet: their foes carry no weapons in the chapter data, so the chance counts no risk there and there’s no ceiling.');
   });
 });
 
