@@ -81,7 +81,7 @@ import { CHROM_WEDDING_CANDIDATES, CHROM_WEDDING_MAP } from '../../game-data/sup
 import { chromWifeByPoints, type ChromStanding } from '../chrom-wedding';
 import { SUPPORT_LEVELS } from '../run';
 import { addPoints, mapSupportGains, pairThresholds, pointsOfRank, rankOf } from './support-growth';
-import { playMap, type ExpPriority, type MapPlay, type MapPlayInput, type SimChase, type SimFoeGroup, type SimGroup, type SimMap, type SimUnit } from './map-play';
+import { playMap, type ExpPriority, type MapPlay, type MapPlayInput, type SimChase, type SimFoeGroup, type SimGroup, type SimMap, type SimUnit, type StressCase } from './map-play';
 import { createRng, runSeed, type Rng } from './random';
 import type { SimItem } from './sustain';
 import { STAT_BOOSTERS, TONICS, itemByName, statItemGain, type GameItem } from '../../game-data/items';
@@ -294,6 +294,11 @@ export type RunSimInput = {
    * multiplied by its factor. Absent, or a unit without one: ×1.
    */
   readonly expFactor?: Readonly<Partial<Record<RosterUnit, number>>>;
+  /**
+   * A stated blind spot's bad case (#211, the stress test): each run plays its maps under it (`MapPlayInput.stress`).
+   * The plan's projection doesn't: the lineups are the plan's, as without it.
+   */
+  readonly stress?: StressCase;
 };
 
 /**
@@ -1664,7 +1669,28 @@ function plannedDeployment(
  * one plan's runs in batches (`simulateRuns`' `first`), and every batch plays the same lineups.
  */
 const PROJECTIONS = new WeakMap<RunSimInput, WeakMap<Assumptions, Map<number, Plan>>>();
-function projection(input: RunSimInput, seed: number, assumptions: Assumptions): Plan {
+/** A stressed input's unstressed one (`withStress`): the stress leaves the projection alone, so they share it. */
+const UNSTRESSED = new WeakMap<RunSimInput, RunSimInput>();
+
+/**
+ * An input with its runs played under a blind spot's bad case (#211), kept per input and case, sharing the input's
+ * projection: the plan's lineups are the same, only the runs' plays change.
+ */
+const STRESSED = new WeakMap<RunSimInput, Map<StressCase, RunSimInput>>();
+export function withStress(input: RunSimInput, stress: StressCase): RunSimInput {
+  const base = UNSTRESSED.get(input) ?? input;
+  let byCase = STRESSED.get(base);
+  if (!byCase) STRESSED.set(base, (byCase = new Map()));
+  let out = byCase.get(stress);
+  if (!out) {
+    byCase.set(stress, (out = { ...base, stress }));
+    UNSTRESSED.set(out, base);
+  }
+  return out;
+}
+
+function projection(given: RunSimInput, seed: number, assumptions: Assumptions): Plan {
+  const input = UNSTRESSED.get(given) ?? given;
   let byAssumptions = PROJECTIONS.get(input);
   if (!byAssumptions) PROJECTIONS.set(input, (byAssumptions = new WeakMap()));
   let bySeed = byAssumptions.get(assumptions);
@@ -1897,7 +1923,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
       const planned = (lineups[i] ??= plan.lineup(i));
       const lineup = lineupOf(state, planned === NOBODY ? deploymentFor(state, input, i, extra) : planned, extra, interner, foesOfMap(step.map));
       // A run already this unlikely to have lost nobody stops playing once the map takes it under `LOST` (it counts 0).
-      const play = playMap({ ...playInput(state, input, i, lineup, input.idle), stopBelow: LOST / flawless }, runSeed(rs, i));
+      const play = playMap({ ...playInput(state, input, i, lineup, input.idle), stopBelow: LOST / flawless, ...(input.stress ? { stress: input.stress } : {}) }, runSeed(rs, i));
       if (play.noDeath < 1) for (const [u, share] of lossShares(play)) lost.set(u, (lost.get(u) ?? 0) + flawless * (1 - play.noDeath) * share);
       // A map the play can't win in its turns isn't cleared: the run doesn't get past it (the plan isn't shown to).
       const stalled = play.ended === 'stalled';

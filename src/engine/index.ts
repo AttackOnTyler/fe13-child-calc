@@ -48,11 +48,11 @@ import { CHAPTER_DISAGREEMENTS, MAPS, lunaticPlusPoolFor, type ChapterData, type
 import { mapWaves, type MapWaves } from './waves';
 import type { RenownReward } from '../game-data/gold';
 import { mapGold, renownGain, renownRewards, type GoldRow } from './gold';
-import { meanNoDeath, playMap, staffReach, type MapPlay, type MapPlayInput, type SimMap, type SimUnit } from './sim/map-play';
+import { meanNoDeath, playMap, staffReach, type MapPlay, type MapPlayInput, type SimMap, type SimUnit, type StressCase } from './sim/map-play';
 import { itemByName } from '../game-data/items';
 import { simMapById, type SimMapOptions } from './sim/sim-map';
 import { runSeed } from './sim/random';
-import { planLineups, simulateRuns, type RunSim, type RunSimInput } from './sim/run-sim';
+import { planLineups, simulateRuns, withStress, type RunSim, type RunSimInput } from './sim/run-sim';
 import { mapUpkeep, type MapUpkeep } from './sim/upkeep';
 import { FLAWLESS_RUNS, FLAWLESS_SEED, flawlessCeiling, flawlessChance, flawlessInput, runItemSources, sureIncome, unitGrowths, type FlawlessChance, type FlawlessOptions } from './flawless';
 import { openLosses, type LossItem } from './losses';
@@ -75,7 +75,7 @@ import type { Plan, PlanLineup, PlanPin, PlanPriority, PlanRobin } from './solve
 import { beforeMapItems, itemPlanOf, type BeforeMapItem, type ItemPlan, type ItemUsed } from './item-plan';
 import { readings, recordedStats, type Readings, type ReadingsOptions, type UnitStats } from './readings';
 import { defaultPriorities, expForecast, suggestChanges, suggestedChanges, type ExpForecast, type ExpForecastOptions, type SuggestedChange } from './exp-forecast';
-import { BLIND_SPOTS, type BlindSpot } from './assumptions';
+import { BLIND_SPOTS, STRESS_TESTS, type BlindSpot, type StressTest } from './assumptions';
 import { matchBuilds, matchTemplate, shownMatch, templateSummary, templatesFor } from './builds';
 import type { SkillId } from '../game-data/skills';
 import { createScorer } from './scoring';
@@ -192,7 +192,7 @@ export { coverage, deployCount, deployMax, forcedOn, leadsByDefault, suggestDepl
 export { childParalogueGates, isChildParalogue, type ChildParalogueGate, type ParalogueGateState } from './child-paralogues';
 export { type MapWaves, type Wave, type WaveGroup } from './waves';
 export { type ArmySpread, type SimItem } from './sim/sustain';
-export { EXPOSURE_RISK, MAX_TURNS, type ExpPriority, type MapPlay, type MapPlayInput, type SimAct, type SimChase, type SimFight, type SimFoeGroup, type SimGroup, type SimMap, type SimStance, type SimTurn, type SimUnit, type SimUnitTally, type SimWave } from './sim/map-play';
+export { EXPOSURE_RISK, MAX_TURNS, type StressCase, type ExpPriority, type MapPlay, type MapPlayInput, type SimAct, type SimChase, type SimFight, type SimFoeGroup, type SimGroup, type SimMap, type SimStance, type SimTurn, type SimUnit, type SimUnitTally, type SimWave } from './sim/map-play';
 export { simLineup, type SimMapOptions } from './sim/sim-map';
 export { levelCap, type ArmyUnit, type ChildRecruit, type LostParent, type GoldSpread, type RunSim, type RunSimInput, type RunSimMap, type RunSimMapResult, type ShoppingLine, type ShoppingStop, type StatSpread, type UnitForecast, type SupportForecast, type MarriageForecast, type RunSimSideGoal, type SideGoalForecast, type ItemSource, type ItemFind, type SimItemUse, type ItemUseForecast, type MapExp, type UnitExp, type MilestoneCheck, type MilestoneChance } from './sim/run-sim';
 export { KIT_FORGE_MT, VULNERARY_VALUE, type MapUpkeep } from './sim/upkeep';
@@ -223,7 +223,7 @@ export type { ClassMilestone, Milestone, MilestonePoint, RecruitMilestone, SealS
 export { QUIET_POINTS, blindSpotsTouching, milestoneWords, riskSplit, type Comparison, type ExplainContext, type Explanation, type ExplanationFormat, type ExplanationKind, type ExplanationRow } from './explain';
 export { EDIT_COST_BUDGET, EDIT_KINDS, SEARCH_RUNS, rescoreSeed, SOLVE_SECONDS, STEP_BUDGET, type EditCost, type EditCostInput, type EditKind, type PinCost, type PinCostInput, type SolveStep, type SolveStepInput, type UnitEdit } from './solve/step';
 export { FORCED_UNITS, LIKELY_LOSSES, type LikelyLoss, type ReserveReading, type ReservesCursor, type ReservesInput, type ReservesStep, type UnitWorth, type WorthCursor, type WorthInput, type WorthStep } from './solve/worth';
-export { BLIND_SPOTS, type BlindSpot, type BlindSpotId, type RunBlindSpotId } from './assumptions';
+export { BLIND_SPOTS, STRESS_TESTS, type BlindSpot, type BlindSpotId, type RunBlindSpotId, type StressTest } from './assumptions';
 export { bestWeapon, classTypes, dangerFlags, foeKey, foeOf, foesOf, matchup, pairUpBonus, statValue, type DangerFlag, type Fighter, type Foe, type Matchup } from './solver';
 export {
   CORRECTION_RANGE,
@@ -589,6 +589,14 @@ export type Engine = {
   flawlessChance(run: Run, options?: FlawlessOptions): FlawlessChance;
   /** The same simulation over a hand-built army and maps (tests, and the solve's edits on the same runs). */
   simulateRuns(input: RunSimInput, seed: number, runs: number): RunSim;
+  /** The stated blind spots that can be stressed (#211), each with its bad case (`STRESS_TESTS`). */
+  stressTests(): readonly StressTest[];
+  /**
+   * A stress-test range (#211): the plan's runs with every map played under a blind spot's bad case, on the seed and
+   * runs given (the headline's: FLAWLESS_SEED and FLAWLESS_RUNS by default), so they pair with the headline's runs. The
+   * plan's lineups are the same; only the plays change. About as costly as the headline.
+   */
+  stressChance(run: Run, plan: Plan, stress: StressCase, options?: { readonly seed?: number; readonly runs?: number }): RunSim;
   /**
    * The ceiling (#189): the endpoint's flawless chance with every unit of today's plan (the army and every recruit on
    * the way) at its effective caps in its full class, no spread; it brackets the flawless chance from above. Its chance
@@ -1833,6 +1841,8 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     renown: (run) => renownAhead(run, remainingMapOrder(run).steps, assumptions['paralogue-renown']),
     flawlessChance: (run, options) => (options?.plan ? planChance(run, { ...options, plan: options.plan }) : flawlessChance(run, assumptions, options)),
     simulateRuns: (input, seed, runs) => simulateRuns(input, seed, runs, assumptions),
+    stressTests: () => STRESS_TESTS,
+    stressChance: (run, plan, stress, options = {}) => simulateRuns(withStress(planInput(run, plan), stress), options.seed ?? FLAWLESS_SEED, options.runs ?? FLAWLESS_RUNS, assumptions),
     ceiling: (run, options) => flawlessCeiling(run, assumptions, options),
     simulateCeiling: (input, seed, runs) => simulateCeiling(input, seed, runs, assumptions),
     seedPlan: (given, options = {}) => {
@@ -2085,6 +2095,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         worth: context.worth ?? [],
         without: context.without ?? {},
         comparisons: context.comparisons ?? {},
+        stress: context.stress ?? {},
       });
     },
     worthChance: (run, plan, unit, options = {}) => {
