@@ -185,7 +185,7 @@ const droppedHere = (r: Run, map: string): ReadonlySet<RosterUnit> => {
 let wishlistOpen: RosterUnit | undefined;
 /** The count of units not on track the Wishlist tab's rail button last showed (#203). */
 let wishlistCount = 0;
-/** The count of units not on track on the solve's best plan so far (#203): the Wishlist tab's rail button. */
+/** The count of units not on track on the adopted plan (#203, #206): the Wishlist tab's rail button. */
 const wishlistNotOnTrack = (): number => {
   const s = solveState(run);
   return s ? notOnTrack(s.plan, s.progress?.readings) : 0;

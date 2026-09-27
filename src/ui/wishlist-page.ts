@@ -5,7 +5,9 @@
  * keeping it in or out among them; the reserves in order, each naming the loss it mainly covers; and the children
  * ledger. The reference is variant D on branch `prototype/wishlist-editing` (its variant B sheet is this tab).
  *
- * It reads the solve the Run view's headline runs (`solveState`): the best plan found and its readings. Once the solve
+ * It reads the solve the Run view's headline runs (`solveState`): the adopted plan (#206: the plan the search started
+ * from, as the inbox reads it and every edit is costed against; never the search's best, which is a proposal) and its
+ * readings. Once the solve
  * is done the page starts the worker's idle work (#202: unit worth and utility, then the reserves), and a unit's edits
  * are listed and costed in the worker's second slot, so opening a unit never stops the search.
  */
@@ -443,7 +445,7 @@ export function wishlistPage(ctx: WishlistContext): HTMLElement[] {
   });
   const menu = (u: UnitRowView | undefined) => (u && ctx.open === u.unit ? editsMenu(ctx, plan, u.unit, u.name) : null);
   const status = working
-    ? 'The search is still at it: the rows follow its best plan so far.'
+    ? 'The search is still at it: what it finds arrives as proposals in the Run view’s inbox; the rows are your plan.'
     : !idle
       ? ''
       : idle.done

@@ -61,6 +61,8 @@ import { milestones, type Milestone } from './milestones';
 import { editCost, solveStep, type EditCost, type EditCostInput, type PinCost, type PinCostInput, type SolveStep, type SolveStepInput, type UnitEdit } from './solve/step';
 import { keptPins, planEdits } from './solve/edits';
 import { adoptedOf } from './solve/adopted';
+import { milestoneMoves, planBreaks, suggestedEdit, type MilestoneMoves, type PlanBreak } from './solve/resolve';
+import type { SuggestedPin } from './exp-forecast';
 import { brokenPins, livePins, pinKey, runPins, withPin, withoutPins } from './solve/pins';
 import { ROBIN_EXTRA, ROBIN_SOLVE, withRobinLock, robinKey, robinLock, robinOptions, robinStep, wishlistDifference, withoutRobinMarriage, type RobinCost, type RobinCursor, type RobinInput, type RobinOption, type RobinPick, type RobinStep, type SolvedRobin, type WishlistDifference } from './solve/robin';
 import { FORCED_UNITS, childrenOf, coveredLineup, hasUtility, planWithout, reservesStep, withoutUnits, worthStep, type ReservesInput, type ReservesStep, type WorthInput, type WorthStep, type WorthVariant } from './solve/worth';
@@ -155,6 +157,8 @@ export type { LineupPlan } from './sim/run-sim';
 export { isMarriagePin, isRuleOut, mapSpanPin, marriagePins } from './solve/plan';
 export { pinKey, withPin, withoutPins, type LineupRule } from './solve/pins';
 export { adoptedOf, proposalId, withDismissedProposal, withEdit, withoutEdit, type NewEdit } from './solve/adopted';
+export { behindFixes, sameWishlist, type MilestoneMoves, type MovedProposal, type PlanBreak } from './solve/resolve';
+export { forecastBefore, whatChanged, withDismissedChange, withEntryForecast, type ExpAgainstForecast, type WhatChanged } from './what-changed';
 export { ROBIN_EXTRA, ROBIN_SOLVE, withRobinLock, robinKey, robinLock, robinOptions, wishlistDifference, type RobinCost, type RobinCursor, type RobinInput, type RobinOption, type RobinPick, type RobinStep, type SolvedRobin, type WishlistDifference };
 export type { KeepPin, MarriagePin, SideGoalPin, SpanPin, SpanPosition } from './solve/plan';
 export { NO_PREPARATIONS } from '../game-data/chapters';
@@ -203,6 +207,7 @@ export {
   type MigrationNote,
   type Run,
   type RunEdit,
+  type EntryForecast,
   type RunEntry,
   type Snapshot,
   type SupportLevel,
@@ -752,6 +757,18 @@ export type Engine = {
   readings(run: Run, plan: Plan, options?: ReadingsOptions): Readings;
   /** The latest recorded map's stats as percentiles of the spread expected there (#197): "Str p12". */
   recordedStats(run: Run, options?: Pick<FlawlessOptions, 'roleOf'>): readonly UnitStats[];
+  /**
+   * What a plan can no longer meet on a run (#206): a unit it needs lost, a recorded marriage it doesn't hold, a support
+   * of its that's a non-starter in the maps left. Non-empty: the re-solve's proposal is required before the next map.
+   */
+  planBreaks(run: Run, plan: Plan): readonly PlanBreak[];
+  /** The milestones `to` adds, drops or moves against `from`'s on a run (#206): what a re-solve proposal changes. */
+  milestoneMoves(run: Run, from: Plan, to: Plan): MilestoneMoves;
+  /**
+   * An at-risk unit's suggested change (#195) as one edit of the adopted plan (#206): a span pin (pair it as Lead with
+   * its Back, or field it), or the plan with the EXP priority span added (to the plan's spans, or the default ones).
+   */
+  suggestedEdit(run: Run, plan: Plan, pin: SuggestedPin): { readonly pins: readonly PlanPin[] } | { readonly plan: Plan };
 };
 
 /** One combat for `Engine.combatExp`. */
@@ -2189,6 +2206,10 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       return readings(run, plan, milestones(run, plan, assumptions), f, assumptions, options);
     },
     recordedStats: (run, options) => recordedStats(run, assumptions, options),
+    planBreaks: (run, plan) => planBreaks(run, plan, milestones(run, plan, assumptions)),
+    milestoneMoves: (run, from, to) => milestoneMoves(milestones(run, from, assumptions), milestones(run, to, assumptions)),
+    suggestedEdit: (run, plan, pin) =>
+      suggestedEdit(plan, pin, pin.kind === 'priority' ? (plan.roadmap.priorities ?? defaultPriorities(milestones(run, plan, assumptions), flawlessInput(run, assumptions, undefined, undefined, plan).input)) : []),
     robinAlternatives: (input) => {
       const { roleOf, seed } = input;
       const run = pinnedRun(input.run, input.pins);

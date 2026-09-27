@@ -19,7 +19,8 @@ import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
 import { h } from './dom';
 import { guide } from './guide';
 import { mapsView, type MapsContext } from './maps-page';
-import { afterLockInbox, beforeTheLock, inboxProgress, inboxView, robinName, robinToLock } from './inbox';
+import { beforeTheLock, inboxNudge, inboxProgress, inboxView, robinName, robinToLock } from './inbox';
+import { forecastBefore, withEntryForecast } from '../engine';
 
 export type RunContext = {
   readonly engine: Engine;
@@ -64,7 +65,21 @@ export function runView(ctx: RunContext): HTMLElement[] {
   return [rec ? recordResults(ctx, rec, ctx.recording!.step) : chapterLog(ctx)];
 }
 
-/** The maps the run can play next (#118): the story's next map first; Record results starts its entry. */
+/**
+ * The run with a map's entry added (#118), keeping the headline as it stands before the map on it (#206: What changed
+ * reads it against the headline worked out after, so the forecast isn't lost once the run moves on).
+ */
+function withMapRecorded(ctx: RunContext, map: string, label?: string): Run {
+  const s = solveState(ctx.run);
+  const before = s?.chance && forecastBefore(ctx.run, s.chance, s.readings);
+  const next = addEntry(ctx.run, map, ctx.now(), label, ctx.assumptions);
+  return before ? withEntryForecast(next, latestEntry(next)!.id, before) : next;
+}
+
+/**
+ * The maps the run can play next (#118): the story's next map first; Record results starts its entry. After the Lock,
+ * the inbox's open items above read as a nudge here, never a gate (#206).
+ */
 function nextMapSection(ctx: RunContext): HTMLElement {
   const offers = nextMaps(ctx.run);
   const label = (id: string) => {
@@ -72,7 +87,7 @@ function nextMapSection(ctx: RunContext): HTMLElement {
     return m.kind === 'xenologue' ? m.label : `${m.label}: ${m.title}`;
   };
   const record = (map: string) => {
-    const next = addEntry(ctx.run, map, ctx.now(), undefined, ctx.assumptions);
+    const next = withMapRecorded(ctx, map);
     ctx.setRun(next);
     ctx.setRecording({ entry: latestEntry(next)!.id, step: 0 });
   };
@@ -91,6 +106,7 @@ function nextMapSection(ctx: RunContext): HTMLElement {
     'div',
     { ...guide('next-map'), class: 'banner next-map' },
     h('b', {}, 'Next map'),
+    beforeTheLock(ctx.run) ? null : inboxNudge(ctx),
     ...(offers.length ? [...story.map((o, i) => row(o, i === 0)), ...(rest.length ? [h('details', {}, h('summary', { class: 'small' }, `Also open (${rest.length})`), ...rest.map((o) => row(o, false)))] : [])] : [h('span', { class: 'muted' }, 'Nothing left to play on this route.')]),
   );
 }
@@ -185,7 +201,7 @@ export function roadmapReadout(engine: Engine, run: Run, plan: Plan, readings?: 
 const READING_TEXT = { 'on-track': 'on track', 'at-risk': 'at risk', behind: 'behind' } as const;
 
 /** A milestone in a few words, as a reading names it for `unit`. */
-function milestoneShort(m: Milestone, unit: RosterUnit, gender: Gender | null | undefined): string {
+export function milestoneShort(m: Milestone, unit: RosterUnit, gender: Gender | null | undefined): string {
   const name = (u: RosterUnit | 'maiden') => unitName(u, gender);
   const by = m.at.when === 'end' ? `by the end of ${m.at.label}` : `before ${m.at.label}`;
   switch (m.kind) {
@@ -203,7 +219,7 @@ function milestoneShort(m: Milestone, unit: RosterUnit, gender: Gender | null | 
 }
 
 /** A suggested change's span pin in words: "raise Lissa's EXP priority from Ch 3 to Ch 7". */
-function pinText(pin: SuggestedPin, gender: Gender | null | undefined, labels?: ReadonlyMap<string, string>): string {
+export function pinText(pin: SuggestedPin, gender: Gender | null | undefined, labels?: ReadonlyMap<string, string>): string {
   const name = (u: RosterUnit) => unitName(u, gender);
   const span = pin.from === pin.to ? `on ${labels?.get(pin.from) ?? pin.from}` : `from ${labels?.get(pin.from) ?? pin.from} to ${labels?.get(pin.to) ?? pin.to}`;
   switch (pin.kind) {
@@ -279,6 +295,9 @@ export type FlawlessReadout = {
   /** The plan's item plan (#193), and the plan itself (its wishlist offers the item pins' units); absent once the endpoint is recorded. */
   readonly items?: ItemPlanReadout;
   readonly plan?: Plan;
+  /** The headline's own chance and the readings it shows (#206: a map's record keeps them for What changed). */
+  readonly chance?: FlawlessChance;
+  readonly readings?: Readings;
 };
 
 /**
@@ -381,7 +400,10 @@ function readoutOf(
       const extra = [...goals, ...(rewards.length ? [`renown: ${listOf(rewards)}`] : [])].map((x) => ` · ${x}`).join('');
       return `${m.label}: ${m.noDeath === undefined ? 'no run gets here with nobody lost' : `${chanceText(m.noDeath)}${m.gold ? ` · ${goldRange(m.gold)}` : ''}`}${extra}`;
     }),
-    roadmap: roadmapReadout(engine, run, plan, readings, new Map(r.maps.map((m) => [m.key, m.label]))),
+    // The roadmap and its readings are the adopted plan's (#206): the plan the search started from.
+    roadmap: roadmapReadout(engine, run, progress?.start ?? plan, readings, new Map(r.maps.map((m) => [m.key, m.label]))),
+    chance: r,
+    ...(readings ? { readings } : {}),
     found: [...improvements, ...notes],
     notes,
   };
@@ -642,8 +664,12 @@ export const goldRange = (g: GoldSpread) => (g.low === g.high ? goldText(g.low) 
 
 /** Readouts already worked out, by run: a run is replaced, never edited, so a new run works it out again. */
 const READOUTS = new WeakMap<Run, FlawlessReadout>();
-/** Whether this visit has run a full solve yet: the first is full (about 30 s), later ones re-solves (about 5 s). */
+/**
+ * Whether this visit has run a full solve yet: the first is full (about 30 s), later ones re-solves (about 5 s). Once a
+ * map is recorded every solve is a re-solve (#206): recording a map triggers one, and its improvements are proposals.
+ */
 let solvedOnce = false;
+const recorded = (run: Run) => run.entries.some((e) => e.map !== 'other');
 /** The run the worker is solving, so a re-render of the same run doesn't restart it. */
 let solving: Run | undefined;
 /** The section on the page now, for the run it shows: updates land on it, whichever render drew it. */
@@ -652,14 +678,17 @@ let live: { run: Run; el: HTMLElement } | undefined;
 const PROGRESS = new WeakMap<Run, SolveProgress>();
 
 /**
- * Where the solve stands for a run (#203): the plan the page shows (the search's best so far, or the seed's where
- * there's no worker), its progress, and whether the worker is still at it (the search, the pin cost, the readings).
+ * Where the solve stands for a run (#203): the plan the page shows (#206: the adopted plan the search started from,
+ * never its best so far; the adopted plan or the seed where there's no worker), its progress, whether the worker is
+ * still at it (the search, the pin cost, the readings), and the headline's chance and readings.
  * Undefined until the headline has been drawn for the run.
  */
-export function solveState(run: Run): { readonly plan: Plan; readonly progress: SolveProgress | undefined; readonly working: boolean } | undefined {
+export function solveState(run: Run): { readonly plan: Plan; readonly progress: SolveProgress | undefined; readonly working: boolean; readonly chance: FlawlessChance | undefined; readonly readings: Readings | undefined } | undefined {
   const progress = PROGRESS.get(run);
-  const plan = progress?.best ?? READOUTS.get(run)?.plan;
-  return plan && { plan, progress, working: solving === run };
+  const readout = READOUTS.get(run);
+  // The adopted plan (#206, as the inbox reads it): the one the search started from, never its best so far.
+  const plan = progress?.start ?? progress?.best ?? readout?.plan;
+  return plan && { plan, progress, working: solving === run, chance: progress?.chance ?? readout?.chance, readings: progress?.readings ?? readout?.readings };
 }
 
 /**
@@ -711,7 +740,7 @@ export function flawlessSection(ctx: HeadlineContext, inInbox = false): HTMLElem
     // The search starts from the adopted plan (#204), else the seed.
     const adopted = adoptedOf(run);
     const started = startSolve(
-      { kind: 'solve', assumptions: ctx.assumptions, run, seed: FLAWLESS_SEED, budget: STEP_BUDGET, seconds: solvedOnce ? SOLVE_SECONDS.resolve : SOLVE_SECONDS.full, ...(adopted ? { plan: adopted } : {}), ...(pins ? { pins } : {}), ...(roles ? { roles } : {}) },
+      { kind: 'solve', assumptions: ctx.assumptions, run, seed: FLAWLESS_SEED, budget: STEP_BUDGET, seconds: solvedOnce || recorded(run) ? SOLVE_SECONDS.resolve : SOLVE_SECONDS.full, ...(adopted ? { plan: adopted } : {}), ...(pins ? { pins } : {}), ...(roles ? { roles } : {}) },
       (reply) => {
         if (reply.done && solving === run) {
           solving = undefined;
@@ -1205,9 +1234,9 @@ function chapterLog(ctx: RunContext): HTMLElement {
       ),
     ),
     migrationNoteSection(ctx),
-    // Before the Lock the top is the inbox (#204), headline and Robin first, above Next map; after it, today's Run view
-    // (the inbox titled "Before <map>" is #206's).
-    ...(beforeTheLock(run) ? [inboxView(ctx, flawlessSection(ctx, true), robinSection(ctx, true)), nextMapSection(ctx)] : [afterLockInbox(ctx), nextMapSection(ctx), flawlessSection(ctx), robinSection(ctx)]),
+    // The top is the inbox, headline first, above Next map: before the Lock (#204) with Robin as the first decision;
+    // after it (#206) titled "Before <map>", What changed above it, and Robin (what the lock cost) below Next map.
+    ...(beforeTheLock(run) ? [inboxView(ctx, flawlessSection(ctx, true), robinSection(ctx, true)), nextMapSection(ctx)] : [inboxView(ctx, flawlessSection(ctx, true), null), nextMapSection(ctx), robinSection(ctx)]),
     sideGoalsSection(ctx),
     mapOrderSection(ctx),
     h(
@@ -1228,7 +1257,7 @@ function chapterLog(ctx: RunContext): HTMLElement {
           {
             onclick: () => {
               const label = pick === 'other' ? (prompt('What did you play?') ?? 'Other') : undefined;
-              const next = addEntry(run, pick, ctx.now(), label, ctx.assumptions);
+              const next = withMapRecorded(ctx, pick, label);
               ctx.setRun(next);
               ctx.setOpenEntry(next.entries[next.entries.length - 1]!.id);
             },
