@@ -102,7 +102,8 @@ const WEAPON_KINDS = new Set(['sword', 'lance', 'axe', 'bow', 'tome']);
 export function classWeaponKinds(cls: string): Set<string> {
   const id = classIdByName(cls);
   const b = id ? classBase(id, 'M') ?? classBase(id, 'F') : undefined;
-  return new Set((b?.weapons ?? []).map((w) => w.replace(/s$/, '').replace('tome', 'tome')));
+  // The class data calls both stones 'stone': a Taguel's is a Beaststone (item kind `beaststone`), a Manakete's a Dragonstone.
+  return new Set((b?.weapons ?? []).map((w) => (w === 'stone' && id === 'taguel' ? 'beaststone' : w.replace(/s$/, ''))));
 }
 
 function classBase(id: ClassId, g: Gender): ClassBase | undefined {

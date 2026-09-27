@@ -577,3 +577,52 @@ describe('a careful player’s exposure, in reach already (realism pass)', () =>
     expect(first.fights.filter((f) => f.phase === 'enemy').every((f) => f.survive === 1)).toBe(true);
   });
 });
+
+describe('baits and bosses (realism pass)', () => {
+  // Hits every time for 9 (Str 3 + Iron Axe 7, less the sword's triangle edge), never crits; 40 HP.
+  const axe: Foe = { ...brute, name: 'Axe', count: 2, stats: stats(40, 3, 0, 0, 0, 60, 0, 0), skills: ['Hawkeye'] };
+  // 15 HP: lives through one Axe's hit, not two. Its counter hurts but never fells one.
+  const tank = (name: string): Fighter => ({ name, className: 'Myrmidon', stats: stats(15, 10, 0, 60, 0, 0, 0, 0), skills: [], weapon: weapon('Iron Sword') });
+  // 5 HP: one hit fells it.
+  const fragile: Fighter = { ...tank('Page'), stats: stats(5, 10, 0, 60, 0, 0, 0, 0) };
+
+  it('lets every front that lives through the enemy phase in reach wait there as bait, and keeps the rest out of reach', () => {
+    const play = engine.playMap({ map: rout([group(axe)]), lineup: [solo(tank('Wall')), solo(tank('Rock')), solo(fragile)] }, 1);
+    const first = play.log[0]!;
+    // Attacking would leave either tank too low for the other Axe: neither attacks, both wait in reach.
+    expect(first.acts.map((a) => [a.kind, a.unit])).toEqual([
+      ['bait', 'wall'],
+      ['bait', 'rock'],
+    ]);
+    // The baits moved the map on: the Page stays out of reach, and nobody died.
+    expect(first.exposed).toEqual(['wall', 'rock']);
+    expect(first.fights.map((f) => [f.phase, f.lead, f.survive])).toEqual([
+      ['enemy', 'wall', 1],
+      ['enemy', 'rock', 1],
+    ]);
+  });
+
+  // A boss that holds and a stream of harmless posts that never ends: waiting for the field to clear never ends either.
+  const post: Foe = { ...brute, name: 'Post', weapon: undefined, count: 3, stats: stats(10, 0, 0, 0, 0, 60, 0, 0) };
+  const endless = (boss: Foe): SimMap => ({
+    id: 'test',
+    victory: 'boss',
+    foes: [group(boss, { target: true }), group(post)],
+    waves: [{ label: 'endless', turns: [], everyTurnFrom: 1, perTurn: 2, joins: 'turn-start', groups: [group({ ...post, name: 'More', count: 1 })] }],
+    skipped: [],
+  });
+
+  it('goes for the boss from the start when reinforcements never stop', () => {
+    const chief: Foe = { ...brute, name: 'Chief', boss: true, weapon: undefined, stats: stats(20, 0, 0, 0, 0, 60, 0, 0) };
+    const play = engine.playMap({ map: endless(chief), lineup: [solo(hero)] }, 1);
+    expect(play).toMatchObject({ ended: 'boss', turns: 1 });
+  });
+
+  it('counts damage on the target boss as part of the victory: it chips the boss before felling posts', () => {
+    // 60 HP, Def 10: the hero's round (5 a hit, doubled) takes 10 of it; posts fall to one strike.
+    const chief: Foe = { ...brute, name: 'Chief', boss: true, weapon: undefined, stats: stats(60, 0, 0, 0, 0, 60, 10, 0) };
+    const play = engine.playMap({ map: endless(chief), lineup: [solo(hero)] }, 1);
+    expect(new Set(play.log.flatMap((t) => t.fights.map((f) => f.foe)))).toEqual(new Set(['Chief']));
+    expect(play.ended).toBe('boss');
+  });
+});

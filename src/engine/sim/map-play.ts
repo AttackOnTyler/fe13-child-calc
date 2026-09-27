@@ -24,6 +24,10 @@
  * - **Exposure** is the player's choice (#183): a front that attacks, or baits, is in reach on enemy phase; one that
  *   holds back isn't. A careful player only exposes a front that very likely lives through it (`EXPOSURE_RISK`), and
  *   when nothing is that safe, engages once a turn with the least risk: the sturdiest front baits, or the safest attack.
+ *   A front already in reach is weighed at its HP now (a Dance's second attack risks the survival it loses). A front
+ *   that would live through the enemy phase in reach and counter waits there as bait (the realism pass); a bait moves
+ *   the map on, so the rest stay out of reach. Damage on the target boss is part of the victory, and with
+ *   reinforcements that never stop the boss is open from the start.
  * - HP is carried: damage stays until an action buys it back. A staff reaches a pair with the chance the assumed army
  *   spread gives (`MapPlayInput.spread`), and heals its expected HP.
  * - `enemyPhase`: arrivals free to act (Hard and up), then each exposed front takes one attack from the worst foe left
@@ -581,7 +585,10 @@ class MapState {
   /** The foe groups on the field from the start (the boss opens once they're gone, unless the solve picks a turn). */
   private readonly starting = new Set<number>();
   private clearQueue: SimWave[];
-  private endless = 0;
+  /** The next of the unlimited reinforcements' kinds to join (their groups in turn). */
+  private endlessNext = 0;
+  /** The map has reinforcements that never stop. */
+  private readonly endless: boolean;
   /** Talk recruits' talks (#184), the foe groups that are recruits still to talk to, and the arrivals by turn. */
   private readonly talks: Talk[] = [];
   private readonly pending = new Set<number>();
@@ -675,6 +682,7 @@ class MapState {
     }
     this.uses = this.units.map((u) => (u.items ?? []).map((i) => i.uses));
     this.clearQueue = input.map.waves.filter((w) => w.onClear);
+    this.endless = input.map.waves.some((w) => w.everyTurnFrom !== undefined && w.groups.length > 0);
     this.chases = (input.chase ?? []).map((c) => ({ c, spent: 0 }));
   }
 
@@ -733,7 +741,7 @@ class MapState {
   /** The wave groups joining now, and how many of each: on their turns, every turn for unlimited ones. */
   private joining(joins: SimWave['joins']): [SimFoeGroup, number][] {
     const out: [SimFoeGroup, number][] = [];
-    let endless = this.endless;
+    let endless = this.endlessNext;
     for (const w of this.input.map.waves) {
       if (w.joins !== joins || w.onClear) continue;
       if (w.turns.includes(this.turn)) for (const g of w.groups) out.push([g, g.foe.count]);
@@ -750,7 +758,7 @@ class MapState {
       if (w.joins !== joins || w.onClear) continue;
       if (w.turns.includes(this.turn)) for (const g of w.groups) this.arrive(g, g.foe.count);
       if (w.everyTurnFrom !== undefined && this.turn >= w.everyTurnFrom && w.groups.length) {
-        for (let i = 0; i < (w.perTurn ?? w.groups.length); i++) this.arrive(w.groups[this.endless++ % w.groups.length]!, 1);
+        for (let i = 0; i < (w.perTurn ?? w.groups.length); i++) this.arrive(w.groups[this.endlessNext++ % w.groups.length]!, 1);
       }
     }
   }
@@ -1049,11 +1057,14 @@ class MapState {
   }
 
   /**
-   * Whether the target boss can be fought now: from the turn the solve picks, or once the foes the map starts with
-   * are gone (reinforcements don't hold it back: Endgame's never stop).
+   * Whether the target boss can be fought now: from the turn the solve picks, from the start when reinforcements never
+   * stop (Endgame's), or once the foes the map starts with are gone.
    */
   private bossOpen(): boolean {
     if (this.input.bossTurn !== undefined) return this.turn >= this.input.bossTurn;
+    // Reinforcements that never stop (Endgame's) make every turn spent on the rest a turn more in reach: a careful
+    // player goes for the boss from the start (the realism pass).
+    if (this.endless) return true;
     return this.foes.every((f) => this.groups[f.g]!.target || !this.starting.has(f.g) || this.pending.has(f.g));
   }
 
@@ -1391,7 +1402,8 @@ class MapState {
     if (!ex.leadStrikes || ex.survive < 0.5) return null;
     const target = !!this.groups[f.g]!.target;
     const dealt = ex.foeHp < f.hp ? (f.hp - ex.foeHp) / f.hp : 0;
-    const gain = ex.kill * (target ? 100 : 1) + 0.5 * dealt;
+    // Damage is part of a kill, worth what the kill is: on the target boss, part of the victory (its HP carries).
+    const gain = (target ? 100 : 1) * (ex.kill + 0.5 * dealt);
     if (gain <= 0) return null;
     return { kind: 'attack', group: gi, foe: f, ex, gain, raw: ex.survive * gain - (1 - ex.survive), risk: 1, exact: false, value: -1, at: -1 };
   }
@@ -1421,6 +1433,23 @@ class MapState {
       }
     }
     return (best as { readonly action: Action } | undefined)?.action;
+  }
+
+  /**
+   * A safe bait (the realism pass): a front with nothing safe to attack that would live through the enemy phase in reach
+   * (within `EXPOSURE_RISK`) and counter the foe it faces waits in reach, as a careful player lets a wall take the
+   * attacks. The sturdiest such front first.
+   */
+  safeBait(ctx: PolicyContext): Action | undefined {
+    if (!ctx.threats.length) return undefined;
+    let best: { readonly action: Action; readonly risk: number } | undefined;
+    for (let gi = 0; gi < this.front.length; gi++) {
+      if (ctx.acted.has(gi) || this.exposed.has(gi) || this.safe.has(gi) || !this.armed(gi) || this.npcFronts.has(gi)) continue;
+      const risk = 1 - this.survival(gi, this.hp[this.front[gi]!.unit]!, ctx);
+      if (risk > EXPOSURE_RISK || (best && risk >= best.risk - EPS) || !this.counters(gi, ctx)) continue;
+      best = { action: { kind: 'bait', group: gi, risk, value: 0 }, risk };
+    }
+    return best?.action;
   }
 
   /** Whether front `gi` would hurt the foe worst for it on enemy phase: a bait that can't counter moves nothing. */
@@ -1686,6 +1715,8 @@ class MapState {
       }
       case 'bait': {
         this.expose(a.group);
+        // Waiting in reach to take an attack and counter is how the army moves the map on: the rest stay out of reach.
+        this.progress = true;
         memo.clear();
         this.acts.push({ kind: 'bait', unit: lead.id });
         return;
@@ -1806,7 +1837,8 @@ type PolicyContext = {
  * 3. A Dance for the front with the best safe attack left, which then acts in tier 2.
  * 4. Sustain: a heal, Fortify, Rescue or potion, by the enemy-phase survival it buys.
  * 5. Safe fighting by anyone left, held back or not.
- * 6. Engaging (#183): nobody is in reach yet, so the least risky attack or bait goes ahead; the rest hold back.
+ * 6. A safe bait (the realism pass): a front that lives through the enemy phase in reach and counters waits there.
+ * 7. Engaging (#183): nobody is in reach yet, so the least risky attack or bait goes ahead; the rest hold back.
  * EXP priorities (#195) change who fights in tiers 2 and 5 (`rankedAttack`), not the tiers.
  */
 const POLICY: readonly ((s: MapState, ctx: PolicyContext) => Action | undefined)[] = [
@@ -1815,6 +1847,7 @@ const POLICY: readonly ((s: MapState, ctx: PolicyContext) => Action | undefined)
   (s, ctx) => s.bestDance(ctx),
   (s, ctx) => s.bestSustain(ctx),
   (s, ctx) => s.bestAttack(ctx, true),
+  (s, ctx) => s.safeBait(ctx),
   (s, ctx) => s.engage(ctx),
 ];
 
