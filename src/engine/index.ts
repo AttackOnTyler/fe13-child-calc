@@ -69,6 +69,7 @@ import { DEFAULT_PRIORITY, childLedger, evaluatePlan, savedPairings, solvePlan, 
 import type { Difficulty, SavedPlan } from './roster';
 import { combatExp, type CombatOutcome, type ExpFoe } from './exp';
 import { classChangeProposals, internalLevels, type ProposedClassChange, type UnitInternalLevel } from './internal-level';
+import { entryShopping, type EntryShopping } from './shopping';
 import { deploymentRoleOf, inPlay } from './composition';
 import { ARMY_FIT_PASS_CAP, armyFit, type RoleAssignment } from './army-fit';
 import { deriveRoles, type Derivation, type RobinGain, type RobinGainSide } from './derive';
@@ -190,6 +191,7 @@ export {
   type ExpFoe,
 } from './exp';
 export { removeClassChange, withClassChange, withCountOverride, type ClassChange, type ProposedClassChange, type Seal, type UnitInternalLevel } from './internal-level';
+export { afterShopping, entryAfterShopping, goldAfterShopping, removeShopLine, shopPrice, withShopLine, type EntryShopping, type ItemFound, type ItemUse, type ShopKind, type ShopLine, type ShoppingSpend } from './shopping';
 export {
   FORGE,
   ITEMS,
@@ -525,6 +527,12 @@ export type Engine = {
   internalLevels(run: Run, entry?: string): ReadonlyMap<RosterUnit, UnitInternalLevel>;
   /** Class changes the log suggests (a level reset) but doesn't hold, on every entry: Record results proposes them. */
   classChangeProposals(run: Run): readonly ProposedClassChange[];
+  /**
+   * An entry's shopping step (#192): its gold at the map's end and after shopping, its buys, sales and forges with what
+   * they spent on upkeep, seals and the kit, and what its map used (uses spent against the entry before, after that
+   * one's shopping) and found (the map's items, or random finds with no buy or map item behind them).
+   */
+  shopping(run: Run, entry: string): EntryShopping | undefined;
   /**
    * The flawless chance of today's plan (#186): every map from the next one to the endpoint played by its suggested
    * deployment, each unit's EXP and level-ups sampled along the way, over `runs` simulated runs from `seed` (defaults
@@ -1606,6 +1614,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       combatExp(c.internalLevel, c.foe, c.outcome, c.pair === 'back', c.difficulty === 'lunatic' || c.difficulty === 'lunatic-plus', c.engagement ?? 1, c.pair === 'front' && c.veteran ? 1.5 : 1),
     internalLevels: (run, entry) => internalLevels(run, assumptions['class-change-internal-level'], entry),
     classChangeProposals: (run) => classChangeProposals(run),
+    shopping: (run, entry) => entryShopping(run, entry),
     flawlessChance: (run, options) => flawlessChance(run, assumptions, options),
     simulateRuns: (input, seed, runs) => simulateRuns(input, seed, runs, assumptions),
     ceiling: (run, options) => flawlessCeiling(run, assumptions, options),

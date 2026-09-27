@@ -301,7 +301,7 @@ A map the run can play next: story maps and paralogues its cleared maps have unl
 _Avoid_: Next chapter (paralogues and xenologues count)
 
 **Record results**:
-The guided flow after a map: it makes the map's entry (a copy of the last) and steps through deployed units, recruits, deaths and marriages, then convoy and gold. On Casual a fallen unit isn't recorded as dead.
+The guided flow after a map: it makes the map's entry (a copy of the last) and steps through deployed units, recruits, deaths and marriages, convoy and gold, then the shopping step. On Casual a fallen unit isn't recorded as dead.
 _Avoid_: Save, end chapter
 
 **Inbox**:
@@ -441,8 +441,12 @@ The plan's buys at each armory stop, in priority order: rebuys from simulated hi
 _Avoid_: Supply list (replaced), shop advice
 
 **Shopping step**:
-Record results' step between maps, after convoy and gold: buys, sells and forges, each with its gold. The entry's gold is gold at map end; gold after shopping is derived.
+Record results' step between maps, after convoy and gold: buys, sells and forges, each with its gold. The entry's gold is gold at map end; gold after shopping is derived, and the next entry and the forecasts start from the army as it left the shop.
 _Avoid_: Shop entry
+
+**Random find**:
+An item gained on a map with no buy or map item (chest, village, drop, side goal) behind it, derived by comparing an entry with the one before after its shopping.
+_Avoid_: Loot
 
 **Renown**:
 The game's renown count, recorded once per run (starting value and rewards already claimed), then derived at +10 per story map; the forecast places every reward crossed on its map. Paralogue and DLC renown count as 0 until recorded.

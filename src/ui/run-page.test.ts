@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, addEntry, createEngine, editEntry, latestEntry, recordMarriage, runFromRoster, withRun, type Route, type RosterUnit, type Run, type Snapshot, type UnitSnapshot } from '../engine';
-import { childStatsNote, flawlessReadout, heldText, mapOrderReadout, parseHeldText, parseSupportsText, supportsText } from './run-page';
+import { EMPTY_ROSTER, addEntry, createEngine, editEntry, latestEntry, recordMarriage, runFromRoster, withRun, withShopLine, type Route, type RosterUnit, type Run, type Snapshot, type UnitSnapshot } from '../engine';
+import { childStatsNote, flawlessReadout, heldText, mapOrderReadout, parseHeldText, parseSupportsText, shoppingReadout, supportsText } from './run-page';
 import { chanceText } from './chance';
 
 describe('the map order readout (#179)', () => {
@@ -119,5 +119,26 @@ describe('Record results’ recruits step (#155)', () => {
     expect(recorded({ chrom: unit('Great Lord', stats), sumia: unit('Dark Flier', stats) }, 'sumia')('lucina')).toBe('Lucina: worked out from Chrom and Sumia as they were on entering this map.');
     expect(recorded({ chrom: unit('Great Lord', stats) }, 'maiden')('lucina')).toBe('Lucina: worked out from Chrom and the Maiden as they were on entering this map (the Maiden’s side is an assumption).');
     expect(recorded({ chrom: unit('Great Lord', stats) }, null)('lucina')).toBe('Lucina: Chrom isn’t married in the entry before this map, so Lucina’s stats are blank: record them from the game.');
+  });
+});
+
+describe('Record results’ shopping step (#192)', () => {
+  const engine = createEngine();
+  const facts = withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal', gender: 'M', asset: 'mag', flaw: 'hp' });
+  const chrom: UnitSnapshot = { class: 'Lord', level: 5, promoted: false, reclassed: false, exp: 0, stats: null, skills: [], inventory: [{ item: 'Iron Sword', uses: 30 }], supports: [] };
+
+  it('shows gold at the map’s end and after shopping, each line, and what the map used and found', () => {
+    let run = editEntry(addEntry(runFromRoster(facts), 'prologue', 1), 'e2', (s) => ({ ...s, gold: 3000, units: { chrom } }), 1);
+    run = withShopLine(run, 'e2', { kind: 'buy', item: 'Master Seal', gold: 2500 }, 1);
+    run = withShopLine(run, 'e2', { kind: 'forge', item: 'Iron Sword', unit: 'chrom', gold: 260, forge: { name: 'Edge', mt: 1, hit: 0, crit: 0 } }, 1);
+    const r = shoppingReadout(engine, run, 'e2');
+    expect(r.gold).toBe('Gold at the map’s end 3,000G → after shopping 240G (seals 2,500G, kit 260G)');
+    expect(r.lines).toEqual(['Bought Master Seal for the convoy: −2,500G', 'Forged Iron Sword [Edge +1/+0/+0] for Chrom: −260G']);
+    run = addEntry(run, 'chapter-2', 2);
+    run = editEntry(run, 'e3', (s) => ({ ...s, units: { chrom: { ...s.units.chrom!, inventory: [{ ...s.units.chrom!.inventory[0]!, uses: 25 }] } }, convoy: [...s.convoy, { item: 'Elixir', uses: 3 }] }), 2);
+    const next = shoppingReadout(engine, run, 'e3');
+    expect(next.gold).toBe('Gold at the map’s end 240G → after shopping 240G');
+    expect(next.used).toBe('Uses spent on this map: Iron Sword 5');
+    expect(next.found).toBe('Found on this map: Elixir (random find)');
   });
 });

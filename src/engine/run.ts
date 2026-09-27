@@ -19,6 +19,7 @@ import { robinBases } from './unit-page';
 import { FORGE, forgeProblem, itemByName } from '../game-data/items';
 import { FIRST_GEN_UNITS, type UnitId } from '../game-data/units';
 import { parseClassChanges, parseCountOverrides, type ClassChange } from './internal-level';
+import { entryAfterShopping, parseShopLines, type ShopLine } from './shopping';
 import { EMPTY_ROSTER, parseRoster, withSpouse, withState, type Roster, type RosterUnit, type RunFacts } from './roster';
 
 export type SupportLevel = 'C' | 'B' | 'A' | 'S';
@@ -66,6 +67,11 @@ export type RunEntry = {
   readonly editedAt?: number;
   /** Class changes made on this map (#185): never copied forward. */
   readonly classChanges?: readonly ClassChange[];
+  /**
+   * The shopping step (#192): buys, sales and forges after the map, each with its gold. The snapshot's gold is gold at
+   * the map's end; the next entry copies the snapshot after shopping (`entryAfterShopping`).
+   */
+  readonly shopping?: readonly ShopLine[];
 };
 
 export type Run = {
@@ -273,12 +279,13 @@ export function heldProblems(h: HeldItem): string[] {
 }
 
 /**
- * The next entry, for the map played: a copy of the latest snapshot, with the map's recruits the snapshot doesn't have
+ * The next entry, for the map played: a copy of the latest snapshot after its shopping (#192), with the map's recruits the snapshot doesn't have
  * yet filled in (#116), a child's stats from its parents in that snapshot (#155). The Robin and Morgan recruits are
  * skipped until Robin's gender is set, and a setup used only on the map (Premonition's, #131) never joins the army.
  */
 export function addEntry(run: Run, map: string, now: number, label?: string, assumptions: Assumptions = DEFAULT_ASSUMPTIONS): Run {
-  const prev = latestEntry(run)?.snapshot ?? EMPTY_SNAPSHOT;
+  const last = latestEntry(run);
+  const prev = last ? entryAfterShopping(last) : EMPTY_SNAPSHOT;
   const units: Partial<Record<RosterUnit, UnitSnapshot>> = { ...prev.units };
   for (const [unit, r] of newRecruits(run, prev, map)) if (!mapOnly(r)) units[unit] = recruitSnapshot(unit, run, r, prev, assumptions);
   const n = run.entries.reduce((m, e) => Math.max(m, Number(e.id.slice(1)) || 0), 0) + 1;
@@ -312,12 +319,13 @@ export type PrepUnits = {
 };
 
 /**
- * The units a map's preparation page can field (#131): the army from the latest entry, plus the recruits on the map
+ * The units a map's preparation page can field (#131): the army from the latest entry (after its shopping, #192), plus the recruits on the map
  * from turn 1, built as Record results will build them, and any setup used only on this map. Later recruits are listed
  * apart. Like Record results, the Robin recruit waits for Robin's gender; a unit already in the army or dead is left out.
  */
 export function prepUnits(run: Run, map: string): PrepUnits {
-  const snap = latestEntry(run)?.snapshot ?? EMPTY_SNAPSHOT;
+  const last = latestEntry(run);
+  const snap = last ? entryAfterShopping(last) : EMPTY_SNAPSHOT;
   const alive = (u: RosterUnit) => run.roster.states[u] !== 'dead' && snap.states[u] !== 'dead';
   const units = (Object.entries(snap.units) as [RosterUnit, UnitSnapshot][]).filter(([u]) => alive(u));
   const joining: RosterUnit[] = [];
@@ -497,6 +505,7 @@ export function parseRun(raw: unknown): Run {
     if (!isObject(e)) return [];
     const map = typeof e.map === 'string' && (e.map === 'other' || MAPS.some((m) => m.id === e.map)) ? e.map : 'other';
     const classChanges = parseClassChanges(e.classChanges);
+    const shopping = parseShopLines(e.shopping);
     return [
       {
         id: typeof e.id === 'string' && e.id ? e.id : `e${i + 1}`,
@@ -506,6 +515,7 @@ export function parseRun(raw: unknown): Run {
         createdAt: num(e.createdAt, 0),
         ...(typeof e.editedAt === 'number' ? { editedAt: e.editedAt } : {}),
         ...(classChanges.length ? { classChanges } : {}),
+        ...(shopping.length ? { shopping } : {}),
       },
     ];
   });

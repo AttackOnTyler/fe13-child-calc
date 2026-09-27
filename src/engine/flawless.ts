@@ -12,7 +12,7 @@
  * none, or whose parent the simulation doesn't play, doesn't join (`notSimulated`, why `child`).
  *
  * Gold and items (#190): the runs start from the latest entry's gold (5,000G before any map is logged), seals and
- * weapons' uses; each map carries what the open armories sell in its preparations (`openStock` over the maps cleared
+ * weapons' uses, after its recorded shopping (#192: gold at the map's end less buys and forges, plus sales); each map carries what the open armories sell in its preparations (`openStock` over the maps cleared
  * by then), its sure income (`sureIncome`) and its sure free seals.
  */
 import { CHILD_UNITS, type ChildId } from '../game-data/children';
@@ -33,6 +33,7 @@ import { remainingMapOrder } from './map-order';
 import { unitName, type Couple, type Difficulty, type RosterUnit } from './roster';
 import { EMPTY_SNAPSHOT, latestEntry, morganStart, recruitSnapshot, unitNamed, type Run, type Snapshot, type UnitSnapshot } from './run';
 import { fixedPass } from './child-skills';
+import { entryAfterShopping } from './shopping';
 import { CHROM_FALLBACK_PARTNER, CHROM_WEDDING_CANDIDATES, CHROM_WEDDING_MAP } from '../game-data/supports';
 import type { Fighter } from './solver';
 import type { SimItem } from './sim/sustain';
@@ -151,7 +152,9 @@ export function flawlessInput(
   const difficulty: Difficulty = run.roster.run.difficulty ?? 'normal';
   const table: ChapterDifficulty = difficulty === 'lunatic-plus' ? 'lunatic' : difficulty;
   const order = remainingMapOrder(run);
-  const snap = latestEntry(run)?.snapshot ?? EMPTY_SNAPSHOT;
+  // The runs start from the latest entry after its shopping (#192): its gold, items and seals as they left the armory.
+  const last = latestEntry(run);
+  const snap = last ? entryAfterShopping(last) : EMPTY_SNAPSHOT;
   const role = roleOf ?? ((u: RosterUnit) => deployRoleOf(u, run.roster, new Map()));
   const alive = (u: RosterUnit) => run.roster.states[u] !== 'dead' && snap.states[u] !== 'dead';
   const levels = internalLevels(run, assumptions['class-change-internal-level']);
