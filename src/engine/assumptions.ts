@@ -25,6 +25,8 @@ import {
   RESEARCH_GOLD,
   FEW_RENOWN,
   SF_RENOWN,
+  RESEARCH_EXP,
+  RESEARCH_INTERNAL_LEVEL,
   JP_CHILDREN,
   JP_CHILDREN_MIRROR,
   JP_PK_CHILDREN,
@@ -67,6 +69,11 @@ type AssumptionValues = {
   'maiden-join-stats': Growths;
   /** Renown for clearing a paralogue or DLC map (a story map gives 10). */
   'paralogue-renown': number;
+  /**
+   * How a class change moves the internal level: the research's formula (Master Seal +20 for the tier, Second Seal adds
+   * half the levels), or the user's memory of +1 per class change (the level at use carries on).
+   */
+  'class-change-internal-level': 'research' | 'plus-one';
 };
 
 export type AssumptionId = keyof AssumptionValues;
@@ -334,6 +341,22 @@ export const ASSUMPTION_REGISTRY: { readonly [K in AssumptionId]: AssumptionDef<
     format: (v) => (v ? `+${v} each` : 'None'),
     parse: (raw) => (raw === 0 || raw === 10 ? raw : undefined),
     affects: 'when renown rewards arrive',
+  }),
+  'class-change-internal-level': entry({
+    id: 'class-change-internal-level',
+    label: 'How a class change moves the internal level',
+    why:
+      'SF and FEW (which cites SF) say a Master Seal only adds the +20 of an advanced class, so Lv 1 after it is internal 21 whether the unit ' +
+      'promoted at Lv 10 or 20, and a Second Seal adds half the levels the unit had; recorded play on the JP 2ch wiki matches. The user ' +
+      'remembers +1 per class change instead (internal 11 after a Lv 10 promotion). It is an open rule until one test kill settles it: a ' +
+      'fresh Swordmaster promoted at Lv 10 kills a Lv 11 base-class foe, 14 EXP under the research and 30 under +1 per class change.',
+    sources: [RESEARCH_EXP, RESEARCH_INTERNAL_LEVEL],
+    default: 'research',
+    alternatives: [{ label: '+1 per class change: the level at use carries on', value: 'plus-one' }],
+    input: 'choice',
+    format: (v) => (v === 'research' ? 'The research’s formula (Master Seal +20, Second Seal half the levels)' : '+1 per class change (the level at use carries on)'),
+    parse: (raw) => (raw === 'research' || raw === 'plus-one' ? raw : undefined),
+    affects: 'each unit’s internal level on the chapter log, and the EXP it earns',
   }),
 };
 

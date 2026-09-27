@@ -18,6 +18,7 @@ import { classIdByName } from './supply';
 import { robinBases } from './unit-page';
 import { FORGE, forgeProblem, itemByName } from '../game-data/items';
 import { FIRST_GEN_UNITS, type UnitId } from '../game-data/units';
+import { parseClassChanges, parseCountOverrides, type ClassChange } from './internal-level';
 import { EMPTY_ROSTER, parseRoster, withSpouse, withState, type Roster, type RosterUnit, type RunFacts } from './roster';
 
 export type SupportLevel = 'C' | 'B' | 'A' | 'S';
@@ -63,6 +64,8 @@ export type RunEntry = {
   readonly createdAt: number;
   /** When it was last edited after later entries were copied from it. */
   readonly editedAt?: number;
+  /** Class changes made on this map (#185): never copied forward. */
+  readonly classChanges?: readonly ClassChange[];
 };
 
 export type Run = {
@@ -73,6 +76,8 @@ export type Run = {
   readonly roster: Roster;
   /** In play order. */
   readonly entries: readonly RunEntry[];
+  /** Each unit's Second Seal count from history the log can't see, set by hand (#185). */
+  readonly countOverrides?: Readonly<Partial<Record<RosterUnit, number>>>;
 };
 
 export const EMPTY_SNAPSHOT: Snapshot = { units: {}, convoy: [], gold: null, states: {}, spouses: {} };
@@ -491,6 +496,7 @@ export function parseRun(raw: unknown): Run {
   const entries = (Array.isArray(raw.entries) ? raw.entries : []).flatMap((e, i): RunEntry[] => {
     if (!isObject(e)) return [];
     const map = typeof e.map === 'string' && (e.map === 'other' || MAPS.some((m) => m.id === e.map)) ? e.map : 'other';
+    const classChanges = parseClassChanges(e.classChanges);
     return [
       {
         id: typeof e.id === 'string' && e.id ? e.id : `e${i + 1}`,
@@ -499,6 +505,7 @@ export function parseRun(raw: unknown): Run {
         snapshot: parseSnapshot(e.snapshot, roster.run),
         createdAt: num(e.createdAt, 0),
         ...(typeof e.editedAt === 'number' ? { editedAt: e.editedAt } : {}),
+        ...(classChanges.length ? { classChanges } : {}),
       },
     ];
   });
@@ -507,7 +514,9 @@ export function parseRun(raw: unknown): Run {
     for (const [foe, skills] of Object.entries(isObject(foes) ? foes : {}))
       if (Array.isArray(skills)) (seen[map] ??= {})[foe] = skills.filter((x): x is string => typeof x === 'string');
   const base: Run = entries.length ? { version: 1, roster: { ...roster, states: {}, spouses: {} }, entries } : runFromRoster(roster);
-  return Object.keys(seen).length ? { ...base, seen } : base;
+  const counts = parseCountOverrides(raw.countOverrides);
+  const withCounts: Run = Object.keys(counts).length ? { ...base, countOverrides: counts } : base;
+  return Object.keys(seen).length ? { ...withCounts, seen } : withCounts;
 }
 
 /** The run as a file (JSON), read back by importRun. */

@@ -91,6 +91,14 @@ export const RESEARCH_GOLD: Citation = {
 };
 export const FEW_RENOWN: Citation = { label: 'FEW Renown (oldid 762420)', url: 'https://fireemblemwiki.org/w/index.php?title=Renown&oldid=762420' };
 export const SF_RENOWN: Citation = { label: 'SF Renown', url: 'https://serenesforest.net/awakening/miscellaneous/renown/' };
+export const RESEARCH_EXP: Citation = {
+  label: 'Research: EXP rules (#138)',
+  url: `${RESEARCH}/research/exp-rules/research/exp-rules.md`,
+};
+export const RESEARCH_INTERNAL_LEVEL: Citation = {
+  label: 'What the chapter log records for the internal level (#149)',
+  url: 'https://github.com/AttackOnTyler/fe13-child-calc/issues/149',
+};
 export const JP_CHILDREN: Citation = { label: 'JP 2ch wiki child units (p.112)', url: 'https://w.atwiki.jp/fireemblem3ds/pages/112.html' };
 /** The mirror wiki's child units page: a passed skill the child already has wastes the slot. */
 export const JP_CHILDREN_MIRROR: Citation = { label: 'JP 2ch wiki child units (p.89)', url: 'https://w.atwiki.jp/kakuseife/pages/89.html' };
