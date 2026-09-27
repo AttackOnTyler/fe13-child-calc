@@ -38,6 +38,17 @@ describe('the map simulation’s no-death chance (#181)', () => {
     expect(play.ended).toBe('stalled');
   });
 
+  it('stops a play once its no-death chance falls below the run’s floor: the run has lost a unit', () => {
+    // Three Brutes: a risky exchange each turn, over several turns.
+    const map = rout([group({ ...brute, count: 3 })]);
+    const full = engine.playMap({ map, lineup: [solo(hero)] }, 1);
+    const first = full.log[0]!.noDeath;
+    expect(first).toBeLessThan(1);
+    expect(full.turns).toBeGreaterThan(1);
+    const stopped = engine.playMap({ map, lineup: [solo(hero)], stopBelow: (first + 1) / 2 }, 1);
+    expect(stopped).toMatchObject({ ended: 'lost', turns: 1, noDeath: first });
+  });
+
   it('multiplies the survival of every exposure, from the solver’s hit rates', () => {
     const m = matchup(hero, undefined, null, brute);
     expect([m.hit, m.crit, m.foeCrit, m.damage, m.hits, m.oneRounds]).toEqual([100, 0, 0, 10, 2, false]);

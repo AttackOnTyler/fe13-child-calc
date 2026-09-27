@@ -171,6 +171,11 @@ export type MapPlayInput = {
    * waits), and a lower unit chips first, into a higher unit's kill range. The foes left alive cost turns.
    */
   readonly priority?: Readonly<Partial<Record<string, ExpPriority>>>;
+  /**
+   * Stop the play once its no-death chance falls below this (the run simulation's: a run whose chance of having lost
+   * nobody is that small counts as lost, #186), ending `lost`. Absent: play the map out.
+   */
+  readonly stopBelow?: number;
 };
 
 /** Who lands kills (#195): a lower unit chips or waits for a higher one; normal by default. */
@@ -281,8 +286,11 @@ export type MapPlay = {
   /** The chance nobody dies on the map, exact given the play. */
   readonly noDeath: number;
   readonly turns: number;
-  /** How it ended: a rout, the boss's defeat, or out of turns with foes left. */
-  readonly ended: 'rout' | 'boss' | 'stalled';
+  /**
+   * How it ended: a rout, the boss's defeat, out of turns with foes left, or stopped once the chance of nobody dying fell
+   * below `MapPlayInput.stopBelow` (`lost`: a run has lost a unit there, and the rest of the map can't change that).
+   */
+  readonly ended: 'rout' | 'boss' | 'stalled' | 'lost';
   readonly units: Readonly<Record<string, SimUnitTally>>;
   readonly groups: readonly { readonly key: string; readonly name: string; readonly className: string; readonly count: number; readonly felled: number }[];
   readonly log: readonly SimTurn[];
@@ -1894,6 +1902,10 @@ export function staffReach(u: SimUnit, item: GameItem, spread: ArmySpread): numb
 export function playMap(input: MapPlayInput, seed: number): MapPlay {
   const s = new MapState(input, createRng(seed));
   while (!s.ended && s.turn < MAX_TURNS) {
+    if (input.stopBelow !== undefined && s.noDeath < input.stopBelow) {
+      s.ended = 'lost';
+      break;
+    }
     // A turn that moved nothing, with no wave to come, would repeat forever: the army can't finish the map.
     if (s.turn > 0 && !s.progress && !s.wavesAhead()) break;
     s.progress = false;
