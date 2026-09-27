@@ -48,6 +48,14 @@
  * from Lv 10, with a seal held or bought there. Each unit's learned skills are tracked (its class's skills as it levels
  * and changes class), so a parent passes the skill the plan names at its child's paralogue entry only when it has
  * learned it by then in that run; otherwise its bottom skill passes, as the game has it.
+ *
+ * Held items (#193): each run holds its boosters, tonics and convoy weapons (`held`, then each map's `finds` after it:
+ * a find tied to a side goal's part arrives only when that part is secured). In a map's preparations (none on the early
+ * forced maps) the plan's uses (`uses`) are made when the run holds the item: a booster adds +2 (+5 HP) to its unit's
+ * stats from then on, clamped at its caps (`booster-at-cap`), before children are read on entry (`booster-to-child`); a
+ * weapon goes to its carrier; then, at the shopping, a tonic adds as much for this map only (past the cap; the same tonic
+ * twice per `tonic-stacking`), a held one first, else bought where an open armory sells it (`item-in-preparations`).
+ * Each use reports the share of runs that made it (`items`): its arrival chance, for an item only some runs hold.
  */
 import { CLASSES, type ClassId, type ClassTier } from '../../game-data/classes';
 import { STATS, type Gender, type Growths, type Modifiers, type Stat } from '../../game-data/stats';
@@ -72,7 +80,7 @@ import { addPoints, mapSupportGains, pairThresholds, pointsOfRank, rankOf } from
 import { playMap, type MapPlay, type SimChase, type SimFoeGroup, type SimGroup, type SimMap, type SimUnit } from './map-play';
 import { createRng, runSeed, type Rng } from './random';
 import type { SimItem } from './sustain';
-import type { GameItem } from '../../game-data/items';
+import { STAT_BOOSTERS, TONICS, statItemGain, type GameItem } from '../../game-data/items';
 import type { StockItem } from '../supply';
 import { buyDown, endpointKit, forgedWeapon, freshWeapon, mapUpkeep, type KitPiece, type MapUpkeep } from './upkeep';
 
@@ -166,6 +174,45 @@ export type RunSimMap = {
   readonly seals?: { readonly master: number; readonly second: number };
   /** Its side goals (#191): each chased or skipped by the plan, paying per part when the play spends its actions in time. */
   readonly sideGoals?: readonly RunSimSideGoal[];
+  /** Held items picked up on it (#193): the run's from the next map (a side goal's only when its part is secured). */
+  readonly finds?: readonly ItemFind[];
+  /** The plan's item uses in its preparations (#193), in order. */
+  readonly uses?: readonly SimItemUse[];
+  /** The map has no preparation phase (the early forced maps): no item is used and nothing is bought before it. */
+  readonly noPreparations?: boolean;
+};
+
+/**
+ * A held item a run can use (#193): a booster, tonic or other item, or a weapon with its own forge and uses left.
+ * `holder` is the unit that holds a weapon at the start (it's already among that unit's weapons); absent: the convoy.
+ */
+export type ItemSource = {
+  readonly id: string;
+  readonly item: string;
+  readonly weapon?: Weapon;
+  readonly uses?: number;
+  readonly holder?: RosterUnit;
+};
+
+/** An item picked up on a map (#193): sure, or only when the side goal part `part` (a `SimChase` id) is secured. */
+export type ItemFind = ItemSource & { readonly part?: string };
+
+/**
+ * A planned item use in a map's preparations (#193, the plan's `PlanItem`): drink a booster, drink (or buy) a tonic,
+ * or hand a weapon to its carrier. `source` names the copy (an `ItemSource` id; `buy` for a tonic to buy).
+ */
+export type SimItemUse = { readonly kind: 'booster' | 'tonic' | 'carry'; readonly item: string; readonly unit: RosterUnit; readonly source: string };
+
+/** A planned item use over the runs (#193). */
+export type ItemUseForecast = SimItemUse & {
+  /** The map's key and label. */
+  readonly key: string;
+  readonly label: string;
+  /**
+   * The share of the runs playing the map with nobody lost before it in which the use was made (the item held, or a
+   * tonic bought): an item that arrives only sometimes reads its arrival chance here. Undefined when none gets there.
+   */
+  readonly share: number | undefined;
 };
 
 /** A side goal as a run plays it (#191): chased parts cost actions in the play (`SimChase`); each secured part pays. */
@@ -186,6 +233,8 @@ export type RunSimInput = {
   readonly secondSealsHeld?: number;
   /** Gold held at the start (#190); absent: none. */
   readonly gold?: number;
+  /** Held items at the start (#193): boosters, tonics and convoy weapons, and weapons the plan may hand from their holders. */
+  readonly held?: readonly ItemSource[];
   /** Maps already played (the chapter log's): a child paralogue's gates read them (#187). */
   readonly cleared?: readonly string[];
   /** The recorded marriages (facts): married from the start of every run. */
@@ -278,8 +327,8 @@ export type GoldSpread = { readonly low: number; readonly median: number; readon
 
 /** One purchase at an armory stop (#190), over the runs that reach the stop with nobody lost. */
 export type ShoppingLine = {
-  /** Why: a rebuy of an item running dry, a seal a promotion needs, or a piece of the endpoint kit. */
-  readonly kind: 'rebuy' | 'seal' | 'kit';
+  /** Why: a rebuy of an item running dry, a seal a promotion needs, a tonic the item plan drinks (#193), or a piece of the endpoint kit. */
+  readonly kind: 'rebuy' | 'seal' | 'tonic' | 'kit';
   readonly action: 'buy' | 'forge';
   readonly item: string;
   /** Who it's for (its id and name). */
@@ -338,6 +387,8 @@ export type RunSim = {
   readonly shopping: readonly ShoppingStop[];
   /** Each side goal on the maps ahead, in map order (#191). */
   readonly sideGoals: readonly SideGoalForecast[];
+  /** Each planned item use on the maps ahead, in map order (#193). */
+  readonly items: readonly ItemUseForecast[];
   /** The stated blind spots it rests on: the map simulation's, then the run simulation's own. */
   readonly blindSpots: readonly (BlindSpotId | RunBlindSpotId)[];
 };
@@ -370,6 +421,10 @@ type Live = {
    * changes class in the run. Skills of classes before the log's aren't known.
    */
   readonly learned: Set<SkillId>;
+  /** Tonics drunk for this map (#193): added to its shown stats until the map's end. */
+  boost: Partial<Record<Stat, number>>;
+  /** What its boosters added (#193), for a child that doesn't read them (`booster-to-child`). */
+  readonly drunk: Partial<Record<Stat, number>>;
 };
 
 /** A purchase a run made at a stop, before it's counted over the runs. */
@@ -403,6 +458,12 @@ export type RunState = {
   /** The plan's class changes (#194), shared by every run, and those this run has made (by index). */
   readonly classChanges: readonly ClassChange[];
   readonly changed: Set<number>;
+  /** Held items not in a unit's hands (#193): boosters, tonics and convoy weapons, by source id. */
+  readonly pool: Map<string, ItemSource>;
+  /** Who holds each held weapon handed out or held from the start (#193), by source id. */
+  readonly carriers: Map<string, RosterUnit>;
+  /** Which of this map's planned uses were made (#193), in `uses` order. */
+  made: boolean[];
 };
 
 /** Class growths by class and gender, per set of assumptions (Conqueror's are assumed). */
@@ -456,6 +517,8 @@ function liveOf(a: ArmyUnit): Live {
     items: [],
     gearKey: '',
     learned: new Set(a.skills.flatMap((n) => SKILL_BY_NAME.get(n) ?? [])),
+    boost: {},
+    drunk: {},
   };
   for (const s of CLASS_SKILLS[a.classId]) if (s.level <= a.level) u.learned.add(s.skill);
   refresh(u);
@@ -568,8 +631,8 @@ function changeClasses(state: RunState, step: RunSimMap, at: number, reading: As
 
 const internalOf = (u: Live, difficulty: Difficulty) => u.level + u.bonus + Math.min(u.count, COUNT_CAP[difficulty]);
 
-/** Rounded stats as the combat math reads them. */
-const shownStats = (u: Live): Record<Stat, number> => Object.fromEntries(STATS.map((s) => [s, Math.floor(u.stats[s] + 1e-9)])) as Record<Stat, number>;
+/** Rounded stats as the combat math reads them, with this map's tonics (#193). */
+const shownStats = (u: Live): Record<Stat, number> => Object.fromEntries(STATS.map((s) => [s, Math.floor(u.stats[s] + 1e-9) + (u.boost[s] ?? 0)])) as Record<Stat, number>;
 
 const fighterOf = (u: Live, stats: Readonly<Record<Stat, number>>): Fighter => ({
   name: u.base.name,
@@ -679,7 +742,9 @@ function childOf(state: RunState, c: ChildRecruit, assumptions: Assumptions): Li
     const p = state.army.get(u);
     if (!p || !classBaseStats(p.classId, p.base.gender)) return undefined;
     const pass = fixed ?? (planned && p.learned.has(planned) ? planned : undefined);
-    return { join: { stats: p.stats, class: p.classId, gender: p.base.gender }, skills: { skills: p.base.skills, ...(pass ? { fixed: pass } : {}) } };
+    // Its boosters drunk before entry feed the child, under `booster-to-child` (#193).
+    const stats = assumptions['booster-to-child'] === 'feeds' ? p.stats : (Object.fromEntries(STATS.map((s) => [s, p.stats[s] - (p.drunk[s] ?? 0)])) as Record<Stat, number>);
+    return { join: { stats, class: p.classId, gender: p.base.gender }, skills: { skills: p.base.skills, ...(pass ? { fixed: pass } : {}) } };
   };
   const a = side(c.parents[0], c.fixed?.[0], c.passes?.[0]);
   const b = side(c.parents[1], c.fixed?.[1], c.passes?.[1]);
@@ -784,14 +849,96 @@ function upkeep(state: RunState, step: RunSimMap, spent: MapUpkeep) {
   state.secondSealsHeld += step.seals?.second ?? 0;
 }
 
+/** A held item's copy for a use (#193): the named one, else another copy of the same item the run holds. */
+function takeFromPool(state: RunState, use: SimItemUse): ItemSource | undefined {
+  let src = state.pool.get(use.source);
+  if (!src) for (const s of state.pool.values()) if (s.item === use.item && !s.holder) (src ??= s);
+  if (src) state.pool.delete(src.id);
+  return src;
+}
+
 /**
- * A map's preparations: its opening recruits join (and its own setups are fielded), its children are read from their
- * parents on entry, then the shopping list in priority order: rebuys, seals with promotions, the endpoint kit (#190).
- * Undefined when the map isn't entered in this run (a closed child paralogue).
+ * The plan's boosters and handovers in a map's preparations (#193): a booster adds its gain to the unit's stats,
+ * clamped at its caps (at the cap it's wasted, or refused and kept, per `booster-at-cap`); a weapon moves to its
+ * carrier from the convoy or from whoever holds it. A use whose item the run doesn't hold, or whose unit isn't in the
+ * army, isn't made.
+ */
+function drinkAndCarry(state: RunState, step: RunSimMap, assumptions: Assumptions) {
+  (step.uses ?? []).forEach((use, j) => {
+    const u = state.army.get(use.unit);
+    if (!u || use.kind === 'tonic') return;
+    if (use.kind === 'booster') {
+      const stat = STAT_BOOSTERS[use.item];
+      if (!stat) return;
+      const cap = capsOf(u)[stat];
+      if (u.stats[stat] >= cap && assumptions['booster-at-cap'] === 'refused') return;
+      if (!takeFromPool(state, use)) return;
+      const gain = Math.max(0, Math.min(cap, u.stats[stat] + statItemGain(stat)) - u.stats[stat]);
+      u.stats[stat] += gain;
+      u.drunk[stat] = (u.drunk[stat] ?? 0) + gain;
+      state.made[j] = true;
+      return;
+    }
+    // A weapon: from the convoy, or from the unit holding it.
+    const holder = state.carriers.get(use.source);
+    if (holder === use.unit) return void (state.made[j] = true);
+    let piece: { weapon: Weapon; uses: number } | undefined;
+    const from = holder ? state.army.get(holder) : undefined;
+    if (from) {
+      const k = from.gear.findIndex((g) => g.weapon.item.name === use.item);
+      if (k >= 0) {
+        piece = from.gear.splice(k, 1)[0]!;
+        refresh(from);
+      }
+    } else {
+      const src = state.pool.get(use.source);
+      if (src?.weapon) {
+        state.pool.delete(src.id);
+        piece = { weapon: src.weapon, uses: src.uses ?? fullUses(src.weapon.item) };
+      }
+    }
+    if (!piece) return;
+    u.gear.push(piece);
+    refresh(u);
+    state.carriers.set(use.source, use.unit);
+    state.made[j] = true;
+  });
+}
+
+/**
+ * The plan's tonics at a map's shopping (#193): a held one first, else one bought where an open armory sells it. Each
+ * adds its gain to the unit's shown stats for this map, past the cap; the same tonic twice per `tonic-stacking`. Left
+ * out when items can't be used in preparations (`item-in-preparations`).
+ */
+function drinkTonics(state: RunState, step: RunSimMap, assumptions: Assumptions) {
+  if (assumptions['item-in-preparations'] !== 'free') return;
+  (step.uses ?? []).forEach((use, j) => {
+    const u = state.army.get(use.unit);
+    const stat = TONICS[use.item];
+    if (!u || use.kind !== 'tonic' || !stat) return;
+    if (u.boost[stat] && assumptions['tonic-stacking'] === 'no-stack') return;
+    if (!takeFromPool(state, use)) {
+      const price = priceIn(step, use.item);
+      if (price === undefined || !pay(state, { kind: 'tonic', action: 'buy', item: use.item, unit: u.base.id, name: u.base.name, cost: price })) return;
+    }
+    u.boost[stat] = (u.boost[stat] ?? 0) + statItemGain(stat);
+    state.made[j] = true;
+  });
+}
+
+/**
+ * A map's preparations: its opening recruits join (and its own setups are fielded), the plan's boosters and handovers
+ * (#193), its children are read from their parents on entry, then the shopping list in priority order: rebuys, seals
+ * with promotions, the plan's tonics (#193), the endpoint kit (#190). A map with no preparation phase has none of the
+ * item uses (the world map's armories still sell before it). Undefined when the map isn't entered in this run (a closed
+ * child paralogue).
  */
 function beforeMap(state: RunState, step: RunSimMap, at: number, assumptions: Assumptions, shop?: Shop): Map<RosterUnit, Live> | undefined {
   if (!entered(state, step)) return undefined;
   for (const a of step.joining) if (!state.army.has(a.id)) join(state, a);
+  state.made = (step.uses ?? []).map(() => false);
+  const prep = !step.noPreparations;
+  if (prep) drinkAndCarry(state, step, assumptions);
   state.arriving = [];
   for (const c of step.children ?? []) {
     if (state.army.has(c.id) || state.arriving.some((u) => u.base.id === c.id) || c.parents[1] !== spouseIn(state, c.parents[0])) continue;
@@ -801,6 +948,7 @@ function beforeMap(state: RunState, step: RunSimMap, at: number, assumptions: As
   const stop = !!step.armory?.length;
   if (shop && stop) rebuy(state, step, shop);
   changeClasses(state, step, at, assumptions['class-change-internal-level']);
+  if (prep) drinkTonics(state, step, assumptions);
   if (shop?.kit && stop) buyKit(state, shop.kit());
   return new Map(step.mapOnly.map((a) => [a.id, liveOf(a)]));
 }
@@ -812,6 +960,9 @@ function beforeMap(state: RunState, step: RunSimMap, at: number, assumptions: As
 function afterMap(state: RunState, step: RunSimMap, at: number, play: MapPlay, rng: Rng | null, difficulty: Difficulty, assumptions: Assumptions, spent?: MapUpkeep) {
   if (spent) upkeep(state, step, spent);
   secure(state, step, play);
+  // Tonics last the map; its finds are held from the next (a side goal's only when its part was secured, #193).
+  for (const u of state.army.values()) u.boost = {};
+  for (const f of step.finds ?? []) if (!f.part || play.chased?.[f.part] === true) state.pool.set(f.id, f);
   earn(state, step.map, play, rng, difficulty, assumptions);
   growSupports(state, play, at, assumptions['support-past-threshold']);
   for (const a of step.later) if (!state.army.has(a.id)) join(state, a);
@@ -971,9 +1122,16 @@ function newState(input: RunSimInput): RunState {
     couples: new Map((input.couples ?? []).map((c) => [pairKey(c[0], c[1]), c])),
     robin: robinOf(input),
     arriving: [],
+    pool: new Map(),
+    carriers: new Map(),
+    made: [],
   };
   for (const [a, b] of input.married ?? []) marry(state, a, b, undefined);
   for (const a of input.army) join(state, a);
+  for (const s of input.held ?? []) {
+    if (s.holder) state.carriers.set(s.id, s.holder);
+    else state.pool.set(s.id, s);
+  }
   return state;
 }
 
@@ -1195,7 +1353,7 @@ function recordStop(s: StopTally, gold: number, receipts: readonly Receipt[] | n
   }
 }
 
-const KIND_ORDER: Readonly<Record<ShoppingLine['kind'], number>> = { rebuy: 0, seal: 1, kit: 2 };
+const KIND_ORDER: Readonly<Record<ShoppingLine['kind'], number>> = { rebuy: 0, seal: 1, tonic: 2, kit: 3 };
 
 /** A stop's shopping list: its lines in priority order (rebuys, seals, kit), the likeliest first within each. */
 function shoppingStop(step: RunSimMap, s: StopTally): ShoppingStop {
@@ -1228,6 +1386,9 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
   const stops = input.maps.map(() => ({ runs: 0, gold: [] as number[], lines: new Map<string, { receipt: Receipt; runs: number }>() }));
   // Runs securing each side goal, by map index and goal (#191); counted over the runs in `golds`.
   const goals = new Map<string, number>();
+  // Runs entering each map with nobody lost, and those making each of its planned item uses (#193).
+  const entering = input.maps.map(() => 0);
+  const made = input.maps.map((m) => (m.uses ?? []).map(() => 0));
   // Each stop's next stop: a rebuy covers what the plan spends until then.
   const nextStop = input.maps.map((_, i) => {
     let j = i + 1;
@@ -1261,6 +1422,8 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
       }
       // A child paralogue whose gates don't hold in this run isn't played.
       if (!extra) continue;
+      entering[i]!++;
+      state.made.forEach((ok, j) => ok && made[i]![j]!++);
       if (step.armory?.length) recordStop(stops[i]!, arriving, receipts);
       const lineup = lineupOf(state, (lineups[i] ??= plan.lineup(i)), extra, interner);
       const play = playMap(playInput(state, step, lineup), runSeed(rs, i));
@@ -1300,6 +1463,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
     sideGoals: input.maps.flatMap((m, i) =>
       (m.sideGoals ?? []).map((g) => ({ id: g.id, label: g.label, key: m.key, chase: g.chase, secured: golds[i]!.length ? (goals.get(`${i}|${g.id}`) ?? 0) / golds[i]!.length : undefined })),
     ),
+    items: input.maps.flatMap((m, i) => (m.uses ?? []).map((u, j) => ({ ...u, key: m.key, label: m.label, share: entering[i]! ? made[i]![j]! / entering[i]! : undefined }))),
     units: [...atEnd.entries()].map(([id, e]) => {
       const [cls, { caps, levelCap: top }] = [...e.classes.entries()].sort((a, b) => b[1].runs - a[1].runs)[0]!;
       return {

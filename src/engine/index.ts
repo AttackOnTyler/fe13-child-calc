@@ -54,13 +54,14 @@ import { simMapById, type SimMapOptions } from './sim/sim-map';
 import { runSeed } from './sim/random';
 import { planLineups, simulateRuns, type RunSim, type RunSimInput } from './sim/run-sim';
 import { mapUpkeep, type MapUpkeep } from './sim/upkeep';
-import { FLAWLESS_RUNS, FLAWLESS_SEED, flawlessCeiling, flawlessChance, flawlessInput, sureIncome, type FlawlessChance, type FlawlessOptions } from './flawless';
+import { FLAWLESS_RUNS, FLAWLESS_SEED, flawlessCeiling, flawlessChance, flawlessInput, runItemSources, sureIncome, type FlawlessChance, type FlawlessOptions } from './flawless';
 import { simulateCeiling, type Ceiling } from './sim/ceiling';
 import { coupleKey, endpointCoverage, nonStarters, seedPlan, type EndpointCoverage, type SeedContext, type SeedOptions } from './solve/seed';
 import { milestones, type Milestone } from './milestones';
 import { editCost, solveStep, type EditCost, type EditCostInput, type SolveStep, type SolveStepInput } from './solve/step';
 import { planEdits } from './solve/edits';
-import type { Plan, PlanLineup, PlanRobin } from './solve/plan';
+import type { Plan, PlanLineup, PlanPin, PlanRobin } from './solve/plan';
+import { beforeMapItems, itemPlanOf, type BeforeMapItem, type ItemPlan, type ItemUsed } from './item-plan';
 import { BLIND_SPOTS, type BlindSpot } from './assumptions';
 import { matchBuilds, matchTemplate, shownMatch, templateSummary, templatesFor } from './builds';
 import type { SkillId } from '../game-data/skills';
@@ -136,7 +137,7 @@ export { type MapWaves, type Wave, type WaveGroup } from './waves';
 export { type ArmySpread, type SimItem } from './sim/sustain';
 export { EXPOSURE_RISK, MAX_TURNS, type MapPlay, type MapPlayInput, type SimAct, type SimChase, type SimFight, type SimFoeGroup, type SimGroup, type SimMap, type SimStance, type SimTurn, type SimUnit, type SimUnitTally, type SimWave } from './sim/map-play';
 export { simLineup, type SimMapOptions } from './sim/sim-map';
-export { levelCap, type ArmyUnit, type ChildRecruit, type GoldSpread, type RunSim, type RunSimInput, type RunSimMap, type RunSimMapResult, type ShoppingLine, type ShoppingStop, type StatSpread, type UnitForecast, type SupportForecast, type MarriageForecast, type RunSimSideGoal, type SideGoalForecast } from './sim/run-sim';
+export { levelCap, type ArmyUnit, type ChildRecruit, type GoldSpread, type RunSim, type RunSimInput, type RunSimMap, type RunSimMapResult, type ShoppingLine, type ShoppingStop, type StatSpread, type UnitForecast, type SupportForecast, type MarriageForecast, type RunSimSideGoal, type SideGoalForecast, type ItemSource, type ItemFind, type SimItemUse, type ItemUseForecast } from './sim/run-sim';
 export { KIT_FORGE_MT, VULNERARY_VALUE, type MapUpkeep } from './sim/upkeep';
 export { SIDE_GOAL_IDS, chaseByDefault, sideGoalById, withSideGoalPin, withSideGoalSecured, type SideGoal, type SideGoalChoice, type SideGoalDecision, type SideGoalId, type SideGoalPart, type SideGoalPlan, type SideGoalRecord } from './side-goals';
 export { rewardsValue, withRenown, type RenownAhead, type RenownStop, type RunRenown } from './renown';
@@ -145,7 +146,10 @@ export { FLAWLESS_RUNS, FLAWLESS_SEED, fighterOf, type FlawlessChance, type Flaw
 export { effectiveCaps, type Ceiling, type CeilingUnit } from './sim/ceiling';
 export type { LineupPlan } from './sim/run-sim';
 export { marriagePins } from './solve/plan';
-export type { CloseCall, Plan, PlanItem, PlanLineup, PlanPin, PlanProposal, PlanRobin, PlanSeal, Position, PrunedComp, Roadmap, SolveCursor, Wishlist, WishlistChild, WishlistReserve, WishlistUnit } from './solve/plan';
+export { NO_PREPARATIONS } from '../game-data/chapters';
+export { STAT_BOOSTERS, TONICS, statItemGain } from '../game-data/items';
+export { hasPreparations, heldKind, statOfItem, withItemPin, withItemsUsed, type BeforeMapItem, type HeldKind, type ItemIdle, type ItemPlan, type ItemPlanRow, type ItemUsed, type PlanSource, type TonicBuys } from './item-plan';
+export type { CloseCall, ItemPin, Plan, PlanItem, PlanLineup, PlanPin, PlanProposal, PlanRobin, PlanSeal, Position, PrunedComp, Roadmap, SolveCursor, Wishlist, WishlistChild, WishlistReserve, WishlistUnit } from './solve/plan';
 export type { EndpointCoverage, SeedOptions } from './solve/seed';
 export type { ClassMilestone, Milestone, MilestonePoint, RecruitMilestone, SealSource, SkillMilestone, SupportMilestone, SupportWindow } from './milestones';
 export { EDIT_COST_BUDGET, EDIT_KINDS, SEARCH_RUNS, rescoreSeed, SOLVE_SECONDS, STEP_BUDGET, type EditCost, type EditCostInput, type EditKind, type SolveStep, type SolveStepInput } from './solve/step';
@@ -618,6 +622,20 @@ export type Engine = {
    * roadmap, preconditions first. Each has a stable `id`. Cheap: no map is played.
    */
   milestones(run: Run, plan: Plan): readonly Milestone[];
+  /**
+   * The item plan of a plan (#193): one row per held item (owned now, or picked up on a map still to play) with its
+   * planned use or carrier timeline, the pins that set it, and, given the plan's flawless chance, its arrival chance
+   * (the share of runs that made its first use); an item with none says why (Boots outside the model, no rank for the
+   * Arms Scroll, other play deciding it, no gain) and what it sells for. Tonics to buy are summed per map.
+   */
+  itemPlan(run: Run, plan: Plan, options?: { readonly chance?: FlawlessChance; readonly pins?: readonly PlanPin[] }): ItemPlan;
+  /** A map's "before this map" list on a plan (#193): boosters and tonics to drink, weapons to hand over. */
+  beforeThisMap(run: Run, plan: Plan, map: string): readonly BeforeMapItem[];
+  /**
+   * The items used step of Record results (#193): the entry's items used as recorded, else pre-filled from the "before
+   * this map" list of `plan`: the plan as it stood before the entry (the seed of the run up to the entry before it).
+   */
+  itemsUsed(run: Run, entry: string, plan: Plan | undefined): { readonly recorded: boolean; readonly items: readonly ItemUsed[] };
 };
 
 /** One combat for `Engine.combatExp`. */
@@ -1762,7 +1780,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       const ctx = seedContext(run);
       const options = { ...(pins ? { pins } : {}), ...(roleOf ? { roleOf } : {}) };
       const lunaticPlus = run.roster.run.difficulty === 'lunatic-plus';
-      const pinnedKeys = new Set((pins ?? []).map((p) => coupleKey(p.couple)));
+      const pinnedKeys = new Set((pins ?? []).flatMap((p) => (p.kind === 'marriage' ? [coupleKey(p.couple)] : [])));
       return solveStep(
         input,
         {
@@ -1781,6 +1799,23 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       );
     },
     milestones: (run, plan) => milestones(run, plan, assumptions),
+    itemPlan: (run, plan, options = {}) => itemPlanOf(runItemSources(run).sources, plan.roadmap.items, options.chance?.items, options.pins),
+    beforeThisMap: (run, plan, map) => {
+      const { steps, sources } = runItemSources(run);
+      const key = steps.find((s) => s.map === map)?.key;
+      return key ? beforeMapItems(sources, plan.roadmap.items, key) : [];
+    },
+    itemsUsed: (run, entry, plan) => {
+      const i = run.entries.findIndex((e) => e.id === entry);
+      const e = run.entries[i];
+      if (!e) return { recorded: false, items: [] };
+      if (e.itemsUsed) return { recorded: true, items: e.itemsUsed };
+      if (!plan) return { recorded: false, items: [] };
+      const before: Run = { ...run, entries: run.entries.slice(0, i) };
+      const { steps, sources } = runItemSources(before);
+      const key = steps.find((s) => s.map === e.map)?.key;
+      return { recorded: false, items: key ? beforeMapItems(sources, plan.roadmap.items, key).map((b) => ({ item: b.item, unit: b.unit })) : [] };
+    },
     editCost: (input) => editCost(input, (plan, first, count) => simulateRuns(planInput(input.run, plan, input.roleOf), input.seed, count, assumptions, first).samples),
     roadmapLineups: (run, plan, options = {}) => lineupsOf(run, plan, options.seed ?? FLAWLESS_SEED, options.roleOf),
   };

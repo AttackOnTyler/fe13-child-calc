@@ -2433,7 +2433,7 @@ function renderParts(parts: readonly Part[]): void {
                 return (u: RosterUnit) => deployRoleOf(u, roster, roles);
               })(),
               // The seed plan (#198), as the Run view's flawless chance takes it: the shopping list reads the same runs.
-              plan: (roleOf) => engine.seedPlan(run, { pins: marriagePins(roster), roleOf }),
+              plan: (roleOf) => engine.seedPlan(run, { pins: [...marriagePins(roster), ...(run.itemPins ?? [])], roleOf }),
               excluded: prepExcluded,
               setExcluded: (u, out) => {
                 const next = new Set(prepExcluded);
@@ -2467,8 +2467,8 @@ function renderParts(parts: readonly Part[]): void {
                 let roles: ReturnType<typeof engine.roles> | undefined;
                 return (u: RosterUnit) => deployRoleOf(u, roster, (roles ??= engine.roles(roster, planSettings())));
               })(),
-              // The marriages pinned on the Plan page: the seed plan behind the flawless chance keeps them (#198).
-              pins: () => marriagePins(roster),
+              // The marriages pinned on the Plan page and the run's item pins: the seed plan keeps them (#198, #193).
+              pins: () => [...marriagePins(roster), ...(run.itemPins ?? [])],
               recording,
               setRecording: (r) => {
                 recording = r;

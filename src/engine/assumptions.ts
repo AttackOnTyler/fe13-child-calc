@@ -38,6 +38,8 @@ import {
   SFF_CHILD_BASES,
   SPEC_MAP_SIMULATION,
   SF_STAVES,
+  ITEM_PLAN_GRILLING,
+  SF_ITEMS,
   SF_CLASS_BASES,
   RESEARCH_SUPPORT_GROWTH,
   SF_SUPPORT_BASICS,
@@ -94,6 +96,14 @@ type AssumptionValues = {
   'chrom-wedding-tie-order': 'sf' | 'jp';
   /** A tome's miss: it spends a use (the series rule for tomes and staves), or it's free like a physical miss. */
   'tome-miss-use': 'costs-a-use' | 'free';
+  /** A booster a parent drank before its child's paralogue entry: it feeds the child's join stats, or it doesn't. */
+  'booster-to-child': 'feeds' | 'not';
+  /** A booster used at the cap: it's spent for nothing (wasted), or the game won't use it (kept for someone else). */
+  'booster-at-cap': 'wasted' | 'refused';
+  /** The same tonic twice on one unit for one map: it doesn't stack (the second does nothing), or it stacks. */
+  'tonic-stacking': 'no-stack' | 'stacks';
+  /** Using an item in preparations: free, or it can't be done (a tonic would cost an action on the map, and is left out). */
+  'item-in-preparations': 'free' | 'not-in-preparations';
 };
 
 export type AssumptionId = keyof AssumptionValues;
@@ -462,6 +472,65 @@ export const ASSUMPTION_REGISTRY: { readonly [K in AssumptionId]: AssumptionDef<
     format: (v) => (v === 'costs-a-use' ? 'Spends a use (the series rule)' : 'Free, like a physical miss'),
     parse: (raw) => (raw === 'costs-a-use' || raw === 'free' ? raw : undefined),
     affects: 'weapon upkeep and rebuys in the simulated runs',
+  }),
+  'booster-to-child': entry({
+    id: 'booster-to-child',
+    label: 'A parent’s booster feeding its child’s join stats',
+    why:
+      'A child’s join stats are read from its parents on entering its paralogue. The JP 2ch wiki says backing out, using stat boosters and ' +
+      're-entering changed them, so a booster a parent drinks before entry is taken to feed the child through the inheritance math. No ' +
+      'English source tests it (the item plan’s grilling lists it as unverified). An open rule until a paralogue entered before and after a ' +
+      'booster settles it.',
+    sources: [JP_CHILDREN, RESEARCH_CHILD_RECRUITMENT, ITEM_PLAN_GRILLING],
+    default: 'feeds',
+    alternatives: [{ label: 'It doesn’t: the child reads the parent without its boosters', value: 'not' }],
+    input: 'choice',
+    format: (v) => (v === 'feeds' ? 'It feeds the child (read on entry)' : 'It doesn’t feed the child'),
+    parse: (raw) => (raw === 'feeds' || raw === 'not' ? raw : undefined),
+    affects: 'children’s join stats in the simulated runs, and where the item plan puts boosters',
+  }),
+  'booster-at-cap': entry({
+    id: 'booster-at-cap',
+    label: 'A booster used at the cap',
+    why:
+      'A booster never raises the cap (SF items). Whether the game lets one be used on a unit already at its cap in that stat, spending it ' +
+      'for nothing, isn’t published; the item plan’s grilling reads it as wasted. An open rule until one is tried at the cap.',
+    sources: [SF_ITEMS, ITEM_PLAN_GRILLING],
+    default: 'wasted',
+    alternatives: [{ label: 'Refused: the game won’t use it, so it stays held', value: 'refused' }],
+    input: 'choice',
+    format: (v) => (v === 'wasted' ? 'Spent for nothing (wasted)' : 'Refused (it stays held)'),
+    parse: (raw) => (raw === 'wasted' || raw === 'refused' ? raw : undefined),
+    affects: 'boosters planned on a unit at its cap in the simulated runs',
+  }),
+  'tonic-stacking': entry({
+    id: 'tonic-stacking',
+    label: 'The same tonic twice',
+    why:
+      'Different tonics stack and a tonic can pass the cap (the item plan’s grilling), but whether a second of the same tonic on one unit ' +
+      'adds another +2 for the map isn’t published; the gold research reads tonics as not stacking. An open rule until one is tried.',
+    sources: [RESEARCH_GOLD, ITEM_PLAN_GRILLING],
+    default: 'no-stack',
+    alternatives: [{ label: 'It stacks: each adds its +2 (+5 HP)', value: 'stacks' }],
+    input: 'choice',
+    format: (v) => (v === 'no-stack' ? 'Doesn’t stack (the second does nothing)' : 'Stacks'),
+    parse: (raw) => (raw === 'no-stack' || raw === 'stacks' ? raw : undefined),
+    affects: 'tonics in the simulated runs',
+  }),
+  'item-in-preparations': entry({
+    id: 'item-in-preparations',
+    label: 'Using an item in preparations',
+    why:
+      'The item plan drinks boosters and tonics, and hands weapons over, in a map’s preparations, at no action on the map. That items can ' +
+      'be used from the preparations menu at no cost is the item plan’s reading, not a tested fact. If they can’t, a tonic costs its ' +
+      'unit an action on the map, which the plan leaves out, so no tonic is used (a booster is drunk on an earlier map instead).',
+    sources: [ITEM_PLAN_GRILLING],
+    default: 'free',
+    alternatives: [{ label: 'Not in preparations: tonics are left out', value: 'not-in-preparations' }],
+    input: 'choice',
+    format: (v) => (v === 'free' ? 'Free, in preparations' : 'Not in preparations (tonics left out)'),
+    parse: (raw) => (raw === 'free' || raw === 'not-in-preparations' ? raw : undefined),
+    affects: 'tonics in the simulated runs',
   }),
 };
 

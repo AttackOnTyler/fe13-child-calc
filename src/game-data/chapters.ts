@@ -206,6 +206,13 @@ export const SEAL_RULES = {
 } as const;
 
 /**
+ * Maps with no preparation phase (#193; spec #175, The preparation page): the early forced maps, whose deploy count is
+ * a fixed number with every unit on the map fielded (FEW chapter pages: Premonition 2, Prologue 4, Chapter 1 4+2,
+ * Chapter 2 8+1), where every later map gives a range to pick from. Nothing is bought, drunk or handed over before them.
+ */
+export const NO_PREPARATIONS: ReadonlySet<string> = new Set(['premonition', 'prologue', 'chapter-1', 'chapter-2']);
+
+/**
  * A chapter-data disagreement between FEW and SF (research/chapter-data §7), or where a source is silent (#132): the
  * value used, and whether it's settled.
  */

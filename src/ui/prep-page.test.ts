@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_ROSTER, addEntry, createEngine, deployCount, deployRoleOf, editEntry, foesOf, forcedOn, itemByName, latestEntry, prepUnits, runFromRoster, simLineup, suggestDeployment, unitName, withRun, type Difficulty, type Run, type SimGroup, type Snapshot } from '../engine';
-import { fighterOf, noDeathReadout, shoppingReadout } from './prep-page';
+import { beforeThisMapReadout, fighterOf, noDeathReadout, shoppingReadout } from './prep-page';
 
 describe('the shopping list (#190)', () => {
   const engine = createEngine();
@@ -23,6 +23,30 @@ describe('the shopping list (#190)', () => {
     const run = atLatest(played(all.slice(0, -2)), (s) => ({ ...s, gold: 0 }));
     expect(shoppingReadout(engine, run, { runs: 1 }).rows).toEqual([]);
     expect(shoppingReadout(engine, played(all), { runs: 1 })).toMatchObject({ title: 'Shopping list', rows: [] });
+  });
+});
+
+describe('the “before this map” list (#193)', () => {
+  const engine = createEngine();
+  const facts = withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal', gender: 'M', asset: 'mag', flaw: 'hp' });
+  const played = (maps: readonly string[]) => maps.reduce((r, m, i) => addEntry(r, m, i + 1), runFromRoster(facts));
+  const all = engine.mapOrder(played([])).steps.map((s) => s.map);
+
+  it('lists the boosters, tonics and handovers the plan uses in this map’s preparations', () => {
+    const run = editEntry(played(all.slice(0, -2)), 'e1', (s) => ({ ...s, convoy: [{ item: 'Levin Sword', uses: 25 }] }), 1);
+    const plan = engine.seedPlan(run);
+    const items = [
+      { item: 'Energy Drop', unit: 'chrom' as const, key: 'endgame', source: 'held:Energy Drop#0' },
+      { item: 'Strength Tonic', unit: 'chrom' as const, key: 'endgame', source: 'buy' },
+      { item: 'Levin Sword', unit: 'robin' as const, key: 'endgame', source: 'held:convoy:Levin Sword#0' },
+    ];
+    const r = beforeThisMapReadout(engine, run, 'endgame', { ...plan, roadmap: { ...plan.roadmap, items } });
+    expect(r.rows).toEqual(['Drink Energy Drop: Chrom', 'Drink Strength Tonic: Chrom (buy it first: 150G)', 'Hand over Levin Sword: the convoy → Robin (M)']);
+    expect(beforeThisMapReadout(engine, run, 'chapter-25', { ...plan, roadmap: { ...plan.roadmap, items } })).toEqual({ note: 'The plan uses no items before this map.', rows: [] });
+  });
+
+  it('says a map with no preparation phase uses nothing before it', () => {
+    expect(beforeThisMapReadout(engine, played([]), 'prologue', undefined).note).toBe('No preparation phase: the game fields everyone on this map, so nothing is used before it.');
   });
 });
 
