@@ -202,7 +202,7 @@ export type SimChase = { readonly id: string; readonly actions: number; readonly
 
 /**
  * An action other than an attack (#182): a heal (one pair, or every pair in reach with Fortify), a Rescue out of
- * enemy phase, a potion on the unit's own lead, a Dance (the target acts again) or a Rally (every other pair's stats
+ * enemy phase, a potion on the unit's own lead (its own, or traded over, `from`), a Dance (the target acts again) or a Rally (every other pair's stats
  * up for the turn); a bait (#183): the front waits in the foes' reach, to take their attack and counter; a talk
  * (#184) to a recruit (`target`), which spends the talker's action; and a side goal's action (#191, `target` its id).
  */
@@ -218,6 +218,8 @@ export type SimAct = {
   readonly reach?: number;
   /** HP restored (expected, for a staff). */
   readonly hp?: number;
+  /** A potion traded over from another unit (a trade costs no action): the unit it came from. */
+  readonly from?: string;
 };
 
 export type SimFight = {
@@ -341,7 +343,7 @@ type Action =
   /** A staff heal: one pair, or each pair in reach (Fortify), each by its expected HP. */
   | { readonly kind: 'heal'; readonly group: number; readonly item: number; readonly reach: number; readonly heals: readonly { readonly group: number; readonly hp: number }[]; readonly value: number }
   | { readonly kind: 'rescue'; readonly group: number; readonly item: number; readonly reach: number; readonly target: number; readonly value: number }
-  | { readonly kind: 'item'; readonly group: number; readonly item: number; readonly hp: number; readonly value: number }
+  | { readonly kind: 'item'; readonly group: number; readonly item: number; readonly holder: number; readonly hp: number; readonly value: number }
   | { readonly kind: 'dance'; readonly group: number; readonly target: number; readonly value: number }
   | { readonly kind: 'rally'; readonly group: number; readonly value: number }
   | { readonly kind: 'bait'; readonly group: number; readonly risk: number; readonly value: number };
@@ -559,6 +561,10 @@ class MapState {
   private readonly phaseSurvival = new Map<number, { readonly start: number; readonly hits: { readonly g: number; readonly hp: number }[] }>();
   /** Whether a wall drew more than one foe this map (the `walls-draw-foes` blind spot applies). */
   walled = false;
+  /** Whether a potion was traded over this map (the `potions-traded` blind spot applies). */
+  traded = false;
+  /** Whether a heal or potion restored HP this turn: the army is recovering, and needn't engage (see `engage`). */
+  private recovered = false;
   /** This turn, the front kept out of the fighting to press the boss (see `keepPresser`); -1 none, undefined not decided. */
   private reserved: number | undefined;
   /** Foes on the field at the start of the first turn, and whether this turn starts with as many or more (`pressing`). */
@@ -807,6 +813,7 @@ class MapState {
   /** The start of a turn: last turn's Rally and Rescues wear off. HP carries over: only actions buy it back (#182). */
   startTurn() {
     this.bossHit = false;
+    this.recovered = false;
     this.phaseSurvival.clear();
     this.safe.clear();
     this.exposed.clear();
@@ -1239,7 +1246,21 @@ class MapState {
         };
         const cur: 0 | 1 = was.kind === 'together' ? was.front : 0;
         const other: 0 | 1 = cur === 0 ? 1 : 0;
-        const front = talker ?? (risk(other) < risk(cur) - EPS ? other : cur);
+        // As safe either way, with the same EXP priority: the sturdier unit fronts (the second realism pass), the HP it
+        // keeps through the worst foe's attack, as a careful player puts the wall where the foes come.
+        const sturdy = (k: 0 | 1) => {
+          const a = p.together![k]!;
+          let left = Infinity;
+          for (const f of ctx.threats) {
+            const ex = this.exchangeFor(a, undefined, f, 'enemy', this.hp[a.unit]!);
+            left = Math.min(left, ex.survive * ex.leadHp);
+          }
+          return left;
+        };
+        const rOther = risk(other);
+        const rCur = risk(cur);
+        const even = ctx.threats.length > 0 && Math.abs(rOther - rCur) <= EPS && rCur < Infinity && (!this.ranked || this.ranks[units[0]] === this.ranks[units[1]]);
+        const front = talker ?? (rOther < rCur - EPS || (even && sturdy(other) >= sturdy(cur) + 1) ? other : cur);
         p.stance = { kind: 'together', front };
         if (was.kind === 'apart') change = 'pair-up';
         else if (front !== was.front) change = 'switch';
@@ -1567,10 +1588,12 @@ class MapState {
    * When nobody is in the foes' reach yet this turn and foes are left, the army engages once, with the least risk: the
    * safest attack by anyone (whatever its risk), or a bait (a front waits in reach, to take one attack and counter),
    * whichever risks less. Otherwise holding back would never finish the map. A turn with a talk (#184) has moved the
-   * map on already: nobody needs to.
+   * map on already: nobody needs to. Nor does a turn that restored HP (the second realism pass): the army is healing up
+   * before the risky engagement, as a careful player does, and engages once it can't (a hurt front drinking a potion
+   * left only a fragile one to engage, at a near-certain death).
    */
   engage(ctx: PolicyContext): Action | undefined {
-    if (this.exposed.size || !this.foes.length || this.acts.some((a) => a.kind === 'talk')) return undefined;
+    if (this.exposed.size || this.recovered || !this.foes.length || this.acts.some((a) => a.kind === 'talk')) return undefined;
     // Nothing left that attacks (only bosses holding their ground): waiting costs nothing, so a careful player heals up
     // before the risky attack, while a staff can still lift a hurt front (the realism pass).
     if (!ctx.threats.length && this.healingLeft()) return undefined;
@@ -1610,6 +1633,22 @@ class MapState {
     return best?.action;
   }
 
+  /** The army's units on the field this turn (fronts and their backs; not NPCs): who can trade a potion over. */
+  private fielded(): number[] {
+    const out: number[] = [];
+    this.front.forEach((a, gi) => {
+      if (this.npcFronts.has(gi)) return;
+      out.push(a.unit);
+      if (a.back !== undefined) out.push(a.back);
+    });
+    return out;
+  }
+
+  /** Whether any unit of the army on the field still holds a potion with uses. */
+  private potionsLeft(): boolean {
+    return this.fielded().some((u) => this.kits[u]!.potions.some((p) => this.uses[u]![p.item]! > 0));
+  }
+
   /** Whether a staff with uses could still heal an armed front that's hurt (a healer that acted heals next turn). */
   private healingLeft(): boolean {
     const hurt = this.front.some((a, gi) => this.armed(gi) && !this.npcFronts.has(gi) && this.hp[a.unit]! < this.units[a.unit]!.fighter.stats.hp);
@@ -1638,7 +1677,7 @@ class MapState {
       if (ctx.acted.has(gi)) continue;
       const kit = this.kitOf(gi);
       if (kit.dances) held.add(gi);
-      else if ((kit.staves.length || kit.potions.length) && this.armed(gi)) {
+      else if ((kit.staves.length || kit.potions.length || this.potionsLeft()) && this.armed(gi)) {
         const own = this.sustainOfCached(gi, ctx);
         if (own && own.value > (this.bestAttackOf(gi, ctx)?.value ?? 0)) held.add(gi);
       }
@@ -1759,7 +1798,7 @@ class MapState {
   private sustainOfCached(gi: number, ctx: PolicyContext): Action | undefined {
     if (ctx.sustain.has(gi)) return ctx.sustain.get(gi);
     const kit = this.kitOf(gi);
-    const a = kit.staves.length || kit.potions.length ? this.sustainOf(gi, ctx) : undefined;
+    const a = kit.staves.length || kit.potions.length || (this.armed(gi) && this.potionsLeft()) ? this.sustainOf(gi, ctx) : undefined;
     ctx.sustain.set(gi, a);
     return a;
   }
@@ -1774,10 +1813,21 @@ class MapState {
       if (a.value > 0 && (!best || a.value > best.value)) best = a;
     };
     const hpOf = (t: number) => this.hp[this.front[t]!.unit]!;
-    for (const p of kit.potions) {
-      if (uses[p.item]! <= 0) continue;
-      const hp = Math.min(p.heal, this.maxHp(gi) - hpOf(gi));
-      consider({ kind: 'item', group: gi, item: p.item, hp, value: this.healWorth(gi, hp, ctx) });
+    // A potion: its own, or one traded from another unit of the army on the field (a trade costs no action; the second
+    // realism pass), the holder's with the most uses left first.
+    const own = this.front[gi]!.unit;
+    let pick: { holder: number; item: number; heal: number; rank: number } | undefined;
+    for (const holder of this.armed(gi) ? this.fielded() : [own]) {
+      for (const p of this.kits[holder]!.potions) {
+        const left = this.uses[holder]![p.item]!;
+        if (left <= 0) continue;
+        const rank = p.heal * 1e6 + (holder === own ? 1e5 : 0) + left;
+        if (!pick || rank > pick.rank) pick = { holder, item: p.item, heal: p.heal, rank };
+      }
+    }
+    if (pick) {
+      const hp = Math.min(pick.heal, this.maxHp(gi) - hpOf(gi));
+      consider({ kind: 'item', group: gi, item: pick.item, holder: pick.holder, hp, value: this.healWorth(gi, hp, ctx) });
     }
     for (const s of kit.staves) {
       if (uses[s.item]! <= 0 || s.reach <= 0) continue;
@@ -1812,10 +1862,13 @@ class MapState {
     const lead = this.units[unit]!;
     const t = this.tallies.get(lead.id)!;
     const idOf = (gi: number) => this.units[this.front[gi]!.unit]!.id;
-    const spend = (item: number) => {
-      this.uses[unit]![item]!--;
-      const name = lead.items![item]!.item.name;
-      t.used[name] = (t.used[name] ?? 0) + 1;
+    // A use of an item, from the unit holding it (a potion traded over is the holder's use).
+    const spend = (item: number, holder = unit) => {
+      this.uses[holder]![item]!--;
+      const u = this.units[holder]!;
+      const name = u.items![item]!.item.name;
+      const ht = this.tallies.get(u.id)!;
+      ht.used[name] = (ht.used[name] ?? 0) + 1;
       return name;
     };
     const forget = (gi: number) => {
@@ -1838,7 +1891,7 @@ class MapState {
         const item = spend(a.item);
         for (const h of a.heals) {
           this.hp[this.front[h.group]!.unit]! += h.hp;
-          if (h.hp > 0) this.progress = true;
+          if (h.hp > 0) this.progress = this.recovered = true;
           if (h.hp > 0 && this.exposed.has(h.group)) this.reclaim(h.group);
           forget(h.group);
           this.acts.push({ kind: 'heal', unit: lead.id, target: idOf(h.group), item, reach: a.reach, hp: h.hp });
@@ -1852,12 +1905,13 @@ class MapState {
         return;
       }
       case 'item': {
-        const item = spend(a.item);
+        const item = spend(a.item, a.holder);
+        if (a.holder !== unit) this.traded = true;
         this.hp[unit]! += a.hp;
-        if (a.hp > 0) this.progress = true;
+        if (a.hp > 0) this.progress = this.recovered = true;
         if (a.hp > 0 && this.exposed.has(a.group)) this.reclaim(a.group);
         forget(a.group);
-        this.acts.push({ kind: 'item', unit: lead.id, item, hp: a.hp });
+        this.acts.push({ kind: 'item', unit: lead.id, item, hp: a.hp, ...(a.holder !== unit ? { from: this.units[a.holder]!.id } : {}) });
         return;
       }
       case 'dance': {
@@ -2187,6 +2241,7 @@ export function playMap(input: MapPlayInput, seed: number): MapPlay {
   if (s.kits.some((k) => k.rally)) spots.push('rally-reaches-every-pair');
   if (s.splitAny) spots.push('attack-stance-adjacency');
   if (s.walled) spots.push('walls-draw-foes');
+  if (s.traded) spots.push('potions-traded');
   if (s.npcAny) spots.push('npc-kills');
   if (s.npcUnarmed) spots.push('npc-screened');
   if (s.talked) spots.push('talk-reaches');
