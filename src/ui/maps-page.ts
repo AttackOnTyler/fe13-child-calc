@@ -3,7 +3,7 @@
  * data on one difficulty: conditions, recruits and forced units, bosses, enemy groups with their triggers,
  * reinforcements, items, shop and the Lunatic+ rule.
  */
-import type { BossRow, ChapterData, ChapterDifficulty, Difficulty, EnemyGroup, Engine } from '../engine';
+import type { BossRow, ChapterData, ChapterDifficulty, Difficulty, EnemyGroup, Engine, Wave, WaveGroup } from '../engine';
 import { LUNATIC_PLUS, REINFORCEMENT_RULE, unitName, type RosterUnit } from '../engine';
 import { h } from './dom';
 import { guide } from './guide';
@@ -131,6 +131,46 @@ function enemyTable(groups: readonly EnemyGroup[]): HTMLElement {
   );
 }
 
+/** When a wave comes: its turns (`Turn 5`, `Turns 3–5`, `Turns 3, 5`), every turn for unlimited ones, or its condition. */
+function waveWhen(w: Wave): string {
+  if (w.everyTurnFrom !== undefined) return `Every turn from ${w.everyTurnFrom}${w.perTurn ? `, ${w.perTurn} a turn` : ''}, of these kinds`;
+  const t = w.turns;
+  if (!t.length) return w.condition ?? w.label;
+  if (t.length === 1) return `Turn ${t[0]}`;
+  const run = t.every((x, i) => i === 0 || x === t[i - 1]! + 1);
+  return run ? `Turns ${t[0]}–${t[t.length - 1]}` : `Turns ${t.join(', ')}`;
+}
+
+const plural = (cls: string) => (/(?:Hero)$/.test(cls) ? `${cls}es` : `${cls}s`);
+
+function waveGroupText(g: WaveGroup): string {
+  const who = g.name ? `${g.name} (${g.class})` : g.count > 1 ? plural(g.class) : g.class;
+  const weapons = g.items.filter((i) => !i.drop).map((i) => i.name);
+  const drops = g.items.filter((i) => i.drop).map((i) => i.name);
+  const from = g.from ? (/^\w+ from /.test(g.from) ? `, ${g.from}` : `, from ${g.from}`) : '';
+  return `${g.count} ${who}${weapons.length ? ` with ${weapons.join(' and ')}` : ''}${drops.length ? ` dropping ${drops.join(' and ')}` : ''}${from}${g.note ? ` (${g.note})` : ''}`;
+}
+
+/** The Maps page's reinforcements (#178): each wave's timing on the difficulty shown, and a line per foe group. */
+export function waveLines(waves: readonly Wave[]): { readonly when: string; readonly groups: readonly string[] }[] {
+  return waves.map((w) => ({ when: waveWhen(w), groups: w.groups.map(waveGroupText) }));
+}
+
+function reinforcements(engine: Engine, m: ChapterData, d: ChapterDifficulty): HTMLElement | null {
+  const { waves, notes, unparsed } = engine.mapWaves(m.id, d);
+  if (!waves.length && !notes.length && !unparsed.length) return null;
+  const endless = waves.filter((w) => w.everyTurnFrom !== undefined).flatMap((w) => w.notes);
+  return h(
+    'div',
+    {},
+    h('h3', {}, 'Reinforcements'),
+    h('p', { class: 'muted small' }, d === 'normal' ? REINFORCEMENT_RULE.normal : REINFORCEMENT_RULE['hard+']),
+    ...[...notes, ...endless].map((n) => h('p', { class: 'small' }, n)),
+    h('ul', { class: 'small' }, ...waveLines(waves).map((w) => h('li', {}, h('b', {}, w.when), h('ul', {}, ...w.groups.map((g) => h('li', {}, g)))))),
+    unparsed.length ? h('div', { class: 'small' }, h('b', {}, 'Not read into waves (FEW’s text): '), h('ul', {}, ...unparsed.map((u) => h('li', {}, u)))) : null,
+  );
+}
+
 function mapPage(ctx: MapsContext, m: ChapterData): HTMLElement[] {
   const d = tableDifficulty(ctx.difficulty);
   const cond = m.conditions[d];
@@ -176,15 +216,7 @@ function mapPage(ctx: MapsContext, m: ChapterData): HTMLElement[] {
           )
         : null,
       enemyTable(m.enemies[d] ?? []),
-      m.reinforcements.length
-        ? h(
-            'div',
-            {},
-            h('h3', {}, 'Reinforcements'),
-            h('p', { class: 'muted small' }, d === 'normal' ? REINFORCEMENT_RULE.normal : REINFORCEMENT_RULE['hard+']),
-            h('ul', { class: 'small' }, ...m.reinforcements.map((r) => h('li', { style: `margin-left:${(r.length - r.trimStart().length) * 6}px` }, r.trim()))),
-          )
-        : null,
+      reinforcements(ctx.engine, m, d),
       howToRun(ctx.engine, m.id),
       m.items.length ? h('div', {}, h('h3', {}, 'Items'), h('ul', { class: 'small' }, ...m.items.map((i) => h('li', {}, `${i.item}: ${i.how}`)))) : null,
       m.shop
