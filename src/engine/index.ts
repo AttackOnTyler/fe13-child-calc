@@ -60,6 +60,7 @@ import { coupleKey, endpointCoverage, nonStarters, seedPlan, type EndpointCovera
 import { milestones, type Milestone } from './milestones';
 import { editCost, solveStep, type EditCost, type EditCostInput, type SolveStep, type SolveStepInput } from './solve/step';
 import { planEdits } from './solve/edits';
+import { FORCED_UNITS, childrenOf, coveredLineup, hasUtility, planWithout, reservesStep, withoutUnits, worthStep, type ReservesInput, type ReservesStep, type WorthInput, type WorthStep, type WorthVariant } from './solve/worth';
 import type { Plan, PlanLineup, PlanPin, PlanRobin } from './solve/plan';
 import { beforeMapItems, itemPlanOf, type BeforeMapItem, type ItemPlan, type ItemUsed } from './item-plan';
 import { BLIND_SPOTS, type BlindSpot } from './assumptions';
@@ -153,6 +154,7 @@ export type { CloseCall, ItemPin, Plan, PlanItem, PlanLineup, PlanPin, PlanPropo
 export type { EndpointCoverage, SeedOptions } from './solve/seed';
 export type { ClassMilestone, Milestone, MilestonePoint, RecruitMilestone, SealSource, SkillMilestone, SupportMilestone, SupportWindow } from './milestones';
 export { EDIT_COST_BUDGET, EDIT_KINDS, SEARCH_RUNS, rescoreSeed, SOLVE_SECONDS, STEP_BUDGET, type EditCost, type EditCostInput, type EditKind, type SolveStep, type SolveStepInput } from './solve/step';
+export { FORCED_UNITS, LIKELY_LOSSES, type LikelyLoss, type ReserveReading, type ReservesCursor, type ReservesInput, type ReservesStep, type UnitWorth, type WorthCursor, type WorthInput, type WorthStep } from './solve/worth';
 export { BLIND_SPOTS, type BlindSpot, type BlindSpotId, type RunBlindSpotId } from './assumptions';
 export { bestWeapon, classTypes, dangerFlags, foeKey, foeOf, foesOf, matchup, pairUpBonus, statValue, type DangerFlag, type Fighter, type Foe, type Matchup } from './solver';
 export {
@@ -611,6 +613,28 @@ export type Engine = {
    */
   editCost(input: EditCostInput): EditCost;
   /**
+   * Each unit's worth and utility on a plan (#202), within a budget of evaluations: the flawless chance lost without it
+   * (removed from every lineup where it's optional, its children with it, its spouse re-matched, the wishlist rebuilt
+   * and the roadmap re-solved greedily where it was named), and the part lost when it fights but takes no staff, Dance
+   * or Rally action, both on the plan's own runs (paired, ±95%). Chrom and Robin read forced. Every unit in any of the
+   * plan's lineups has one. Pass the returned cursor to the next step until converged (runs double to `cap`).
+   */
+  unitWorth(input: WorthInput & { readonly roleOf?: (u: RosterUnit) => DeploymentRole }): WorthStep;
+  /**
+   * The plan a unit's worth is read against (#202): without the unit and the children it takes with it, its spouse
+   * re-matched, the wishlist rebuilt and the roadmap re-solved greedily where it was named (for the worth's drill-down).
+   */
+  worthPlan(run: Run, plan: Plan, unit: RosterUnit, options?: { readonly pins?: readonly PlanPin[]; readonly roleOf?: (u: RosterUnit) => DeploymentRole }): Plan;
+  /** The same over a hand-built army and maps: a unit is removed with the children it parents (tests). */
+  simulateWorth(input: RunSimInput, options: Omit<WorthInput, 'run' | 'plan' | 'pins'>): WorthStep;
+  /**
+   * A plan's reserves (#202), within a budget: for the likely losses (the wishlist units its runs lose most, weighted by
+   * how often), the chance each unit off the wishlist restores stepping into the lost unit's endpoint slot, on the same
+   * runs; ordered, each naming the loss it mainly covers. Run it when the worker is idle, after the solve. The plan it
+   * returns lists them and changes nothing else: no EXP is set aside for a reserve.
+   */
+  reserves(input: ReservesInput & { readonly roleOf?: (u: RosterUnit) => DeploymentRole }): ReservesStep;
+  /**
    * Every map's lineup on a plan's roadmap (#198): its own where it names one, else the greedy lineup its projection
    * picks. Plays every map once: about 2 s on a fresh Full route (the Web Worker's job, #199).
    */
@@ -842,6 +866,8 @@ function mapById(id: string): ChapterData {
 
 /** Plan inputs kept per run for the solve's batches (#199). */
 const PLAN_INPUTS = 16;
+/** Worth's variant inputs and plans kept per run (#202): a few plans' units, losses and reserves. */
+const WORTH_INPUTS = 96;
 /** Lunatic+ skill draws the solve's ceiling check plays (#199). */
 const CEILING_DRAWS = 4;
 
@@ -994,6 +1020,8 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
    * A plan's simulation input, kept for the plans a run's solve is comparing (#199): its runs are simulated in batches,
    * and each batch reuses the input and so its projection (run-sim's). A few plans per run and roles; the oldest goes.
    */
+  /** Hand-built worth variants (#202, `simulateWorth`), kept while the input lives. */
+  const handBuilt = new WeakMap<RunSimInput, Map<string, RunSimInput>>();
   const planInputs = new WeakMap<Run, { roleOf: ((u: RosterUnit) => DeploymentRole) | undefined; byPlan: Map<string, RunSimInput> }>();
   const planInput = (run: Run, plan: Plan, roleOf: ((u: RosterUnit) => DeploymentRole) | undefined): RunSimInput => {
     let held = planInputs.get(run);
@@ -1009,8 +1037,57 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     held.byPlan.set(k, input);
     return input;
   };
+  /**
+   * Worth's variants of a plan (#202), each input built once and kept while the run lives (so each keeps its
+   * projection across steps): the plan, the plan without a unit (and the children it takes), the unit idle, and a
+   * reserve stepping into a lost unit's slot. Kept per run and roles, the oldest going first.
+   */
+  const worthHeld = new WeakMap<Run, { roleOf: ((u: RosterUnit) => DeploymentRole) | undefined; inputs: Map<string, RunSimInput>; plans: Map<string, Plan> }>();
+  const worthVariants = (run: Run, plan: Plan, roleOf: ((u: RosterUnit) => DeploymentRole) | undefined, pins: readonly PlanPin[] | undefined) => {
+    let held = worthHeld.get(run);
+    if (!held || held.roleOf !== roleOf) worthHeld.set(run, (held = { roleOf, inputs: new Map(), plans: new Map() }));
+    const { inputs, plans } = held;
+    const planKey = JSON.stringify([plan, pins ?? []]);
+    const keep = <T,>(m: Map<string, T>, k: string, make: () => T): T => {
+      let x = m.get(`${planKey}|${k}`);
+      if (x !== undefined) m.delete(`${planKey}|${k}`);
+      else {
+        x = make();
+        if (m.size >= WORTH_INPUTS) m.delete(m.keys().next().value!);
+      }
+      m.set(`${planKey}|${k}`, x);
+      return x;
+    };
+    const inputFor = (p: Plan) => flawlessInput(run, assumptions, roleOf, undefined, p).input;
+    const base = keep(inputs, 'plan', () => inputFor(plan));
+    const recruited = new Set<RosterUnit>([...base.army.map((a) => a.id), ...base.maps.flatMap((m) => [...m.joining, ...m.later].map((a) => a.id))]);
+    const recorded = (base.married ?? []).filter((c): c is readonly [RosterUnit, RosterUnit] => c[1] !== 'maiden');
+    const goneOf = (u: RosterUnit) => new Set<RosterUnit>([u, ...childrenOf(plan, u, recruited)]);
+    const options = { ...(pins ? { pins } : {}), ...(roleOf ? { roleOf } : {}) };
+    const without = (u: RosterUnit) => keep(plans, `without:${u}`, () => planWithout(run, seedContext(run), options, plan, goneOf(u), recorded));
+    const inputOf = (v: WorthVariant): RunSimInput => {
+      if (v.kind === 'plan') return base;
+      if (v.kind === 'idle') return keep(inputs, `idle:${v.unit}`, () => ({ ...base, idle: [v.unit] }));
+      if (v.kind === 'without') return keep(inputs, `without:${v.unit}`, () => withoutUnits(inputFor(without(v.unit)), goneOf(v.unit)));
+      return keep(inputs, `cover:${v.loss}:${v.reserve ?? '-'}`, () => {
+        const p = without(v.loss);
+        const l = coveredLineup(plan, v.loss, goneOf(v.loss), v.reserve);
+        const q = l ? { ...p, roadmap: { ...p.roadmap, lineups: [...p.roadmap.lineups.filter((x) => x.key !== l.key), l] } } : p;
+        return withoutUnits(inputFor(q), goneOf(v.loss));
+      });
+    };
+    /** A unit's kit and classes as the plan has them, for whether it has any utility to read. */
+    const utility = (u: RosterUnit): boolean => {
+      const classes = [...plan.roadmap.seals.filter((s) => s.unit === u).map((s) => s.classId), ...plan.wishlist.units.filter((w) => w.unit === u).map((w) => w.classId)];
+      const a = [...base.army, ...base.maps.flatMap((m) => [...m.joining, ...m.later])].find((x) => x.id === u);
+      if (a) return hasUtility(a, classes);
+      const c = base.maps.flatMap((m) => m.children ?? []).find((x) => x.id === u);
+      return hasUtility({ classId: c?.startClass ?? (u in CHILD_UNITS ? CHILD_UNITS[u as ChildId].defaultClassSet[0]! : 'villager'), skills: [], ...(c?.items ? { items: c.items } : {}) }, classes);
+    };
+    return { base, recruited, goneOf, inputOf, utility, without };
+  };
   /** Every map's lineup on a plan's roadmap: its own where it names one, else the greedy lineup its projection picks. */
-  const lineupsOf = (run: Run, plan: Plan, seed: number, roleOf: ((u: RosterUnit) => DeploymentRole) | undefined): PlanLineup[] => {
+  const lineupsOf =(run: Run, plan: Plan, seed: number, roleOf: ((u: RosterUnit) => DeploymentRole) | undefined): PlanLineup[] => {
     const input = planInput(run, plan, roleOf);
     const lineups = planLineups(input, seed, assumptions);
     return input.maps.map((m, i) => ({ key: m.key, pairs: lineups[i]!.pairs.map((p) => ({ lead: p.lead, ...(p.back ? { back: p.back } : {}) })), solo: [...lineups[i]!.solo] }));
@@ -1817,6 +1894,62 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       return { recorded: false, items: key ? beforeMapItems(sources, plan.roadmap.items, key).map((b) => ({ item: b.item, unit: b.unit })) : [] };
     },
     editCost: (input) => editCost(input, (plan, first, count) => simulateRuns(planInput(input.run, plan, input.roleOf), input.seed, count, assumptions, first).samples),
+    unitWorth: (input) => {
+      const { run, plan, seed, roleOf, pins } = input;
+      const v = worthVariants(run, plan, roleOf, pins);
+      return worthStep(input, {
+        subjects: () => {
+          // Every unit in any of the plan's lineups, and its wishlist: those the plan fields (not a map's own setup).
+          const units = new Set<RosterUnit>(plan.wishlist.units.map((w) => w.unit));
+          for (const d of planLineups(v.base, seed, assumptions)) for (const u of d.deployed) units.add(u);
+          const planned = new Set<RosterUnit>(plan.wishlist.children.map((c) => c.child));
+          return [...units]
+            .filter((u) => v.recruited.has(u) || planned.has(u))
+            .map((u) => ({ unit: u, forced: FORCED_UNITS.includes(u), children: [...v.goneOf(u)].filter((x) => x !== u), utility: !FORCED_UNITS.includes(u) && v.utility(u) }));
+        },
+        samples: (variant, first, count) => simulateRuns(v.inputOf(variant), seed, count, assumptions, first).samples,
+      });
+    },
+    worthPlan: (run, plan, unit, options = {}) => worthVariants(run, plan, options.roleOf, options.pins).without(unit),
+    simulateWorth: (input, options) => {
+      let held = handBuilt.get(input);
+      if (!held) handBuilt.set(input, (held = new Map()));
+      const kept = held;
+      const recruits = [...input.army, ...input.maps.flatMap((m) => [...m.joining, ...m.later])];
+      const children = input.maps.flatMap((m) => m.children ?? []);
+      const goneOf = (u: RosterUnit) => new Set<RosterUnit>([u, ...children.filter((c) => c.parents.includes(u)).map((c) => c.id)]);
+      const inputOf = (v: WorthVariant): RunSimInput => {
+        if (v.kind === 'plan') return input;
+        const k = JSON.stringify(v);
+        let x = kept.get(k);
+        if (!x) kept.set(k, (x = v.kind === 'idle' ? { ...input, idle: [v.unit] } : withoutUnits(input, goneOf(v.kind === 'without' ? v.unit : v.loss))));
+        return x;
+      };
+      const ids = [...new Set<RosterUnit>([...recruits.map((a) => a.id), ...children.map((c) => c.id)])];
+      return worthStep(options, {
+        subjects: () =>
+          ids.map((u) => {
+            const c = children.find((x) => x.id === u);
+            const a = recruits.find((x) => x.id === u) ?? (c && { classId: c.startClass ?? CHILD_UNITS[c.id as ChildId]?.defaultClassSet[0] ?? 'villager', skills: [], ...(c.items ? { items: c.items } : {}) });
+            return { unit: u, forced: FORCED_UNITS.includes(u), children: [...goneOf(u)].filter((x) => x !== u), utility: !!a && !FORCED_UNITS.includes(u) && hasUtility(a) };
+          }),
+        samples: (variant, first, count) => simulateRuns(inputOf(variant), options.seed, count, assumptions, first).samples,
+      });
+    },
+    reserves: (input) => {
+      const { run, plan, seed, roleOf, pins } = input;
+      const v = worthVariants(run, plan, roleOf, pins);
+      const wishlist = plan.wishlist.units.map((w) => w.unit);
+      return reservesStep(input, {
+        losses: (runs) => simulateRuns(v.base, seed, runs, assumptions, 0).losses,
+        wishlist,
+        candidates: () => {
+          const planned = plan.wishlist.children.map((c) => c.child).filter((c) => !v.recruited.has(c));
+          return [...v.recruited, ...planned].filter((u) => !wishlist.includes(u) && !FORCED_UNITS.includes(u));
+        },
+        samples: (variant, first, count) => simulateRuns(v.inputOf(variant), seed, count, assumptions, first).samples,
+      });
+    },
     roadmapLineups: (run, plan, options = {}) => lineupsOf(run, plan, options.seed ?? FLAWLESS_SEED, options.roleOf),
   };
 }

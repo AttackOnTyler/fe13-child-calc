@@ -254,6 +254,11 @@ export type RunSimInput = {
    * unit in a base class reaches its best promotion by the endpoint (`plannedSeals`).
    */
   readonly seals?: readonly PlanSeal[];
+  /**
+   * Units that fight in the runs but take none of their sustain, Dance, Rally or Rescue actions (#202, a unit's
+   * utility). The plan's projection still plays them in full, so the lineups are the plan's.
+   */
+  readonly idle?: readonly RosterUnit[];
 };
 
 /** A lineup a plan names for one map (#198): its pairs (a Lead, and its Back if any) and its units alone. */
@@ -389,6 +394,13 @@ export type RunSim = {
   readonly sideGoals: readonly SideGoalForecast[];
   /** Each planned item use on the maps ahead, in map order (#193). */
   readonly items: readonly ItemUseForecast[];
+  /**
+   * The likely losses (#202): each unit's share of the chance lost, over the runs. A map's lost chance (the run's chance
+   * of getting there, less its chance of getting through) is split among the units that fought on it by each one's
+   * death risk there (the log of its fights' survival); a unit's chance here is how often the runs lose it. Units with
+   * none aren't listed; most lost first.
+   */
+  readonly losses: readonly { readonly unit: string; readonly chance: number }[];
   /** The stated blind spots it rests on: the map simulation's, then the run simulation's own. */
   readonly blindSpots: readonly (BlindSpotId | RunBlindSpotId)[];
 };
@@ -985,9 +997,24 @@ function chasesOf(step: RunSimMap): readonly SimChase[] | undefined {
 }
 
 /** The map play's input for a step: the lineup, the couples to keep together (#184) and the side goals chased (#191). */
-function playInput(state: RunState, step: RunSimMap, lineup: readonly SimGroup[]) {
+function playInput(state: RunState, step: RunSimMap, lineup: readonly SimGroup[], idle?: readonly RosterUnit[]) {
   const chase = chasesOf(step);
-  return { map: step.map, lineup, bonds: couplesToMarry(state), ...(chase ? { chase } : {}) };
+  return { map: step.map, lineup, bonds: couplesToMarry(state), ...(chase ? { chase } : {}), ...(idle?.length ? { idle } : {}) };
+}
+
+/** Each unit's share of a play's lost chance (#202): its death risk there, the log of its fights' survival, over all of theirs. */
+function lossShares(play: MapPlay): Map<string, number> {
+  const risk = new Map<string, number>();
+  let total = 0;
+  for (const t of play.log)
+    for (const f of t.fights) {
+      const r = -Math.log(Math.max(f.survive, 1e-300));
+      if (r <= 0) continue;
+      risk.set(f.lead, (risk.get(f.lead) ?? 0) + r);
+      total += r;
+    }
+  if (total > 0) for (const [u, r] of risk) risk.set(u, r / total);
+  return risk;
 }
 
 /** Whether a run secured a side goal on the map it played: chased, with every part's actions spent in time. */
@@ -1398,6 +1425,8 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
   // Runs entering each map with nobody lost, and those making each of its planned item uses (#193).
   const entering = input.maps.map(() => 0);
   const made = input.maps.map((m) => (m.uses ?? []).map(() => 0));
+  // The chance each unit is lost, summed over the runs (#202).
+  const lost = new Map<string, number>();
   // Each stop's next stop: a rebuy covers what the plan spends until then.
   const nextStop = input.maps.map((_, i) => {
     let j = i + 1;
@@ -1435,7 +1464,8 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
       state.made.forEach((ok, j) => ok && made[i]![j]!++);
       if (step.armory?.length) recordStop(stops[i]!, arriving, receipts);
       const lineup = lineupOf(state, (lineups[i] ??= plan.lineup(i)), extra, interner);
-      const play = playMap(playInput(state, step, lineup), runSeed(rs, i));
+      const play = playMap(playInput(state, step, lineup, input.idle), runSeed(rs, i));
+      if (play.noDeath < 1) for (const [u, share] of lossShares(play)) lost.set(u, (lost.get(u) ?? 0) + flawless * (1 - play.noDeath) * share);
       reach[i]! += flawless;
       noDeath[i]! += flawless * play.noDeath;
       turns[i]! += flawless * play.turns;
@@ -1473,6 +1503,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
       (m.sideGoals ?? []).map((g) => ({ id: g.id, label: g.label, key: m.key, chase: g.chase, secured: golds[i]!.length ? (goals.get(`${i}|${g.id}`) ?? 0) / golds[i]!.length : undefined })),
     ),
     items: input.maps.flatMap((m, i) => (m.uses ?? []).map((u, j) => ({ ...u, key: m.key, label: m.label, share: entering[i]! ? made[i]![j]! / entering[i]! : undefined }))),
+    losses: [...lost].map(([unit, c]) => ({ unit, chance: c / n })).sort((a, b) => b.chance - a.chance || a.unit.localeCompare(b.unit)),
     units: [...atEnd.entries()].map(([id, e]) => {
       const [cls, { caps, levelCap: top }] = [...e.classes.entries()].sort((a, b) => b[1].runs - a[1].runs)[0]!;
       return {

@@ -155,6 +155,11 @@ export type MapPlayInput = {
    * a chest opened, a villager guarded) by a turn. Those actions come first, after the talks.
    */
   readonly chase?: readonly SimChase[];
+  /**
+   * Units that fight but take none of their sustain, Dance, Rally or Rescue actions for others (no staff, no Dance, no
+   * Rally; a potion on itself is its own fighting), by id: a unit's utility (#202) is the flawless chance lost this way.
+   */
+  readonly idle?: readonly string[];
 };
 
 /**
@@ -639,7 +644,8 @@ class MapState {
         this.arriving.push([p, r.id, r.arrives]);
       } else if (r.unit && r.npc) alone(r.unit, 1, Infinity);
     }
-    this.kits = this.units.map((u) => kitOf(u, input.spread));
+    const idle = new Set(input.idle ?? []);
+    this.kits = this.units.map((u) => (idle.has(u.id) ? { ...kitOf(u, input.spread), staves: [], dances: false, rally: undefined } : kitOf(u, input.spread)));
     this.uses = this.units.map((u) => (u.items ?? []).map((i) => i.uses));
     this.clearQueue = input.map.waves.filter((w) => w.onClear);
     this.chases = (input.chase ?? []).map((c) => ({ c, spent: 0 }));
