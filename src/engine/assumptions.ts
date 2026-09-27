@@ -560,7 +560,8 @@ export type BlindSpotId =
   | 'npc-kills'
   | 'npc-screened'
   | 'talk-reaches'
-  | 'door-keys';
+  | 'door-keys'
+  | 'skills-in-combat';
 
 /** The run simulation's own blind spots (#186): how it walks the army from one map to the next. */
 export type RunBlindSpotId =
@@ -625,6 +626,18 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
     label: 'Bosses hold their ground',
     why: 'A boss fights only when attacked, as most do on their throne or gate; one that moves out to attack isn’t counted on enemy phase.',
     lean: 'high',
+    touches: ['map'],
+  },
+  {
+    id: 'skills-in-combat',
+    label: 'Proc and stat skills left out of the combat math',
+    why:
+      'The exchange plays Dual Strike+ and Dual Guard+, the faires (+5 with the kind), the breakers (+50 Hit and Avoid against it), Hit Rate ' +
+      '+20 and Avoid +10, both sides, and the Lunatic+ foe skills (Luna+, Hawkeye, Pavise+, Aegis+, Counter, Vantage+); outside it, Limit ' +
+      'Breaker, Veteran, Armsthrift, Healtouch, Rally and Dance. A unit’s proc skills (Luna, Sol, Aether, Astra, Lethality, Ignis, Vengeance, ' +
+      'Pavise, Aegis, Counter), Vantage, Miracle, Galeforce’s extra action, Renewal and the stat +2 skills aren’t played for either side. ' +
+      'The plan’s build skills are equipped once learned, so a build leaning on procs reads below what it does.',
+    lean: 'low',
     touches: ['map'],
   },
   {

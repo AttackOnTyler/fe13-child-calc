@@ -51,7 +51,7 @@ describe('the chapter log', () => {
 
   it('pre-fills recruits from join data on the run’s difficulty, and a child’s class and level from the map', () => {
     let run = addEntry(runFromRoster(facts), 'prologue', 1);
-    expect(latestEntry(run)!.snapshot.units.frederick).toMatchObject({ class: 'Great Knight', level: 1, skills: ['discipline', 'outdoor-fighter'], stats: { hp: 28, def: 14 } });
+    expect(latestEntry(run)!.snapshot.units.frederick).toMatchObject({ class: 'Great Knight', level: 1, skills: ['Discipline', 'Outdoor Fighter'], stats: { hp: 28, def: 14 } });
     expect(latestEntry(run)!.snapshot.units.robin).toMatchObject({ class: 'Tactician', level: 1 });
     run = addEntry(run, 'chapter-8', 2);
     // Gregor has Lunatic bases.
@@ -267,6 +267,13 @@ describe('units joining on the map being prepared (#131)', () => {
     expect(p.joining).toEqual(['chrom', 'robin', 'lissa', 'frederick']);
     const recorded = latestEntry(addEntry(fresh, 'prologue', 1))!.snapshot.units;
     for (const [u, s] of p.units) expect(s).toEqual(recorded[u]);
+  });
+
+  it('record a recruit’s starting skills by name, as Record results writes them and the combat math reads them (realism pass)', () => {
+    const recorded = latestEntry(addEntry(fresh, 'prologue', 1))!.snapshot.units;
+    expect(recorded.chrom!.skills).toEqual(['Dual Strike+']);
+    expect(recorded.robin!.skills).toEqual(['Veteran']);
+    expect(recorded.frederick!.skills).toEqual(['Discipline', 'Outdoor Fighter']);
   });
 
   it('field Chapter 2’s turn-1 recruits and list the later ones with when, apart from the army', () => {

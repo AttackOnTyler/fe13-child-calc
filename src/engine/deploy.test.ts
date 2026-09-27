@@ -53,6 +53,16 @@ describe('deployment, pairs and loadouts (#121)', () => {
     expect(big.deployed).toEqual(expect.arrayContaining(['lissa', 'maribelle']));
   });
 
+  it('never has a unit with nothing to fight with lead a pair, forced or not (realism pass)', () => {
+    const unarmed = cand('vaike', 'lead', stats(25, 10, 0, 8, 6, 4, 6, 0), [], 'Fighter');
+    const candidates = [...army.filter((c) => c.unit !== 'vaike'), unarmed];
+    for (const max of [4, 6, 8]) {
+      const d = suggestDeployment({ candidates, forced: ['chrom', 'vaike'], max, foes, pool: noPool });
+      expect(d.deployed).toContain('vaike');
+      expect(d.pairs.map((p) => p.lead)).not.toContain('vaike');
+    }
+  });
+
   it('keeps the player’s pairs and leaves out units they drop, recomputing the rest', () => {
     const d = suggestDeployment({ candidates: army, forced: ['chrom'], max: 8, foes, pool: noPool, pinned: [{ lead: 'frederick', back: 'lissa' }], excluded: new Set(['vaike' as never]) });
     expect(d.pairs.find((p) => p.lead === 'frederick')!.back).toBe('lissa');

@@ -286,6 +286,11 @@ export type RunSimInput = {
   readonly priority?: readonly (Readonly<Partial<Record<RosterUnit, ExpPriority>>> | undefined)[];
   /** The roadmap's milestones (#194) as the runs check them (#195): each one's chance of being met is counted over the runs. */
   readonly milestones?: readonly MilestoneCheck[];
+  /**
+   * The plan's build for each unit (#198, the wishlist's), by unit: each skill of it is equipped once the unit has learned
+   * it (the realism pass), the rest of its five slots its recorded skills. Absent: units keep the skills they have.
+   */
+  readonly builds?: Readonly<Partial<Record<RosterUnit, readonly SkillId[]>>>;
 };
 
 /**
@@ -555,6 +560,8 @@ type Live = {
    * changes class in the run. Skills of classes before the log's aren't known.
    */
   readonly learned: Set<SkillId>;
+  /** Its equipped skills, by name: the plan's build as far as it has learned it, then its recorded ones (`equip`). */
+  skills: readonly string[];
   /** Tonics drunk for this map (#193): added to its shown stats until the map's end. */
   boost: Partial<Record<Stat, number>>;
   /** What its boosters added (#193), for a child that doesn't read them (`booster-to-child`). */
@@ -598,6 +605,8 @@ export type RunState = {
   readonly carriers: Map<string, RosterUnit>;
   /** Which of this map's planned uses were made (#193), in `uses` order. */
   made: boolean[];
+  /** The plan's builds (`RunSimInput.builds`). */
+  readonly builds: RunSimInput['builds'];
 };
 
 /** Class growths by class and gender, per set of assumptions (Conqueror's are assumed). */
@@ -614,7 +623,7 @@ function totalGrowth(u: Live, assumptions: Assumptions, s: Stat): number {
 /** Effective caps: the class's max stats plus the unit's modifiers, plus 10 (not HP) with Limit Breaker equipped. */
 function capsOf(u: Live): Record<Stat, number> {
   const max = classMaxStats(u.classId, u.base.gender);
-  const lb = u.base.skills.includes('Limit Breaker') ? 10 : 0;
+  const lb = u.skills.includes('Limit Breaker') ? 10 : 0;
   const out = {} as Record<Stat, number>;
   for (const s of STATS) out[s] = s === 'hp' ? max.hp : max[s] + u.base.modifiers[s] + lb;
   return out;
@@ -670,6 +679,7 @@ function liveOf(a: ArmyUnit): Live {
     items: [],
     gearKey: '',
     learned: new Set(a.skills.flatMap((n) => SKILL_BY_NAME.get(n) ?? [])),
+    skills: a.skills,
     boost: {},
     drunk: {},
   };
@@ -679,6 +689,21 @@ function liveOf(a: ArmyUnit): Live {
 }
 
 const SKILL_BY_NAME = new Map(Object.entries(SKILLS).map(([id, s]) => [s.name, id as SkillId]));
+
+/** Skills a unit can equip at once. */
+const SKILL_SLOTS = 5;
+
+/**
+ * Its equipped skills (the realism pass): each skill of the plan's build it has learned, in the build's order, then its
+ * recorded skills, five at most. The combat math reads them (Dual Strike+, Limit Breaker, Veteran, Healtouch, Rally…).
+ */
+function equip(u: Live, build: readonly SkillId[] | undefined) {
+  if (!build?.length) return;
+  const out: string[] = [];
+  for (const id of build) if (u.learned.has(id) && !out.includes(SKILLS[id].name)) out.push(SKILLS[id].name);
+  for (const n of u.base.skills) if (out.length < SKILL_SLOTS && !out.includes(n)) out.push(n);
+  u.skills = out.slice(0, SKILL_SLOTS);
+}
 
 /** The skills its class teaches at its level (#194). */
 function learn(u: Live) {
@@ -791,7 +816,7 @@ const fighterOf = (u: Live, stats: Readonly<Record<Stat, number>>): Fighter => (
   name: u.base.name,
   className: className(u.classId, u.base.gender),
   stats,
-  skills: u.base.skills,
+  skills: u.skills,
   weapon: u.weapons[0],
 });
 
@@ -829,7 +854,7 @@ function earn(state: RunState, map: SimMap, play: MapPlay, rng: Rng | null, diff
       const foe = foes.get(f.foe);
       if (!foe) continue;
       const u = state.army.get(f.lead as RosterUnit);
-      if (u) give(u, combatExp(internalOf(u, difficulty), foe, f.kill ? 'kill' : f.dealt ? 'damage' : 'miss', false, lunatic, f.engagement, f.back && u.base.skills.includes('Veteran') ? 1.5 : 1));
+      if (u) give(u, combatExp(internalOf(u, difficulty), foe, f.kill ? 'kill' : f.dealt ? 'damage' : 'miss', false, lunatic, f.engagement, f.back && u.skills.includes('Veteran') ? 1.5 : 1));
       const b = f.back && f.dualStrike ? state.army.get(f.back as RosterUnit) : undefined;
       if (b) give(b, Math.round(f.dualStrike! * combatExp(internalOf(b, difficulty), foe, 'damage', true, lunatic, f.engagement)));
     }
@@ -928,7 +953,7 @@ function childOf(state: RunState, c: ChildRecruit, assumptions: Assumptions): Li
     const pass = fixed ?? (planned && p.learned.has(planned) ? planned : undefined);
     // Its boosters drunk before entry feed the child, under `booster-to-child` (#193).
     const stats = assumptions['booster-to-child'] === 'feeds' ? p.stats : (Object.fromEntries(STATS.map((s) => [s, p.stats[s] - (p.drunk[s] ?? 0)])) as Record<Stat, number>);
-    return { join: { stats, class: p.classId, gender: p.base.gender }, skills: { skills: p.base.skills, ...(pass ? { fixed: pass } : {}) } };
+    return { join: { stats, class: p.classId, gender: p.base.gender }, skills: { skills: p.skills, ...(pass ? { fixed: pass } : {}) } };
   };
   const a = side(c.parents[0], c.fixed?.[0], c.passes?.[0], c.lost?.[0]);
   const b = side(c.parents[1], c.fixed?.[1], c.passes?.[1], c.lost?.[1]);
@@ -1171,6 +1196,8 @@ function beforeMap(state: RunState, step: RunSimMap, at: number, assumptions: As
   const stop = !!step.armory?.length;
   if (shop && stop) rebuy(state, step, shop);
   changeClasses(state, step, at, assumptions['class-change-internal-level']);
+  // The plan's build skills learned by now are equipped (a skill is equipped in the preparations, like a class change).
+  if (state.builds) for (const u of state.army.values()) equip(u, state.builds[u.base.id]);
   if (prep) handOver(state);
   if (prep) drinkTonics(state, step, assumptions);
   // On the way, the gold the plan's seals still to buy need stays in hand.
@@ -1411,6 +1438,7 @@ function newState(input: RunSimInput): RunState {
     pool: new Map(),
     carriers: new Map(),
     made: [],
+    builds: input.builds,
   };
   for (const [a, b] of input.married ?? []) marry(state, a, b, undefined);
   for (const a of input.army) join(state, a);
@@ -1628,7 +1656,7 @@ type Endpoint = Map<RosterUnit, { name: string; skills: readonly string[]; class
 function recordEndpoint(atEnd: Endpoint, state: RunState) {
   for (const u of state.army.values()) {
     let e = atEnd.get(u.base.id);
-    if (!e) atEnd.set(u.base.id, (e = { name: u.base.name, skills: u.base.skills, classes: new Map(), level: [], exp: [], stats: Object.fromEntries(STATS.map((s) => [s, []])) as unknown as Record<Stat, number[]> }));
+    if (!e) atEnd.set(u.base.id, (e = { name: u.base.name, skills: u.skills, classes: new Map(), level: [], exp: [], stats: Object.fromEntries(STATS.map((s) => [s, []])) as unknown as Record<Stat, number[]> }));
     const cls = className(u.classId, u.base.gender);
     const c = e.classes.get(cls);
     e.classes.set(cls, { runs: (c?.runs ?? 0) + 1, caps: c?.caps ?? capsOf(u), levelCap: levelCap(u.tier) });

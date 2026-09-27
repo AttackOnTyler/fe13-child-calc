@@ -147,7 +147,10 @@ export function suggestDeployment(input: {
     }
     addPair(lead, best.back);
   };
-  const leads = [...byId.values()].filter((c) => c.role === 'lead' && !paired.has(c.unit)).sort((a, b) => solo(b) - solo(a));
+  // A unit with nothing to fight with never leads a pair (Chapter 2's Vaike, his axe in Miriel's hands): it can only
+  // be someone's back, or stand alone out of the way.
+  const armed = (c: DeployCandidate) => c.weapons.length > 0 || !!c.fighter.weapon;
+  const leads = [...byId.values()].filter((c) => c.role === 'lead' && armed(c) && !paired.has(c.unit)).sort((a, b) => solo(b) - solo(a));
   // Forced units lead first, so Chrom (every story map) is paired rather than left alone.
   leads.sort((a, b) => Number(input.forced.includes(b.unit)) - Number(input.forced.includes(a.unit)));
   for (const lead of leads) {
@@ -159,7 +162,11 @@ export function suggestDeployment(input: {
   for (const c of extras) if (room() > 0) take(c.unit);
   // Room left with too few leads (#133): the best-covering unit left leads, whatever its role, and takes a back if it can.
   const waiting = [...byId.values()].filter((c) => !deployed.includes(c.unit)).sort((a, b) => solo(b) - solo(a));
-  for (const c of waiting) if (room() > 0 && !deployed.includes(c.unit)) pairUp(c);
+  for (const c of waiting) {
+    if (room() <= 0 || deployed.includes(c.unit)) continue;
+    if (armed(c)) pairUp(c);
+    else take(c.unit);
+  }
   return {
     max: input.max,
     deployed: deployed.slice(0, Math.max(input.max, input.forced.length)),

@@ -999,8 +999,9 @@ function mapById(id: string): ChapterData {
 /** Plan inputs kept per run for the solve's batches (#199). */
 const PLAN_INPUTS = 16;
 
-/** What the simulation reads of a plan, as a key: its Robin, marriages, children's passes and roadmap (not the builds). */
-const simKeyOf = (plan: Plan): string => JSON.stringify([plan.robin, plan.wishlist.marriages, plan.wishlist.children, plan.roadmap]);
+/** What the simulation reads of a plan, as a key: its Robin, marriages, children's passes, builds and roadmap. */
+const simKeyOf = (plan: Plan): string =>
+  JSON.stringify([plan.robin, plan.wishlist.marriages, plan.wishlist.children, plan.roadmap, plan.wishlist.units.map((w) => [w.unit, w.build])]);
 /** Worth's variant inputs and plans kept per run (#202): a few plans' units, losses and reserves. */
 const WORTH_INPUTS = 96;
 /** Lunatic+ skill draws the solve's ceiling check plays (#199). */

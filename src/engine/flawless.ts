@@ -31,6 +31,7 @@ import { ASSET_FLAW, ROBIN_GROWTHS, ROBIN_MODIFIERS } from '../game-data/robin';
 import { MOD_STATS, STATS, type Gender, type Growths, type Modifiers } from '../game-data/stats';
 import { FIRST_GEN_UNITS, type UnitId } from '../game-data/units';
 import { itemByName } from '../game-data/items';
+import { SKILLS, type SkillId } from '../game-data/skills';
 import { CLASSES } from '../game-data/classes';
 import type { DeploymentRole } from '../curated/deployment';
 import { assumed, isAssumed, type Assumptions } from './assumptions';
@@ -75,8 +76,14 @@ export function fighterOf(name: string, u: UnitSnapshot): { fighter: Fighter; we
     const uses = h.uses ?? item?.uses ?? 0;
     return item && (item.kind === 'staff' || item.kind === 'item') && uses > 0 ? [{ item, uses }] : [];
   });
-  return { fighter: { name, className: u.class, stats: u.stats, skills: u.skills, weapon: weapons[0] }, weapons, weaponUses: held.map((h) => h.uses), items };
+  return { fighter: { name, className: u.class, stats: u.stats, skills: skillNames(u.skills), weapon: weapons[0] }, weapons, weaponUses: held.map((h) => h.uses), items };
 }
+
+/**
+ * Skills by name, as the combat math reads them: a run saved before recruits' skills were recorded by name holds the
+ * join data's ids (`dual-strike-plus`); each is read as its name (`Dual Strike+`). Other text is kept as written.
+ */
+export const skillNames = (skills: readonly string[]): string[] => skills.map((s) => (s in SKILLS ? SKILLS[s as SkillId].name : s));
 
 /** Why a unit of the army isn't in the simulation. */
 export type NotSimulated = { readonly unit: RosterUnit; readonly why: 'no-stats' | 'unknown-class' | 'child' };
@@ -251,7 +258,7 @@ export function flawlessInput(
       stats: s.stats!,
       growths: side.growths,
       modifiers: side.modifiers,
-      skills: s.skills,
+      skills: skillNames(s.skills),
       weapons: f.weapons,
       weaponUses: f.weaponUses,
       ...(f.items.length ? { items: f.items } : {}),
@@ -452,6 +459,8 @@ export function flawlessInput(
       ...(plan ? { seals: plan.roadmap.seals } : {}),
       ...(items.held.length ? { held: items.held } : {}),
       ...(rules ? { pins: rules } : {}),
+      // The plan's builds (the realism pass): each skill equipped once learned.
+      ...(plan ? { builds: Object.fromEntries(plan.wishlist.units.map((w) => [w.unit, w.build])) } : {}),
       // The plan's EXP priorities (#195): who lands kills in each map's play.
       ...(plan?.roadmap.priorities?.length ? { priority: priorityByMap(maps, plan.roadmap.priorities, rules) } : {}),
     },
