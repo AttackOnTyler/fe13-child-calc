@@ -1,9 +1,14 @@
 /**
  * The page's side of the solve's Web Worker (#199): starts the worker on a request and hands each reply to the page.
- * One worker per request: a new request, or `stop`, terminates the one before (a step can't be interrupted mid-way).
+ * One worker per request and slot: a new request, or `stop`, terminates the one before in its slot (a step can't be
+ * interrupted mid-way). The solve and its idle work run in the `main` slot; a unit's edits on the Wishlist tab (#203)
+ * are costed in the `edits` slot beside it, so opening a unit never stops the search.
  * Where there's no Worker (tests), `startSolve` returns undefined and the page works the chance out itself.
  */
-import type { Assumptions, DeploymentRole, EditCost, PinCost, Plan, PlanPin, Readings, ReservesCursor, ReservesStep, RobinCursor, RobinStep, Run, SolveCursor, SolveStep, WorthCursor, WorthStep } from '../engine';
+import type { Assumptions, DeploymentRole, EditCost, PinCost, Plan, PlanPin, Readings, ReservesCursor, ReservesStep, RobinCursor, RobinStep, RosterUnit, Run, SolveCursor, SolveStep, UnitEdit, WorthCursor, WorthStep } from '../engine';
+
+/** A unit's edit as the worker posts it (#203): its plan is built and costed in the worker. */
+export type UnitEditView = Pick<UnitEdit, 'kind' | 'key' | 'label' | 'pins'>;
 
 type Common = {
   readonly id: number;
@@ -59,6 +64,17 @@ export type SolveRequest =
       readonly cursor?: RobinCursor;
       readonly solve?: readonly string[];
       readonly noRobin?: boolean;
+    })
+  | (Common & {
+      /**
+       * Every edit that touches a unit (#203, the Wishlist tab): listed at once, then each costed against the plan at
+       * each budget in turn (`EDIT_COST_BUDGET.provisional` for all, then `.settled`), the likeliest choices first.
+       */
+      readonly kind: 'edits';
+      readonly plan: Plan;
+      readonly pins?: readonly PlanPin[];
+      readonly unit: RosterUnit;
+      readonly budgets: readonly number[];
     });
 
 /**
@@ -72,37 +88,44 @@ export type SolveReply =
   | { readonly id: number; readonly kind: 'readings'; readonly readings: Readings | undefined; readonly done: boolean }
   | { readonly id: number; readonly kind: 'cost'; readonly cost: EditCost; readonly done: boolean }
   | { readonly id: number; readonly kind: 'idle'; readonly worth: WorthStep; readonly reserves: ReservesStep | undefined; readonly done: boolean }
-  | { readonly id: number; readonly kind: 'robin'; readonly step: RobinStep; readonly done: boolean };
+  | { readonly id: number; readonly kind: 'robin'; readonly step: RobinStep; readonly done: boolean }
+  | { readonly id: number; readonly kind: 'edits'; readonly edits: readonly UnitEditView[]; readonly done: boolean }
+  | { readonly id: number; readonly kind: 'edit-cost'; readonly key: string; readonly cost: EditCost; readonly done: boolean };
+
+/** Where a request runs: the solve and its idle work, or a unit's edits beside it. */
+export type SolveSlot = 'main' | 'edits';
 
 /** A request as the page makes it: the client numbers it. */
 export type NewSolveRequest = SolveRequest extends infer R ? (R extends SolveRequest ? Omit<R, 'id'> : never) : never;
 
-let worker: Worker | undefined;
+const workers: Partial<Record<SolveSlot, Worker>> = {};
 let next = 0;
 
-/** Stops the solve under way, if any. */
-export function stopSolve(): void {
-  worker?.terminate();
-  worker = undefined;
+/** Stops the request under way in a slot (the solve's by default), if any. */
+export function stopSolve(slot: SolveSlot = 'main'): void {
+  workers[slot]?.terminate();
+  delete workers[slot];
 }
 
 /**
- * Starts a solve (or an edit's cost) in the worker, stopping any other; each reply goes to `onReply` until the one
- * marked done. Returns a stop function, or undefined where Workers aren't available.
+ * Starts a solve (or an edit's cost, the idle work, a unit's edits) in its slot's worker, stopping any other there;
+ * each reply goes to `onReply` until the one marked done. Returns a stop function, or undefined where Workers aren't
+ * available.
  */
-export function startSolve(request: NewSolveRequest, onReply: (reply: SolveReply) => void): (() => void) | undefined {
+export function startSolve(request: NewSolveRequest, onReply: (reply: SolveReply) => void, slot: SolveSlot = 'main'): (() => void) | undefined {
   if (typeof Worker === 'undefined') return undefined;
-  stopSolve();
+  stopSolve(slot);
   const id = ++next;
   const w = new Worker(new URL('./solve-worker.ts', import.meta.url), { type: 'module' });
-  worker = w;
+  workers[slot] = w;
   w.onmessage = (e: MessageEvent<SolveReply>) => {
     if (e.data.id !== id) return;
     onReply(e.data);
-    if (e.data.done && worker === w) stopSolve();
+    if (e.data.done && workers[slot] === w) stopSolve(slot);
   };
   w.postMessage({ ...request, id } as SolveRequest);
   return () => {
-    if (worker === w) stopSolve();
+    if (workers[slot] === w) stopSolve(slot);
   };
 }
+

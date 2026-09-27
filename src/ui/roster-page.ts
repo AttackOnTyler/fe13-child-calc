@@ -3,25 +3,21 @@ import {
   DEPLOYMENT_ROLES,
   STAT_LABELS,
   UNIT_STATES,
-  composition,
   deploymentOf,
   isDeployable,
   pinLoss,
   rosterUnits,
   stateOf,
-  unitName,
   withDeploy,
   withDeployRole,
   withRun,
   withSpouse,
   withState,
   type Bond,
-  type ChildId,
   type DeployableUnit,
   type DeploymentRole,
   type Engine,
   type Gender,
-  type LedgerEntry,
   type Roster,
   type RosterEntry,
   type RosterUnit,
@@ -29,7 +25,7 @@ import {
 } from '../engine';
 import { h } from './dom';
 import { guide } from './guide';
-import { LABELS, LEDGER_UI, LEFT_OUT_UI, PIN_LOSS_UI, ROLE_UI, STATE_UI } from './labels';
+import { LABELS, PIN_LOSS_UI, ROLE_UI, STATE_UI } from './labels';
 import { compositionStrip, priorityControl, roleChip, sourceChip, type ChildPlanControls } from './plan-page';
 import { unitLink } from './unit-links';
 import { DIFFICULTIES, type Difficulty } from '../engine/roster';
@@ -46,8 +42,6 @@ export type RosterContext = {
   readonly setDeployment: (next: Roster) => void;
   /** Wipes the run, `run:v2` (after the user confirms); scoring settings and checked rules are left alone. */
   readonly clearAll: () => void;
-  /** The children ledger edits the same priorities and plan presets as the Plan sidebar. */
-  readonly plan: ChildPlanControls;
 };
 
 const BOND_UI: Readonly<Record<Bond, string>> = { pinned: LABELS.pinned, married: LABELS.married };
@@ -177,95 +171,6 @@ function unitRow(ctx: RosterContext, u: RosterEntry): HTMLElement {
   );
 }
 
-const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
-
-function ledgerRow(ctx: RosterContext, e: LedgerEntry): HTMLElement {
-  const gender = ctx.roster.run.gender;
-  const st = LEDGER_UI[e.status];
-  const pairing = (c: LedgerEntry['planned']) =>
-    c ? [h('span', {}, c.parent), ' ', h('b', { class: 'num' }, c.score === undefined ? '—' : String(c.score))] : [h('span', { class: 'muted' }, '—')];
-  const same = e.best && e.best.key === e.planned?.key;
-  // A plan-broken row adds why its saved pairing can't happen, one reason per line.
-  const statusHint = [e.leftOut ? `${st.hint}. ${LEFT_OUT_UI[e.leftOut].hint}` : st.hint, ...(e.saved?.reasons ?? [])].join('\n');
-  return h(
-    'tr',
-    { class: `ledger-${e.status}` },
-    h('td', { class: 'uname' }, unitLink(ctx.plan.openUnit, e.child, e.name), ' ', roleChip(ctx.plan, e.child)),
-    h('td', { class: 'muted' }, unitLink(ctx.plan.openUnit, e.fixedParent, unitName(e.fixedParent, gender))),
-    h(
-      'td',
-      { title: e.status === 'married' ? 'Its parents’ marriage' : 'The marriage plan’s pairing' },
-      ...(e.saved ? [h('s', {}, e.saved.parent), ' → '] : []),
-      ...pairing(e.planned),
-    ),
-    h(
-      'td',
-      { title: 'Its best pairing in its plan preset that can still happen, whatever the rest of the plan' },
-      ...(same ? [h('span', { class: 'muted' }, '= plan')] : pairing(e.best)),
-      e.delta ? h('span', { class: `small ${e.delta > 0 ? 'pos' : 'neg'}` }, ` ${signed(e.delta)}`) : null,
-    ),
-    h(
-      'td',
-      { class: `lstatus ${e.status}`, title: statusHint },
-      `${st.mark} ${st.label}`,
-      e.leftOut ? h('span', { class: 'small' }, ` · ${LEFT_OUT_UI[e.leftOut].label}`) : null,
-      e.notes.length ? h('span', { class: 'warn', title: e.notes.join('\n'), 'aria-label': e.notes.join('. ') }, ' ⚠') : null,
-    ),
-    h('td', {}, priorityControl(ctx.plan, e.child, e.name)),
-    h('td', {}, planPresetCell(ctx.plan, e.child)),
-  );
-}
-
-/** A child's plan preset, read-only, and where it comes from; roles and presets are set on the Plan's role matrix. */
-function planPresetCell(ctl: ChildPlanControls, id: ChildId): HTMLElement {
-  const preset = ctl.engine.planPreset(id, ctl.roster, ctl.settings);
-  return h(
-    'span',
-    { class: 'ppreset' },
-    ctl.presetLabel(preset),
-    ' ',
-    sourceChip(ctl.engine.roles(ctl.roster, ctl.settings).get(id)),
-    ' ',
-    h('button', { class: 'mini', title: 'Set roles and presets on the Plan’s role matrix', onclick: ctl.openRoles }, 'Roles →'),
-  );
-}
-
-/** Each child: fixed parent, plan or marriage, best remaining pairing with Δ vs the plan, status, and its plan controls. */
-function childrenLedger(ctx: RosterContext): HTMLElement {
-  const ledger = ctx.engine.ledger(ctx.roster, ctx.plan.settings);
-  return h(
-    'section',
-    { ...guide('children-ledger'), class: 'rsec ledger', 'aria-label': 'Children ledger' },
-    h('h3', {}, 'Children ledger'),
-    h('p', { class: 'muted' }, 'Each child scored in its plan preset. Priority and preset are the same controls as the Plan sidebar.'),
-    h(
-      'div',
-      { class: 'ledger-scroll' },
-      h(
-        'table',
-        { class: 'grid ledger' },
-        h(
-          'thead',
-          {},
-          h(
-            'tr',
-            {},
-            h('th', {}, 'Child'),
-            h('th', {}, 'Fixed parent'),
-            h('th', {}, 'Plan / marriage'),
-            h('th', {}, LABELS.bestRemaining),
-            h('th', {}, LABELS.ledgerStatus),
-            h('th', {}, 'Priority'),
-            h('th', {}, 'Plan preset'),
-          ),
-        ),
-        h('tbody', {}, ...ledger.map((e) => ledgerRow(ctx, e))),
-      ),
-    ),
-    compositionStrip(composition(ctx.roster, ctx.engine.plan(ctx.roster, ctx.plan.settings), ctx.plan.quotas, ctx.plan.settings.noRobin)),
-  );
-}
-
 function runFacts(ctx: RosterContext): HTMLElement {
   const { run } = ctx.roster;
   const setRun = (next: Partial<Roster['run']>) => ctx.setRoster(withRun(ctx.roster, next));
@@ -364,7 +269,6 @@ export function rosterPage(ctx: RosterContext): HTMLElement[] {
       section('Men', byGender('M')),
       section('Women', byGender('F')),
       section('Children', units.filter((u) => u.kind === 'child')),
-      childrenLedger(ctx),
     ),
   ];
 }

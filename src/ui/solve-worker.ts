@@ -5,10 +5,11 @@
  * pins lifted (`liftPins`), from the best plan found with them, then `pinCost`. Then it reads the best plan's readings
  * (#197): the EXP forecast's first pass, then each pending milestone's suggested changes, one milestone a reply, within
  * `READING_SECONDS`. The page may also hand it idle work (#202): the plan's unit worth and utility, then its reserves;
- * or, on request, the Robin alternatives (#201), after the search, pin cost and readings. It holds no logic: the
- * search, its state (the cursor) and its budgets are the engine's. Started by `solve-client.ts`, which terminates it to stop a solve.
+ * or, on request, the Robin alternatives (#201), after the search, pin cost and readings; and the Wishlist tab (#203) asks,
+ * in a second worker, for a unit's edits, listed then costed one by one (`unitEdits`). It holds no logic: the search,
+ * its state (the cursor) and its budgets are the engine's. Started by `solve-client.ts`, which terminates it to stop a solve.
  */
-import { EDIT_COST_BUDGET, READING_SECONDS, SOLVE_SECONDS, SUGGEST_RUNS, createEngine, type Assumptions, type DeploymentRole, type Engine, type Plan, type Run, type SolveCursor, type SuggestedChange } from '../engine';
+import { EDIT_COST_BUDGET, READING_SECONDS, SOLVE_SECONDS, SUGGEST_RUNS, createEngine, type Assumptions, type DeploymentRole, type Engine, type Plan, type Run, type SolveCursor, type SuggestedChange, type UnitEdit } from '../engine';
 import type { SolveReply, SolveRequest } from './solve-client';
 
 const scope = self as unknown as { onmessage: ((e: MessageEvent<SolveRequest>) => void) | null; postMessage(m: SolveReply): void };
@@ -76,9 +77,36 @@ scope.onmessage = ({ data: m }) => {
       if (done) return;
     }
   }
+  if (m.kind === 'edits') return unitEdits(engine, m, roleOf);
   for (const [i, budget] of m.budgets.entries())
     scope.postMessage({ id: m.id, kind: 'cost', cost: engine.editCost({ run: m.run, plan: m.plan, edited: m.edited, seed: m.seed, budget, ...(roleOf ? { roleOf } : {}) }), done: i === m.budgets.length - 1 });
 };
+
+/** The order a unit's edits are costed in (#203): the likeliest choices first; a build skill costs nothing to read. */
+const COST_ORDER: readonly UnitEdit['kind'][] = ['keep', 'marriage', 'class', 'pass', 'lineup', 'pair', 'robin', 'priority', 'place', 'seal', 'item', 'build', 'side-goal'];
+
+/**
+ * A unit's edits (#203): listed at once, then each costed at each budget in turn (every edit provisional first, then
+ * each settled), skipping those already settled; the list again, marked done, when every cost is in.
+ */
+function unitEdits(engine: Engine, m: Extract<SolveRequest, { kind: 'edits' }>, roleOf: ((u: string) => DeploymentRole) | undefined) {
+  const edits = engine.unitEdits(m.run, m.plan, m.unit, { ...(m.pins ? { pins: m.pins } : {}), seed: m.seed, ...(roleOf ? { roleOf } : {}) });
+  const views = edits.map(({ kind, key, label, pins }) => ({ kind, key, label, pins }));
+  scope.postMessage({ id: m.id, kind: 'edits', edits: views, done: false });
+  const order = [...edits].sort((a, b) => COST_ORDER.indexOf(a.kind) - COST_ORDER.indexOf(b.kind));
+  const plans = new Map<string, Plan>();
+  const settled = new Set<string>();
+  for (const budget of m.budgets)
+    for (const e of order) {
+      if (settled.has(e.key)) continue;
+      let edited = plans.get(e.key);
+      if (!edited) plans.set(e.key, (edited = e.make()));
+      const cost = engine.editCost({ run: m.run, plan: m.plan, edited, pins: e.play, seed: m.seed, budget, ...(roleOf ? { roleOf } : {}) });
+      if (cost.settled) settled.add(e.key);
+      scope.postMessage({ id: m.id, kind: 'edit-cost', key: e.key, cost, done: false });
+    }
+  scope.postMessage({ id: m.id, kind: 'edits', edits: views, done: true });
+}
 
 /**
  * The best plan's readings (#197), posted as they firm up: the first pass from its EXP forecast (a unit below 80% reads

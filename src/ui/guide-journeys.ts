@@ -9,7 +9,7 @@ import { LABELS, LEDGER_UI, LEFT_OUT_UI, NOT_BORN_UI, PIN_LOSS_UI, ROLE_UI, STAT
 import { CONTEXT_LABELS } from './scoring-prefs';
 
 /** The views a journey step lives on; a click switches to it. */
-export type GuideView = 'roster' | 'plan';
+export type GuideView = 'roster' | 'plan' | 'wishlist';
 
 export type JourneyStep = {
   readonly view: GuideView;
@@ -35,7 +35,7 @@ export type JourneyContent = {
   readonly steps: readonly JourneyStep[];
 };
 
-export const VIEW_NAMES: Readonly<Record<GuideView, string>> = { roster: LABELS.roster, plan: LABELS.plan };
+export const VIEW_NAMES: Readonly<Record<GuideView, string>> = { roster: LABELS.roster, plan: LABELS.plan, wishlist: 'Wishlist' };
 
 const { pinned, married, ruleOut, adoptPlan, lock, freeReplan, pin, roster, plan, runFacts, playContext, changedVsSaved, bestRemaining } =
   LABELS;
@@ -228,12 +228,12 @@ const LOSS: JourneyContent = {
       tick: 'marriageRecorded',
     },
     {
-      view: 'roster',
+      view: 'wishlist',
       target: 'children-ledger',
-      where: `${roster} › children ledger`,
+      where: 'Wishlist › children ledger',
       title: 'Scan the children ledger',
       takeaway:
-        `One row per child, with its fixed parent (the one it always has). ${ledgerStatus} tells you which children are hurt: ` +
+        `One row per child, beside the army on the Wishlist tab, with its fixed parent (the one it always has) and the wishlist’s parents for it. ${ledgerStatus} tells you which children are hurt: ` +
         `${ledgerLabel('broken')} (the saved pairing can’t happen: it is struck through in the plan column, and hovering the status says why), ${ledgerLabel('on-hold')} (a parent is benched), ` +
         `${ledgerLabel('left-out')} (it can still be born, but this plan doesn’t produce it: ${leftOutReasons}), ` +
         `${ledgerLabel('unborn')}, ${ledgerLabel('dead')}. The plan’s pairing column already shows the re-plan; ${bestRemaining} is ` +

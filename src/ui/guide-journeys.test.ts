@@ -83,11 +83,11 @@ describe('the After a loss journey', () => {
     expect(Object.keys(JOURNEYS)).toEqual(['fresh', 'loss', 'explore']);
   });
 
-  it('records on Roster, reads the ledger, then re-plans and adopts on Plan', () => {
+  it('records on Roster, reads the ledger on the Wishlist tab, then re-plans and adopts on Plan', () => {
     expect(steps.map((s) => [s.view, s.target])).toEqual([
       ['roster', 'state-strip'],
       ['roster', 'married'],
-      ['roster', 'children-ledger'],
+      ['wishlist', 'children-ledger'],
       ['plan', 'plan-diff'],
       ['plan', 'free-replan'],
       ['plan', 'adopt'],

@@ -43,7 +43,7 @@ import { editQuota } from './plan-prefs';
 import { unitLink, type OpenUnit } from './unit-links';
 import { shownDelta, shownTotal } from './plan-totals';
 
-/** A child's plan controls (priority, plan preset), shared by the Plan sidebar and the Roster page's ledger. */
+/** A child's plan controls (priority, plan preset), shared by the Plan sidebar and the Wishlist tab's children ledger. */
 export type ChildPlanControls = {
   readonly engine: Engine;
   readonly settings: PlanSettings;

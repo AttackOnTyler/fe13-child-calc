@@ -58,7 +58,7 @@ import { FLAWLESS_RUNS, FLAWLESS_SEED, flawlessCeiling, flawlessChance, flawless
 import { simulateCeiling, type Ceiling } from './sim/ceiling';
 import { coupleKey, endpointCoverage, nonStarters, seedPlan, type EndpointCoverage, type SeedContext, type SeedOptions } from './solve/seed';
 import { milestones, type Milestone } from './milestones';
-import { editCost, solveStep, type EditCost, type EditCostInput, type PinCost, type PinCostInput, type SolveStep, type SolveStepInput } from './solve/step';
+import { editCost, solveStep, type EditCost, type EditCostInput, type PinCost, type PinCostInput, type SolveStep, type SolveStepInput, type UnitEdit } from './solve/step';
 import { keptPins, planEdits } from './solve/edits';
 import { brokenPins, livePins, pinKey, runPins, withPin, withoutPins } from './solve/pins';
 import { ROBIN_EXTRA, ROBIN_SOLVE, withRobinLock, robinKey, robinLock, robinOptions, robinStep, wishlistDifference, withoutRobinMarriage, type RobinCost, type RobinCursor, type RobinInput, type RobinOption, type RobinPick, type RobinStep, type SolvedRobin, type WishlistDifference } from './solve/robin';
@@ -163,7 +163,7 @@ export { READING_SECONDS, SUGGEST_RUNS, growthPercentile, readUnits, type Readin
 export { ON_TRACK, milestoneCheck, type ExpForecast, type ExpForecastOptions, type SuggestedChange, type SuggestedPin } from './exp-forecast';
 export type { EndpointCoverage, SeedOptions } from './solve/seed';
 export type { ClassMilestone, Milestone, MilestonePoint, RecruitMilestone, SealSource, SkillMilestone, SupportMilestone, SupportWindow } from './milestones';
-export { EDIT_COST_BUDGET, EDIT_KINDS, SEARCH_RUNS, rescoreSeed, SOLVE_SECONDS, STEP_BUDGET, type EditCost, type EditCostInput, type EditKind, type PinCost, type PinCostInput, type SolveStep, type SolveStepInput } from './solve/step';
+export { EDIT_COST_BUDGET, EDIT_KINDS, SEARCH_RUNS, rescoreSeed, SOLVE_SECONDS, STEP_BUDGET, type EditCost, type EditCostInput, type EditKind, type PinCost, type PinCostInput, type SolveStep, type SolveStepInput, type UnitEdit } from './solve/step';
 export { FORCED_UNITS, LIKELY_LOSSES, type LikelyLoss, type ReserveReading, type ReservesCursor, type ReservesInput, type ReservesStep, type UnitWorth, type WorthCursor, type WorthInput, type WorthStep } from './solve/worth';
 export { BLIND_SPOTS, type BlindSpot, type BlindSpotId, type RunBlindSpotId } from './assumptions';
 export { bestWeapon, classTypes, dangerFlags, foeKey, foeOf, foesOf, matchup, pairUpBonus, statValue, type DangerFlag, type Fighter, type Foe, type Matchup } from './solver';
@@ -621,9 +621,17 @@ export type Engine = {
   /**
    * An edit's cost (#199): the edited plan's gain over the adopted plan on the same runs, with its paired error (±, 95%),
    * within a budget of evaluations: `EDIT_COST_BUDGET.provisional` for the first reading (about 1 s), `.settled` to
-   * settle it (clear either way, or a close call at the run cap).
+   * settle it (clear either way, or a close call at the run cap). `pins` are the pins the edited plan plays under (a
+   * keep edit's). An edit the simulation can't see (a build skill, today) is a close call on no runs.
    */
   editCost(input: EditCostInput): EditCost;
+  /**
+   * Every edit that touches a unit on a plan (#203, the Wishlist tab), in the search's order: the single edits naming
+   * it (marriages, Robin, its class, build and passes, the endpoint's lineup and pairs, EXP priorities, its paralogue's
+   * place, seals, items), then keeping it out of the wishlist (a wishlist unit; never Chrom or Robin) or in (anyone
+   * else). Each edited plan is built only when it's costed (`editCost` with the edit's `play` pins).
+   */
+  unitEdits(run: Run, plan: Plan, unit: RosterUnit, options?: { readonly pins?: readonly PlanPin[]; readonly seed?: number; readonly roleOf?: (u: RosterUnit) => DeploymentRole }): readonly UnitEdit[];
   /**
    * Each unit's worth and utility on a plan (#202), within a budget of evaluations: the flawless chance lost without it
    * (removed from every lineup where it's optional, its children with it, its spouse re-matched, the wishlist rebuilt
@@ -1994,7 +2002,43 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       const key = steps.find((s) => s.map === e.map)?.key;
       return { recorded: false, items: key ? beforeMapItems(sources, plan.roadmap.items, key).map((b) => ({ item: b.item, unit: b.unit })) : [] };
     },
-    editCost: (input) => editCost(input, (plan, first, count) => simulateRuns(planInput(input.run, plan, input.roleOf), input.seed, count, assumptions, first).samples),
+    editCost: (input) => {
+      const samplesOn = (r: Run) => (plan: Plan, first: number, count: number) => simulateRuns(planInput(r, plan, input.roleOf), input.seed, count, assumptions, first).samples;
+      const played = input.pins?.length ? pinnedRun(input.run, input.pins) : input.run;
+      // What the simulation reads of a plan (as the search's `simKey`): an edit it can't see costs nothing, on no runs.
+      const seen = (plan: Plan) => JSON.stringify([plan.robin, plan.wishlist.marriages, plan.wishlist.children, plan.roadmap]);
+      if (played === input.run && seen(input.plan) === seen(input.edited)) return { gain: 0, margin: 0, runs: 0, verdict: 'close', settled: true };
+      return editCost(input, samplesOn(input.run), samplesOn(played));
+    },
+    unitEdits: (given, plan, unit, options = {}) => {
+      const { roleOf } = options;
+      const run = pinnedRun(given, options.pins);
+      const pins = livePinsOf(run);
+      const opts = { pins, ...(roleOf ? { roleOf } : {}) };
+      // The endpoint's lineup is the wishlist's: its lineup and pair edits are the ones a unit's row offers.
+      const hints = { riskiest: [plan.wishlist.endpoint], stuck: [] };
+      const edits: UnitEdit[] = [];
+      for (const e of planEdits(run, seedContext(run), opts, plan, hints, (p) => lineupsOf(run, p, options.seed ?? FLAWLESS_SEED, roleOf)))
+        if (e.units?.includes(unit)) edits.push({ kind: e.kind, key: e.key, label: e.label, pins: e.pins ?? [], play: [], make: e.make });
+      // Keeping it out (a wishlist unit) or in (anyone else), as a keep pin: the edited plan keeps it, played under it.
+      const inWishlist = plan.wishlist.units.some((w) => w.unit === unit);
+      if (!(inWishlist && FORCED_UNITS.includes(unit))) {
+        const keep: PlanPin = { kind: 'keep', unit, keep: inWishlist ? 'out' : 'in' };
+        const name = unitName(unit, run.roster.run.gender ?? plan.robin.gender);
+        edits.push({
+          kind: 'keep',
+          key: `keep:${unit}:${keep.keep}`,
+          label: inWishlist ? `Keep ${name} out of the wishlist` : `Keep ${name} in the wishlist`,
+          pins: [keep],
+          play: [keep],
+          make: () => {
+            const kept = pinnedRun(run, [keep]);
+            return keptPins(kept, seedContext(kept), { pins: livePinsOf(kept), ...(roleOf ? { roleOf } : {}) }, plan);
+          },
+        });
+      }
+      return edits;
+    },
     unitWorth: (input) => {
       const { run, plan, seed, roleOf, pins } = input;
       const v = worthVariants(run, plan, roleOf, pins);
