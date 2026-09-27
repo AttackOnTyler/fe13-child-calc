@@ -1122,7 +1122,7 @@ class MapState {
   /** The policy's context for one choice. */
   private context(acted: ReadonlySet<number>, memo: Map<number, Attack | null>): PolicyContext {
     this.refreshThreats();
-    return { acted, memo, open: this.bossOpen(), threats: this.threatList, worn: this.worn(), sustain: new Map(), survival: this.survCache };
+    return { acted, memo, open: this.bossOpen(), threats: this.threatList, worn: this.worn(), sustain: new Map(), survival: this.survCache, relief: new Map() };
   }
 
   /**
@@ -1349,7 +1349,7 @@ class MapState {
     const others = [...this.front.keys()].filter((t) => t !== gi && !ctx.acted.has(t) && !this.npcFronts.has(t) && this.armed(t));
     if (!others.length) return false;
     // Each front's best attack at any risk, valued as the policy values it (a safer attack is worth more), or nothing.
-    const fresh = (): PolicyContext => ({ ...ctx, memo: new Map(), sustain: new Map() });
+    const fresh = (): PolicyContext => ({ ...ctx, memo: new Map(), sustain: new Map(), relief: new Map() });
     const worth = (c: PolicyContext) => others.reduce((v, t) => v + Math.max(0, this.bestAttackOf(t, c, 1)?.value ?? 0), 0);
     const own = Math.max(0, this.armed(gi) ? (this.bestAttackOf(gi, fresh())?.value ?? 0) : 0, this.sustainOf(gi, fresh())?.value ?? 0);
     // Nothing else to do: the Rally costs nothing (HP it saves over the turns isn't in the worth below).
@@ -1401,12 +1401,19 @@ class MapState {
     const rank = (gi: number) => this.ranks[this.front[gi]!.unit]!;
     const kills: Attack[] = [];
     const chips: Attack[] = [];
+    // Damage on the target boss is the victory itself, whoever deals it (the second realism pass): it goes before
+    // any EXP routing, the most valuable first.
+    let boss: Attack | undefined;
     for (const gi of open) {
       for (const a of this.attacksOf(gi, ctx)) {
         this.exposure(a, ctx, maxRisk < 1);
-        if (a.risk <= maxRisk) (a.ex.foeHp <= 0 ? kills : chips).push(a);
+        if (a.risk > maxRisk) continue;
+        if (this.groups[a.foe.g]!.target) {
+          if (!boss || a.value > boss.value) boss = a;
+        } else (a.ex.foeHp <= 0 ? kills : chips).push(a);
       }
     }
+    if (boss) return boss;
     let best: Attack | undefined;
     for (const a of kills) {
       const r = rank(a.group);
@@ -1506,6 +1513,28 @@ class MapState {
   }
 
   /** An attack by front `gi` on foe `f` that does something and that it more likely survives than not; null if not. */
+  /**
+   * How much safer each armed front stands on enemy phase with one foe of group `g` gone (see `attack`): its survival
+   * without it less with it, at its HP now, by front. Worked out once a choice.
+   */
+  private relief(g: number, ctx: PolicyContext): ReadonlyMap<number, number> {
+    const known = ctx.relief.get(g);
+    if (known) return known;
+    const r = new Map<number, number>();
+    ctx.relief.set(g, r);
+    if (!ctx.threats.some((f) => f.g === g)) return r;
+    for (let gi = 0; gi < this.front.length; gi++) {
+      if (this.npcFronts.has(gi) || this.safe.has(gi) || !this.armed(gi)) continue;
+      const a = this.front[gi]!;
+      if (!this.reachable(a)) continue;
+      const hp = this.hp[a.unit]!;
+      const now = this.survivalOf(a, this.bonus[gi], hp, ctx, -1);
+      const without = this.survivalOf(a, this.bonus[gi], hp, ctx, g);
+      if (without > now + EPS) r.set(gi, without - now);
+    }
+    return r;
+  }
+
   private attack(gi: number, f: FoeInstance, ctx: PolicyContext): Attack | null {
     if (this.groups[f.g]!.target && !ctx.open) return null;
     const ex = this.exchangeOf(gi, f, 'player');
@@ -1513,7 +1542,12 @@ class MapState {
     const target = !!this.groups[f.g]!.target;
     const dealt = ex.foeHp < f.hp ? (f.hp - ex.foeHp) / f.hp : 0;
     // Damage is part of a kill, worth what the kill is: on the target boss, part of the victory (its HP carries).
-    const gain = (target ? 100 : 1) * (ex.kill + 0.5 * dealt);
+    // A kill also makes the others safer: the survival it buys them against this foe's attack, and damage is part of
+    // that too (the second realism pass: a careful player fells the Hammer fighter that keeps its Great Knight out of
+    // the fight first).
+    let worth = target ? 100 : 1;
+    for (const [k, v] of this.relief(f.g, ctx)) if (k !== gi) worth += v;
+    const gain = worth * (ex.kill + 0.5 * dealt);
     if (gain <= 0) return null;
     return { kind: 'attack', group: gi, foe: f, ex, gain, raw: ex.survive * gain - (1 - ex.survive), risk: 1, exact: false, value: -1, at: -1 };
   }
@@ -2157,6 +2191,8 @@ type PolicyContext = {
   readonly sustain: Map<number, Action | undefined>;
   /** Enemy-phase survival by actor, HP and foe group gone, once worked out. */
   readonly survival: Map<number, number>;
+  /** How much safer each front stands with one foe of a group gone, by group (see `relief`), once worked out. */
+  readonly relief: Map<number, ReadonlyMap<number, number>>;
   /** Fronts keeping their action from the fighting tier (see `heldBack`). */
   held?: ReadonlySet<number>;
 };
