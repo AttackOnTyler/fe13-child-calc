@@ -72,6 +72,7 @@ import { brokenPins, livePins, pinKey, runPins, withPin, withoutPins } from './s
 import { ROBIN_EXTRA, ROBIN_SOLVE, withRobinLock, robinKey, robinLock, robinOptions, robinStep, wishlistDifference, withoutRobinMarriage, type RobinCost, type RobinCursor, type RobinInput, type RobinOption, type RobinPick, type RobinStep, type SolvedRobin, type WishlistDifference } from './solve/robin';
 import { FORCED_UNITS, childrenOf, coveredLineup, hasUtility, planWithout, reservesStep, withoutUnits, worthStep, type ReservesInput, type ReservesStep, type WorthInput, type WorthStep, type WorthVariant } from './solve/worth';
 import type { Plan, PlanLineup, PlanPin, PlanPriority, PlanRobin } from './solve/plan';
+import { checksStep, editChoicesStep, lossStep, pinCostStep, readingsStep, unitEditsStep, type ChecksStep, type ChecksStepInput, type EditChoicesStepInput, type EditsStep, type LossStep, type LossStepInput, type PinCostStep, type PinCostStepInput, type ReadingsStep, type ReadingsStepInput, type UnitEditsStepInput } from './background';
 import { beforeMapItems, itemPlanOf, type BeforeMapItem, type ItemPlan, type ItemUsed } from './item-plan';
 import { readings, recordedStats, type Readings, type ReadingsOptions, type UnitStats } from './readings';
 import { defaultPriorities, expForecast, suggestChanges, suggestedChanges, type ExpForecast, type ExpForecastOptions, type SuggestedChange } from './exp-forecast';
@@ -222,6 +223,7 @@ export type { EndpointCoverage, SeedOptions } from './solve/seed';
 export type { ClassMilestone, Milestone, MilestonePoint, RecruitMilestone, SealSource, SkillMilestone, SupportMilestone, SupportWindow } from './milestones';
 export { QUIET_POINTS, blindSpotsTouching, milestoneWords, riskSplit, type Comparison, type ExplainContext, type Explanation, type ExplanationFormat, type ExplanationKind, type ExplanationRow } from './explain';
 export { EDIT_COST_BUDGET, EDIT_KINDS, SEARCH_RUNS, rescoreSeed, SOLVE_SECONDS, STEP_BUDGET, type EditCost, type EditCostInput, type EditKind, type PinCost, type PinCostInput, type SolveStep, type SolveStepInput, type UnitEdit } from './solve/step';
+export type { ChecksCursor, ChecksStep, ChecksStepInput, EditChoicesStepInput, EditListing, EditsCursor, EditsStep, LossCursor, LossStep, LossStepInput, PinCostStep, PinCostStepInput, ReadingsCursor, ReadingsStep, ReadingsStepInput, SearchCursor, UnitEditsStepInput } from './background';
 export { FORCED_UNITS, LIKELY_LOSSES, type LikelyLoss, type ReserveReading, type ReservesCursor, type ReservesInput, type ReservesStep, type UnitWorth, type WorthCursor, type WorthInput, type WorthStep } from './solve/worth';
 export { BLIND_SPOTS, STRESS_TESTS, type BlindSpot, type BlindSpotId, type BlindSpotTouch, type RunBlindSpotId, type StressTest } from './assumptions';
 export { bestWeapon, classTypes, dangerFlags, foeKey, foeOf, foesOf, matchup, pairUpBonus, statValue, type DangerFlag, type Fighter, type Foe, type Matchup } from './solver';
@@ -717,6 +719,37 @@ export type Engine = {
    * `lift`'s on request. Recorded facts are never pins and cost nothing.
    */
   pinCost(input: PinCostInput): PinCost;
+  /**
+   * The pin cost as a stepping call (#200, the Web Worker's idle job): the second search with the pins (or `lift`)
+   * lifted from `plan`, one `solveStep` a call; once it converges, or `stop` says the time budget is spent, the best
+   * found with them lifted priced against `plan` (`pinCost`, settled).
+   */
+  pinCostStep(input: PinCostStepInput): PinCostStep;
+  /**
+   * The loss item's re-solve as a stepping call (#208): the search from the loss item's proposal, one `solveStep` a
+   * call; once done (converged, stopped, or no loss open), its best plan and chance.
+   */
+  lossStep(input: LossStepInput): LossStep;
+  /**
+   * A unit's edits costed (#203) as a stepping call: the list (`unitEdits`), then one edit's cost at one budget a call,
+   * the likeliest choices first, each budget in turn, skipping those settled; the list again, done.
+   */
+  unitEditsStep(input: UnitEditsStepInput): EditsStep;
+  /**
+   * The inbox's "anything else" (#204) as a stepping call: the list (`editChoices`), then each of `keys` costed at each
+   * budget in turn with its edited plan, skipping those settled; the list again, done.
+   */
+  editChoicesStep(input: EditChoicesStepInput): EditsStep;
+  /**
+   * The in-play checks (#209) as a stepping call: each open rule's stakes (those the model doesn't read first: they
+   * have none), then the setup checks, then each setup edit's cost at each budget in turn; the setup checks again, done.
+   */
+  checksStep(input: ChecksStepInput): ChecksStep;
+  /**
+   * A plan's readings (#197) as a stepping call: the first pass from its EXP forecast, then one pending milestone's
+   * suggested changes a call, until none are pending or `stop`.
+   */
+  readingsStep(input: ReadingsStepInput): ReadingsStep;
   /**
    * The item plan of a plan (#193): one row per held item (owned now, or picked up on a map still to play) with its
    * planned use or carrier timeline, the pins that set it, and, given the plan's flawless chance, its arrival chance
@@ -2046,6 +2079,12 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     },
     pins: (run, extra) => livePinsOf(pinnedRun(run, extra)),
     liftPins: (run, options = {}) => liftedRun(pinnedRun(run, options.pins), options.lift),
+    pinCostStep: (input) => pinCostStep(engine, input),
+    lossStep: (input) => lossStep(engine, input),
+    unitEditsStep: (input) => unitEditsStep(engine, input),
+    editChoicesStep: (input) => editChoicesStep(engine, input),
+    checksStep: (input) => checksStep(engine, input),
+    readingsStep: (input) => readingsStep(engine, input),
     pinCost: (input) => {
       const run = pinnedRun(input.run, input.pins);
       const lift = input.lift ? new Set(input.lift.map(pinKey)) : undefined;
