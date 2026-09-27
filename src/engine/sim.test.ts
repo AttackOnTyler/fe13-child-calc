@@ -624,6 +624,40 @@ describe('baits and bosses (realism pass)', () => {
     ]);
   });
 
+  it('lets a wall draw the foes it can surely take, up to the four next to it, each countering: fewer turns', () => {
+    // Each Axe hit takes 10. 70 HP: after its own attack's counter (60), four more hits leave it standing, and a fifth
+    // would too, but only four foes stand next to it. The 15 HP tank lives through one hit, not two.
+    const wall: Fighter = { ...tank('Wall'), stats: stats(70, 10, 0, 60, 0, 0, 0, 0) };
+    const five = rout([group({ ...axe, count: 5 })]);
+    const play = engine.playMap({ map: five, lineup: [solo(wall)] }, 1);
+    const enemy = (t: number) => play.log[t]!.fights.filter((f) => f.phase === 'enemy');
+    expect(enemy(0).map((f) => [f.lead, f.survive])).toEqual([
+      ['wall', 1],
+      ['wall', 1],
+      ['wall', 1],
+      ['wall', 1],
+    ]);
+    expect(play.log[0]!.noDeath).toBe(1);
+    expect(play.blindSpots).toContain('walls-draw-foes');
+    // Two hits would fell the 15 HP tank for sure: it takes one attack, as the one-attacker model has it.
+    const one = engine.playMap({ map: five, lineup: [solo(tank('Rock'))] }, 1);
+    expect(one.log[0]!.fights.filter((f) => f.phase === 'enemy')).toHaveLength(1);
+    expect(one.blindSpots).not.toContain('walls-draw-foes');
+  });
+
+  it('works out a second attack in one enemy phase over every HP the first can leave, not from its likely result', () => {
+    // A 55% hitter dealing 15 on a 30 HP tank: from the likely HP after one attack (about 22) a second can't kill, but
+    // both landing (30%) does. The stress case's second attacker reads the true risk.
+    const heavy: Foe = { ...brute, name: 'Heavy', count: 2, stats: stats(60, 18, 0, 0, 0, 60, 15, 0) };
+    const tank2: Fighter = { name: 'Tank', className: 'Myrmidon', stats: stats(30, 15, 0, 60, 30, 0, 10, 0), skills: [], weapon: weapon('Iron Sword') };
+    const q = matchup(tank2, undefined, null, heavy).foeHit / 100;
+    const play = engine.playMap({ map: rout([group(heavy)]), lineup: [solo(tank2)], stress: 'two-attackers' }, 1);
+    const first = play.log[0]!.fights.filter((f) => f.phase === 'enemy');
+    expect(first).toHaveLength(2);
+    expect(first[0]!.survive).toBe(1);
+    expect(first[1]!.survive).toBeCloseTo(1 - q * q, 9);
+  });
+
   // A boss that holds and a stream of harmless posts that never ends: waiting for the field to clear never ends either.
   const post: Foe = { ...brute, name: 'Post', weapon: undefined, count: 3, stats: stats(10, 0, 0, 0, 0, 60, 0, 0) };
   const endless = (boss: Foe): SimMap => ({
@@ -641,13 +675,13 @@ describe('baits and bosses (realism pass)', () => {
   });
 
   it('presses a boss that fights back when reinforcements never stop: waiting only lets the field fill', () => {
-    // The Brute's counter is a real risk (over the 1% a careful player takes for free), and the posts are free kills:
-    // a turn spent on posts is a turn more of the stream, so the boss is attacked every turn, at the least risk.
+    // The Brute's counter is a real risk (over the 1% a careful player takes for free), and the posts are free kills.
+    // The hero fells posts while the boss's risk is first read; once the field has filled (more posts than it started
+    // with) and that risk hasn't fallen since the turn before, the boss is pressed every turn, and falls: no stall.
     const chief: Foe = { ...brute, name: 'Chief', boss: true };
     const play = engine.playMap({ map: endless(chief), lineup: [solo(hero)] }, 1);
     expect(play.ended).toBe('boss');
-    expect(play.turns).toBe(2);
-    expect(play.log.map((t) => t.fights.filter((f) => f.phase === 'player').map((f) => f.foe))).toEqual([['Chief'], ['Chief']]);
+    expect(play.log.map((t) => t.fights.filter((f) => f.phase === 'player').map((f) => f.foe))).toEqual([['Post'], ['Post'], ['Chief'], ['Chief']]);
   });
 
   it('counts damage on the target boss as part of the victory: it chips the boss before felling posts', () => {

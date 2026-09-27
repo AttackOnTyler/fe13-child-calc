@@ -54,11 +54,11 @@ describe('the blind spots that can be stressed (#211)', () => {
 
 describe('a map played under a blind spot’s bad case (#211)', () => {
   it('two attackers: each exposed front takes a second attack on enemy phase, each foe still attacking once', () => {
-    // A tank the cleric heals each turn: one attack a turn it lives through, two between heals it may not.
+    // A tank the cleric heals each turn: one attack a turn it lives through, two between heals it may not (so it never draws a second).
     const tank: Fighter = { name: 'Tank', className: 'Myrmidon', stats: stats(30, 15, 0, 60, 30, 0, 10, 0), skills: [], weapon: weapon('Iron Sword') };
     const cleric: Fighter = { name: 'Cleric', className: 'Cleric', stats: stats(20, 0, 10, 5, 5, 5, 2, 8), skills: [], weapon: undefined };
     const healer: SimGroup = { lead: { id: 'cleric', fighter: cleric, weapons: [], items: [{ item: itemByName('Physic')!, uses: 30 }] }, support: null };
-    const wall: Foe = { ...brute, name: 'Wall', stats: stats(60, 16, 0, 0, 0, 60, 15, 0) };
+    const wall: Foe = { ...brute, name: 'Wall', stats: stats(60, 18, 0, 0, 0, 60, 15, 0) };
     const input = { map: rout([group(wall)]), lineup: [solo(tank), healer] };
     const base = engine.playMap(input, 1);
     const stressed = engine.playMap({ ...input, stress: 'two-attackers' }, 1);
