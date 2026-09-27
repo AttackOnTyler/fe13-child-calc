@@ -136,14 +136,26 @@ export const REINFORCEMENT_RULE: Readonly<Record<'normal' | 'hard+', string>> = 
 };
 
 /**
- * Seals (research/chapter-data §6; SF shops and merchants): Master Seals from the Port Ferox armory after Chapter 12,
- * Second Seals from the Mila Tree armory after Chapter 16. Before that, merchants from the Prologue through Chapter 10
- * (and Paralogues 1–3) can offer either, but a merchant appears at random and sells three random picks, so a plan can't
- * count on them. The preparations shop is disabled on Hard and up.
+ * Seals (research/chapter-data §6; SF shops and merchants): Master Seals from the Port Ferox armory after Chapter 12.
+ * Second Seals from four armories (#153; research/child-recruitment §5, C8): the Mila Tree after Chapter 16, and the
+ * Great Gate, Mercenary Fortress and Manor of Lost Souls after Paralogues 6, 10 and 16. That's what this chapter data
+ * says (FEW chapter pages; SF shops agreed 49/49), and the JP 2ch wiki FAQ (p.19) agrees: 「チェンジプルフは16章ないし
+ * 外伝6,10,16クリアで購入できる」. Marrying Olivia, Cordelia or Nowi early can open one before Chapter 16. Before any
+ * armory, merchants from the Prologue through Chapter 10 (and Paralogues 1–3) can offer either seal, but a merchant
+ * appears at random and sells three random picks, so a plan can't count on them. The preparations shop is disabled on
+ * Hard and up.
  */
 export const SEAL_RULES = {
   masterSeal: { armoryAfter: 'chapter-12', location: 'Port Ferox' },
-  secondSeal: { armoryAfter: 'chapter-16', location: 'Mila Tree' },
+  secondSeal: {
+    armories: [
+      { after: 'chapter-16', location: 'Mila Tree' },
+      { after: 'paralogue-6', location: 'Great Gate' },
+      { after: 'paralogue-10', location: 'Mercenary Fortress' },
+      { after: 'paralogue-16', location: 'Manor of Lost Souls' },
+    ],
+    source: 'FEW chapter pages (this data; SF shops agree); JP 2ch wiki FAQ (p.19, https://w.atwiki.jp/fireemblem3ds/pages/19.html)',
+  },
   merchantsUntil: 'chapter-10',
   prepShopOnHardUp: false,
 } as const;

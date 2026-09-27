@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createEngine, foesOf, itemByName, openStock, promotionAdvice, sealAvailability, sealsHeld, supplyList, type DeployCandidate } from './index';
+import { createEngine, foesOf, itemByName, openStock, promotionAdvice, SEAL_RULES, sealAvailability, sealsHeld, supplyList, type DeployCandidate } from './index';
 
 const engine = createEngine();
 const map = (id: string) => engine.maps().find((m) => m.id === id)!;
@@ -25,6 +25,32 @@ describe('stock and seals (#122)', () => {
     expect(sealAvailability(upTo('chapter-11')).master).toBe('merchant');
     expect(sealAvailability(upTo('chapter-12'))).toMatchObject({ master: 'armory', second: 'merchant' });
     expect(sealAvailability(upTo('chapter-16'))).toMatchObject({ master: 'armory', second: 'armory' });
+  });
+
+  it('sends Second Seals to whichever of the Mila Tree, Great Gate, Mercenary Fortress or Manor of Lost Souls armories is open (#153)', () => {
+    const plus = (id: string) => new Set([...upTo('chapter-13'), id]);
+    for (const [p, where] of [['paralogue-6', 'Great Gate'], ['paralogue-10', 'Mercenary Fortress'], ['paralogue-16', 'Manor of Lost Souls']] as const) {
+      const s = sealAvailability(plus(p));
+      expect(s.second).toBe('armory');
+      expect(s.note).toContain(`Second Seals: in the ${where} armory.`);
+      expect(s.note).not.toContain('Mila Tree');
+    }
+    const ch16 = sealAvailability(upTo('chapter-16'));
+    expect(ch16.second).toBe('armory');
+    expect(ch16.note).toContain('Second Seals: in the Mila Tree armory.');
+    const ch12 = sealAvailability(upTo('chapter-12'));
+    expect(ch12.second).toBe('merchant');
+    expect(ch12.note).toContain('after Chapter 16, or Paralogue 6, 10 or 16');
+    expect(sealAvailability(new Set()).note).toContain('Second Seals: from an armory after Chapter 16, or Paralogue 6, 10 or 16.');
+  });
+
+  it('lists exactly the armories the chapter data says sell Second Seals (#153)', () => {
+    const selling = engine.maps().filter((m) => m.shop?.armory.some((a) => a.item === 'Second Seal'));
+    expect(SEAL_RULES.secondSeal.armories.map((a) => a.after).sort()).toEqual(selling.map((m) => m.id).sort());
+    for (const a of SEAL_RULES.secondSeal.armories) expect(map(a.after).shop!.location.replace(/^The /, '')).toBe(a.location);
+  });
+
+  it('counts held seals', () => {
     expect(sealsHeld([{ item: 'Master Seal', uses: 1 }, { item: 'Master Seal', uses: 1 }, { item: 'Iron Sword', uses: 40 }])).toEqual({ master: 2, second: 0 });
   });
 });

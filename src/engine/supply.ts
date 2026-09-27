@@ -35,21 +35,46 @@ export type SealAvailability = { readonly master: 'armory' | 'merchant' | 'none'
 
 /**
  * When seals can be bought, read from the chapter data (SEAL_RULES): Master Seals from the Port Ferox armory once
- * Chapter 12 is cleared, Second Seals from the Mila Tree armory once Chapter 16 is; until then only a random merchant
- * at a cleared location whose pool holds them (Prologue to Chapter 10, Paralogues 1–3) sells them.
+ * Chapter 12 is cleared; Second Seals from the Mila Tree armory once Chapter 16 is, or the Great Gate, Mercenary
+ * Fortress or Manor of Lost Souls armory once Paralogue 6, 10 or 16 is (chapter data and JP 2ch wiki FAQ, #153). Until
+ * then only a random merchant at a cleared location whose pool holds them (Prologue to Chapter 10, Paralogues 1–3)
+ * sells them. The note names the armories that are open, or every way in while none is.
  */
 export function sealAvailability(cleared: ReadonlySet<string>): SealAvailability {
   const stock = openStock(cleared);
   const where = (seal: string) => (stock.armory.some((a) => a.item === seal) ? 'armory' : stock.merchant.some((a) => a.item === seal) ? 'merchant' : 'none') as SealAvailability['master'];
   const master = where('Master Seal');
   const second = where('Second Seal');
-  const say = (w: SealAvailability['master'], loc: string, after: string) =>
-    w === 'armory' ? `in the ${loc} armory` : w === 'merchant' ? 'only from a random merchant (not something to count on)' : `from the ${loc} armory after ${after}`;
-  return {
-    master,
-    second,
-    note: `Master Seals: ${say(master, SEAL_RULES.masterSeal.location, 'Chapter 12')}. Second Seals: ${say(second, SEAL_RULES.secondSeal.location, 'Chapter 16')}.`,
-  };
+  const merchantOnly = 'only from a random merchant (not something to count on)';
+  const masterSays = master === 'armory' ? `in the ${SEAL_RULES.masterSeal.location} armory` : master === 'merchant' ? merchantOnly : `from the ${SEAL_RULES.masterSeal.location} armory after Chapter 12`;
+  const armories = SEAL_RULES.secondSeal.armories;
+  const open = armories.filter((a) => cleared.has(a.after));
+  const everyWayIn = `after ${afterMaps(armories.map((a) => a.after))}`;
+  const secondSays =
+    second === 'armory' && open.length
+      ? `in the ${orList(open.map((a) => a.location))} armory`
+      : second === 'merchant'
+        ? `${merchantOnly}; an armory sells them ${everyWayIn}`
+        : `from an armory ${everyWayIn}`;
+  return { master, second, note: `Master Seals: ${masterSays}. Second Seals: ${secondSays}.` };
+}
+
+/** "a", "a or b", "a, b or c". */
+const orList = (xs: readonly string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} or ${xs[xs.length - 1]}`);
+
+/** Map labels grouped by kind: "Chapter 16, or Paralogue 6, 10 or 16". */
+function afterMaps(ids: readonly string[]): string {
+  const groups: { kind: string; nums: string[] }[] = [];
+  for (const id of ids) {
+    const label = MAPS.find((m) => m.id === id)?.label ?? id;
+    const at = label.lastIndexOf(' ');
+    const [kind, num] = at < 0 ? [label, ''] : [label.slice(0, at), label.slice(at + 1)];
+    const last = groups[groups.length - 1];
+    if (last && last.kind === kind) last.nums.push(num);
+    else groups.push({ kind, nums: [num] });
+  }
+  const said = groups.map((g) => `${g.kind} ${orList(g.nums)}`.trim());
+  return said.length < 2 ? said.join('') : `${said.slice(0, -1).join(', ')}, or ${said[said.length - 1]}`;
 }
 
 /** Seals held in inventories and the convoy. */

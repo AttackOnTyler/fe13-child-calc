@@ -282,7 +282,7 @@ export const DEEPER: readonly DeeperEntry[] = [
     question: 'What should I buy, forge or promote before this map?',
     answer: [
       'The supply list suggests a buy or a forge for each deployed lead that turns foes it can’t one-round into one-round kills, cheapest per foe first, within the gold you recorded and only from armories you’ve opened. Merchants are random, so they aren’t counted.',
-      'Seals and promotions says where seals come from now (Master Seals in the Port Ferox armory after Chapter 12, Second Seals at the Mila Tree after Chapter 16; before that only random merchants), how many you hold, and for each base-class unit at level 10+ whether promoting now wins more of this map’s matchups.',
+      'Seals and promotions says where seals come from now (Master Seals in the Port Ferox armory after Chapter 12, Second Seals in the Mila Tree armory after Chapter 16, or the Great Gate, Mercenary Fortress or Manor of Lost Souls armory after Paralogue 6, 10 or 16, naming whichever is open; before that only random merchants), how many you hold, and for each base-class unit at level 10+ whether promoting now wins more of this map’s matchups.',
       'The level-20 stats it shows are expected, from average growths: a guide to “now or later”, not your unit’s real stats.',
     ],
     jump: { to: 'log', target: 'prepare' },
