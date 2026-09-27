@@ -26,7 +26,7 @@ import {
   type RunSim,
   type UnitWorth,
 } from '../engine';
-import { chanceText, differenceText, killText } from './chance';
+import { chanceText, differenceText, killText, pointsText, signedPoints } from './chance';
 import { h } from './dom';
 import { startSolve } from './solve-client';
 
@@ -230,12 +230,6 @@ function ask(ctx: WhyContext, id: string, e: Explanation): void {
 /** A blind spot's lean as the panel tags it: the chip's words, what it means, and its colour class. */
 export const LEAN = { high: ['▲ may read high', 'the real chance is probably lower', 'warn'], low: ['▼ may read low', 'the real chance is probably higher', 'ok'], either: ['◆ either way', 'it could go either way', 'dim'] } as const;
 
-/** A signed number of points: 0.012 → "+1.2", −0.034 → "−3.4". */
-const signed = (p: number) => {
-  const s = (Math.abs(p) * 100).toFixed(1);
-  return s === '0.0' ? s : `${p < 0 ? '−' : '+'}${s}`;
-};
-
 /** An explanation's value as the panel reads it (the ± of a difference with it; the headline's in its math). */
 export function valueText(e: Pick<Explanation, 'value' | 'format' | 'margin' | 'close'>): string {
   switch (e.format) {
@@ -246,7 +240,7 @@ export function valueText(e: Pick<Explanation, 'value' | 'format' | 'margin' | '
     case 'difference':
       return differenceText(e.value, e.margin ?? Number.NaN, e.close);
     case 'points':
-      return `${(e.value * 100).toFixed(1)} points`;
+      return `${pointsText(e.value)} points`;
     case 'gold':
       return `${Math.round(e.value).toLocaleString('en-US')}G`;
     case 'exp':
@@ -299,7 +293,7 @@ export function explanationView(
                   { class: r.drillTo ? 'drill' : '', ...(r.drillTo ? { title: 'Why?', onclick: () => on.drill(r.drillTo!) } : {}) },
                   h('td', {}, r.drillTo ? h('button', { class: 'linkish', type: 'button' }, r.label) : r.label),
                   h('td', { class: 'v' }, rowValue(r)),
-                  h('td', { class: `v ${r.points === undefined ? '' : r.points < 0 ? 'neg' : 'pos'}` }, r.points === undefined ? '' : signed(r.points)),
+                  h('td', { class: `v ${r.points === undefined ? '' : r.points < 0 ? 'neg' : 'pos'}` }, r.points === undefined ? '' : signedPoints(r.points)),
                   h('td', { class: 'bar' }, r.points === undefined ? '' : h('i', { class: r.points < 0 ? 'neg' : 'pos', style: `width:${Math.round((Math.abs(r.points) / max) * 100)}%` })),
                   h('td', {}, r.drillTo ? '›' : ''),
                 ),

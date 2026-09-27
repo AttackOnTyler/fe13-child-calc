@@ -75,7 +75,7 @@ import {
   withoutPins,
   type DeployCandidate,
 } from '../engine';
-import { chanceText } from './chance';
+import { chanceText, chanceWithMargin, pointsText, riskText, signedPoints } from './chance';
 import { lossText, mapChecks } from './inbox';
 import { adoptedOf, openLosses } from '../engine';
 import { goldRange, goldText, milestoneShort, pinText, solveState } from './run-page';
@@ -251,9 +251,6 @@ const PRIORITY_TEXT = { high: 'High', normal: 'Normal', low: 'Low' } as const;
 
 /** A level with its EXP as the fraction (5.4 → "Lv 5, 40 EXP"), as the game shows it. */
 const levelText = (x: number) => `Lv ${Math.floor(x + 1e-9)}${Math.round((x % 1) * 100) ? ` ${Math.round((x % 1) * 100)} EXP` : ''}`;
-
-/** A small chance of a death, as the threats read it: "0.4%", "under 0.1%", "0%". */
-const riskText = (p: number) => (p <= 0 ? '0%' : p < 0.001 ? 'under 0.1%' : `${(p * 100).toFixed(1)}%`);
 
 const WHY: Readonly<Record<ShoppingLine['kind'], string>> = { rebuy: 'runs dry before the next armory', seal: 'for a promotion', tonic: 'the item plan’s tonic for this map', arms: 'arms the lineup for this map', kit: 'endpoint kit' };
 
@@ -622,7 +619,7 @@ export function prepReadout(engine: Engine, run: Run, map: string, input: PrepIn
   const todo = actions.filter((a) => a.step !== 'map').length;
   const head = {
     noDeath: `No-death chance on this map: ${chanceText(noDeath)}`,
-    flawless: `The plan’s flawless chance: ${chanceText(forecast.chance)} ±${(forecast.margin * 100).toFixed(1)}`,
+    flawless: `The plan’s flawless chance: ${chanceWithMargin(forecast)}`,
     turns: `about ${Math.round(turns)} turn${Math.round(turns) === 1 ? '' : 's'}`,
     deploy: `deploy ${lineup.deployed.length} of ${max}${noPrep ? ' (forced)' : ''}`,
     detail: `${playDetail(engine, sim, play)}${noPrep ? '' : ` ${todo ? `${todo} thing${todo === 1 ? '' : 's'} to do before you start.` : 'Nothing to do in the preparations.'}`}`,
@@ -863,7 +860,7 @@ function pairCard(ctx: PrepContext, r: PrepReadout, c: PairCard, choices: readon
                   'button',
                   {
                     class: 'mini',
-                    title: `${capital(x.atRisk.fix.text)}${x.atRisk.fix.worth ? `, flawless chance ${x.atRisk.fix.worth < 0 ? '−' : '+'}${Math.abs(x.atRisk.fix.worth * 100).toFixed(1)}` : ''}`,
+                    title: `${capital(x.atRisk.fix.text)}${x.atRisk.fix.worth ? `, flawless chance ${signedPoints(x.atRisk.fix.worth)}` : ''}`,
                     onclick: () => {
                       const plan = FORECASTS.get(ctx.run)?.plan;
                       if (!plan) return;
@@ -897,7 +894,7 @@ function pairCard(ctx: PrepContext, r: PrepReadout, c: PairCard, choices: readon
 /** A checklist action with its tick (view state) and why. */
 function actionRow(a: PrepAction): HTMLElement {
   const box = h('input', { type: 'checkbox', checked: CHECKED.has(a.id) });
-  const row = h('label', { class: `act${CHECKED.has(a.id) ? ' done' : ''}`, id: `act-${a.id}` }, box, h('span', {}, a.text, h('br', {}), h('small', { class: 'muted' }, a.why)), a.worth ? h('span', { class: 'pos small' }, `+${(a.worth * 100).toFixed(1)}`) : null);
+  const row = h('label', { class: `act${CHECKED.has(a.id) ? ' done' : ''}`, id: `act-${a.id}` }, box, h('span', {}, a.text, h('br', {}), h('small', { class: 'muted' }, a.why)), a.worth ? h('span', { class: 'pos small' }, `+${pointsText(a.worth)}`) : null);
   box.addEventListener('change', () => {
     if ((box as HTMLInputElement).checked) CHECKED.add(a.id);
     else CHECKED.delete(a.id);

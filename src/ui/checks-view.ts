@@ -33,7 +33,7 @@ import {
   type RunEntry,
   type SetupCheck,
 } from '../engine';
-import { differenceText } from './chance';
+import { differenceText, marginText, pointsText } from './chance';
 import { h } from './dom';
 import { startSolve } from './solve-client';
 
@@ -111,13 +111,11 @@ export function askChecks(ctx: { readonly assumptions?: Assumptions; readonly ru
 
 // ---- words -----------------------------------------------------------------------------------------------------------
 
-const points = (x: number) => (Math.abs(x) * 100).toFixed(1);
-
 /** A rule's stakes in words: "stakes 2.1 ±0.8 points", none where the model doesn't read it, pending until worked out. */
 export function stakeText(stake: RuleStake | undefined): string {
   if (!stake) return 'stakes being worked out';
   if (!stake.modelled) return 'no stakes: the model doesn’t read it';
-  return `stakes ${points(stake.gain)} ±${points(stake.margin)} points`;
+  return `stakes ${pointsText(Math.abs(stake.gain))} ${marginText(stake.margin)} points`;
 }
 
 /** What a check asks for, in words: "EXP from one Rally (0 if no EXP bar appears)", "Did the back gain any EXP?". */

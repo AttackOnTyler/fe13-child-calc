@@ -28,7 +28,7 @@ import type { Comparison, CostRow, Deployment, EditCost, Engine, LossItem, Miles
 import { EDIT_COST_BUDGET, FLAWLESS_SEED, STEP_BUDGET, adoptedOf, behindFixes, pinKey, proposalId, robinLock, rosterUnits, unitName, whatChanged, withDismissedChange, withDismissedProposal, withEdit, withLossesSettled, withRobinLock, withoutEdit } from '../engine';
 import { SKILLS } from '../game-data/skills';
 import { STAT_LABELS } from '../game-data/stats';
-import { chanceText, differenceText } from './chance';
+import { chanceText, chanceWithMargin, differenceText, signedPoints } from './chance';
 import { h } from './dom';
 import { guide } from './guide';
 import { startSolve, type UnitEditView } from './solve-client';
@@ -417,8 +417,8 @@ function lossItem(engine: Engine, loss: LossItem, adopted: Plan, state: InboxSta
   const what = loss.losses.map((l) => lossText(engine, l, name));
   const broke = loss.broke.map((m) => milestoneWords(m, name));
   const refined = state.progress?.loss;
-  const after = refined ? `${withMargin(refined)} with the re-solve` : 'working out the re-solve’s chance…';
-  const before = loss.before ? `${withMargin(loss.before)} before the loss` : 'not worked out before the loss';
+  const after = refined ? `${chanceWithMargin(refined)} with the re-solve` : 'working out the re-solve’s chance…';
+  const before = loss.before ? `${chanceWithMargin(loss.before)} before the loss` : 'not worked out before the loss';
   const changes = [
     ...loss.steppingIn.map((x) => `${name(x.unit)} steps in for ${name(x.for)} (the reserve covering ${name(x.for)})`),
     ...loss.marriages.removed.map(([a, b]) => `${name(a)} and ${name(b)} no longer marry`),
@@ -504,7 +504,7 @@ export function afterLockReadout(engine: Engine, run: Run, state: InboxState): A
           key: `at-risk:${r.unit}`,
           text: `${name(r.unit)}: ${worstOf(r)}`,
           marks: worstMarks(r),
-          fix: c && edit ? { key: `fix:${r.unit}`, text: `${capital(words!)}: ${chanceText(c.chance)}${c.flawless ? `, flawless chance ${signed(c.flawless)}` : ''}`, edit } : r.pending ? { key: `fix:${r.unit}`, text: 'Reading the changes that could bring it back…' } : undefined,
+          fix: c && edit ? { key: `fix:${r.unit}`, text: `${capital(words!)}: ${chanceText(c.chance)}${c.flawless ? `, flawless chance ${signedPoints(c.flawless)}` : ''}`, edit } : r.pending ? { key: `fix:${r.unit}`, text: 'Reading the changes that could bring it back…' } : undefined,
         };
       }),
     });
@@ -562,12 +562,6 @@ const pinCostMark = (p: SolveProgress | undefined): WhyMark | undefined => {
   const pc = p?.pinCost;
   return pc && [differenceText(pc.cost, pc.margin, pc.verdict === 'close' || pc.verdict === 'unclear'), 'edit:pin-cost'];
 };
-
-/** Points of chance with a sign: "+1.2", "−0.4". */
-const signed = (p: number) => `${p < 0 ? '−' : '+'}${Math.abs(p * 100).toFixed(1)}`;
-
-/** A chance with its ±: "42.0% ±5.0". */
-const withMargin = (c: { readonly chance: number; readonly margin: number }) => `${chanceText(c.chance)} ±${(c.margin * 100).toFixed(1)}`;
 
 const READING_WORDS = { 'on-track': 'on track', 'at-risk': 'at risk', behind: 'behind' } as const;
 
@@ -630,9 +624,9 @@ export function whatChangedReadout(engine: Engine, run: Run, progress: SolveProg
   const gender = run.roster.run.gender;
   const name = (u: RosterUnit | 'maiden') => unitName(u, gender);
   const lv = (x: number) => x.toFixed(1);
-  const now = w.after ? `${withMargin(w.after)} now` : 'working it out…';
+  const now = w.after ? `${chanceWithMargin(w.after)} now` : 'working it out…';
   const chance = w.before
-    ? `Flawless chance: ${withMargin(w.before)} before → ${now}${w.after ? ` (${signed(w.after.chance - w.before.chance)} points)` : ''}`
+    ? `Flawless chance: ${chanceWithMargin(w.before)} before → ${now}${w.after ? ` (${signedPoints(w.after.chance - w.before.chance)} points)` : ''}`
     : `Flawless chance: ${now} (not worked out before the map was recorded)`;
   // A unit with no EXP forecast or earned (a Back that never struck, a unit left idle) has nothing to compare.
   const exp = w.exp.filter((x) => x.forecast >= 0.5 || x.earned).map(
@@ -656,10 +650,10 @@ export function whatChangedReadout(engine: Engine, run: Run, progress: SolveProg
       comparison: { key, comparison: { kind: 'cost', label: text.slice(0, text.indexOf(': ') > 0 ? text.indexOf(': ') : undefined), gain: r.points, margin: r.margin, runs: priced!.runs } },
     };
   });
-  if (priced && priced.entry === w.entry && priced.small) cost.push({ text: `${priced.small.count} smaller row${priced.small.count === 1 ? '' : 's'} (under 0.1 points each): ${signed(priced.small.points)} points together` });
+  if (priced && priced.entry === w.entry && priced.small) cost.push({ text: `${priced.small.count} smaller row${priced.small.count === 1 ? '' : 's'} (under 0.1 points each): ${signedPoints(priced.small.points)} points together` });
   const costNote = !progress?.cost ? 'What it cost: pricing each event on the same runs…' : cost.length ? `In flawless points on ${priced!.runs} paired runs each (negative: what it cost).` : 'What it cost: nothing on this map moved the flawless chance.';
   const moved = w.before && w.after ? { gain: w.after.chance - w.before.chance, margin: Math.hypot(w.before.margin, w.after.margin) } : undefined;
-  const marks: WhyMark[] = w.after ? [[withMargin(w.after), 'flawless'], ...(moved ? [[`${signed(moved.gain)} points`, `edit:changed:${w.entry}`] as WhyMark] : [])] : [];
+  const marks: WhyMark[] = w.after ? [[chanceWithMargin(w.after), 'flawless'], ...(moved ? [[`${signedPoints(moved.gain)} points`, `edit:changed:${w.entry}`] as WhyMark] : [])] : [];
   return {
     entry: w.entry,
     title: `What changed on ${label}`,

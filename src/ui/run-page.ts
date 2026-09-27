@@ -4,7 +4,7 @@
  * A new entry copies the one before; editing a past entry never reaches later ones, which are flagged instead.
  */
 import type { Assumptions, Ceiling, ChildId, CloseCall, Gender, Reading, Readings, SuggestedPin, Engine, FlawlessChance, FlawlessOptions, GoldSpread, HeldItem, ItemPin, ItemPlanRow, ItemUsed, MapOrderStep, Milestone, MilestonePoint, PinCost, Plan, PlanPin, PlanProposal, PlanRobin, PrunedComp, RobinCursor, RobinStep, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
-import { chanceText, differenceText, stressText } from './chance';
+import { chanceText, chanceWithMargin, differenceText, stressText } from './chance';
 import { startSolve } from './solve-client';
 import { SOLVE_SECONDS, STEP_BUDGET, rescoreSeed, rosterUnits, type RunSim, type StressCase } from '../engine';
 import { EMPTY_SNAPSHOT, FLAWLESS_SEED, SUPPORT_LEVELS, addEntry, childJoinFrom, chromWedding, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, withUnit } from '../engine';
@@ -304,9 +304,6 @@ export function readingRow(r: Reading, ms: readonly Milestone[], gender: Gender 
   return [head, worst, why, stats].filter(Boolean).join(' · ');
 }
 
-/** Points of chance, as the ± reads: 0.015 → "1.5". */
-const points = (p: number) => (p * 100).toFixed(1);
-
 const listOf = (xs: readonly string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
 /** What the headline is worked out from: the seed's runs and the player's pins (#198). */
@@ -489,7 +486,7 @@ function readoutOf(
       ]
     : [];
   const why = {
-    text: [[`${chanceText(r.chance)} ±${points(r.margin)}`, 'flawless'], ...(ceiling?.chance !== undefined ? [[chanceText(ceiling.chance), 'ceiling'] as WhyMark] : [])] as WhyMark[],
+    text: [[chanceWithMargin(r), 'flawless'], ...(ceiling?.chance !== undefined ? [[chanceText(ceiling.chance), 'ceiling'] as WhyMark] : [])] as WhyMark[],
     rows: r.maps.map((m): WhyMark[] => [
       ...(m.noDeath !== undefined ? [[chanceText(m.noDeath), `map:${m.key}`] as WhyMark] : []),
       ...(m.noDeath !== undefined && m.gold ? [[goldRange(m.gold), `gold:${m.key}`] as WhyMark] : []),
@@ -508,7 +505,7 @@ function readoutOf(
   return {
     items: itemPlanReadout(engine, run, plan, r, pins),
     plan,
-    text: `Flawless chance: ${chanceText(r.chance)} ±${points(r.margin)} · ${ceiling?.chance !== undefined ? `ceiling ${chanceText(ceiling.chance)}` : 'no ceiling yet'}${status}`,
+    text: `Flawless chance: ${chanceWithMargin(r)} · ${ceiling?.chance !== undefined ? `ceiling ${chanceText(ceiling.chance)}` : 'no ceiling yet'}${status}`,
     detail: detail.join(' '),
     rows: r.maps.map((m) => {
       // Its side goals (#191): the share of runs that secure each one chased; and renown's rewards arriving on it.
@@ -1099,7 +1096,7 @@ export function robinReadout(engine: Engine, run: Run, step: RobinStep | undefin
     ].filter(Boolean);
     const spouse = s.plan.wishlist.marriages.find((c) => c.includes('robin'))?.find((u) => u !== 'robin') ?? null;
     const cost = s.cost ? ` · ${differenceText(s.cost.gain, s.cost.margin, s.cost.verdict === 'close')} against ${against} · ${parts.length ? parts.join('; ') : 'the same wishlist'}` : s.key === step.reference ? ` · ${locked ? 'locked' : 'the best'}` : '';
-    return { key: s.key, robin: r, plan: s.plan, text: `${married(r, spouse)}: ${chanceText(s.chance)} ±${points(s.margin)}${cost}${PICKS[s.pick](r)}`, lock: !locked };
+    return { key: s.key, robin: r, plan: s.plan, text: `${married(r, spouse)}: ${chanceWithMargin(s)}${cost}${PICKS[s.pick](r)}`, lock: !locked };
   });
   const rest = step.options
     .filter((o) => o.status !== 'solved')
@@ -1132,7 +1129,7 @@ export function robinReadout(engine: Engine, run: Run, step: RobinStep | undefin
   const noRobinText = !noRobin
     ? undefined
     : nr
-      ? `No-Robin view (Robin no one’s parent: no Morgan${nr.spouse ? `, ${unitName(nr.spouse, nr.plan.robin.gender)} unmarried` : ''}): ${chanceText(nr.chance)} ±${points(nr.margin)}, ${differenceText(nr.cost.gain, nr.cost.margin, nr.cost.verdict === 'close')} against ${against}: what Robin’s marriage is worth`
+      ? `No-Robin view (Robin no one’s parent: no Morgan${nr.spouse ? `, ${unitName(nr.spouse, nr.plan.robin.gender)} unmarried` : ''}): ${chanceWithMargin(nr)}, ${differenceText(nr.cost.gain, nr.cost.margin, nr.cost.verdict === 'close')} against ${against}: what Robin’s marriage is worth`
       : step.converged && step.reference && !step.solved.find((s) => s.key === step.reference)?.plan.wishlist.marriages.some((c) => c.includes('robin'))
         ? 'No-Robin view: Robin marries no one in the best plan, so Robin is no one’s parent already'
         : 'No-Robin view: working it out…';
