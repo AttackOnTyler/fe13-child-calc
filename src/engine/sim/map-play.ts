@@ -143,6 +143,12 @@ export type MapPlayInput = {
   readonly spread?: ArmySpread;
   /** The turn the solve sends a talker to each talk recruit, by the recruit's id (#184); the first turn by default. */
   readonly talks?: Readonly<Record<string, number>>;
+  /**
+   * Pairs whose support growth matters (by unit id, either order): a couple the plan still has to marry (#188). Such a
+   * pair stays together while together it has safe work (combats together are what supports grow from), and splits
+   * only when together it has none and apart it has; Pair Up brings it back once together is safe again.
+   */
+  readonly bonds?: readonly (readonly [string, string])[];
 };
 
 /**
@@ -491,6 +497,8 @@ class MapState {
   readonly uses: number[][];
   readonly pairs: Pair[] = [];
   private readonly actors: Actor[] = [];
+  /** Bonded pairs (`MapPlayInput.bonds`), as `lead|back` both ways. */
+  private readonly bonds = new Set<string>();
   /** The chance a pair apart stands adjacent (Attack Stance), from the spread. */
   private readonly adjacency: number;
   /** This turn's fronts, in lineup order; the policy's group indices are indices into it. */
@@ -552,6 +560,7 @@ class MapState {
     readonly rng: Rng,
   ) {
     this.adjacency = input.spread ? reachChance(1, input.spread) : 1;
+    for (const [a, b] of input.bonds ?? []) this.bonds.add(`${a}|${b}`).add(`${b}|${a}`);
     const unitIndex = (u: SimUnit) => {
       this.units.push(u);
       this.hp.push(u.fighter.stats.hp);
@@ -984,6 +993,8 @@ class MapState {
    *   acts, and is only exposed if it attacks; one with nothing safe to do holds back.
    * - Together otherwise, with the front whose engagement is safest (its safest attack or bait): pair-up stats and
    *   Dual Guard on the one that fights, and the back never takes a hit.
+   * - A bonded pair (`MapPlayInput.bonds`: a couple still to marry) stays together while together has safe work, its
+   *   support growing from each combat; a unit with a talk due (#184) keeps its action, in front.
    * The game's costs: Separate spends the front's action (its back, dropped beside it, still acts); Pair Up spends the
    * mover's (the other acts, paired); Switch is free, once a turn, before the pair moves (it loses the move left).
    */
@@ -1036,7 +1047,9 @@ class MapState {
       };
       // A unit with a talk to make this turn (#184) keeps its action: its pair stays as it is, the talker in front.
       const talker: 0 | 1 | undefined = talkers.has(p.lead) ? 0 : talkers.has(p.back!) ? 1 : undefined;
-      const splits = talker !== undefined ? was.kind === 'apart' : splitsForWork();
+      // A bonded pair (a couple still to marry) stays together, or pairs up again, while together has safe work.
+      const bonded = this.bonds.has(`${this.units[p.lead]!.id}|${this.units[p.back!]!.id}`);
+      const splits = talker !== undefined ? was.kind === 'apart' : bonded && p.together!.some(hasSafe) ? false : splitsForWork();
       let change: SimStance['change'];
       if (splits) {
         p.stance = { kind: 'apart' };

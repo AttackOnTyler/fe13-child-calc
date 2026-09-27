@@ -122,6 +122,15 @@ expect(r.maps.map((x) => x.key)).toEqual(['a', 'b']);    for (const x of r.maps)
     expect(Math.abs(many.chance - few.chance)).toBeLessThan(few.margin + many.margin);
     expect(many.blindSpots).toEqual(expect.arrayContaining(['one-worst-attacker', 'promotes-at-cap', 'lead-takes-exp']));
   });
+
+  it('keeps a couple the plan still has to marry fighting together, so its support grows (#184)', () => {
+    // Two armed heroes who could each fell a dummy safely alone: apart, their combats earn no support points.
+    const army = [hero(), hero({ id: 'sully', name: 'Sully', gender: 'F' })];
+    const maps = [step(rout('a', [dummy(5, 4)]), { deploy: 2 }), empty];
+    const points = (r: ReturnType<typeof sim>) => r.supports.find((s) => [s.a, s.b].sort().join() === 'lonqu,sully')?.points.median ?? 0;
+    expect(points(engine.simulateRuns({ army, maps, difficulty: 'normal', couples: [['lonqu', 'sully']] }, 1, 1))).toBeGreaterThan(0);
+    expect(points(engine.simulateRuns({ army, maps, difficulty: 'normal' }, 1, 1))).toBe(0);
+  });
 });
 
 describe('the flawless chance of a recorded run (#186)', () => {
