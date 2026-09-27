@@ -3,7 +3,7 @@
  * holds a snapshot: every unit's class, level, EXP, stats, skills, inventory and supports, plus the convoy and gold.
  * A new entry copies the one before; editing a past entry never reaches later ones, which are flagged instead.
  */
-import type { Assumptions, ChildId, CloseCall, DeploymentRole, Engine, FlawlessChance, FlawlessOptions, GoldSpread, HeldItem, ItemPin, ItemPlanRow, ItemUsed, MapOrderStep, Milestone, MilestonePoint, Plan, PlanPin, PlanProposal, PrunedComp, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
+import type { Assumptions, ChildId, CloseCall, DeploymentRole, Engine, FlawlessChance, FlawlessOptions, GoldSpread, HeldItem, ItemPin, ItemPlanRow, ItemUsed, MapOrderStep, Milestone, MilestonePoint, PinCost, Plan, PlanPin, PlanProposal, PrunedComp, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
 import { chanceText, differenceText } from './chance';
 import { startSolve } from './solve-client';
 import { SOLVE_SECONDS, STEP_BUDGET, rosterUnits } from '../engine';
@@ -11,7 +11,7 @@ import { EMPTY_SNAPSHOT, FLAWLESS_SEED, SUPPORT_LEVELS, addEntry, childJoinFrom,
 import { removeClassChange, tierOfClass, withClassChange, withCountOverride, type Seal } from '../engine';
 import { entryAfterShopping, goldAfterShopping, removeShopLine, shopPrice, withShopLine, type ShopKind, type ShopLine } from '../engine';
 import { withRenown, withSideGoalPin, withSideGoalSecured, type SideGoalDecision, type SideGoalId } from '../engine';
-import { withItemPin, withItemsUsed } from '../engine';
+import { runItemPins, withItemPin, withItemsUsed } from '../engine';
 import { CHILD_UNITS } from '../game-data/children';
 import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
 import { h } from './dom';
@@ -178,6 +178,8 @@ export type SolveProgress = {
   /** The worker is done: converged, or out of time. */
   readonly done: boolean;
   readonly converged: boolean;
+  /** The pins' cost together (#200), worked out once the search is done, while the worker is idle. */
+  readonly pinCost?: PinCost;
 };
 
 export type FlawlessReadout = {
@@ -264,6 +266,11 @@ function readoutOf(
         ...progress.proposals.map((p) => `Improvement: ${p.edits.join('; ')}: ${differenceText(p.gain, p.margin)}`),
         ...progress.closeCalls.map((c) => `${c.label}: ${differenceText(c.gain, c.margin, true)}`),
         ...progress.pruned.map((c) => `Not tried: ${c.label} (its ceiling ${chanceText(c.ceiling)} is below the best found, ${chanceText(c.best)})`),
+        ...(progress.pinCost?.pins.length
+          ? [
+              `Your ${progress.pinCost.pins.length === 1 ? 'pin costs' : `${progress.pinCost.pins.length} pins cost`} ${differenceText(progress.pinCost.cost, progress.pinCost.margin, progress.pinCost.verdict === 'close' || progress.pinCost.verdict === 'unclear')}: the best plan found with ${progress.pinCost.pins.length === 1 ? 'it' : 'them'} lifted, less the best found with ${progress.pinCost.pins.length === 1 ? 'it' : 'them'}`,
+            ]
+          : []),
       ]
     : [];
   const status = progress ? (progress.done ? (progress.converged ? ' · searched' : '') : ' · searching…') : '';
@@ -330,7 +337,7 @@ export function itemPlanReadout(engine: Engine, run: Run, plan: Plan, chance: Fl
     const text = `${r.item}${where(r)}: ${use || idle}${r.pinned ? ' (pinned)' : ''}${arrives}`;
     const at = r.uses[0]?.key ?? (r.after ? steps[steps.findIndex((x) => x.key === r.after) + 1]?.key : steps[0]?.key);
     const pinKind = r.kind === 'booster' || r.kind === 'boots' ? 'booster' : r.kind === 'weapon' ? 'carrier' : undefined;
-    const pinned = (run.itemPins ?? []).find((x) => x.kind === pinKind && x.item === r.item);
+    const pinned = runItemPins(run).find((x) => x.kind === pinKind && x.item === r.item);
     return { source: r.source, item: r.item, text, pin: pinKind && at ? { kind: pinKind, unit: pinned?.unit, key: pinned?.key ?? at } : undefined };
   });
   const tonics = p.tonics.map((t) => `${label(t.key)}: ${t.count} tonic${t.count === 1 ? '' : 's'}, ${goldText(t.gold)}`);
@@ -585,14 +592,22 @@ function flawlessSection(ctx: RunContext): HTMLElement {
   if (solving !== run && ctx.assumptions) {
     const roles = ctx.roleOf ? Object.fromEntries(rosterUnits(run.roster.run).map((u) => [u.id, ctx.roleOf!(u.id)])) : undefined;
     let chance: FlawlessChance | undefined;
+    let last: SolveProgress | undefined;
     const started = startSolve(
       { kind: 'solve', assumptions: ctx.assumptions, run, seed: FLAWLESS_SEED, budget: STEP_BUDGET, seconds: solvedOnce ? SOLVE_SECONDS.resolve : SOLVE_SECONDS.full, ...(pins ? { pins } : {}), ...(roles ? { roles } : {}) },
       (reply) => {
+        if (reply.done && solving === run) solving = undefined;
+        // The pin cost (#200) comes once the search is done, while the worker is idle.
+        if (reply.kind === 'pin-cost') {
+          if (last) show(solvedReadout(ctx.engine, run, { ...last, pinCost: reply.cost }, pins, ctx.roleOf));
+          return;
+        }
         if (reply.kind !== 'step') return;
         const s = reply.step;
         chance = s.chance ?? chance;
-        if (reply.done && solving === run) solving = undefined;
-        if (chance) show(solvedReadout(ctx.engine, run, { best: s.best, chance, proposals: s.proposals, closeCalls: s.closeCalls, pruned: s.pruned, done: reply.done, converged: s.converged }, pins, ctx.roleOf));
+        if (!chance) return;
+        last = { best: s.best, chance, proposals: s.proposals, closeCalls: s.closeCalls, pruned: s.pruned, done: reply.searched, converged: s.converged };
+        show(solvedReadout(ctx.engine, run, last, pins, ctx.roleOf));
       },
     );
     if (started) {

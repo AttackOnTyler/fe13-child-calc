@@ -263,11 +263,14 @@ export type ItemUsed = { readonly item: string; readonly unit: RosterUnit };
 
 /** Pins an item (a booster or carrier pin), replacing any pin on the same item of the same kind; `remove` unpins it. */
 export function withItemPin(run: Run, pin: ItemPin, remove = false): Run {
-  const rest = (run.itemPins ?? []).filter((p) => !(p.kind === pin.kind && p.item === pin.item));
+  const rest = (run.pins ?? []).filter((p) => !(p.kind === pin.kind && p.item === pin.item));
   const next = remove ? rest : [...rest, pin];
-  const { itemPins: _, ...base } = run;
-  return next.length ? { ...base, itemPins: next } : base;
+  const { pins: _, ...base } = run;
+  return next.length ? { ...base, pins: next } : base;
 }
+
+/** The run's item pins (#193), from its pins (#200). */
+export const runItemPins = (run: Run): ItemPin[] => (run.pins ?? []).filter((p): p is ItemPin => p.kind === 'booster' || p.kind === 'carrier');
 
 /** Records the items used on an entry's map (#193); undefined clears it (the pre-fill again). */
 export function withItemsUsed(run: Run, entryId: string, used: readonly ItemUsed[] | undefined, now: number): Run {

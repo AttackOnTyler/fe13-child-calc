@@ -109,7 +109,7 @@ export function seedItems(input: RunSimInput, sources: readonly PlanSource[], ar
     return g;
   };
   const pinnedSources = new Set<string>();
-  const pinFor = (s: PlanSource) => pins.find((p): p is Extract<PlanPin, { kind: 'booster' | 'carrier' }> => p.kind !== 'marriage' && p.item === s.item && !pinnedSources.has(s.id));
+  const pinFor = (s: PlanSource) => pins.find((p): p is Extract<PlanPin, { kind: 'booster' | 'carrier' }> => (p.kind === 'booster' || p.kind === 'carrier') && p.item === s.item && !pinnedSources.has(s.id));
   const byArrival = [...sources].filter((s) => !s.uncounted).sort((a, b) => arrival(a) - arrival(b));
 
   for (const s of byArrival) {

@@ -115,6 +115,18 @@ describe('the local search (#199)', () => {
     expect(nameOf(solveStep(input(), kept.deps, 6).best)).toBe('better');
   });
 
+  it('never takes, proposes or offers as a close call an edit that breaks a pin (#200)', () => {
+    // 'best2' and 'even' break a pin: the first would win, the second would be a close call.
+    const { deps, calls } = fake(edits);
+    const broken = new Set(['best2', 'even']);
+    const step = solveStep(input(), { ...deps, brokenPins: (p) => (broken.has(nameOf(p)) ? 1 : 0) }, 6);
+    expect(nameOf(step.best)).toBe('better');
+    expect(calls.samples).not.toContain('best2');
+    expect(calls.samples).not.toContain('even');
+    for (const p of [...step.proposals.map((x) => x.plan), ...step.closeCalls.map((x) => x.plan)]) expect(broken.has(nameOf(p))).toBe(false);
+    expect(step.converged).toBe(true);
+  });
+
   it('fixes a non-starter first, never takes one more, and never proposes a plan with one (#194)', () => {
     const stuck = { start: 1, better: 1, broken: 2 };
     const { deps, calls } = fake({ start: [['lineup', 'broken'], ['pair', 'better'], ['place', 'fix']], better: [['place', 'fixBetter']] }, {}, stuck);

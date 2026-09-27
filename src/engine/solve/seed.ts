@@ -54,6 +54,7 @@ import type { BuildMatch, ChildResult, Pairing, ParentRef, RobinRef } from '../t
 import type { PageSubject } from '../unit-page';
 import { hungarian } from './hungarian';
 import { seedItems } from './items';
+import { pinnedLineup, type LineupRule } from './pins';
 import type { Plan, PlanLineup, PlanPin, PlanRobin, WishlistChild, WishlistUnit } from './plan';
 
 /** What the seed needs from the engine: pairings as it resolves them, and builds from the play context's templates. */
@@ -418,7 +419,7 @@ export function planFor(run: Run, ctx: SeedContext, options: SeedOptions, robin:
   }
 
   // The endpoint's lineup at caps, each unit's full class and best build.
-  const army = ceilingArmy(input, ctx.assumptions);
+  const army = keptAtEndpoint(ceilingArmy(input, ctx.assumptions), input.pins?.[input.maps.length - 1]);
   const classOf = new Map(army?.fielded.map((c) => [c.unit, c.shown.classId]) ?? []);
   const buildOf = (u: RosterUnit): SkillId[] => {
     if (builds.has(u)) return skillIds(builds.get(u));
@@ -441,6 +442,20 @@ export function planFor(run: Run, ctx: SeedContext, options: SeedOptions, robin:
     wishlist: { endpoint, units, marriages: marriages.map(([a, b]) => [a, b] as const), children, reserves: [] },
     roadmap: { order: input.maps.map((m) => m.key), lineups, seals: plannedSeals(input, (u) => classOf.get(u), endpoint), items: seedItems(input, sources, army, options.pins ?? [], ctx.assumptions) },
   };
+}
+
+/**
+ * The endpoint's army with its lineup keeping the pins' rules there (#200): span pins covering the endpoint, keep-out,
+ * keep-in (the wishlist is this lineup).
+ */
+function keptAtEndpoint(army: ReturnType<typeof ceilingArmy>, rules: readonly LineupRule[] | undefined): ReturnType<typeof ceilingArmy> {
+  if (!army || !rules?.length) return army;
+  const has = new Set(army.fielded.map((c) => c.unit));
+  const d = army.lineup;
+  const kept = pinnedLineup({ pairs: d.pairs.map((p) => ({ lead: p.lead, ...(p.back ? { back: p.back } : {}) })), solo: d.solo }, rules, { max: army.end.deploy || army.fielded.length, forced: army.end.forced, here: (u) => has.has(u) });
+  const pairs = kept.pairs.map((p) => d.pairs.find((x) => x.lead === p.lead && x.back === p.back) ?? { lead: p.lead, back: p.back, support: null, coverage: 0 });
+  const deployed = [...pairs.flatMap((p) => (p.back ? [p.lead, p.back] : [p.lead])), ...kept.solo];
+  return { ...army, lineup: { ...d, pairs, solo: [...kept.solo], deployed } };
 }
 
 /**

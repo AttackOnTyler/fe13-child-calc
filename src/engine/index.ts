@@ -58,8 +58,9 @@ import { FLAWLESS_RUNS, FLAWLESS_SEED, flawlessCeiling, flawlessChance, flawless
 import { simulateCeiling, type Ceiling } from './sim/ceiling';
 import { coupleKey, endpointCoverage, nonStarters, seedPlan, type EndpointCoverage, type SeedContext, type SeedOptions } from './solve/seed';
 import { milestones, type Milestone } from './milestones';
-import { editCost, solveStep, type EditCost, type EditCostInput, type SolveStep, type SolveStepInput } from './solve/step';
-import { planEdits } from './solve/edits';
+import { editCost, solveStep, type EditCost, type EditCostInput, type PinCost, type PinCostInput, type SolveStep, type SolveStepInput } from './solve/step';
+import { keptPins, planEdits } from './solve/edits';
+import { brokenPins, livePins, pinKey, runPins, withPin, withoutPins } from './solve/pins';
 import { FORCED_UNITS, childrenOf, coveredLineup, hasUtility, planWithout, reservesStep, withoutUnits, worthStep, type ReservesInput, type ReservesStep, type WorthInput, type WorthStep, type WorthVariant } from './solve/worth';
 import type { Plan, PlanLineup, PlanPin, PlanRobin } from './solve/plan';
 import { beforeMapItems, itemPlanOf, type BeforeMapItem, type ItemPlan, type ItemUsed } from './item-plan';
@@ -146,14 +147,16 @@ export { TOP_PAIR_POINTS, combatPoints, mapSupportGains, type SupportGain, type 
 export { FLAWLESS_RUNS, FLAWLESS_SEED, fighterOf, type FlawlessChance, type FlawlessOptions, type NotSimulated } from './flawless';
 export { effectiveCaps, type Ceiling, type CeilingUnit } from './sim/ceiling';
 export type { LineupPlan } from './sim/run-sim';
-export { marriagePins } from './solve/plan';
+export { mapSpanPin, marriagePins } from './solve/plan';
+export { pinKey, withPin, withoutPins, type LineupRule } from './solve/pins';
+export type { KeepPin, MarriagePin, SideGoalPin, SpanPin, SpanPosition } from './solve/plan';
 export { NO_PREPARATIONS } from '../game-data/chapters';
 export { STAT_BOOSTERS, TONICS, statItemGain } from '../game-data/items';
-export { hasPreparations, heldKind, statOfItem, withItemPin, withItemsUsed, type BeforeMapItem, type HeldKind, type ItemIdle, type ItemPlan, type ItemPlanRow, type ItemUsed, type PlanSource, type TonicBuys } from './item-plan';
+export { hasPreparations, heldKind, statOfItem, runItemPins, withItemPin, withItemsUsed, type BeforeMapItem, type HeldKind, type ItemIdle, type ItemPlan, type ItemPlanRow, type ItemUsed, type PlanSource, type TonicBuys } from './item-plan';
 export type { CloseCall, ItemPin, Plan, PlanItem, PlanLineup, PlanPin, PlanProposal, PlanRobin, PlanSeal, Position, PrunedComp, Roadmap, SolveCursor, Wishlist, WishlistChild, WishlistReserve, WishlistUnit } from './solve/plan';
 export type { EndpointCoverage, SeedOptions } from './solve/seed';
 export type { ClassMilestone, Milestone, MilestonePoint, RecruitMilestone, SealSource, SkillMilestone, SupportMilestone, SupportWindow } from './milestones';
-export { EDIT_COST_BUDGET, EDIT_KINDS, SEARCH_RUNS, rescoreSeed, SOLVE_SECONDS, STEP_BUDGET, type EditCost, type EditCostInput, type EditKind, type SolveStep, type SolveStepInput } from './solve/step';
+export { EDIT_COST_BUDGET, EDIT_KINDS, SEARCH_RUNS, rescoreSeed, SOLVE_SECONDS, STEP_BUDGET, type EditCost, type EditCostInput, type EditKind, type PinCost, type PinCostInput, type SolveStep, type SolveStepInput } from './solve/step';
 export { FORCED_UNITS, LIKELY_LOSSES, type LikelyLoss, type ReserveReading, type ReservesCursor, type ReservesInput, type ReservesStep, type UnitWorth, type WorthCursor, type WorthInput, type WorthStep } from './solve/worth';
 export { BLIND_SPOTS, type BlindSpot, type BlindSpotId, type RunBlindSpotId } from './assumptions';
 export { bestWeapon, classTypes, dangerFlags, foeKey, foeOf, foesOf, matchup, pairUpBonus, statValue, type DangerFlag, type Fighter, type Foe, type Matchup } from './solver';
@@ -647,6 +650,23 @@ export type Engine = {
    */
   milestones(run: Run, plan: Plan): readonly Milestone[];
   /**
+   * The pins that hold on a run (#200): its own (`Run.pins`, its side goals, the Plan page's pinned marriages) and
+   * `extra` (as `solveStep` takes them), each once, less recorded facts (a pin on what already happened, or on a unit
+   * dead or missed). Hard constraints on the solve.
+   */
+  pins(run: Run, extra?: readonly PlanPin[]): readonly PlanPin[];
+  /**
+   * The run with pins lifted (#200): all of them by default, or `lift` (one pin, for its own cost). The pin cost's second
+   * search is `solveStep` over it, from the best plan found with the pins (when the worker is idle).
+   */
+  liftPins(run: Run, options?: { readonly pins?: readonly PlanPin[]; readonly lift?: readonly PlanPin[] }): Run;
+  /**
+   * The pin cost (#200): the best plan found with the pins lifted (`lifted`, from the second search) less the best found
+   * with them (`plan`), on the same runs, within a budget of evaluations as an edit's cost; all the pins together, or
+   * `lift`'s on request. Recorded facts are never pins and cost nothing.
+   */
+  pinCost(input: PinCostInput): PinCost;
+  /**
    * The item plan of a plan (#193): one row per held item (owned now, or picked up on a map still to play) with its
    * planned use or carrier timeline, the pins that set it, and, given the plan's flawless chance, its arrival chance
    * (the share of runs that made its first use); an item with none says why (Boots outside the model, no rank for the
@@ -1097,6 +1117,28 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
    * The seed for a run, kept while the run lives (a run is replaced, never edited): it takes 0.3–1.2 s since #199 fixes
    * its non-starters. Without roles only (the roles are a function).
    */
+  /**
+   * A run with pins added (#200), or taken off, kept per run and pins: the solve's caches (the seed, each plan's input)
+   * are kept per run, so each step must get the same one.
+   */
+  const derived = new WeakMap<Run, Map<string, Run>>();
+  const derive = (run: Run, key: string, make: () => Run): Run => {
+    let held = derived.get(run);
+    if (!held) derived.set(run, (held = new Map()));
+    let r = held.get(key);
+    if (!r) held.set(key, (r = make()));
+    return r;
+  };
+  /** The run with pins given besides its own (the Plan page's, until #205): the run itself when it holds them all. */
+  const pinnedRun = (run: Run, extra: readonly PlanPin[] | undefined): Run => {
+    const has = new Set(runPins(run).map(pinKey));
+    const more = (extra ?? []).filter((p) => !has.has(pinKey(p)));
+    return more.length ? derive(run, `+${JSON.stringify(more)}`, () => more.reduce(withPin, run)) : run;
+  };
+  /** The run with pins lifted (all by default): the pin cost's second search. */
+  const liftedRun = (run: Run, lift: readonly PlanPin[] | undefined): Run => derive(run, `-${lift ? JSON.stringify(lift.map(pinKey)) : '*'}`, () => withoutPins(run, lift));
+  /** The pins that still hold on a run: its own, less recorded facts. */
+  const livePinsOf = (run: Run): PlanPin[] => livePins(run, runPins(run), remainingMapOrder(run).steps.map((s) => s.key));
   const seeds = new WeakMap<Run, Map<string, Plan>>();
   const seedFor = (run: Run, options: SeedOptions): Plan => {
     if (options.roleOf) return seedPlan(run, seedContext(run), options);
@@ -1850,17 +1892,30 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     simulateRuns: (input, seed, runs) => simulateRuns(input, seed, runs, assumptions),
     ceiling: (run, options) => flawlessCeiling(run, assumptions, options),
     simulateCeiling: (input, seed, runs) => simulateCeiling(input, seed, runs, assumptions),
-    seedPlan: (run, options) => seedFor(run, options ?? {}),
+    seedPlan: (given, options = {}) => {
+      const run = pinnedRun(given, options.pins);
+      return seedFor(run, { ...options, pins: livePinsOf(run) });
+    },
     endpointCoverage: (run, child, parents, robin) => endpointCoverage(run, seedContext(run), child, parents, robin),
-    solveStep: (input) => {
-      const { run, roleOf, pins } = input;
+    solveStep: (given) => {
+      const { roleOf } = given;
+      // The run's pins and those given, less recorded facts (#200): hard constraints on the seed, every edit and the runs.
+      const run = pinnedRun(given.run, given.pins);
+      const pins = livePinsOf(run);
       const ctx = seedContext(run);
-      const options = { ...(pins ? { pins } : {}), ...(roleOf ? { roleOf } : {}) };
+      const options = { pins, ...(roleOf ? { roleOf } : {}) };
       const lunaticPlus = run.roster.run.difficulty === 'lunatic-plus';
-      const pinnedKeys = new Set((pins ?? []).flatMap((p) => (p.kind === 'marriage' ? [coupleKey(p.couple)] : [])));
+      const pinnedKeys = new Set(pins.flatMap((p) => (p.kind === 'marriage' ? [coupleKey(p.couple)] : [])));
+      // An adopted plan from before a pin was set is made to keep it.
+      const input = { ...given, run, ...(given.plan ? { plan: keptPins(run, ctx, options, given.plan) } : {}) };
+      const forcedAt = (plan: Plan) => {
+        let forced: Map<string, readonly RosterUnit[]> | undefined;
+        return (key: string) => (forced ??= new Map(planInput(run, plan, roleOf).maps.map((m) => [m.key, m.forced]))).get(key) ?? [];
+      };
       return solveStep(
         input,
         {
+          brokenPins: (plan) => (pins.length ? brokenPins(plan, pins, forcedAt(plan)) : 0),
           seed: () => seedFor(run, options),
           edits: (plan, hints) => planEdits(run, ctx, options, plan, hints, (p) => lineupsOf(run, p, input.seed, roleOf)),
           samples: (plan, first, count) => simulateRuns(planInput(run, plan, roleOf), input.seed, count, assumptions, first).samples,
@@ -1949,6 +2004,19 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         },
         samples: (variant, first, count) => simulateRuns(v.inputOf(variant), seed, count, assumptions, first).samples,
       });
+    },
+    pins: (run, extra) => livePinsOf(pinnedRun(run, extra)),
+    liftPins: (run, options = {}) => liftedRun(pinnedRun(run, options.pins), options.lift),
+    pinCost: (input) => {
+      const run = pinnedRun(input.run, input.pins);
+      const lift = input.lift ? new Set(input.lift.map(pinKey)) : undefined;
+      const lifting = livePinsOf(run).filter((p) => !lift || lift.has(pinKey(p)));
+      // Recorded facts are never pins: nothing to lift, no cost.
+      if (!lifting.length) return { pins: [], cost: 0, margin: 0, runs: 0, verdict: 'close', settled: true };
+      const free = liftedRun(run, lifting);
+      const samplesOn = (r: Run) => (plan: Plan, first: number, count: number) => simulateRuns(planInput(r, plan, input.roleOf), input.seed, count, assumptions, first).samples;
+      const c = editCost({ ...input, edited: input.lifted }, samplesOn(run), samplesOn(free));
+      return { pins: lifting, cost: c.gain, margin: c.margin, runs: c.runs, verdict: c.verdict, settled: c.settled };
     },
     roadmapLineups: (run, plan, options = {}) => lineupsOf(run, plan, options.seed ?? FLAWLESS_SEED, options.roleOf),
   };

@@ -26,6 +26,9 @@
  *   item's uses aren't edited. Boots and the Arms Scroll aren't edited (no pin: no use).
  * - **Side goals:** none yet: their chase/skip edits come with #191's pins.
  *
+ * **Pins (#200)** hold: recorded and pinned marriages aren't edited, pinned items aren't moved, and the step drops an
+ * edit whose lineups break a span or keep pin (`brokenPins`). `keptPins` makes an adopted plan from before a pin keep it.
+ *
  * **Non-starters first (#194):** while the best plan has a couple that can't reach S by its deadline, the edits that
  * could fix it come first: its child's paralogue moved later (`placedForSupports`), then the marriages touching it.
  */
@@ -51,6 +54,7 @@ import { latestEntry, type Run } from '../run';
 import type { Plan, PlanItem, PlanLineup, PlanRobin, WishlistChild } from './plan';
 import { UNAVAILABLE, genderOf, pairingsOf, placedForSupports, planFor, robinRef, type SeedContext, type SeedOptions } from './seed';
 import type { Edit, EditHints } from './step';
+import { brokenPins, lineupRules, rulesBroken } from './pins';
 
 const STAT_NAMES: Readonly<Record<Stat, string>> = { hp: 'HP', str: 'Str', mag: 'Mag', skl: 'Skl', spd: 'Spd', lck: 'Lck', def: 'Def', res: 'Res' };
 
@@ -76,6 +80,27 @@ function rebuilt(run: Run, ctx: SeedContext, options: SeedOptions, prev: Plan, r
   // The class changes the plan had for units still in it stay as they were (a seal edit's timing, a class edit).
   const seals = next.roadmap.seals.map((x) => prev.roadmap.seals.find((y) => y.unit === x.unit && y.seal === x.seal) ?? x);
   return { ...next, wishlist: { ...next.wishlist, children }, roadmap: { ...next.roadmap, order, lineups, seals } };
+}
+
+/**
+ * A plan made to keep the pins (#200; `options.pins`, the live ones): the adopted plan from before a pin was set. A
+ * pinned couple it doesn't marry marries (their other marriages dropped), rebuilt as a marriage edit is; a named lineup
+ * that breaks a span or keep pin is dropped (the map plays the greedy lineup, which keeps them), and a wishlist that
+ * breaks one is rebuilt (the endpoint's lineup keeps them). The plan itself when it keeps them all.
+ */
+export function keptPins(run: Run, ctx: SeedContext, options: SeedOptions, plan: Plan): Plan {
+  const pins = options.pins ?? [];
+  if (!brokenPins(plan, pins)) return plan;
+  const missing = pins.flatMap((p) => (p.kind === 'marriage' && !plan.wishlist.marriages.some((c) => c.includes(p.couple[0]) && c.includes(p.couple[1])) ? [p.couple] : []));
+  const taken = new Set(missing.flat());
+  const marriages = [...plan.wishlist.marriages.filter((c) => !c.some((u) => taken.has(u))), ...missing];
+  let next = rebuilt(run, ctx, options, plan, plan.robin, marriages);
+  const end = next.wishlist.endpoint;
+  const rules = lineupRules(pins, next.roadmap.order);
+  const at = new Map(next.roadmap.order.map((k, i) => [k, i]));
+  const lineups = next.roadmap.lineups.filter((l) => l.key === end || !rulesBroken(l, rules?.[at.get(l.key) ?? -1]));
+  next = { ...next, roadmap: { ...next.roadmap, lineups } };
+  return next;
 }
 
 /** Zero or one edit. */

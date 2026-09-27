@@ -31,6 +31,10 @@
  * comes first), and its fixes are tried first. A plan with a non-starter is never offered, as a proposal or a close
  * call. An edit the simulation can't see (`simKey`: a build skill, today) is a close call at no cost.
  *
+ * **Pins are hard constraints (#200):** the seed and the adopted plan keep them (the facade has them keep them), an
+ * edit that breaks one more than the best plan is dropped unsimulated, and no plan breaking one is offered. The runs
+ * play every lineup with its span and keep pins (`pinnedLineup`), so a pin holds in play whatever a plan lists.
+ *
  * **Proposals never replace the adopted plan:** the step never changes the plan it's given; each kept edit is offered
  * as a proposal with its gain over the adopted plan on the same runs, best first.
  *
@@ -147,6 +151,11 @@ export type SearchDeps = {
    * run, so an edit that keeps it is a close call at no cost. By default the whole plan.
    */
   readonly simKey?: (plan: Plan) => string;
+  /**
+   * How many of the pins a plan breaks, as it lists them (#200). An edit that breaks more than the best plan is dropped
+   * unsimulated, and a plan that breaks more than the plan the search started from is never offered. None by default.
+   */
+  readonly brokenPins?: (plan: Plan) => number;
 };
 
 const keyOf = (p: Plan) => JSON.stringify(p);
@@ -199,8 +208,11 @@ export function solveStep(input: SolveStepInput, deps: SearchDeps, display: numb
     for (const e of deps.edits(s.best, { riskiest: s.riskiest, stuck: [...new Set(s.stuck!.flat())] as RosterUnit[] })) if (!tried.has(e.key)) return e;
     return undefined;
   };
-  /** A plan is offered (a proposal, a close call) only with no non-starter. */
-  const offered = (plan: Plan) => stuckOf(plan).length === 0;
+  // Pins (#200) are hard constraints: the start keeps them (the facade has it keep them), and no edit breaks more.
+  const broken = (plan: Plan) => deps.brokenPins?.(plan) ?? 0;
+  const startBroken = broken(s.start);
+  /** A plan is offered (a proposal, a close call) only with no non-starter, and no pin broken the start keeps. */
+  const offered = (plan: Plan) => stuckOf(plan).length === 0 && broken(plan) <= startBroken;
 
   while (!s.converged && spent < budget) {
     const left = budget - spent;
@@ -235,6 +247,10 @@ export function solveStep(input: SolveStepInput, deps: SearchDeps, display: numb
       // drops edits still ends within its budget.
       const plan = e.make();
       spent += 1;
+      if (broken(plan) > broken(s.best)) {
+        s.tried.push(e.key);
+        continue;
+      }
       const stuck = stuckOf(plan).map((c) => [...c]);
       if (stuck.length > s.stuck!.length) {
         s.tried.push(e.key);
@@ -339,7 +355,11 @@ export type EditCost = {
  * the new runs of both plans), stopping once it's clear. A budget below the first comparison compares on as many runs
  * as it pays for (at least 2 each): the provisional reading.
  */
-export function editCost(input: EditCostInput, samples: (plan: Plan, first: number, count: number) => readonly number[]): EditCost {
+export function editCost(
+  input: Omit<EditCostInput, 'run'> & { readonly run?: Run },
+  samples: (plan: Plan, first: number, count: number) => readonly number[],
+  editedSamples: (plan: Plan, first: number, count: number) => readonly number[] = samples,
+): EditCost {
   const start = Math.max(2, Math.floor(input.runs ?? SEARCH_RUNS.start));
   const cap = Math.max(start, Math.floor(input.cap ?? SEARCH_RUNS.cap));
   const afford = Math.max(2, Math.floor(input.budget / 2));
@@ -348,7 +368,7 @@ export function editCost(input: EditCostInput, samples: (plan: Plan, first: numb
   let n = Math.min(start, afford);
   for (;;) {
     a.push(...samples(input.plan, a.length, n - a.length));
-    b.push(...samples(input.edited, b.length, n - b.length));
+    b.push(...editedSamples(input.edited, b.length, n - b.length));
     const p = paired(a, b);
     const v = verdictOf(p);
     if (v !== 'unclear') return { gain: p.gain, margin: p.margin, runs: n, verdict: v, settled: true };
@@ -357,3 +377,37 @@ export function editCost(input: EditCostInput, samples: (plan: Plan, first: numb
     n = Math.min(cap, n * 2);
   }
 }
+
+export type PinCostInput = {
+  /** The run; its pins (`Run.pins`, its side goals, the Plan page's pinned marriages) are the ones costed. */
+  readonly run: Run;
+  /** Pins besides the run's, as `solveStep` takes them. */
+  readonly pins?: readonly PlanPin[];
+  /** The pins to lift: all of them by default; one pin for that pin's own cost. */
+  readonly lift?: readonly PlanPin[];
+  /** The best plan found with the pins (the solve's). */
+  readonly plan: Plan;
+  /** The best plan found with them lifted: a second search over `liftPins(run)`, from `plan`. */
+  readonly lifted: Plan;
+  readonly seed: number;
+  /** Evaluations over both plans, as an edit's cost has them (`EDIT_COST_BUDGET`). */
+  readonly budget: number;
+  readonly runs?: number;
+  readonly cap?: number;
+  readonly roleOf?: (u: RosterUnit) => DeploymentRole;
+};
+
+/**
+ * The pin cost (#200; spec #175, The joint solve): the flawless chance the pins give up together (or one pin's, on
+ * request): the best plan found with them lifted less the best found with them, on the same runs, with its paired
+ * error (±, 95%) and verdict as an edit's cost has them. `pins` are the pins lifted: recorded facts are never pins, so
+ * with none the cost is 0, on no runs.
+ */
+export type PinCost = {
+  readonly pins: readonly PlanPin[];
+  readonly cost: number;
+  readonly margin: number;
+  readonly runs: number;
+  readonly verdict: EditCost['verdict'];
+  readonly settled: boolean;
+};

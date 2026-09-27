@@ -608,6 +608,10 @@ _Avoid_: Optimizer, background job
 The flawless chance the player's pins and span pins give up together: the best plan found with them lifted, less the best found with them. One pin's own cost comes on request. Recorded facts are never pins and have no cost.
 _Avoid_: Penalty, pin loss (a lost pin is broken or on hold)
 
+**Keep-in / keep-out**:
+A hard constraint on one unit: kept in, it's in the wishlist (fielded at the endpoint); kept out, it's out of the wishlist and never fielded, unless a map forces it or a span pin fields it there. Its cost shows with the other pins'.
+_Avoid_: Bench (Benched is a unit state), ban
+
 ### Verification
 
 **Assumption**:
