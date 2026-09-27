@@ -63,7 +63,10 @@ import {
   type Stat,
   type SupportRank,
   type Weights,
+  mapSpanPin,
   marriagePins,
+  withPin,
+  withoutPins,
 } from '../engine';
 import { h } from './dom';
 import { guide } from './guide';
@@ -167,7 +170,13 @@ let recording: { entry: string; step: number } | undefined;
 let preparing: string | undefined;
 let prepBacks: Partial<Record<RosterUnit, RosterUnit | 'none'>> = {};
 let prepFoe = 0;
-let prepExcluded: ReadonlySet<RosterUnit> = new Set();
+/** A map's key on the run's map order (the preparation page's map). */
+const prepKey = (r: Run, map: string): string => engine.mapOrder(r).steps.find((s) => s.map === map)?.key ?? map;
+/** The units dropped on the preparation page's map: span pins keeping them out of this map only (#200). */
+const droppedHere = (r: Run, map: string): ReadonlySet<RosterUnit> => {
+  const key = prepKey(r, map);
+  return new Set((r.pins ?? []).flatMap((p) => (p.kind === 'span' && p.position === 'out' && p.from === key && p.to === key ? [p.unit] : [])));
+};
 /** The Run view's open map (#109); undefined shows the Maps list. */
 let mapOpen: string | undefined;
 /** A difficulty picked on the Maps view (view state); otherwise it shows the run's, else Normal. */
@@ -2433,14 +2442,12 @@ function renderParts(parts: readonly Part[]): void {
                 return (u: RosterUnit) => deployRoleOf(u, roster, roles);
               })(),
               // The seed plan (#198), as the Run view's flawless chance takes it: the shopping list reads the same runs.
-              plan: (roleOf) => engine.seedPlan(run, { pins: [...marriagePins(roster), ...(run.itemPins ?? [])], roleOf }),
-              excluded: prepExcluded,
+              plan: (roleOf) => engine.seedPlan(run, { pins: [...marriagePins(roster), ...(run.pins ?? [])], roleOf }),
+              // A unit dropped here is a span pin over this map only (#200): the flawless chance and the solve keep it out.
+              excluded: droppedHere(run, preparing),
               setExcluded: (u, out) => {
-                const next = new Set(prepExcluded);
-                if (out) next.add(u);
-                else next.delete(u);
-                prepExcluded = next;
-                renderParts(['main']);
+                const pin = mapSpanPin(u, 'out', prepKey(run, preparing!));
+                setRun(out ? withPin(run, pin) : withoutPins(run, [pin]));
               },
             })
           : view === 'run'
@@ -2459,7 +2466,6 @@ function renderParts(parts: readonly Part[]): void {
                 preparing = map;
                 prepFoe = 0;
                 prepBacks = {};
-                prepExcluded = new Set();
                 renderParts(['main']);
               },
               // The preparation page's roles, worked out only when the flawless chance needs them.
@@ -2468,7 +2474,7 @@ function renderParts(parts: readonly Part[]): void {
                 return (u: RosterUnit) => deployRoleOf(u, roster, (roles ??= engine.roles(roster, planSettings())));
               })(),
               // The marriages pinned on the Plan page and the run's item pins: the seed plan keeps them (#198, #193).
-              pins: () => [...marriagePins(roster), ...(run.itemPins ?? [])],
+              pins: () => [...marriagePins(roster), ...(run.pins ?? [])],
               recording,
               setRecording: (r) => {
                 recording = r;

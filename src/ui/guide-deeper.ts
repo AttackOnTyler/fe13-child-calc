@@ -279,7 +279,7 @@ export const DEEPER: readonly DeeperEntry[] = [
     answer: [
       'Deployment and pairs, on the preparation page, fills the map’s deploy count: its forced units first (Chrom, Robin on Chapter 23, and anyone the map fields from its start), then each lead (by role: army fit’s for children, the roster’s tag for the rest) with the back that covers the map’s foes best, then Staff/Rally and dancers. If room is left, whoever covers best of the rest leads, whatever its role, and takes a back.',
       'Coverage counts, for each foe, whether one round kills it and whether the lead survives its worst round, weighted by how many there are and more for the boss.',
-      'Pick another back, give a unit alone a back to make it a lead, swap a pair with ⇅, or drop a unit that isn’t forced, and everything recomputes: pairs, matchups and loadouts. Loadouts list the weapons that win each unit’s matchups, from its inventory and convoy weapons of a kind it already uses.',
+      'Pick another back, give a unit alone a back to make it a lead, swap a pair with ⇅, or drop a unit that isn’t forced, and everything recomputes: pairs, matchups and loadouts. A dropped unit is a pin over this map only: the flawless chance and the solve keep it out here too, until you let the solver deploy it again. Loadouts list the weapons that win each unit’s matchups, from its inventory and convoy weapons of a kind it already uses.',
     ],
     jump: { to: 'log', target: 'prepare' },
     terms: [

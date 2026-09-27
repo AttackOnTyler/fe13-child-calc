@@ -106,6 +106,11 @@ describe('the flawless chance readout (#186)', () => {
       'Not tried: Gaius marries Nowi (its ceiling 20.0% is below the best found, 50.0%)',
     ]);
     expect(solvedReadout(engine, run, { ...progress, done: true, converged: true }).text).toMatch(/ · searched$/);
+    // The pins' cost together (#200), once the worker has worked it out.
+    const pinCost = { pins: [{ kind: 'marriage', couple: ['vaike', 'sully'] }, { kind: 'keep', unit: 'frederick', keep: 'out' }] as const, cost: 0.031, margin: 0.012, runs: 32, verdict: 'better', settled: true } as const;
+    expect(solvedReadout(engine, run, { ...progress, done: true, converged: true, pinCost }).found).toContain('Your 2 pins cost +3.1 ±1.2: the best plan found with them lifted, less the best found with them');
+    const free = { ...pinCost, cost: -0.001, verdict: 'close' } as const;
+    expect(solvedReadout(engine, run, { ...progress, done: true, converged: true, pinCost: free }).found).toContain('Your 2 pins cost no measurable difference (−0.1 ±1.2): the best plan found with them lifted, less the best found with them');
     // Worked out on the page, there's nothing found to list.
     expect(flawlessReadout(engine, run, { runs: 1 }).found).toEqual([]);
   });
@@ -288,7 +293,7 @@ describe('the item plan on the Run view and Record results’ items used (#193)'
 
   it('keeps a pin, marked as pinned', () => {
     const pinned = withItemPin(run, { kind: 'booster', item: 'Energy Drop', unit: 'chrom' });
-    const pins = pinned.itemPins!;
+    const pins = pinned.pins!;
     const r = itemPlanReadout(engine, pinned, engine.seedPlan(pinned, { pins }), undefined, pins);
     const row = r.rows.find((x) => x.item === 'Energy Drop')!;
     expect(row.text).toMatch(/^Energy Drop \(held\): Chrom at .* \(pinned\)$/);

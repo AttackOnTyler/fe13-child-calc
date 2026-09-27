@@ -263,9 +263,9 @@ describe('the item plan of a recorded run (#193)', () => {
     // Stored with the run, with the item pins.
     const pinned = withItemPin(recorded, { kind: 'carrier', item: 'Levin Sword', unit: 'robin', key: 'chapter-5' });
     const back = importRun(exportRun(pinned));
-    expect(back.itemPins).toEqual([{ kind: 'carrier', item: 'Levin Sword', unit: 'robin', key: 'chapter-5' }]);
+    expect(back.pins).toEqual([{ kind: 'carrier', item: 'Levin Sword', unit: 'robin', key: 'chapter-5' }]);
     expect(back.entries.at(-1)!.itemsUsed).toEqual([{ item: 'Energy Drop', unit: 'chrom' }]);
-    expect(withItemPin(pinned, { kind: 'carrier', item: 'Levin Sword', unit: 'robin', key: 'chapter-5' }, true).itemPins).toBeUndefined();
+    expect(withItemPin(pinned, { kind: 'carrier', item: 'Levin Sword', unit: 'robin', key: 'chapter-5' }, true).pins).toBeUndefined();
   });
 
   it('lists the open item rules in the assumptions registry', () => {

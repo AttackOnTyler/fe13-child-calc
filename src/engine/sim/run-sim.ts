@@ -64,6 +64,7 @@ import type { Assumptions, BlindSpotId, RunBlindSpotId } from '../assumptions';
 import { CHILD_UNITS, type ChildId } from '../../game-data/children';
 import { CLASS_SKILLS, SKILLS, type SkillId } from '../../game-data/skills';
 import type { PlanSeal } from '../solve/plan';
+import { pinnedLineup, rulesBroken, type LineupRule } from '../solve/pins';
 import { SEAL_LEVEL, classChangeGains, plannedSeals, sealReaches } from './class-changes';
 import { childJoinStats, classBaseStats, type JoinParent } from '../child-join';
 import { childParalogueGates, isChildParalogue } from '../child-paralogues';
@@ -259,6 +260,11 @@ export type RunSimInput = {
    * utility). The plan's projection still plays them in full, so the lineups are the plan's.
    */
   readonly idle?: readonly RosterUnit[];
+  /**
+   * The pins' lineup rules (#200), by map in `maps` order (`lineupRules`): every lineup the runs play there, named by
+   * the plan or greedy, keeps them (`pinnedLineup`).
+   */
+  readonly pins?: readonly (readonly LineupRule[] | undefined)[];
 };
 
 /** A lineup a plan names for one map (#198): its pairs (a Lead, and its Back if any) and its units alone. */
@@ -1235,16 +1241,27 @@ function planner(input: RunSimInput, seed: number, assumptions: Assumptions): Pl
         .map(([a, b]) => (leads(b) && !leads(a) ? { lead: b, back: a } : { lead: a, back: b }));
       const max = step.deploy || state.army.size + extra.size;
       const planned = input.lineups?.[k];
-      const d = planned
-        ? plannedDeployment(planned, step.forced, max, here, (a, b) => rankIn(state, a, b))
+      // The pins' rules on this map (#200): the greedy lineup starts from their pairs and leaves out who's kept out;
+      // either lineup then keeps them.
+      const rules = input.pins?.[k];
+      const kept = { max, forced: step.forced, here };
+      const rank = (a: RosterUnit, b: RosterUnit) => rankIn(state, a, b);
+      let d = planned
+        ? plannedDeployment(pinnedLineup(planned, rules, kept), step.forced, max, here, rank)
         : suggestDeployment({
             candidates: candidatesOf(state, extra),
             forced: step.forced,
-            pinned,
+            pinned: [...(rules ?? []).flatMap((r) => (r.partner && (r.position === 'lead' || r.position === 'back') ? [r.position === 'lead' ? { lead: r.unit, back: r.partner } : { lead: r.partner, back: r.unit }] : [])), ...pinned],
+            ...(rules?.some((r) => r.position === 'out') ? { excluded: new Set(rules.filter((r) => r.position === 'out').map((r) => r.unit)) } : {}),
             max,
             foes: step.map.foes.map((g) => g.foe),
             pool: (f) => pools.get(f) ?? [],
           });
+      if (!planned && rules) {
+        const greedy: LineupPlan = { pairs: d.pairs.map((p) => ({ lead: p.lead, ...(p.back ? { back: p.back } : {}) })), solo: d.solo };
+        const fixed = pinnedLineup(greedy, rules, kept);
+        if (rulesBroken(greedy, rules, step.forced, here) > 0) d = plannedDeployment(fixed, step.forced, max, here, rank);
+      }
       if (k === last && step.armory?.length) kit = kitFor(state, step, d);
       const lineup = lineupOf(state, d, extra, interner);
       const play = playMap(playInput(state, step, lineup), runSeed(seed, k));

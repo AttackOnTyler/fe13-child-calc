@@ -54,6 +54,7 @@ import { sideGoalChoices } from './side-goals';
 import { renownAhead, rewardsValue, type RenownAhead } from './renown';
 import { hasPreparations, itemSources, simItems, simUses, type PlanSource } from './item-plan';
 import type { Plan } from './solve/plan';
+import { lineupRules, livePins, runPins } from './solve/pins';
 
 const WEAPON_KINDS = new Set(['sword', 'lance', 'axe', 'bow', 'tome', 'stone', 'beaststone']);
 
@@ -405,6 +406,9 @@ export function flawlessInput(
   const gold = (snap.gold ?? (fresh ? STARTING_GOLD : 0)) + waiting.gold;
   const decided = new Map(plan?.roadmap.lineups.map((l) => [l.key, l]) ?? []);
   const lineups = decided.size ? { lineups: maps.map((m) => decided.get(m.key)) } : {};
+  // The run's span and keep pins (#200), as each map's lineup rules: every lineup the runs play keeps them.
+  const keys = maps.map((m) => m.key);
+  const rules = lineupRules(livePins(run, runPins(run), keys), keys);
   return {
     input: {
       army,
@@ -420,6 +424,7 @@ export function flawlessInput(
       // The plan's class changes (#194); without a plan, each unit's best promotion by the endpoint.
       ...(plan ? { seals: plan.roadmap.seals } : {}),
       ...(items.held.length ? { held: items.held } : {}),
+      ...(rules ? { pins: rules } : {}),
     },
     notSimulated,
     unknownHistory,

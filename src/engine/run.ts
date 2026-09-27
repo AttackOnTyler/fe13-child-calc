@@ -22,8 +22,9 @@ import { parseClassChanges, parseCountOverrides, type ClassChange } from './inte
 import { entryAfterShopping, parseShopLines, type ShopLine } from './shopping';
 import { parseSideGoalPlan, parseSideGoalsSecured, type SideGoalId, type SideGoalPlan } from './side-goals';
 import { parseRenown, type RunRenown } from './renown';
-import { parseItemPins, parseItemsUsed, type ItemUsed } from './item-plan';
-import type { ItemPin } from './solve/plan';
+import { parseItemsUsed, type ItemUsed } from './item-plan';
+import type { PlanPin } from './solve/plan';
+import { parsePins } from './solve/pins';
 import { EMPTY_ROSTER, parseRoster, withSpouse, withState, type Roster, type RosterUnit, type RunFacts } from './roster';
 
 export type SupportLevel = 'C' | 'B' | 'A' | 'S';
@@ -96,8 +97,11 @@ export type Run = {
   readonly sideGoals?: SideGoalPlan;
   /** The file's renown, asked once (#191): its start and the rewards already claimed. */
   readonly renown?: RunRenown;
-  /** Item pins (#193): a booster (or Boots) to a unit, a weapon's carrier from a map on; the plan keeps them. */
-  readonly itemPins?: readonly ItemPin[];
+  /**
+   * The player's pins (#200): marriage, span, keep-in/out and item pins (#193), hard constraints on the solve. Side goals
+   * stay in `sideGoals` and read as pins (`runPins`). A save from before #200 kept item pins as `itemPins`; they're read in.
+   */
+  readonly pins?: readonly PlanPin[];
 };
 
 export const EMPTY_SNAPSHOT: Snapshot = { units: {}, convoy: [], gold: null, states: {}, spouses: {} };
@@ -544,10 +548,11 @@ export function parseRun(raw: unknown): Run {
   const base: Run = entries.length ? { version: 1, roster: { ...roster, states: {}, spouses: {} }, entries } : runFromRoster(roster);
   const counts = parseCountOverrides(raw.countOverrides);
   const withCounts: Run = Object.keys(counts).length ? { ...base, countOverrides: counts } : base;
-  const pins = parseSideGoalPlan(raw.sideGoals);
+  const goals = parseSideGoalPlan(raw.sideGoals);
   const renown = parseRenown(raw.renown);
-  const itemPins = parseItemPins(raw.itemPins);
-  const withGoals: Run = { ...withCounts, ...(Object.keys(pins).length ? { sideGoals: pins } : {}), ...(renown ? { renown } : {}), ...(itemPins.length ? { itemPins } : {}) };
+  // The pins (#200), #193's item pins (`itemPins`, before #200) read into them.
+  const pins = parsePins(raw.pins, raw.itemPins);
+  const withGoals: Run = { ...withCounts, ...(Object.keys(goals).length ? { sideGoals: goals } : {}), ...(renown ? { renown } : {}), ...(pins.length ? { pins } : {}) };
   return Object.keys(seen).length ? { ...withGoals, seen } : withGoals;
 }
 
