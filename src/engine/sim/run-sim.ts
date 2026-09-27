@@ -1022,8 +1022,30 @@ function rebuy(state: RunState, step: RunSimMap, shop: Shop) {
       changed = true;
     }
     u.gear.push(...substitutes);
+    // Every weapon it holds has run dry, the maps ahead or not (the plan's projection never wears one out): a careful
+    // player never leaves a fighter unarmed at an armory. Its strongest broken weapon again, else the nearest sold.
+    if (u.gear.length && u.gear.every((g) => g.uses <= 0)) {
+      const g = [...u.gear].sort((a, b) => (b.weapon.item.mt ?? 0) - (a.weapon.item.mt ?? 0))[0]!;
+      const item = g.weapon.item;
+      const price = item.uses ? priceIn(step, item.name) : undefined;
+      if (price !== undefined) {
+        if (pay(state, receipt(item, price))) {
+          g.weapon = freshWeapon(item);
+          g.uses = item.uses!;
+          changed = true;
+        }
+      } else {
+        const sub = substituteFor(u, item, step);
+        if (sub && pay(state, receipt(sub.item, sub.cost))) {
+          u.gear.push({ weapon: freshWeapon(sub.item), uses: fullUses(sub.item) });
+          changed = true;
+        }
+      }
+    }
     for (const s of u.stock) {
-      const need = shop.need(u.base.id, s.item.name);
+      // A staff or potion is kept to a third of its uses at least as well (the realism pass): the projection's use of
+      // it is one play's, and a healer run dry mid-map leaves the army with no way to buy HP back.
+      const need = Math.max(shop.need(u.base.id, s.item.name), s.item.uses ? Math.ceil(s.item.uses / 3) : 0);
       const price = s.item.uses && need > 0 && s.uses < need ? priceIn(step, s.item.name) : undefined;
       if (price === undefined || !pay(state, receipt(s.item, price))) continue;
       s.uses += s.item.uses!;
@@ -1858,7 +1880,8 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
       // this run's own lineup.
       const planned = (lineups[i] ??= plan.lineup(i));
       const lineup = lineupOf(state, planned === NOBODY ? deploymentFor(state, input, i, extra) : planned, extra, interner, foesOfMap(step.map));
-      const play = playMap(playInput(state, input, i, lineup, input.idle), runSeed(rs, i));
+      // A run already this unlikely to have lost nobody stops playing once the map takes it under `LOST` (it counts 0).
+      const play = playMap({ ...playInput(state, input, i, lineup, input.idle), stopBelow: LOST / flawless }, runSeed(rs, i));
       if (play.noDeath < 1) for (const [u, share] of lossShares(play)) lost.set(u, (lost.get(u) ?? 0) + flawless * (1 - play.noDeath) * share);
       // A map the play can't win in its turns isn't cleared: the run doesn't get past it (the plan isn't shown to).
       const stalled = play.ended === 'stalled';

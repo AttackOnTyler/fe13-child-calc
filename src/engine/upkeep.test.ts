@@ -161,6 +161,21 @@ describe('gold and the shopping list in the simulated runs (#190)', () => {
     expect(r.maps[2]!.turns).toBe(4);
   });
 
+  it('never leaves a unit unarmed at an armory, and keeps a staff to a third of its uses (realism pass)', () => {
+    // Its only sword broke, on no map the plan's projection sees: bought again at the next stop all the same.
+    const broken = hero({ weaponUses: [0] });
+    const cleric = hero({ id: 'lissa', name: 'Lissa', weapons: [], items: [{ item: item('Heal'), uses: 5 }] });
+    const armory = sells(['Iron Sword', 520], ['Heal', 600]);
+    const r = sim([broken, cleric], [step(rout('a', []), { armory }), step(rout('b', [dummy(2)]), { deploy: 2 })], 2000);
+    expect(r.shopping[0]!.lines.map((l) => [l.kind, l.item, l.unit])).toEqual(
+      expect.arrayContaining([
+        ['rebuy', 'Iron Sword', 'lonqu'],
+        ['rebuy', 'Heal', 'lissa'],
+      ]),
+    );
+    expect(r.maps[1]).toMatchObject({ noDeath: 1, turns: 2, stalled: 0 });
+  });
+
   it('hands a weapon its holder can’t wield to a unit that can, in the preparations: Vaike’s Iron Axe from Miriel (realism pass)', () => {
     const fighter = engine.classGrowths('fighter', 'M');
     const mage = engine.classGrowths('mage', 'F');
