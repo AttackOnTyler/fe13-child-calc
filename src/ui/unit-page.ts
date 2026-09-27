@@ -2,7 +2,7 @@
  * The Units view (#101): the list of units, and a unit's page. A header with its identity chips, the class tree, then
  * build coverage (open), "As a parent" and pair-up folding away below it. It follows the global play context.
  */
-import type { BuildMatch, ChildId, FrontDoor, OpinionBlock, OpinionMark, PresetId, Engine, PageSubject, PageUnitId, PartnerRow, PlanSettings, RobinRef, Roster, SkillRef, SkillViewSettings, TreeClass, UnitPage } from '../engine';
+import type { BuildMatch, ChildId, FrontDoor, OpinionBlock, OpinionMark, PairCurve, PresetId, Engine, PageSubject, PageUnitId, PartnerRow, PlanSettings, RobinRef, Roster, SkillRef, SkillViewSettings, TreeClass, UnitPage } from '../engine';
 import { MOD_STATS, STATS, STAT_LABELS, type Gender, type Stat } from '../game-data/stats';
 import { h } from './dom';
 import { guide } from './guide';
@@ -282,6 +282,17 @@ const PARTNER_MARKS = (r: PartnerRow): string[] => [
   ...(r.blocked && !r.married ? ['blocked'] : []),
 ];
 
+/** A partner's support curve (#177): its name, maps to S, and the points each rank needs on hover. */
+const curveChip = (c: PairCurve) => {
+  const t = c.thresholds;
+  const points = `C ${t.C} · B ${t.B} · A ${t.A}${t.S === undefined ? '' : ` · S ${t.S}`} points`;
+  return h(
+    'span',
+    { class: `chip small curve-${c.curve}`, title: `Support curve: ${points}. S in ${c.mapsToS} maps fighting together at best (3 points a map, one rank a map).` },
+    `${c.curve} · S in ${c.mapsToS}`,
+  );
+};
+
 /** Partners (#102): each possible spouse, the children the marriage produces, where it stands; read-only. */
 function partners(ctx: UnitsContext, p: UnitPage): HTMLElement {
   const rows = ctx.engine.partners(p.robin ?? (p.unit as PageUnitId), ctx.roster, ctx.planSettings);
@@ -301,7 +312,7 @@ function partners(ctx: UnitsContext, p: UnitPage): HTMLElement {
       h(
         'div',
         { class: `partner${r.blocked && !r.married ? ' blocked' : ''}`, title: r.blocked && !r.married ? `Blocked: ${r.blocked}` : undefined },
-        h('div', {}, partnerName(r), markChip(r.opinion), ...PARTNER_MARKS(r).map((m) => h('span', { class: 'chip small' }, m)), ' ', h('button', { class: 'mini', title: 'Open the Plan', onclick: ctx.openPlan }, 'Plan →')),
+        h('div', {}, partnerName(r), markChip(r.opinion), curveChip(r.curve), ...PARTNER_MARKS(r).map((m) => h('span', { class: 'chip small' }, m)), ' ', h('button', { class: 'mini', title: 'Open the Plan', onclick: ctx.openPlan }, 'Plan →')),
         h(
           'div',
           { class: 'small' },

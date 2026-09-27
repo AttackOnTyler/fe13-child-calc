@@ -57,6 +57,16 @@ describe('a unit’s Partners', () => {
     expect(olivia.find((r) => r.partner === 'gaius')!.blocked).toBeDefined();
   });
 
+  it('shows each partner’s support curve and maps to S (#177)', () => {
+    const rows = engine.partners('miriel', roster, settings);
+    expect(rows.find((r) => r.partner === 'stahl')!.curve).toMatchObject({ curve: 'fast', mapsToS: 7 });
+    expect(rows.find((r) => r.partner === 'kellam')!.curve).toMatchObject({ curve: 'medium', mapsToS: 7 });
+    expect(rows.find((r) => r.partner === 'lonqu')!.curve).toMatchObject({ curve: 'slow', mapsToS: 8 });
+    expect(rows.find((r) => r.partner === 'robin')!.curve).toMatchObject({ curve: 'slow', mapsToS: 8 });
+    const robinRows = engine.partners({ kind: 'robin', gender: 'F', asset: 'mag', flaw: 'str' }, roster, settings);
+    expect(robinRows.find((r) => r.partner === 'gaius')!.curve.curve).toBe('slow');
+  });
+
   it('gives a SpotPass unit Robin only', () => {
     expect(engine.partners('walhart', withRun(EMPTY_ROSTER, { gender: 'F' }), settings).map((r) => r.partner)).toEqual(['robin']);
   });

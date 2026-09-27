@@ -340,6 +340,9 @@ button.chip.plan-preset.visit { color: #c59bff; border-color: #6a4f94; }
 .ppreset select { font: inherit; font-size: 11px; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 2px; max-width: 170px; }
 .chip.set { color: var(--accent); border-color: #3a6394; }
 .chip.suggested { color: #d8b45a; border-color: #7a6427; }
+.chip.curve-slow { color: var(--muted); margin-left: 4px; cursor: help; }
+.chip.curve-medium { color: var(--accent); margin-left: 4px; cursor: help; }
+.chip.curve-fast { color: var(--pos); border-color: #3f7a47; margin-left: 4px; cursor: help; }
 button.chip.plan-preset { cursor: pointer; background: transparent; color: var(--accent); border-color: #3a6394; }
 button.chip.plan-preset:disabled { cursor: default; color: var(--muted); border-color: var(--line); }
 
