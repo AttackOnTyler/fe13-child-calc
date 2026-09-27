@@ -228,6 +228,7 @@ export const DEEPER: readonly DeeperEntry[] = [
     answer: [
       'Next map, at the top of Run, offers what your route has opened: the story’s next chapter first, then paralogues (with any condition, and a note that SpotPass downloads may be gone), then on a Full route the DLC. Grind maps are never offered: log them as “other”.',
       'Record results makes the map’s entry, a copy of the last, and walks you through what changed: deployed units, the map’s recruits (pre-filled), deaths and marriages, then convoy and gold.',
+      'On Chapter 11, if Chrom has no recorded marriage, it asks who the game married him to at the map’s end: a candidate not married to someone else (a lost one included), or the Maiden. It pre-selects one only when his logged support ranks decide it (a single candidate at his highest rank, C or above); otherwise the game decided by support points the app can’t see, so pick who he married. The answer is recorded as a marriage.',
       'On Classic a unit that falls is dead for good; on Casual it comes back, so nothing is recorded. Anything you skip keeps its copied value.',
     ],
     jump: { to: 'log', target: 'next-map' },

@@ -135,6 +135,7 @@ export {
   type SupportLevel,
   type UnitSnapshot,
 } from './run';
+export { chromChapter11Wife, chromWedding, type ChromWeddingAsk, type ChromWife } from './chrom-wedding';
 export {
   FORGE,
   ITEMS,
