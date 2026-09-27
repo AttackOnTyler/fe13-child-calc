@@ -58,6 +58,7 @@ import { FLAWLESS_SEED, flawlessCeiling, flawlessChance, flawlessInput, sureInco
 import { simulateCeiling, type Ceiling } from './sim/ceiling';
 import { endpointCoverage, seedPlan, type EndpointCoverage, type SeedContext, type SeedOptions } from './solve/seed';
 import { solveStep, type SolveStep, type SolveStepInput } from './solve/step';
+import { milestones, type Milestone } from './milestones';
 import type { Plan, PlanLineup, PlanRobin } from './solve/plan';
 import { BLIND_SPOTS, type BlindSpot } from './assumptions';
 import { matchBuilds, matchTemplate, shownMatch, templateSummary, templatesFor } from './builds';
@@ -134,7 +135,7 @@ export { type MapWaves, type Wave, type WaveGroup } from './waves';
 export { type ArmySpread, type SimItem } from './sim/sustain';
 export { EXPOSURE_RISK, MAX_TURNS, type MapPlay, type MapPlayInput, type SimAct, type SimChase, type SimFight, type SimFoeGroup, type SimGroup, type SimMap, type SimStance, type SimTurn, type SimUnit, type SimUnitTally, type SimWave } from './sim/map-play';
 export { simLineup, type SimMapOptions } from './sim/sim-map';
-export { PROMOTION_RULE, levelCap, type ArmyUnit, type ChildRecruit, type GoldSpread, type RunSim, type RunSimInput, type RunSimMap, type RunSimMapResult, type ShoppingLine, type ShoppingStop, type StatSpread, type UnitForecast, type SupportForecast, type MarriageForecast, type RunSimSideGoal, type SideGoalForecast } from './sim/run-sim';
+export { levelCap, type ArmyUnit, type ChildRecruit, type GoldSpread, type RunSim, type RunSimInput, type RunSimMap, type RunSimMapResult, type ShoppingLine, type ShoppingStop, type StatSpread, type UnitForecast, type SupportForecast, type MarriageForecast, type RunSimSideGoal, type SideGoalForecast } from './sim/run-sim';
 export { KIT_FORGE_MT, VULNERARY_VALUE, type MapUpkeep } from './sim/upkeep';
 export { SIDE_GOAL_IDS, chaseByDefault, sideGoalById, withSideGoalPin, withSideGoalSecured, type SideGoal, type SideGoalChoice, type SideGoalDecision, type SideGoalId, type SideGoalPart, type SideGoalPlan, type SideGoalRecord } from './side-goals';
 export { rewardsValue, withRenown, type RenownAhead, type RenownStop, type RunRenown } from './renown';
@@ -146,6 +147,7 @@ export { marriagePins } from './solve/plan';
 export type { Plan, PlanItem, PlanLineup, PlanPin, PlanProposal, PlanRobin, PlanSeal, Position, Roadmap, SolveCursor, Wishlist, WishlistChild, WishlistReserve, WishlistUnit } from './solve/plan';
 export type { EndpointCoverage, SeedOptions } from './solve/seed';
 export type { SolveStep, SolveStepInput } from './solve/step';
+export type { ClassMilestone, Milestone, MilestonePoint, RecruitMilestone, SealSource, SkillMilestone, SupportMilestone, SupportWindow } from './milestones';
 export { BLIND_SPOTS, type BlindSpot, type BlindSpotId, type RunBlindSpotId } from './assumptions';
 export { bestWeapon, classTypes, dangerFlags, foeKey, foeOf, foesOf, matchup, pairUpBonus, statValue, type DangerFlag, type Fighter, type Foe, type Matchup } from './solver';
 export {
@@ -601,6 +603,13 @@ export type Engine = {
    * picks. Plays every map once: about 2 s on a fresh Full route (the Web Worker's job, #199).
    */
   roadmapLineups(run: Run, plan: Plan, options?: Pick<FlawlessOptions, 'seed' | 'roleOf'>): readonly PlanLineup[];
+  /**
+   * A plan's milestones for a run (#194): supports (windows counted in maps, non-starters flagged), skills learned (for
+   * a build, or passed at paralogue entry; wasted passes flagged), recruitments and classes reached (each naming its
+   * seal and where it comes from; a seal play can lose flagged as a risk), ordered by where their event falls on the
+   * roadmap, preconditions first. Each has a stable `id`. Cheap: no map is played.
+   */
+  milestones(run: Run, plan: Plan): readonly Milestone[];
 };
 
 /** One combat for `Engine.combatExp`. */
@@ -1705,5 +1714,6 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       const lineups = planLineups(input, options.seed ?? FLAWLESS_SEED, assumptions);
       return input.maps.map((m, i) => ({ key: m.key, pairs: lineups[i]!.pairs.map((p) => ({ lead: p.lead, ...(p.back ? { back: p.back } : {}) })), solo: [...lineups[i]!.solo] }));
     },
+    milestones: (run, plan) => milestones(run, plan, assumptions),
   };
 }

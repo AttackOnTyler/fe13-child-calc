@@ -43,21 +43,26 @@
  * actions were spent in time pays the run (its Bullion sold, gold, free seals), and each goal reports the share of runs
  * that secured all of it (`sideGoals`). A skipped one is never counted. Renown's rewards come in as sure income.
  *
- * Later tickets extend the same walk:
- * - #194 replaces the promotion rule below (`PROMOTION_RULE`) with the roadmap's class-reached milestones.
+ * Class changes (#194) are the roadmap's class-reached milestones (`seals`, see `class-changes.ts`): each is used in the
+ * preparations after its unit reaches its level cap, or before the map that needs the class, whichever comes first,
+ * from Lv 10, with a seal held or bought there. Each unit's learned skills are tracked (its class's skills as it levels
+ * and changes class), so a parent passes the skill the plan names at its child's paralogue entry only when it has
+ * learned it by then in that run; otherwise its bottom skill passes, as the game has it.
  */
-import { CLASSES, type ClassData, type ClassId, type ClassTier } from '../../game-data/classes';
+import { CLASSES, type ClassId, type ClassTier } from '../../game-data/classes';
 import { STATS, type Gender, type Growths, type Modifiers, type Stat } from '../../game-data/stats';
 import type { DeploymentRole } from '../../curated/deployment';
 import type { Assumptions, BlindSpotId, RunBlindSpotId } from '../assumptions';
 import { CHILD_UNITS, type ChildId } from '../../game-data/children';
-import type { SkillId } from '../../game-data/skills';
+import { CLASS_SKILLS, SKILLS, type SkillId } from '../../game-data/skills';
+import type { PlanSeal } from '../solve/plan';
+import { SEAL_LEVEL, classChangeGains, plannedSeals, sealReaches } from './class-changes';
 import { childJoinStats, classBaseStats, type JoinParent } from '../child-join';
 import { childParalogueGates, isChildParalogue } from '../child-paralogues';
 import { childSkills, type SkillParent } from '../child-skills';
-import { classGrowths, classMaxStats, className, promotionsOf } from '../classes';
+import { classGrowths, classMaxStats, className } from '../classes';
 import { suggestDeployment, type DeployCandidate, type Deployment, type Pair } from '../deploy';
-import { COUNT_CAP, combatExp, expFoeOf, tierBonus, type ExpFoe } from '../exp';
+import { COUNT_CAP, combatExp, expFoeOf, secondSealCount, tierBonus, type ExpFoe } from '../exp';
 import type { Difficulty, RosterUnit } from '../roster';
 import type { Fighter, Foe, SupportLevel } from '../solver';
 import { CHROM_WEDDING_CANDIDATES, CHROM_WEDDING_MAP } from '../../game-data/supports';
@@ -116,6 +121,11 @@ export type ChildRecruit = {
   readonly parents: readonly [RosterUnit, RosterUnit | 'maiden'];
   /** A parent's fixed pass (Chrom's, Walhart's, Aversa's, or a Chrom child's to Morgan), fixed parent first. */
   readonly fixed?: readonly [SkillId | undefined, SkillId | undefined];
+  /**
+   * The skill the plan has each parent pass (#198), fixed parent first: passed only when the parent has learned it by
+   * entry in the run (#194); otherwise its bottom skill passes.
+   */
+  readonly passes?: readonly [SkillId | undefined, SkillId | undefined];
   /** Morgan's start class (its other parent's); every other child joins in its fixed class. */
   readonly startClass?: ClassId;
   readonly growths: Growths;
@@ -190,6 +200,11 @@ export type RunSimInput = {
    * plays the greedy lineup (`suggestDeployment` over the projection's army, the couples paired until they marry).
    */
   readonly lineups?: readonly (LineupPlan | undefined)[];
+  /**
+   * The plan's class changes (#194), each needed by its map (`key`); a unit with none never changes class. Absent: each
+   * unit in a base class reaches its best promotion by the endpoint (`plannedSeals`).
+   */
+  readonly seals?: readonly PlanSeal[];
 };
 
 /** A lineup a plan names for one map (#198): its pairs (a Lead, and its Back if any) and its units alone. */
@@ -327,15 +342,8 @@ export type RunSim = {
   readonly blindSpots: readonly (BlindSpotId | RunBlindSpotId)[];
 };
 
-/**
- * The promotion rule until the roadmap plans class changes (#194): a unit in a base class at its level cap is
- * promoted with a Master Seal in the next map's preparations, when one is held or an armory sells them by then, to the
- * promotion that raises its class bases most. A stated blind spot (`promotes-at-cap`).
- */
-export const PROMOTION_RULE = { level: 20 } as const;
-
 /** The run simulation's own blind spots (see BLIND_SPOTS): what it simplifies between maps. */
-const RUN_BLIND_SPOTS: readonly RunBlindSpotId[] = ['promotes-at-cap', 'lead-takes-exp', 'supports-from-pair-combats', 'side-goal-actions', 'kit-by-matchups-won'];
+const RUN_BLIND_SPOTS: readonly RunBlindSpotId[] = ['class-change-at-cap', 'lead-takes-exp', 'supports-from-pair-combats', 'side-goal-actions', 'kit-by-matchups-won'];
 
 /** Special classes (Dancer, Villager, Taguel, Manakete, the DLC classes) level to 30; base and advanced to 20. */
 export const levelCap = (tier: ClassTier): number => (tier === 'special' ? 30 : 20);
@@ -357,6 +365,11 @@ type Live = {
   weapons: readonly Weapon[];
   items: readonly SimItem[];
   gearKey: string;
+  /**
+   * Skills it has learned (#194): its equipped ones, its class's up to its level, and each class's as it levels and
+   * changes class in the run. Skills of classes before the log's aren't known.
+   */
+  readonly learned: Set<SkillId>;
 };
 
 /** A purchase a run made at a stop, before it's counted over the runs. */
@@ -387,6 +400,9 @@ export type RunState = {
   readonly robin: Gender | undefined;
   /** Children read on entering this map, who join after it. */
   arriving: Live[];
+  /** The plan's class changes (#194), shared by every run, and those this run has made (by index). */
+  readonly classChanges: readonly ClassChange[];
+  readonly changed: Set<number>;
 };
 
 /** Class growths by class and gender, per set of assumptions (Conqueror's are assumed). */
@@ -439,14 +455,24 @@ function liveOf(a: ArmyUnit): Live {
     weapons: [],
     items: [],
     gearKey: '',
+    learned: new Set(a.skills.flatMap((n) => SKILL_BY_NAME.get(n) ?? [])),
   };
+  for (const s of CLASS_SKILLS[a.classId]) if (s.level <= a.level) u.learned.add(s.skill);
   refresh(u);
   return u;
+}
+
+const SKILL_BY_NAME = new Map(Object.entries(SKILLS).map(([id, s]) => [s.name, id as SkillId]));
+
+/** The skills its class teaches at its level (#194). */
+function learn(u: Live) {
+  for (const s of CLASS_SKILLS[u.classId]) if (s.level === u.level) u.learned.add(s.skill);
 }
 
 /** One level-up: each stat grows by 1 on its growth's roll (or by the growth's fraction in the projection), up to its cap. */
 function levelUp(u: Live, rng: Rng | null, assumptions: Assumptions) {
   u.level++;
+  learn(u);
   const caps = capsOf(u);
   for (const s of STATS) {
     if (u.stats[s] >= caps[s]) continue;
@@ -467,21 +493,6 @@ function gainExp(u: Live, exp: number, rng: Rng | null, assumptions: Assumptions
   if (u.level >= cap) u.exp = 0;
 }
 
-/** The promotion that raises its class bases most (first listed on a tie), with the gains. */
-function promotionOf(u: Live): { to: ClassId; gains: Record<Stat, number> } | undefined {
-  const from = classBaseStats(u.classId, u.base.gender);
-  let best: { to: ClassId; gains: Record<Stat, number>; total: number } | undefined;
-  for (const to of promotionsOf(u.classId)) {
-    const t = classBaseStats(to, u.base.gender);
-    const lock = (CLASSES[to] as ClassData).genderLock;
-    if (!from || !t || (lock && lock !== u.base.gender)) continue;
-    const gains = Object.fromEntries(STATS.map((s) => [s, Math.max(0, t[s] - from[s])])) as Record<Stat, number>;
-    const total = STATS.reduce((a, s) => a + gains[s], 0);
-    if (!best || total > best.total) best = { to, gains, total };
-  }
-  return best;
-}
-
 /** A seal's price in the armories when `armory` isn't given. */
 const SEAL_PRICE = 2500;
 
@@ -499,30 +510,59 @@ function pay(state: RunState, r: Receipt): boolean {
   return true;
 }
 
+/** A planned class change and the map index it's needed by (past the last map when it isn't on the order). */
+type ClassChange = { readonly seal: PlanSeal; readonly by: number };
+
+const SEAL_ITEM = { master: 'Master Seal', second: 'Second Seal' } as const;
+
 /**
- * The promotion rule (`PROMOTION_RULE`), in a map's preparations: with a Master Seal the run holds, else one bought
- * here when an armory sells it and the gold covers it (#190); otherwise it waits.
+ * The plan's class changes in map `at`'s preparations (#194): each unit's next planned change is used when the unit is
+ * at its level cap or the map needing the class has come, from Lv 10, with a seal the run holds, else one bought here
+ * when an armory sells it and the gold covers it (#190); otherwise it waits. A Master Seal adds the class bases it
+ * gains; a Second Seal moves each stat by the difference in class bases. The unit restarts at Lv 1 and learns its new
+ * class's Lv 1 skill.
  */
-function promote(state: RunState, step: RunSimMap, reading: Assumptions['class-change-internal-level']) {
-  for (const u of state.army.values()) {
-    if (u.tier !== 'base' || u.level < PROMOTION_RULE.level) continue;
-    const p = promotionOf(u);
-    if (!p) continue;
-    if (state.masterSealsHeld > 0) state.masterSealsHeld--;
-    else {
-      const price = priceIn(step, 'Master Seal');
-      if (price === undefined || !pay(state, { kind: 'seal', action: 'buy', item: 'Master Seal', unit: u.base.id, name: u.base.name, cost: price })) continue;
+function changeClasses(state: RunState, step: RunSimMap, at: number, reading: Assumptions['class-change-internal-level']) {
+  const next = new Map<RosterUnit, number>();
+  state.classChanges.forEach((c, i) => {
+    if (!state.changed.has(i) && !next.has(c.seal.unit)) next.set(c.seal.unit, i);
+  });
+  for (const [id, i] of next) {
+    const u = state.army.get(id);
+    const { seal, by } = state.classChanges[i]!;
+    if (!u) continue;
+    if (u.classId === seal.classId) {
+      state.changed.add(i);
+      continue;
     }
+    if (u.level < SEAL_LEVEL || (u.level < levelCap(u.tier) && at < by)) continue;
+    const gains = sealReaches(u.classId, seal.classId, u.base.gender, seal.seal) ? classChangeGains(u.classId, seal.classId, u.base.gender, seal.seal) : undefined;
+    if (!gains) continue;
+    if (seal.seal === 'master' && state.masterSealsHeld > 0) state.masterSealsHeld--;
+    else if (seal.seal === 'second' && state.secondSealsHeld > 0) state.secondSealsHeld--;
+    else {
+      const item = SEAL_ITEM[seal.seal];
+      const price = priceIn(step, item);
+      if (price === undefined || !pay(state, { kind: 'seal', action: 'buy', item, unit: u.base.id, name: u.base.name, cost: price })) continue;
+    }
+    state.changed.add(i);
     const levelAtUse = u.level;
-    u.classId = p.to;
-    u.tier = CLASSES[p.to].tier;
+    const fromTier = u.tier;
+    u.classId = seal.classId;
+    u.tier = CLASSES[seal.classId].tier;
     u.level = 1;
     u.exp = 0;
-    // Research: a Master Seal only adds the advanced tier's +20. +1 per class change: the level at use carries on.
+    // Research: a Master Seal only adds the advanced tier's +20, a Second Seal adds to the count. +1 per class change:
+    // the level at use carries on.
     if (reading === 'plus-one') u.count += levelAtUse;
-    else u.bonus = 20;
+    else {
+      if (seal.seal === 'second') u.count += secondSealCount(levelAtUse, fromTier);
+      u.bonus = tierBonus(u.tier);
+    }
     const caps = capsOf(u);
-    for (const s of STATS) u.stats[s] = Math.min(Math.max(caps[s], u.stats[s]), u.stats[s] + p.gains[s]);
+    for (const s of STATS)
+      u.stats[s] = seal.seal === 'master' ? Math.min(Math.max(caps[s], u.stats[s]), u.stats[s] + gains[s]) : Math.max(0, Math.min(caps[s], u.stats[s] + gains[s]));
+    learn(u);
   }
 }
 
@@ -633,18 +673,19 @@ function entered(state: RunState, step: RunSimMap): boolean {
  * parent isn't in the run's army (lost, or never simulated) or is in a class with no published bases.
  */
 function childOf(state: RunState, c: ChildRecruit, assumptions: Assumptions): Live | undefined {
-  const side = (u: RosterUnit | 'maiden'): { join: JoinParent; skills: SkillParent } | undefined => {
+  // A parent passes its fixed skill; else the plan's, once it has learned it (and, the plan has it, equipped it last).
+  const side = (u: RosterUnit | 'maiden', fixed: SkillId | undefined, planned: SkillId | undefined): { join: JoinParent; skills: SkillParent } | undefined => {
     if (u === 'maiden') return { join: 'maiden', skills: 'maiden' };
     const p = state.army.get(u);
     if (!p || !classBaseStats(p.classId, p.base.gender)) return undefined;
-    return { join: { stats: p.stats, class: p.classId, gender: p.base.gender }, skills: { skills: p.base.skills } };
+    const pass = fixed ?? (planned && p.learned.has(planned) ? planned : undefined);
+    return { join: { stats: p.stats, class: p.classId, gender: p.base.gender }, skills: { skills: p.base.skills, ...(pass ? { fixed: pass } : {}) } };
   };
-  const a = side(c.parents[0]);
-  const b = side(c.parents[1]);
+  const a = side(c.parents[0], c.fixed?.[0], c.passes?.[0]);
+  const b = side(c.parents[1], c.fixed?.[1], c.passes?.[1]);
   if (!a || !b) return undefined;
-  const fixed = (s: SkillParent, f: SkillId | undefined): SkillParent => (f && s !== 'maiden' ? { ...s, fixed: f } : s);
   const join = childJoinStats({ child: c.id, parents: [a.join, b.join], ...(c.startClass ? { startClass: c.startClass } : {}), modifiers: c.modifiers }, assumptions);
-  const { skills } = childSkills({ child: c.id, parents: [fixed(a.skills, c.fixed?.[0]), fixed(b.skills, c.fixed?.[1])], startClass: join.class, level: join.level }, assumptions);
+  const { skills } = childSkills({ child: c.id, parents: [a.skills, b.skills], startClass: join.class, level: join.level }, assumptions);
   const gender = CHILD_UNITS[c.id].gender;
   return liveOf({
     id: c.id,
@@ -748,7 +789,7 @@ function upkeep(state: RunState, step: RunSimMap, spent: MapUpkeep) {
  * parents on entry, then the shopping list in priority order: rebuys, seals with promotions, the endpoint kit (#190).
  * Undefined when the map isn't entered in this run (a closed child paralogue).
  */
-function beforeMap(state: RunState, step: RunSimMap, assumptions: Assumptions, shop?: Shop): Map<RosterUnit, Live> | undefined {
+function beforeMap(state: RunState, step: RunSimMap, at: number, assumptions: Assumptions, shop?: Shop): Map<RosterUnit, Live> | undefined {
   if (!entered(state, step)) return undefined;
   for (const a of step.joining) if (!state.army.has(a.id)) join(state, a);
   state.arriving = [];
@@ -759,7 +800,7 @@ function beforeMap(state: RunState, step: RunSimMap, assumptions: Assumptions, s
   }
   const stop = !!step.armory?.length;
   if (shop && stop) rebuy(state, step, shop);
-  promote(state, step, assumptions['class-change-internal-level']);
+  changeClasses(state, step, at, assumptions['class-change-internal-level']);
   if (shop?.kit && stop) buyKit(state, shop.kit());
   return new Map(step.mapOnly.map((a) => [a.id, liveOf(a)]));
 }
@@ -901,8 +942,22 @@ function chromWedding(state: RunState, at: number, assumptions: Assumptions) {
 const robinOf = (input: RunSimInput): Gender | undefined =>
   [...input.army, ...input.maps.flatMap((m) => [...m.joining, ...m.later])].find((a) => a.id === 'robin')?.gender;
 
+/** The plan's class changes with the map index each is needed by (`plannedSeals` when the input names none). */
+const CHANGES = new WeakMap<RunSimInput, readonly ClassChange[]>();
+function classChangesOf(input: RunSimInput): readonly ClassChange[] {
+  let out = CHANGES.get(input);
+  if (!out) {
+    const index = new Map(input.maps.map((m, i) => [m.key, i]));
+    out = (input.seals ?? plannedSeals(input)).map((seal) => ({ seal, by: index.get(seal.key) ?? input.maps.length }));
+    CHANGES.set(input, out);
+  }
+  return out;
+}
+
 function newState(input: RunSimInput): RunState {
   const state: RunState = {
+    classChanges: classChangesOf(input),
+    changed: new Set(),
     army: new Map(),
     masterSealsHeld: input.masterSealsHeld ?? 0,
     secondSealsHeld: input.secondSealsHeld ?? 0,
@@ -971,7 +1026,7 @@ function planner(input: RunSimInput, seed: number, assumptions: Assumptions): Pl
     while (done.length <= i) {
       const k = done.length;
       const step = input.maps[k]!;
-      const extra = beforeMap(state, step, assumptions);
+      const extra = beforeMap(state, step, k, assumptions);
       if (!extra) {
         done.push(NOBODY);
         wear.push(NO_WEAR);
@@ -1181,7 +1236,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
       const step = input.maps[i]!;
       const arriving = state.gold;
       state.receipts = [];
-      const extra = beforeMap(state, step, assumptions, { need: need(i), ...(i === last ? { kit: plan.kit } : {}) });
+      const extra = beforeMap(state, step, i, assumptions, { need: need(i), ...(i === last ? { kit: plan.kit } : {}) });
       const receipts = state.receipts;
       state.receipts = null;
       if (i === last) {

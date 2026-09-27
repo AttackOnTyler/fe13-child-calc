@@ -106,8 +106,8 @@ function childUnit(c: ChildRecruit, army: ReadonlyMap<RosterUnit, ArmyUnit>, ass
     const p = army.get(u);
     return p ? { skills: p.skills, ...(fixed ? { fixed } : {}) } : undefined;
   };
-  const a = side(c.parents[0], c.fixed?.[0]);
-  const b = side(c.parents[1], c.fixed?.[1]);
+  const a = side(c.parents[0], c.fixed?.[0] ?? c.passes?.[0]);
+  const b = side(c.parents[1], c.fixed?.[1] ?? c.passes?.[1]);
   const child = CHILD_UNITS[c.id];
   const classId = c.startClass ?? child.defaultClassSet[0];
   if (!a || !b || !classId) return undefined;

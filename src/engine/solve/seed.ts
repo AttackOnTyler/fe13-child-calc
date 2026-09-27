@@ -18,7 +18,8 @@
  *   build lacks, else its best-ranked).
  * - **The roadmap** is greedy: every map but the endpoint plays the greedy lineup (forced units first, then pairs by
  *   coverage, each couple the plan marries paired until it marries), so the seed decides only the endpoint's, the
- *   wishlist's. The map order is the route's template.
+ *   wishlist's. The map order is the route's template. Its class changes (#194, `plannedSeals`) take every unit to its
+ *   wishlist class (a unit off the wishlist to its best promotion) by the endpoint.
  *
  * Deterministic: the same run and pins give the same seed. Cheap: no map is played (a Full route seed takes about
  * 0.15 s, 0.2 s with Robin open, plus about 0.25 s for the builds the first time); the flawless chance is its
@@ -44,6 +45,7 @@ import { classWeaponKinds, openStock } from '../supply';
 import { ceilingArmy, effectiveCaps, fullClass } from '../sim/ceiling';
 import type { RunSimInput } from '../sim/run-sim';
 import { forgedWeapon, freshWeapon, kitForgeCost } from '../sim/upkeep';
+import { plannedSeals } from '../sim/class-changes';
 import type { BuildMatch, ChildResult, Pairing, ParentRef, RobinRef } from '../types';
 import type { PageSubject } from '../unit-page';
 import { hungarian } from './hungarian';
@@ -375,7 +377,7 @@ function planFor(run: Run, ctx: SeedContext, options: SeedOptions, robin: PlanRo
   return {
     robin,
     wishlist: { endpoint, units, marriages: marriages.map(([a, b]) => [a, b] as const), children, reserves: [] },
-    roadmap: { order: input.maps.map((m) => m.key), lineups, seals: [], items: [] },
+    roadmap: { order: input.maps.map((m) => m.key), lineups, seals: plannedSeals(input, (u) => classOf.get(u), endpoint), items: [] },
   };
 }
 

@@ -268,16 +268,14 @@ export function flawlessInput(
     if (startClass === null) return undefined;
     const f = fighterOf(child.name, { ...s, stats: s.stats ?? Object.fromEntries(STATS.map((x) => [x, 0])) as Record<(typeof STATS)[number], number> })!;
     const side = sideOf(run, snap, u, assumptions, spouse);
-    // The game's fixed passes first; else the skill the plan has each parent pass (#198).
+    // The game's fixed passes; else the skill the plan has each parent pass (#198), once the parent has learned it (#194).
     const passes = plan?.wishlist.children.find((c) => c.child === u && c.parents[0] === fixed && c.parents[1] === spouse)?.passes;
     return {
       id: u,
       name: unitName(u, gender),
       parents: [fixed, spouse],
-      fixed: [
-        fixedPass(fixed, child.gender, chromsChild(fixed)) ?? passes?.[0] ?? undefined,
-        spouse === 'maiden' ? undefined : (fixedPass(spouse, child.gender, chromsChild(spouse)) ?? passes?.[1] ?? undefined),
-      ],
+      fixed: [fixedPass(fixed, child.gender, chromsChild(fixed)), spouse === 'maiden' ? undefined : fixedPass(spouse, child.gender, chromsChild(spouse))],
+      ...(passes ? { passes: [passes[0] ?? undefined, spouse === 'maiden' ? undefined : (passes[1] ?? undefined)] as const } : {}),
       ...(startClass ? { startClass } : {}),
       growths: side.growths,
       modifiers: side.modifiers,
@@ -397,6 +395,8 @@ export function flawlessInput(
       married: couplesOf(recorded),
       couples: couplesOf(spouseOf).filter(([a]) => !recorded.has(a)),
       ...lineups,
+      // The plan's class changes (#194); without a plan, each unit's best promotion by the endpoint.
+      ...(plan ? { seals: plan.roadmap.seals } : {}),
     },
     notSimulated,
     unknownHistory,
@@ -449,8 +449,7 @@ const couplesOf = (spouses: ReadonlyMap<RosterUnit, RosterUnit>): [RosterUnit, R
 export function flawlessChance(run: Run, assumptions: Assumptions, options: FlawlessOptions = {}): FlawlessChance {
   const { input, notSimulated, unknownHistory, endpoint, goldUnrecorded, renown } = flawlessInput(run, assumptions, options.roleOf, options.marriages, options.plan);
   const sim = simulateRuns(input, options.seed ?? FLAWLESS_SEED, options.runs ?? FLAWLESS_RUNS, assumptions);
-  const passes = options.plan?.wishlist.children.some((c) => c.passes.some((p) => p !== null));
-  return { ...sim, ...(passes ? { blindSpots: [...sim.blindSpots, 'passes-as-planned' as const] } : {}), notSimulated, unknownHistory, endpoint, goldUnrecorded, renown };
+  return { ...sim, notSimulated, unknownHistory, endpoint, goldUnrecorded, renown };
 }
 
 /**

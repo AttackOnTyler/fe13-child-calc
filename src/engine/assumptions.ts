@@ -508,7 +508,7 @@ export type BlindSpotId =
   | 'door-keys';
 
 /** The run simulation's own blind spots (#186): how it walks the army from one map to the next. */
-export type RunBlindSpotId = 'promotes-at-cap' | 'lead-takes-exp' | 'supports-from-pair-combats' | 'kit-as-recorded' | 'side-goal-actions' | 'kit-by-matchups-won' | 'passes-as-planned';
+export type RunBlindSpotId = 'class-change-at-cap' | 'lead-takes-exp' | 'supports-from-pair-combats' | 'kit-as-recorded' | 'side-goal-actions' | 'kit-by-matchups-won';
 
 export type BlindSpot = {
   readonly id: BlindSpotId | RunBlindSpotId;
@@ -565,12 +565,13 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
     touches: ['map'],
   },
   {
-    id: 'promotes-at-cap',
-    label: 'Promotions at the level cap',
+    id: 'class-change-at-cap',
+    label: 'Class changes at the level cap or when needed',
     why:
-      'Until the plan schedules class changes, a unit in a base class is promoted in the preparations after it reaches level 20, with a ' +
-      'Master Seal it holds or one an armory sells by then, to the promotion that raises its class bases most. Promoting earlier, or to ' +
-      'another class, changes its stats along the way.',
+      'Each class change the plan makes (a class-reached milestone) is used in the preparations after the unit reaches its level cap, or ' +
+      'before the map that needs the class, whichever comes first, from level 10, with a seal the run holds or one an armory sells ' +
+      'there. Seals found mid-map aren’t used before the map ends, and only sure seals are picked up. Changing class earlier or later ' +
+      'moves its stats along the way.',
     lean: 'either',
     touches: ['flawless'],
   },
@@ -679,15 +680,5 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
       'Chapter 3 is also lost when both Door Keys are lost before a door is opened. The play has no doors or keys: the keys are assumed kept.',
     lean: 'high',
     touches: ['map'],
-  },
-  {
-    id: 'passes-as-planned',
-    label: 'Parents pass the skills the plan names',
-    why:
-      'A plan names the skill each parent passes at its child’s paralogue entry, and the runs take it as passed, as if the parent had ' +
-      'learned it and equipped it in its last slot by then. Nothing checks yet that the parent reaches that skill in time (the skill ' +
-      'milestones, #194).',
-    lean: 'high',
-    touches: ['flawless'],
   },
 ];

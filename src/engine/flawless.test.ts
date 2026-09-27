@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, STATS, addEntry, createEngine, editEntry, fixedPass, itemByName, runFromRoster, withRun, type ArmyUnit, type ChildRecruit, type Foe, type RunSimInput, type RunSimMap, type SimFoeGroup, type SimMap, type Stat } from './index';
+import { EMPTY_ROSTER, STATS, addEntry, classBaseStats, createEngine, editEntry, fixedPass, itemByName, runFromRoster, withRun, type ArmyUnit, type ChildRecruit, type Foe, type RunSimInput, type RunSimMap, type SimFoeGroup, type SimMap, type Stat } from './index';
 
 /**
  * The flawless chance across the map order (#186): hand-built armies and maps whose EXP and level-ups can be worked by
@@ -70,6 +70,45 @@ describe('levels from simulated EXP (#186)', () => {
   });
 });
 
+describe('the plan’s class changes drive promotions (#194)', () => {
+  const maps = [step(rout('a', [])), step(rout('b', [])), empty];
+  const run = (army: ArmyUnit[], seals: RunSimInput['seals'], more: Partial<RunSimInput> = {}) => engine.simulateRuns({ army, maps, difficulty: 'normal', masterSealsHeld: 1, ...(seals ? { seals } : {}), ...more }, 1, 1);
+
+  it('promotes to the class the plan names, and not at all when the plan names none', () => {
+    const assassin = run([hero({ level: 20 })], [{ unit: 'lonqu', classId: 'assassin', seal: 'master', key: 'end' }]);
+    expect(assassin.units[0]).toMatchObject({ className: 'Assassin', level: { median: 1 } });
+    expect(run([hero({ level: 20 })], []).units[0]!.className).toBe('Myrmidon');
+    // With no class plan (a hand-built input), each unit in a base class reaches its best promotion by the endpoint.
+    expect(run([hero({ level: 20 })], undefined).units[0]!.className).toMatch(/Swordmaster|Assassin/);
+  });
+
+  it('uses the seal before the map that needs the class, below the level cap, from Lv 10', () => {
+    const byB = [{ unit: 'lonqu', classId: 'swordmaster', seal: 'master', key: 'b' }] as const;
+    // Lv 12: it waits for its level cap until map b's preparations, then promotes there.
+    const r = run([hero({ level: 12 })], byB);
+    expect(r.units[0]).toMatchObject({ className: 'Swordmaster', level: { median: 1 } });
+    // Lv 9 can't use a seal: it stays until it reaches Lv 10.
+    expect(run([hero({ level: 9 })], byB).units[0]!.className).toBe('Myrmidon');
+    // No seal held and none sold: it waits in its base class.
+    expect(run([hero({ level: 12 })], byB, { masterSealsHeld: 0 }).units[0]!.className).toBe('Myrmidon');
+  });
+
+  it('reclasses with a Second Seal: the stats move by the difference in class bases', () => {
+    const sm = hero({ classId: 'swordmaster', level: 15, stats: stats(40, 20, 5, 30, 30, 10, 15, 10) });
+    const r = run([sm], [{ unit: 'lonqu', classId: 'assassin', seal: 'second', key: 'b' }], { masterSealsHeld: 0, secondSealsHeld: 1 });
+    const sw = classBaseStats('swordmaster', 'M')!;
+    const as = classBaseStats('assassin', 'M')!;
+    expect(r.units[0]).toMatchObject({ className: 'Assassin', level: { median: 1 } });
+    expect(r.units[0]!.stats.str.median).toBe(20 + as.str - sw.str);
+  });
+
+  it('rests on the class-change timing, not a promotion rule', () => {
+    const r = run([hero()], []);
+    expect(r.blindSpots).toContain('class-change-at-cap');
+    expect(r.blindSpots).not.toContain('promotes-at-cap');
+  });
+});
+
 describe('expected stats (#186)', () => {
   // Ten kills of Lv 50 foes (100 EXP each, the most a combat gives): ten level-ups from Lv 1.
   const grow = (growths: Record<Stat, number>, start = stats(20, 5, 0, caps.skl, 10, 0, 0, 0), runs = 40) =>
@@ -120,7 +159,7 @@ expect(r.maps.map((x) => x.key)).toEqual(['a', 'b']);    for (const x of r.maps)
     expect(few.margin).toBeGreaterThan(0);
     expect(many.margin).toBeLessThan(few.margin);
     expect(Math.abs(many.chance - few.chance)).toBeLessThan(few.margin + many.margin);
-    expect(many.blindSpots).toEqual(expect.arrayContaining(['one-worst-attacker', 'promotes-at-cap', 'lead-takes-exp']));
+    expect(many.blindSpots).toEqual(expect.arrayContaining(['one-worst-attacker', 'class-change-at-cap', 'lead-takes-exp']));
   });
 
   it('keeps a couple the plan still has to marry fighting together, so its support grows (#184)', () => {
@@ -245,6 +284,16 @@ describe('children join at paralogue entry (#187)', () => {
     const r = married([grower, sumia], [step(rout('chapter-12', [dummy(50, 10)]), { forced: ['chrom'] }), step(rout('chapter-13', []), { children: [lucina] }), empty]);
     expect(r.units.find((u) => u.id === 'chrom')!.stats.hp.median).toBe(62);
     expect(lucinaOf(r)!.stats.hp.median).toBe(Math.floor((62 - 23 + (46 - 19) + 12) / 3) + 16);
+  });
+
+  it('passes the plan’s skill only when the parent has learned it by entry in the run (#194)', () => {
+    const plain = hero({ id: 'sumia', name: 'Sumia', gender: 'F', classId: 'dark-flier', level: 10, stats: stats(46, 24, 16, 37, 37, 30, 10, 25), skills: ['Speed +2', 'Relief'] });
+    const planned: ChildRecruit = { ...lucina, passes: [undefined, 'galeforce'] };
+    const at13 = (kills: Foe[]) => [step(rout('chapter-12', kills), { forced: ['sumia'] }), step(rout('chapter-13', []), { children: [planned] }), step(rout('end', []), { deploy: 3 })];
+    // Galeforce is Dark Flier's Lv 15 skill: at Lv 10 she hasn't learned it, so her bottom skill passes instead.
+    expect(lucinaOf(married([chrom(), plain], at13([])))!.skills).toEqual(['Dual Strike+', 'Charm', 'Aether', 'Relief']);
+    // Ten levels on Chapter 12 and she has: it passes.
+    expect(lucinaOf(married([chrom(), plain], at13([dummy(50, 10)])))!.skills).toEqual(['Dual Strike+', 'Charm', 'Aether', 'Galeforce']);
   });
 
   it('plays a child paralogue and joins its child only when its gates hold in the run', () => {
