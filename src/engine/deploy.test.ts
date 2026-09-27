@@ -41,6 +41,18 @@ describe('deployment, pairs and loadouts (#121)', () => {
     expect(d.pairs[0]!.lead).toBe('chrom');
   });
 
+  it('keeps a healer’s slot ahead of the leads: one from six slots, two from twelve (realism pass)', () => {
+    const d = suggestDeployment({ candidates: army, forced: ['chrom'], max: 6, foes, pool: noPool });
+    expect(d.deployed).toContain('lissa');
+    expect(d.deployed).toHaveLength(6);
+    // Too few slots to spare one: the fighting comes first.
+    expect(suggestDeployment({ candidates: army, forced: ['chrom'], max: 5, foes, pool: noPool }).deployed).not.toContain('lissa');
+    const maribelle = cand('maribelle', 'staff', stats(18, 1, 7, 5, 6, 8, 3, 6), ['Heal'], 'Troubadour');
+    const more = [...army, maribelle, ...['a', 'b', 'c', 'd', 'e'].map((x) => cand(x, 'lead', stats(22, 9, 1, 10, 10, 6, 8, 2), ['Iron Lance']))];
+    const big = suggestDeployment({ candidates: more, forced: ['chrom'], max: 12, foes, pool: noPool });
+    expect(big.deployed).toEqual(expect.arrayContaining(['lissa', 'maribelle']));
+  });
+
   it('keeps the player’s pairs and leaves out units they drop, recomputing the rest', () => {
     const d = suggestDeployment({ candidates: army, forced: ['chrom'], max: 8, foes, pool: noPool, pinned: [{ lead: 'frederick', back: 'lissa' }], excluded: new Set(['vaike' as never]) });
     expect(d.pairs.find((p) => p.lead === 'frederick')!.back).toBe('lissa');
