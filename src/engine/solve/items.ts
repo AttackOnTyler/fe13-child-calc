@@ -44,6 +44,13 @@ type Candidate = { readonly id: RosterUnit; readonly base: ArmyUnit; readonly st
 const RANKS = new Set(['E', 'D', 'C', 'B', 'A', 'S']);
 
 /**
+ * Matchups won by a fighter, kept per endpoint (its foes, a map read once: `simMapById`) and fighter: every Robin's
+ * seed (#201) reads the same wishlist units again.
+ */
+const wonMemo = new WeakMap<object, Map<string, number>>();
+const WON_KEPT = 50_000;
+
+/**
  * The item plan the seed proposes for a run (see the module comment): `army` is the endpoint's army at its full build
  * and its lineup, the wishlist (`ceilingArmy`).
  */
@@ -77,7 +84,19 @@ export function seedItems(input: RunSimInput, sources: readonly PlanSource[], ar
 
   // The endpoint's foes, weighted by count (a boss once).
   const foes: { foe: Foe; pool: readonly string[]; weight: number }[] = [...end.map.foes, ...end.map.waves.flatMap((w) => w.groups)].map((g) => ({ foe: g.foe, pool: g.pool ?? [], weight: g.foe.boss ? 1 : Math.max(1, g.foe.count) }));
+  let memo = wonMemo.get(end.map.foes);
+  if (!memo) wonMemo.set(end.map.foes, (memo = new Map()));
+  const kept = memo;
   const won = (name: string, cls: string, stats: Readonly<Record<Stat, number>>, skills: readonly string[], weapons: readonly Weapon[]): number => {
+    const k = JSON.stringify([name, cls, stats, skills, weapons]);
+    const hit = kept.get(k);
+    if (hit !== undefined) return hit;
+    const v = wonNow(name, cls, stats, skills, weapons);
+    if (kept.size >= WON_KEPT) kept.clear();
+    kept.set(k, v);
+    return v;
+  };
+  function wonNow(name: string, cls: string, stats: Readonly<Record<Stat, number>>, skills: readonly string[], weapons: readonly Weapon[]): number {
     let total = 0;
     for (const f of foes) {
       let best = 0;
@@ -88,7 +107,7 @@ export function seedItems(input: RunSimInput, sources: readonly PlanSource[], ar
       total += best * f.weight;
     }
     return total;
-  };
+  }
   const clsOf = (c: Candidate) => className(c.base.classId, c.base.gender);
   /** The share of the maps still to play from map index `i` on. */
   const lasting = (i: number) => (i >= n ? 0 : (n - i) / n);

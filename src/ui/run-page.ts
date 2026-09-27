@@ -3,7 +3,7 @@
  * holds a snapshot: every unit's class, level, EXP, stats, skills, inventory and supports, plus the convoy and gold.
  * A new entry copies the one before; editing a past entry never reaches later ones, which are flagged instead.
  */
-import type { Assumptions, ChildId, CloseCall, Gender, Reading, Readings, SuggestedPin, DeploymentRole, Engine, FlawlessChance, FlawlessOptions, GoldSpread, HeldItem, ItemPin, ItemPlanRow, ItemUsed, MapOrderStep, Milestone, MilestonePoint, PinCost, Plan, PlanPin, PlanProposal, PrunedComp, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
+import type { Assumptions, ChildId, CloseCall, Gender, Reading, Readings, SuggestedPin, DeploymentRole, Engine, FlawlessChance, FlawlessOptions, GoldSpread, HeldItem, ItemPin, ItemPlanRow, ItemUsed, MapOrderStep, Milestone, MilestonePoint, PinCost, Plan, PlanPin, PlanProposal, PlanRobin, PrunedComp, RobinCursor, RobinStep, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
 import { chanceText, differenceText } from './chance';
 import { startSolve } from './solve-client';
 import { SOLVE_SECONDS, STEP_BUDGET, rosterUnits } from '../engine';
@@ -12,6 +12,7 @@ import { removeClassChange, tierOfClass, withClassChange, withCountOverride, typ
 import { entryAfterShopping, goldAfterShopping, removeShopLine, shopPrice, withShopLine, type ShopKind, type ShopLine } from '../engine';
 import { withRenown, withSideGoalPin, withSideGoalSecured, type SideGoalDecision, type SideGoalId } from '../engine';
 import { runItemPins, withItemPin, withItemsUsed } from '../engine';
+import { robinLock, withRobinLock, withoutPins } from '../engine';
 import { dismissMigrationNote, withPin } from '../engine';
 import { CHILD_UNITS } from '../game-data/children';
 import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
@@ -682,7 +683,11 @@ function flawlessSection(ctx: RunContext): HTMLElement {
     const started = startSolve(
       { kind: 'solve', assumptions: ctx.assumptions, run, seed: FLAWLESS_SEED, budget: STEP_BUDGET, seconds: solvedOnce ? SOLVE_SECONDS.resolve : SOLVE_SECONDS.full, ...(pins ? { pins } : {}), ...(roles ? { roles } : {}) },
       (reply) => {
-        if (reply.done && solving === run) solving = undefined;
+        if (reply.done && solving === run) {
+          solving = undefined;
+          // The worker is free: the Robin alternatives (#201) may start.
+          setTimeout(() => whenIdle?.(), 0);
+        }
         // The pin cost (#200) and then the readings (#197) come once the search is done, while the worker is idle.
         if (reply.kind === 'pin-cost' || reply.kind === 'readings') {
           if (!last) return;
@@ -711,6 +716,209 @@ function flawlessSection(ctx: RunContext): HTMLElement {
   }, 0);
   return el;
 }
+
+/** A Robin option as the page writes it: "Female, +Spd −Lck". */
+export const robinName = (r: PlanRobin) => `${r.gender === 'M' ? 'Male' : 'Female'}, +${STAT_LABELS[r.asset]} −${STAT_LABELS[r.flaw]}`;
+
+export type RobinReadout = {
+  readonly title: string;
+  readonly status: string;
+  /** Each solved Robin, the reference first, and whether it can be locked from here. */
+  readonly solved: readonly { readonly key: string; readonly robin: PlanRobin; readonly text: string; readonly lock: boolean }[];
+  /** The options not solved: seed and ceiling, and whether a solve can be asked for. */
+  readonly rest: readonly { readonly key: string; readonly text: string; readonly solve: boolean }[];
+  /** Once locked: what the lock cost. */
+  readonly lock?: string;
+  /** The no-Robin view, when toggled on. */
+  readonly noRobin?: string;
+};
+
+const PICKS = { gender: (r: PlanRobin) => ` (the best ${r.gender === 'M' ? 'Male' : 'Female'} Robin)`, ceiling: () => ' (its ceiling could beat the best)', requested: () => ' (asked)', locked: () => '' } as const;
+
+/**
+ * The Robin alternatives (#201), as the Run view writes them: each solved Robin's whole-wishlist chance with its cost
+ * against the best (or, once locked, the locked Robin) on the same runs and how its wishlist differs; every other
+ * option with its seed's spouse and ceiling and a solve button; once locked, what the lock cost; the no-Robin view.
+ */
+export function robinReadout(engine: Engine, run: Run, step: RobinStep | undefined, noRobin: boolean): RobinReadout {
+  const locked = robinLock(run)?.robin;
+  const title = locked ? `Robin: locked, ${robinName(locked)}` : `Robin: open${step ? ` · ${step.solved.length} of ${step.options.length} solved` : ''}`;
+  if (!step) return { title, status: 'Compare every Robin option by what it does to the whole wishlist.', solved: [], rest: [], ...(noRobin ? { noRobin: 'No-Robin view: working it out…' } : {}) };
+  const who = (u: RosterUnit, r: PlanRobin) => unitName(u, u === 'robin' ? null : r.gender);
+  const married = (r: PlanRobin, spouse: RosterUnit | null) => `${robinName(r)}${spouse ? `, marrying ${who(spouse, r)}` : ''}`;
+  const against = locked ? 'the locked Robin' : 'the best';
+  const couple = (c: readonly [RosterUnit, RosterUnit], r: PlanRobin) => `${who(c[0], r)} × ${who(c[1], r)}`;
+  const solved = step.solved.map((s) => {
+    const d = s.differences;
+    const r = s.robin;
+    const parts = [
+      d.marriages.added.length || d.marriages.removed.length ? `marries ${listOf(d.marriages.added.map((c) => couple(c, r))) || 'no one new'}${d.marriages.removed.length ? ` (not ${listOf(d.marriages.removed.map((c) => couple(c, r)))})` : ''}` : '',
+      d.units.added.length || d.units.removed.length ? `fields ${listOf(d.units.added.map((u) => who(u, r))) || 'no one new'}${d.units.removed.length ? ` (not ${listOf(d.units.removed.map((u) => who(u, r)))})` : ''}` : '',
+      ...d.classes.map((c) => `${who(c.unit, r)} as ${engine.className(c.to, r.gender)} (not ${engine.className(c.from, r.gender)})`),
+    ].filter(Boolean);
+    const spouse = s.plan.wishlist.marriages.find((c) => c.includes('robin'))?.find((u) => u !== 'robin') ?? null;
+    const cost = s.cost ? ` · ${differenceText(s.cost.gain, s.cost.margin, s.cost.verdict === 'close')} against ${against} · ${parts.length ? parts.join('; ') : 'the same wishlist'}` : s.key === step.reference ? ` · ${locked ? 'locked' : 'the best'}` : '';
+    return { key: s.key, robin: r, text: `${married(r, spouse)}: ${chanceText(s.chance)} ±${points(s.margin)}${cost}${PICKS[s.pick](r)}`, lock: !locked };
+  });
+  const rest = step.options
+    .filter((o) => o.status !== 'solved')
+    .map((o) => ({
+      key: o.key,
+      text: `${married(o.robin, o.spouse)}: ${!o.screened ? 'not screened yet' : o.ceiling === undefined ? 'no ceiling' : `ceiling ${chanceText(o.ceiling)}`}${o.status === 'solving' ? ' · solving…' : o.status === 'queued' ? ' · queued' : ''}`,
+      solve: o.status === 'open',
+    }));
+  const screened = step.options.filter((o) => o.screened).length;
+  const lock = locked
+    ? step.lockCost
+      ? `What this lock cost: ${differenceText(step.lockCost.gain, step.lockCost.margin)} (${robinName(step.solved.find((s) => s.key === step.lockCost!.key)!.robin)} does better)`
+      : 'What this lock cost: nothing measurable, among the Robins solved'
+    : undefined;
+  const nr = step.noRobin;
+  const noRobinText = !noRobin
+    ? undefined
+    : nr
+      ? `No-Robin view (Robin no one’s parent: no Morgan${nr.spouse ? `, ${unitName(nr.spouse, nr.plan.robin.gender)} unmarried` : ''}): ${chanceText(nr.chance)} ±${points(nr.margin)}, ${differenceText(nr.cost.gain, nr.cost.margin, nr.cost.verdict === 'close')} against ${against}: what Robin’s marriage is worth`
+      : step.converged && step.reference && !step.solved.find((s) => s.key === step.reference)?.plan.wishlist.marriages.some((c) => c.includes('robin'))
+        ? 'No-Robin view: Robin marries no one in the best plan, so Robin is no one’s parent already'
+        : 'No-Robin view: working it out…';
+  return {
+    title,
+    status: `${screened} of ${step.options.length} options screened by their seed and ceiling${step.converged ? '' : ' · comparing…'}`,
+    solved,
+    rest,
+    ...(lock ? { lock } : {}),
+    ...(noRobinText ? { noRobin: noRobinText } : {}),
+  };
+}
+
+/**
+ * The Robin alternatives' state on the page (#201): the worker's latest step and cursor, the solves asked for, and the
+ * no-Robin toggle, for one run as the alternatives read it (its log, route and pins, the Robin Lock aside): locking
+ * keeps them, recording a map starts them again.
+ */
+let robinState: { key: string; step?: RobinStep; cursor?: RobinCursor; asked: string[]; noRobin: boolean; running: boolean } | undefined;
+/** Called when the worker is free (the headline's search is done): the Robin alternatives wait for it. */
+let whenIdle: (() => void) | undefined;
+/** The Robin section on the page now, and how to draw it again: the worker's replies land on it, whichever render drew it. */
+let robinView: { el: HTMLElement; draw: () => HTMLElement } | undefined;
+const redraw = () => {
+  const v = robinView;
+  if (!v?.el.isConnected) return;
+  const next = v.draw();
+  v.el.replaceWith(next);
+  v.el = next;
+};
+
+const robinStateKey = (run: Run) => {
+  const lock = robinLock(run);
+  const facts = { ...run.roster.run, ...Object.fromEntries((lock?.open ?? []).map((f) => [f, null])) };
+  return JSON.stringify([facts, run.entries.map((e) => e.id), (run.pins ?? []).filter((p) => p.kind !== 'robin-lock'), run.sideGoals ?? {}]);
+};
+
+/**
+ * The Robin section (#201; the inbox's Robin card is #204): the alternatives worked out by the solve's Web Worker once
+ * the headline's search is done, a solve button per option, Lock Robin, and the no-Robin toggle.
+ */
+function robinSection(ctx: RunContext): HTMLElement | null {
+  const { run } = ctx;
+  if (!ctx.assumptions || !nextMaps(run).length) return null;
+  const key = robinStateKey(run);
+  if (robinState?.key !== key) robinState = { key, asked: [], noRobin: false, running: false };
+  const state = robinState;
+  const pins = ctx.pins?.();
+  const start = () => {
+    if (!ctx.assumptions || state !== robinState) return;
+    const roles = ctx.roleOf ? Object.fromEntries(rosterUnits(run.roster.run).map((u) => [u.id, ctx.roleOf!(u.id)])) : undefined;
+    const started = startSolve(
+      {
+        kind: 'robin',
+        assumptions: ctx.assumptions,
+        run,
+        seed: FLAWLESS_SEED,
+        budget: STEP_BUDGET,
+        seconds: SOLVE_SECONDS.full * 4,
+        ...(state.cursor ? { cursor: state.cursor } : {}),
+        ...(state.asked.length ? { solve: state.asked } : {}),
+        ...(state.noRobin ? { noRobin: true } : {}),
+        ...(pins ? { pins } : {}),
+        ...(roles ? { roles } : {}),
+      },
+      (reply) => {
+        if (reply.kind !== 'robin' || state !== robinState) return;
+        state.step = reply.step;
+        state.cursor = reply.step.cursor;
+        if (reply.done) state.running = false;
+        redraw();
+      },
+    );
+    state.running = !!started;
+    redraw();
+  };
+  const ask = () => {
+    whenIdle = undefined;
+    if (solving) whenIdle = start;
+    else start();
+  };
+  const draw = () => {
+    const r = robinReadout(ctx.engine, run, state.step, state.noRobin);
+    const locked = robinLock(run);
+    return h(
+      'details',
+      { class: 'banner robin', ...(robinView?.el.hasAttribute('open') ? { open: 'open' } : {}) },
+      h('summary', {}, h('b', {}, r.title)),
+      h(
+        'div',
+        { class: 'row small' },
+        h('span', { class: 'muted' }, r.status),
+        h('button', { class: 'mini', title: 'Work out the Robin alternatives in the background (after the headline’s search)', disabled: !!(state.running || state.step?.converged), onclick: ask }, state.running ? 'Comparing…' : state.step ? 'Carry on' : 'Compare Robins'),
+        locked ? h('button', { class: 'mini ghost', title: 'Unlock Robin: every option is solved again', onclick: () => ctx.setRun(withoutPins(run, [locked])) }, 'Unlock') : null,
+      ),
+      r.lock ? h('p', { class: 'small' }, h('b', {}, r.lock)) : null,
+      r.solved.length
+        ? h(
+            'ul',
+            { class: 'small' },
+            ...r.solved.map((x) =>
+              h('li', {}, x.text, x.lock ? h('button', { class: 'mini', title: 'Lock this Robin into the run facts and start: only Robin is locked, the rest stays editable', onclick: () => ctx.setRun(withRobinLock(run, x.robin)) }, 'Lock Robin and start') : null),
+            ),
+          )
+        : null,
+      r.rest.length
+        ? h(
+            'details',
+            {},
+            h('summary', { class: 'small' }, `${r.rest.length} more Robin${r.rest.length === 1 ? '' : 's'}: seed and ceiling`),
+            h(
+              'ul',
+              { class: 'small' },
+              ...r.rest.map((x) =>
+                h('li', {}, x.text, x.solve ? h('button', { class: 'mini', onclick: () => (state.asked = [...new Set([...state.asked, x.key])], ask()) }, 'Solve') : null),
+              ),
+            ),
+          )
+        : null,
+      h(
+        'label',
+        { class: 'small', title: 'The best plan with Robin no one’s parent (no Morgan): how much Robin’s marriage is worth' },
+        h('input', { type: 'checkbox', checked: state.noRobin, onchange: (e) => ((state.noRobin = (e.target as HTMLInputElement).checked), state.noRobin && state.step ? ask() : redraw()) }),
+        ' No-Robin view',
+      ),
+      r.noRobin ? h('p', { class: 'small' }, r.noRobin) : null,
+    );
+  };
+  // The headline's search took the worker (one request at a time): carry on from the cursor once it's free.
+  if (state.running && solving) {
+    state.running = false;
+    whenIdle = start;
+  }
+  const el = draw();
+  robinView = { el, draw };
+  // After a Lock the alternatives are read again (the locked Robin solved), once the worker is free.
+  if (state.step && !state.running && robinKeyOf(state.step.locked) !== robinKeyOf(robinLock(run)?.robin)) ask();
+  return el;
+}
+
+const robinKeyOf = (r: PlanRobin | undefined) => (r ? `${r.gender}-${r.asset}-${r.flaw}` : '');
 
 function mapOrderSection(ctx: RunContext): HTMLElement {
   const { title, rows } = mapOrderReadout(ctx.engine, ctx.run);
@@ -947,6 +1155,7 @@ function chapterLog(ctx: RunContext): HTMLElement {
     migrationNoteSection(ctx),
     nextMapSection(ctx),
     flawlessSection(ctx),
+    robinSection(ctx),
     sideGoalsSection(ctx),
     mapOrderSection(ctx),
     h(

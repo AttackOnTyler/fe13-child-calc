@@ -61,6 +61,7 @@ import { milestones, type Milestone } from './milestones';
 import { editCost, solveStep, type EditCost, type EditCostInput, type PinCost, type PinCostInput, type SolveStep, type SolveStepInput } from './solve/step';
 import { keptPins, planEdits } from './solve/edits';
 import { brokenPins, livePins, pinKey, runPins, withPin, withoutPins } from './solve/pins';
+import { ROBIN_EXTRA, ROBIN_SOLVE, withRobinLock, robinKey, robinLock, robinOptions, robinStep, wishlistDifference, withoutRobinMarriage, type RobinCost, type RobinCursor, type RobinInput, type RobinOption, type RobinPick, type RobinStep, type SolvedRobin, type WishlistDifference } from './solve/robin';
 import { FORCED_UNITS, childrenOf, coveredLineup, hasUtility, planWithout, reservesStep, withoutUnits, worthStep, type ReservesInput, type ReservesStep, type WorthInput, type WorthStep, type WorthVariant } from './solve/worth';
 import type { Plan, PlanLineup, PlanPin, PlanPriority, PlanRobin } from './solve/plan';
 import { beforeMapItems, itemPlanOf, type BeforeMapItem, type ItemPlan, type ItemUsed } from './item-plan';
@@ -73,7 +74,7 @@ import { createScorer } from './scoring';
 import { pairUpSpd } from './pair-up';
 import { contextReachesDlc, defaultTargetBreakpoint } from './speed';
 import { runSelfTest } from './self-test';
-import { EMPTY_ROSTER, evaluateBlocking, rosterUnits, stateOf, unitName, type Blocking, type Roster, type RosterUnit, type RunFacts } from './roster';
+import { EMPTY_ROSTER, evaluateBlocking, rosterUnits, stateOf, unitName, withRun, type Blocking, type Roster, type RosterUnit, type RunFacts } from './roster';
 import { CANDIDATE_PRESETS, PRESETS, type PresetId, type ScoringRole } from '../curated/presets';
 import { DEFAULT_PRIORITY, childLedger, evaluatePlan, savedPairings, solvePlan, type LedgerEntry, type MarriagePlan, type PlanContext, type PlannedChild } from './plan';
 import type { Difficulty, SavedPlan } from './roster';
@@ -152,6 +153,7 @@ export { effectiveCaps, type Ceiling, type CeilingUnit } from './sim/ceiling';
 export type { LineupPlan } from './sim/run-sim';
 export { isMarriagePin, isRuleOut, mapSpanPin, marriagePins } from './solve/plan';
 export { pinKey, withPin, withoutPins, type LineupRule } from './solve/pins';
+export { ROBIN_EXTRA, ROBIN_SOLVE, withRobinLock, robinKey, robinLock, robinOptions, wishlistDifference, type RobinCost, type RobinCursor, type RobinInput, type RobinOption, type RobinPick, type RobinStep, type SolvedRobin, type WishlistDifference };
 export type { KeepPin, MarriagePin, SideGoalPin, SpanPin, SpanPosition } from './solve/plan';
 export { NO_PREPARATIONS } from '../game-data/chapters';
 export { STAT_BOOSTERS, TONICS, statItemGain } from '../game-data/items';
@@ -644,6 +646,16 @@ export type Engine = {
    * returns lists them and changes nothing else: no EXP is set aside for a reserve.
    */
   reserves(input: ReservesInput & { readonly roleOf?: (u: RosterUnit) => DeploymentRole }): ReservesStep;
+  /**
+   * The Robin alternatives (#201), within a budget of evaluations: every Robin option the run facts leave open (the run
+   * with its Robin Lock lifted) screened by its seed and ceiling; the best of each gender solved in full (a budgeted
+   * search per Robin), then up to `ROBIN_EXTRA` more whose ceiling could beat the best found, and any in `solve`; each
+   * solved Robin's whole-wishlist chance, its cost against the reference (the best solved, or once locked the locked
+   * Robin) on the same runs, and how its wishlist differs. Once locked only the locked Robin is solved unless asked,
+   * and `lockCost` is what the lock cost. `noRobin` adds the no-Robin view (Robin no one's parent). Pass the returned
+   * cursor to the next step, across the Lock too.
+   */
+  robinAlternatives(input: RobinInput & { readonly pins?: readonly PlanPin[]; readonly roleOf?: (u: RosterUnit) => DeploymentRole }): RobinStep;
   /**
    * Every map's lineup on a plan's roadmap (#198): its own where it names one, else the greedy lineup its projection
    * picks. Plays every map once: about 2 s on a fresh Full route (the Web Worker's job, #199).
@@ -1713,7 +1725,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     return roles;
   };
 
-  return {
+  const engine: Engine = {
     children: () =>
       CHILD_IDS.map((id) => {
         const c = CHILD_UNITS[id];
@@ -2063,5 +2075,48 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       return readings(run, plan, milestones(run, plan, assumptions), f, assumptions, options);
     },
     recordedStats: (run, options) => recordedStats(run, assumptions, options),
+    robinAlternatives: (input) => {
+      const { roleOf, seed } = input;
+      const run = pinnedRun(input.run, input.pins);
+      const lock = robinLock(run);
+      // The alternatives are read with the lock lifted: its facts open again.
+      const open = lock ? liftedRun(run, [lock]) : run;
+      const facts = open.roster.run;
+      const lunaticPlus = facts.difficulty === 'lunatic-plus';
+      const withFacts = (key: string, f: Partial<RunFacts>) => derive(open, key, () => ({ ...open, roster: withRun(open.roster, f) }));
+      const forRobin = (r: PlanRobin) => withFacts(`robin:${robinKey(r)}`, r);
+      const optionsOf = (r: Run): SeedOptions => ({ pins: livePinsOf(r), ...(roleOf ? { roleOf } : {}) });
+      return robinStep(input, {
+        options: robinOptions(facts),
+        locked: lock?.robin,
+        genders: facts.gender ? [facts.gender] : ['M', 'F'],
+        genderBest: (g) => {
+          const r = withFacts(`robin-gender:${g}`, { gender: g });
+          return seedFor(r, optionsOf(r)).robin;
+        },
+        screen: (robin) => {
+          const r = forRobin(robin);
+          const plan = seedFor(r, optionsOf(r));
+          return { plan, ceiling: flawlessCeiling(r, assumptions, { plan, seed, runs: lunaticPlus ? CEILING_DRAWS : 1, ...(roleOf ? { roleOf } : {}) })?.chance };
+        },
+        solve: (robin, cursor, budget) =>
+          engine.solveStep({
+            run: forRobin(robin),
+            budget,
+            seed,
+            display: input.display ?? ROBIN_SOLVE.display,
+            ...(input.runs ? { runs: input.runs } : {}),
+            ...(input.cap ? { cap: input.cap } : {}),
+            ...(cursor ? { cursor } : {}),
+            ...(roleOf ? { roleOf } : {}),
+          }),
+        samples: (robin, plan, first, count) => simulateRuns(planInput(forRobin(robin), plan, roleOf), seed, count, assumptions, first).samples,
+        noRobin: (robin, plan) => {
+          const r = forRobin(robin);
+          return withoutRobinMarriage(r, seedContext(r), optionsOf(r), plan);
+        },
+      });
+    },
   };
+  return engine;
 }

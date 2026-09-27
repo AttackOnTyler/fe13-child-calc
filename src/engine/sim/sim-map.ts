@@ -186,11 +186,21 @@ function thirdParty(map: ChapterData, table: ChapterDifficulty, foes: readonly S
   return { allies, recruits };
 }
 
-/** A map by id. */
+/** Maps by id, difficulty and options, kept: a map is read-only once built, and building one parses every foe. */
+const byId = new Map<string, SimMap>();
+const BY_ID = 512;
+
+/** A map by id (the same object again for the same id, difficulty and options). */
 export function simMapById(id: string, difficulty: Difficulty, options?: SimMapOptions): SimMap {
+  const k = `${id}|${difficulty}|${options?.route ?? ''}|${JSON.stringify(options?.seen ?? {})}`;
+  const hit = byId.get(k);
+  if (hit) return hit;
   const map = MAPS.find((m) => m.id === id);
   if (!map) throw new Error(`No chapter data for ${id}`);
-  return simMap(map, difficulty, options);
+  const built = simMap(map, difficulty, options);
+  if (byId.size >= BY_ID) byId.delete(byId.keys().next().value!);
+  byId.set(k, built);
+  return built;
 }
 
 /**
