@@ -617,7 +617,8 @@ export type BlindSpotId =
   | 'door-keys'
   | 'skills-in-combat'
   | 'walls-draw-foes'
-  | 'potions-traded';
+  | 'potions-traded'
+  | 'lunatic-plus-draws';
 
 /** The run simulation's own blind spots (#186): how it walks the army from one map to the next. */
 export type RunBlindSpotId =
@@ -666,6 +667,16 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
       'sturdy unit stood where the foes come, up to four (the tiles next to it). With no map positions, the play can’t know whether the ' +
       'map offers such ground, or whether the foes come at all: fewer attackers mean fewer counter kills and longer maps.',
     lean: 'high',
+    touches: ['map', 'fight'],
+  },
+  {
+    id: 'lunatic-plus-draws',
+    label: 'Lunatic+ skills drawn at random, foe by foe',
+    why:
+      'Each Lunatic+ foe without recorded skills draws its two extra skills from the map’s pool, evenly and anew in every simulated run, ' +
+      'bosses too. How the game rolls them (evenly? bosses?) isn’t published, and a player who reads them in preparations and restarts ' +
+      'the map before moving can roll again; a recorded foe’s skills replace its draw.',
+    lean: 'either',
     touches: ['map', 'fight'],
   },
   {
