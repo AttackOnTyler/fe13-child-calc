@@ -559,7 +559,7 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
     label: 'Supports grow only from combats paired',
     why:
       'A pair’s support points come from the exchanges it fights paired up, and the plan pairs each couple it marries until they marry. ' +
-      'Fighting beside an ally, Dual Strikes and Guards, staves and Dances on the partner, Seeds of Trust, event tiles and Barracks talks ' +
+      'Fighting beside the partner or an ally (Attack Stance), Dual Strikes and Guards, staves and Dances on the partner, Seeds of Trust, event tiles and Barracks talks ' +
       'add nothing, and a unit’s tied pairs go by combats, then name, not by its support list. A marriage is made when the pair reaches S; a ' +
       'child whose fixed parent isn’t married by its paralogue doesn’t join.',
     lean: 'low',
