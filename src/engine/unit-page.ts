@@ -16,6 +16,7 @@ import { matchBuilds } from './builds';
 import { className, promotionsOf, reachableClasses } from './classes';
 import { firstGenSkills, ref, skillData, unitSkillReach, type SkillReach } from './skills';
 import type { BuildMatch, PlayContext, RobinRef, SkillRef } from './types';
+import type { PairCurve } from './support-curves';
 
 /** A unit with a page: every first-gen unit but the Maiden, who never joins. */
 export type PageUnitId = Exclude<UnitId, 'maiden'>;
@@ -106,6 +107,8 @@ export type PartnerRow = {
   readonly married: boolean;
   readonly planned: boolean;
   readonly dead: boolean;
+  /** The pair's support curve (#177): how many points each rank needs and the fewest maps together to S. */
+  readonly curve: PairCurve;
   /** Why the marriage can no longer happen, when it can't. */
   readonly blocked: string | undefined;
   /** Robin × a child (#103): the pairing the child brings to Morgan, from the saved plan or its best that can still happen. */

@@ -6,7 +6,8 @@ import { CHILD_UNITS, type ChildId } from '../game-data/children';
 import { ASSET_FLAW, ROBIN_GROWTHS, ROBIN_MODIFIERS } from '../game-data/robin';
 import { CLASSES, regularClasses, type ClassData, type ClassId } from '../game-data/classes';
 import { MOD_STATS, STATS, STAT_LABELS, type Gender, type Growths, type Stat } from '../game-data/stats';
-import { CHROM_FALLBACK_PARTNER, ROBIN_SUPPORTS, S_SUPPORTS } from '../game-data/supports';
+import { CHROM_FALLBACK_PARTNER, ROBIN_SUPPORTS, S_SUPPORTS, type SupportUnit } from '../game-data/supports';
+import { SUPPORT_PAIR_CURVES, pairCurve, type PairCurve, type SupportPairCurve } from './support-curves';
 import { FIRST_GEN_UNITS, type FirstGenUnitData, type UnitId } from '../game-data/units';
 import { RESOLVED_DISAGREEMENTS, type ResolvedDisagreement } from '../game-data/disagreements';
 import {
@@ -218,6 +219,8 @@ export { CHILD_DEPLOYMENT_ROLES, type Derivation, type DerivedRole, type OutOfCa
 export type { ClassLine, ClassTree, FrontDoor, FrontDoorTile, OpinionBlock, OpinionMark, PageSubject, PageUnitId, ParentedChild, PartnerChild, PartnerRow, PassedClasses, TreeClass, TreeSkill, UnitAsParent, UnitPage } from './unit-page';
 export { CANDIDATE_PRESETS } from '../curated/presets';
 export { STAFF_CLASSES } from '../game-data/classes';
+export { SUPPORT_POINTS_PER_MAP, type PairCurve, type SupportPairCurve } from './support-curves';
+export type { SupportCurve, SupportThresholds, SupportUnit } from '../game-data/supports';
 export {
   DEFAULT_PRIORITY,
   PLAN_PRIORITIES,
@@ -331,6 +334,14 @@ export type Engine = {
    * against the roster and the saved plan. Sorted by the best child's score; read-only, no plan re-solve.
    */
   partners(subject: PageSubject, roster: Roster, settings: PlanSettings): readonly PartnerRow[];
+  /**
+   * A pair's support curve (#177), either way round: slow, medium, fast or non-romantic, its thresholds (total points
+   * for C, B, A and S), maps together to each rank at 3 points a map and one rank a map, and maps to S (slow 8, fast
+   * or medium 7, none for a non-romantic pair). Robin is `robin-m` or `robin-f`. Undefined when the two can't support.
+   */
+  supportCurve(a: SupportUnit, b: SupportUnit): PairCurve | undefined;
+  /** Every pair that can support, with its curve (#177): 316 pairs, Robin (M) and Robin (F) counted apart. */
+  supportPairs(): readonly SupportPairCurve[];
   /**
    * A child's front door (#104): fixed facts, its top 5 parent groups by the scoring (the pairing table's group-best
    * ranking) and the Robin line. Morgan shows no pairings until Robin is set in the run facts.
@@ -951,6 +962,8 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     }
     return best && { pairing: best.pairing, from: 'best' };
   };
+  /** A roster unit as a support unit: Robin by the gender the pair gives it. */
+  const supportUnitOf = (u: RosterUnit, gender: Gender): SupportUnit => (u === 'robin' ? (gender === 'M' ? 'robin-m' : 'robin-f') : u);
   const partnersFor = (subject: PageSubject, roster: Roster, s: PlanSettings): PartnerRow[] => {
     const derivation = derivationFor(roster, s);
     const self: RosterUnit = typeof subject === 'string' ? subject : 'robin';
@@ -1039,6 +1052,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         married: spouse?.bond === 'married' && spouse.partner === partner,
         planned: !!roster.savedPlan?.marriages.some(couple(self, partner)),
         dead: stateOf(roster, partner) === 'dead',
+        curve: pairCurve(supportUnitOf(self, gender), supportUnitOf(partner, opposite(gender)))!,
         blocked,
         ...(via ? { via } : {}),
         ...(robin ? { robin } : {}),
@@ -1363,6 +1377,8 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     },
     unitPage: (unit, settings) => unitPage(unit, settings.context, dlcOf(settings), parentedBy(unit)),
     partners: partnersFor,
+    supportCurve: pairCurve,
+    supportPairs: () => SUPPORT_PAIR_CURVES,
     frontDoor: frontDoorFor,
     unitOpinions: opinionBlocks,
     unitSkillCard: (unit, id, settings) => {

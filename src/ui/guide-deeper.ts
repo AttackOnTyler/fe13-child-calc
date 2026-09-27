@@ -153,6 +153,7 @@ export const DEEPER: readonly DeeperEntry[] = [
       'Partners on a unit page lists everyone it can S-support, Robin included, with the children each marriage produces.',
       'Each child is scored in its plan preset; rows are sorted by the best child, so one great child beats two middling ones.',
       `Marks show a marriage that happened, the saved plan’s pick (◆), a dead partner, and a blocked marriage with why.`,
+      'Each row names the pair’s support curve: most marriages are slow (S in 8 maps fighting together at best), and each woman has one fast husband (S in 7), most also a medium one.',
       `It never changes your plan: Plan → opens the ${plan}, where pinning the marriage shows what it costs the rest.`,
     ],
     jump: { to: 'unit', target: 'unit-partners' },
