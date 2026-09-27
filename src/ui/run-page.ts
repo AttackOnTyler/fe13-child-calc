@@ -3,7 +3,8 @@
  * holds a snapshot: every unit's class, level, EXP, stats, skills, inventory and supports, plus the convoy and gold.
  * A new entry copies the one before; editing a past entry never reaches later ones, which are flagged instead.
  */
-import type { Assumptions, ChildId, Engine, HeldItem, MapOrderStep, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
+import type { Assumptions, ChildId, DeploymentRole, Engine, FlawlessOptions, HeldItem, MapOrderStep, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
+import { chanceText } from './chance';
 import { EMPTY_SNAPSHOT, SUPPORT_LEVELS, addEntry, childJoinFrom, chromWedding, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, withUnit } from '../engine';
 import { removeClassChange, tierOfClass, withClassChange, withCountOverride, type Seal } from '../engine';
 import { CHILD_UNITS } from '../game-data/children';
@@ -31,6 +32,8 @@ export type RunContext = {
   readonly setRecording: (r: { readonly entry: string; readonly step: number } | undefined) => void;
   /** Opens a map's preparation page (#119). */
   readonly prepare: (map: string) => void;
+  /** Each unit's deployment role, as the preparation page reads it: the flawless chance's lineups use it (#186). */
+  readonly roleOf?: (u: RosterUnit) => DeploymentRole;
 };
 
 const RECORD_STEPS = ['Deployed units', 'Recruits', 'Deaths and marriages', 'Convoy and gold'] as const;
@@ -96,6 +99,74 @@ export function mapOrderReadout(engine: Engine, run: Run): { readonly title: str
     title: `Map order: ${ROUTE_NAMES[order.route]}, to ${name(order.endpoint, true)}, deploying ${order.endpoint.deploy}`,
     rows: order.steps.map(row),
   };
+}
+
+/** Points of chance, as the ± reads: 0.015 → "1.5". */
+const points = (p: number) => (p * 100).toFixed(1);
+
+const listOf = (xs: readonly string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+
+/**
+ * The headline flawless chance (#186), as the Run view writes it: the chance with its simulation error (±, 95%), what it
+ * covers and rests on (units whose seal history is read as 0, units it can't simulate, the blind spots), and each map's
+ * no-death chance for the runs that reach it with nobody lost.
+ */
+export function flawlessReadout(engine: Engine, run: Run, options?: FlawlessOptions): { readonly text: string; readonly detail: string; readonly rows: readonly string[] } {
+  const r = engine.flawlessChance(run, options);
+  if (!r.maps.length) return { text: 'Flawless chance: the endpoint is recorded, nothing left to simulate.', detail: '', rows: [] };
+  const gender = run.roster.run.gender;
+  const names = (us: readonly RosterUnit[]) => listOf(us.map((u) => unitName(u, gender)));
+  const first = r.maps[0]!.label;
+  const last = r.maps[r.maps.length - 1]!.label;
+  const children = r.notSimulated.filter((n) => n.why === 'child').map((n) => n.unit);
+  const blank = r.notSimulated.filter((n) => n.why !== 'child').map((n) => n.unit);
+  const LEAN = { high: 'may read high', low: 'may read low', either: 'either way' } as const;
+  const spots = engine.blindSpots().filter((b) => r.blindSpots.includes(b.id));
+  const detail = [
+    `The chance no unit dies from ${first}${r.maps.length > 1 ? ` to ${last}` : ''} (${r.maps.length} map${r.maps.length === 1 ? '' : 's'}), each played by its suggested deployment while EXP and level-ups are rolled, over ${r.runs} simulated run${r.runs === 1 ? '' : 's'}; the ± is the simulation error (95%).`,
+    r.unknownHistory.length
+      ? `${names(r.unknownHistory)} ${r.unknownHistory.length === 1 ? 'was' : 'were'} first logged in a class ${r.unknownHistory.length === 1 ? 'it' : 'they'} can’t join in: the Second Seal count before the log is read as 0 (set it on the chapter log if it isn’t).`
+      : '',
+    blank.length ? `Not simulated, no stats recorded: ${names(blank)}.` : '',
+    children.length ? `Children not yet in the log don’t join the simulated army yet: ${names(children)}.` : '',
+    `Rests on: ${spots.map((b) => `${b.label[0]!.toLowerCase()}${b.label.slice(1)} (${LEAN[b.lean]})`).join(', ')}.`,
+  ].filter(Boolean);
+  return {
+    text: `Flawless chance: ${chanceText(r.chance)} ±${points(r.margin)}`,
+    detail: detail.join(' '),
+    rows: r.maps.map((m) => `${m.label}: ${m.noDeath === undefined ? 'no run gets here with nobody lost' : chanceText(m.noDeath)}`),
+  };
+}
+
+type Readout = ReturnType<typeof flawlessReadout>;
+
+/** Readouts already worked out, by run: a run is replaced, never edited, so a new run works it out again. */
+const READOUTS = new WeakMap<Run, Readout>();
+
+/**
+ * The flawless chance (#186) under the map order. It takes a moment on a long map order, so the view renders first and
+ * the chance fills in right after.
+ */
+function flawlessSection(ctx: RunContext): HTMLElement {
+  const draw = (r: Readout | undefined) =>
+    h(
+      'details',
+      { class: 'banner flawless' },
+      h('summary', {}, h('b', {}, r?.text ?? 'Flawless chance: working it out…')),
+      r?.detail ? h('p', { class: 'muted small' }, r.detail) : null,
+      r?.rows.length ? h('ol', { class: 'small' }, ...r.rows.map((x) => h('li', {}, x))) : null,
+    );
+  const done = READOUTS.get(ctx.run);
+  if (done) return draw(done);
+  const el = draw(undefined);
+  const run = ctx.run;
+  setTimeout(() => {
+    if (!el.isConnected) return;
+    const r = READOUTS.get(run) ?? flawlessReadout(ctx.engine, run, ctx.roleOf ? { roleOf: ctx.roleOf } : undefined);
+    READOUTS.set(run, r);
+    if (el.isConnected) el.replaceWith(draw(r));
+  }, 0);
+  return el;
 }
 
 function mapOrderSection(ctx: RunContext): HTMLElement {
@@ -323,6 +394,7 @@ function chapterLog(ctx: RunContext): HTMLElement {
       ),
     ),
     nextMapSection(ctx),
+    flawlessSection(ctx),
     mapOrderSection(ctx),
     h(
       'div',

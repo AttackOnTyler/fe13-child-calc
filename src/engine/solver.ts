@@ -45,6 +45,8 @@ export type Foe = {
   readonly weapon: GameItem | undefined;
   readonly skills: readonly string[];
   readonly boss: boolean;
+  /** Its level (the chapter data's), which the EXP formulas key on; a hand-built foe may leave it out. */
+  readonly level?: number;
 };
 
 export type Matchup = {
@@ -236,6 +238,7 @@ export function foeOf(g: EnemyGroup | BossRow, boss: boolean): Foe {
     weapon,
     skills: g.skills ?? [],
     boss,
+    level: statValue(g.level),
   };
 }
 

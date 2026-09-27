@@ -424,13 +424,16 @@ export const isDefaultValue = (id: AssumptionId, value: unknown) =>
  */
 export type BlindSpotId = 'one-worst-attacker' | 'equal-share-of-actions' | 'rally-reaches-every-pair' | 'likely-result' | 'bosses-hold';
 
+/** The run simulation's own blind spots (#186): how it walks the army from one map to the next. */
+export type RunBlindSpotId = 'promotes-at-cap' | 'lead-takes-exp' | 'no-new-children' | 'kit-as-recorded';
+
 export type BlindSpot = {
-  readonly id: BlindSpotId;
+  readonly id: BlindSpotId | RunBlindSpotId;
   readonly label: string;
   readonly why: string;
   readonly lean: 'high' | 'low' | 'either';
-  /** What it touches: the map simulation's chances (each map's no-death chance and everything built on it). */
-  readonly touches: readonly 'map'[];
+  /** What it touches: the map simulation's chances (each map's no-death chance and everything built on it), or the flawless chance across the map order. */
+  readonly touches: readonly ('map' | 'flawless')[];
 };
 
 export const BLIND_SPOTS: readonly BlindSpot[] = [
@@ -477,5 +480,38 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
     why: 'A boss fights only when attacked, as most do on their throne or gate; one that moves out to attack isn’t counted on enemy phase.',
     lean: 'high',
     touches: ['map'],
+  },
+  {
+    id: 'promotes-at-cap',
+    label: 'Promotions at the level cap',
+    why:
+      'Until the plan schedules class changes, a unit in a base class is promoted in the preparations after it reaches level 20, with a ' +
+      'Master Seal it holds or one an armory sells by then, to the promotion that raises its class bases most. Promoting earlier, or to ' +
+      'another class, changes its stats along the way.',
+    lean: 'either',
+    touches: ['flawless'],
+  },
+  {
+    id: 'lead-takes-exp',
+    label: 'Each fight’s EXP goes to its lead',
+    why:
+      'A fight gives its lead kill EXP when the foe falls and damage EXP otherwise. A back’s Dual Strike EXP, the Lunatic cut for a foe ' +
+      'fought again and again, and staff and Dance EXP aren’t counted yet, so backs and healers grow slower than in play.',
+    lean: 'low',
+    touches: ['flawless'],
+  },
+  {
+    id: 'no-new-children',
+    label: 'No new children join yet',
+    why: 'A child not yet in the chapter log doesn’t join the simulated army at its paralogue: the maps after it are played without it.',
+    lean: 'low',
+    touches: ['flawless'],
+  },
+  {
+    id: 'kit-as-recorded',
+    label: 'The army keeps the weapons it has now',
+    why: 'Each unit fights with the weapons its latest entry records (a recruit with those it joins with): weapons never wear out, and nothing is bought or forged on the way.',
+    lean: 'either',
+    touches: ['flawless'],
   },
 ];

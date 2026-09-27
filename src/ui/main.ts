@@ -2459,6 +2459,11 @@ function renderParts(parts: readonly Part[]): void {
                 prepExcluded = new Set();
                 renderParts(['main']);
               },
+              // The preparation page's roles, worked out only when the flawless chance needs them.
+              roleOf: (() => {
+                let roles: ReturnType<typeof engine.roles> | undefined;
+                return (u: RosterUnit) => deployRoleOf(u, roster, (roles ??= engine.roles(roster, planSettings())));
+              })(),
               recording,
               setRecording: (r) => {
                 recording = r;

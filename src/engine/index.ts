@@ -51,6 +51,8 @@ import { meanNoDeath, playMap, staffReach, type MapPlay, type MapPlayInput, type
 import { itemByName } from '../game-data/items';
 import { simMapById, type SimMapOptions } from './sim/sim-map';
 import { runSeed } from './sim/random';
+import { simulateRuns, type RunSim, type RunSimInput } from './sim/run-sim';
+import { flawlessChance, type FlawlessChance, type FlawlessOptions } from './flawless';
 import { BLIND_SPOTS, type BlindSpot } from './assumptions';
 import { matchBuilds, matchTemplate, shownMatch, templateSummary, templatesFor } from './builds';
 import type { SkillId } from '../game-data/skills';
@@ -122,7 +124,9 @@ export { type MapWaves, type Wave, type WaveGroup } from './waves';
 export { type ArmySpread, type SimItem } from './sim/sustain';
 export { MAX_TURNS, type MapPlay, type MapPlayInput, type SimAct, type SimFight, type SimFoeGroup, type SimGroup, type SimMap, type SimTurn, type SimUnit, type SimUnitTally, type SimWave } from './sim/map-play';
 export { simLineup, type SimMapOptions } from './sim/sim-map';
-export { BLIND_SPOTS, type BlindSpot, type BlindSpotId } from './assumptions';
+export { PROMOTION_RULE, levelCap, type ArmyUnit, type RunSim, type RunSimInput, type RunSimMap, type RunSimMapResult, type StatSpread, type UnitForecast } from './sim/run-sim';
+export { FLAWLESS_RUNS, FLAWLESS_SEED, fighterOf, type FlawlessChance, type FlawlessOptions, type NotSimulated } from './flawless';
+export { BLIND_SPOTS, type BlindSpot, type BlindSpotId, type RunBlindSpotId } from './assumptions';
 export { bestWeapon, classTypes, dangerFlags, foeKey, foeOf, foesOf, matchup, pairUpBonus, statValue, type DangerFlag, type Fighter, type Foe, type Matchup } from './solver';
 export {
   EMPTY_RUN,
@@ -498,6 +502,15 @@ export type Engine = {
   internalLevels(run: Run, entry?: string): ReadonlyMap<RosterUnit, UnitInternalLevel>;
   /** Class changes the log suggests (a level reset) but doesn't hold, on every entry: Record results proposes them. */
   classChangeProposals(run: Run): readonly ProposedClassChange[];
+  /**
+   * The flawless chance of today's plan (#186): every map from the next one to the endpoint played by its suggested
+   * deployment, each unit's EXP and level-ups sampled along the way, over `runs` simulated runs from `seed` (defaults
+   * FLAWLESS_RUNS, FLAWLESS_SEED). The mean of each run's product of no-death chances, with its ± (95%), each map's
+   * chance, the expected stats entering the endpoint, the units left out, and those whose seal history is read as 0.
+   */
+  flawlessChance(run: Run, options?: FlawlessOptions): FlawlessChance;
+  /** The same simulation over a hand-built army and maps (tests, and the solve's edits on the same runs). */
+  simulateRuns(input: RunSimInput, seed: number, runs: number): RunSim;
 };
 
 /** One combat for `Engine.combatExp`. */
@@ -1558,5 +1571,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       combatExp(c.internalLevel, c.foe, c.outcome, c.pair === 'back', c.difficulty === 'lunatic' || c.difficulty === 'lunatic-plus', c.engagement ?? 1, c.pair === 'front' && c.veteran ? 1.5 : 1),
     internalLevels: (run, entry) => internalLevels(run, assumptions['class-change-internal-level'], entry),
     classChangeProposals: (run) => classChangeProposals(run),
+    flawlessChance: (run, options) => flawlessChance(run, assumptions, options),
+    simulateRuns: (input, seed, runs) => simulateRuns(input, seed, runs, assumptions),
   };
 }
