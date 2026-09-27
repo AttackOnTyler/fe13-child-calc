@@ -63,6 +63,7 @@ import {
   type Stat,
   type SupportRank,
   type Weights,
+  marriagePins,
 } from '../engine';
 import { h } from './dom';
 import { guide } from './guide';
@@ -2431,8 +2432,8 @@ function renderParts(parts: readonly Part[]): void {
                 const roles = engine.roles(roster, planSettings());
                 return (u: RosterUnit) => deployRoleOf(u, roster, roles);
               })(),
-              // The plan's marriages (#187), as the Run view's flawless chance takes them: the shopping list reads the same runs.
-              marriages: () => roster.savedPlan?.marriages ?? engine.plan(roster, planSettings()).marriages.map((m) => [m.husband, m.wife] as const),
+              // The seed plan (#198), as the Run view's flawless chance takes it: the shopping list reads the same runs.
+              plan: (roleOf) => engine.seedPlan(run, { pins: marriagePins(roster), roleOf }),
               excluded: prepExcluded,
               setExcluded: (u, out) => {
                 const next = new Set(prepExcluded);
@@ -2466,8 +2467,8 @@ function renderParts(parts: readonly Part[]): void {
                 let roles: ReturnType<typeof engine.roles> | undefined;
                 return (u: RosterUnit) => deployRoleOf(u, roster, (roles ??= engine.roles(roster, planSettings())));
               })(),
-              // The plan's marriages (#187): the adopted plan's, else the suggested one's.
-              marriages: () => roster.savedPlan?.marriages ?? engine.plan(roster, planSettings()).marriages.map((m) => [m.husband, m.wife] as const),
+              // The marriages pinned on the Plan page: the seed plan behind the flawless chance keeps them (#198).
+              pins: () => marriagePins(roster),
               recording,
               setRecording: (r) => {
                 recording = r;

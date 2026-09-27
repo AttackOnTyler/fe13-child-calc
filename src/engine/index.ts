@@ -52,10 +52,13 @@ import { meanNoDeath, playMap, staffReach, type MapPlay, type MapPlayInput, type
 import { itemByName } from '../game-data/items';
 import { simMapById, type SimMapOptions } from './sim/sim-map';
 import { runSeed } from './sim/random';
-import { simulateRuns, type RunSim, type RunSimInput } from './sim/run-sim';
+import { planLineups, simulateRuns, type RunSim, type RunSimInput } from './sim/run-sim';
 import { mapUpkeep, type MapUpkeep } from './sim/upkeep';
-import { flawlessCeiling, flawlessChance, sureIncome, type FlawlessChance, type FlawlessOptions } from './flawless';
+import { FLAWLESS_SEED, flawlessCeiling, flawlessChance, flawlessInput, sureIncome, type FlawlessChance, type FlawlessOptions } from './flawless';
 import { simulateCeiling, type Ceiling } from './sim/ceiling';
+import { endpointCoverage, seedPlan, type EndpointCoverage, type SeedContext, type SeedOptions } from './solve/seed';
+import { solveStep, type SolveStep, type SolveStepInput } from './solve/step';
+import type { Plan, PlanLineup, PlanRobin } from './solve/plan';
 import { BLIND_SPOTS, type BlindSpot } from './assumptions';
 import { matchBuilds, matchTemplate, shownMatch, templateSummary, templatesFor } from './builds';
 import type { SkillId } from '../game-data/skills';
@@ -134,6 +137,11 @@ export { KIT_FORGE_MT, VULNERARY_VALUE, type MapUpkeep } from './sim/upkeep';
 export { TOP_PAIR_POINTS, combatPoints, mapSupportGains, type SupportGain, type Together } from './sim/support-growth';
 export { FLAWLESS_RUNS, FLAWLESS_SEED, fighterOf, type FlawlessChance, type FlawlessOptions, type NotSimulated } from './flawless';
 export { effectiveCaps, type Ceiling, type CeilingUnit } from './sim/ceiling';
+export type { LineupPlan } from './sim/run-sim';
+export { marriagePins } from './solve/plan';
+export type { Plan, PlanItem, PlanLineup, PlanPin, PlanProposal, PlanRobin, PlanSeal, Position, Roadmap, SolveCursor, Wishlist, WishlistChild, WishlistReserve, WishlistUnit } from './solve/plan';
+export type { EndpointCoverage, SeedOptions } from './solve/seed';
+export type { SolveStep, SolveStepInput } from './solve/step';
 export { BLIND_SPOTS, type BlindSpot, type BlindSpotId, type RunBlindSpotId } from './assumptions';
 export { bestWeapon, classTypes, dangerFlags, foeKey, foeOf, foesOf, matchup, pairUpBonus, statValue, type DangerFlag, type Fighter, type Foe, type Matchup } from './solver';
 export {
@@ -551,6 +559,31 @@ export type Engine = {
   ceiling(run: Run, options?: FlawlessOptions): Ceiling | undefined;
   /** The ceiling of a hand-built army and maps: the last map is the endpoint. */
   simulateCeiling(input: RunSimInput, seed: number, runs: number): Ceiling | undefined;
+  /**
+   * The solve's seed for a run (#198): marriages and Robin (where the run facts leave it open) matched on endpoint
+   * coverage, recorded marriages kept as facts and marriage pins kept; the wishlist is the endpoint's lineup of that army
+   * at its full build, each unit's best play-context build, each parent passing the skill its child's build wants most;
+   * the roadmap is greedy (it names only the endpoint's lineup). Deterministic and cheap: no map is played.
+   * Evaluate it with `flawlessChance(run, { plan })`.
+   */
+  seedPlan(run: Run, options?: SeedOptions): Plan;
+  /**
+   * A pairing's endpoint coverage (#198): the share of the endpoint's foes its child beats at caps, times the share of
+   * the maps still to play it is in the army for. `parents` is any couple that makes the child (Robin's as `robin`);
+   * undefined when it makes no such child.
+   */
+  endpointCoverage(run: Run, child: ChildId, parents: readonly [RosterUnit, RosterUnit], robin: PlanRobin): EndpointCoverage | undefined;
+  /**
+   * The anytime solve's stepping call (#198; the local search is #199): from the adopted plan (or the seed), within a
+   * budget of evaluations, the best plan found, its flawless chance when worked out, the proposals, and whether the
+   * search has converged. Deterministic for the same input.
+   */
+  solveStep(input: SolveStepInput): SolveStep;
+  /**
+   * Every map's lineup on a plan's roadmap (#198): its own where it names one, else the greedy lineup its projection
+   * picks. Plays every map once: about 2 s on a fresh Full route (the Web Worker's job, #199).
+   */
+  roadmapLineups(run: Run, plan: Plan, options?: Pick<FlawlessOptions, 'seed' | 'roleOf'>): readonly PlanLineup[];
 };
 
 /** One combat for `Engine.combatExp`. */
@@ -895,6 +928,26 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     let found = buildCache.get(k);
     if (!found) buildCache.set(k, (found = matchBuilds(reachFor(r, settings), settings.context)));
     return found;
+  };
+
+  // The seed's builds (#198): a child's best build hangs only on what it can reach (not on Robin's asset/flaw), a unit's
+  // on the unit (Robin's on its gender); cached by that and the play context.
+  const seedBuilds = new Map<string, BuildMatch | undefined>();
+  const seedContext = (run: Run): SeedContext => {
+    const context: PlayContext = run.roster.run.route ?? 'main-story';
+    const settings: SkillViewSettings = { context, dlc: false };
+    const cached = (k: string, f: () => BuildMatch | undefined) => (seedBuilds.has(k) ? seedBuilds.get(k) : (seedBuilds.set(k, f()), seedBuilds.get(k)));
+    return {
+      assumptions,
+      result: (p) => byKey.get(pairingKey(p)),
+      childBuild: (r) => {
+        const input = skillInput(r);
+        const k = `${r.pairing.child}|${context}|${r.startClass}|${input.reachable.join()}|${JSON.stringify(r.skillCandidates)}`;
+        return cached(k, () => matchBuilds(skillReach(input, dlcOf(settings)), context)[0]);
+      },
+      unitBuild: (s) => cached(`${typeof s === 'string' ? s : `robin-${s.gender}`}|${context}`, () => matchBuilds(unitReach(s, dlcOf(settings)), context)[0]),
+      rank: (id) => skillRank(id, context),
+    };
   };
 
   /** Built on first use: rows prepared once, rescored per settings. */
@@ -1619,5 +1672,18 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     simulateRuns: (input, seed, runs) => simulateRuns(input, seed, runs, assumptions),
     ceiling: (run, options) => flawlessCeiling(run, assumptions, options),
     simulateCeiling: (input, seed, runs) => simulateCeiling(input, seed, runs, assumptions),
+    seedPlan: (run, options) => seedPlan(run, seedContext(run), options),
+    endpointCoverage: (run, child, parents, robin) => endpointCoverage(run, seedContext(run), child, parents, robin),
+    solveStep: (input) =>
+      solveStep(
+        input,
+        () => seedPlan(input.run, seedContext(input.run), { ...(input.pins ? { pins: input.pins } : {}), ...(input.roleOf ? { roleOf: input.roleOf } : {}) }),
+        (plan) => flawlessChance(input.run, assumptions, { plan, seed: input.seed, ...(input.runs ? { runs: input.runs } : {}), ...(input.roleOf ? { roleOf: input.roleOf } : {}) }),
+      ),
+    roadmapLineups: (run, plan, options = {}) => {
+      const { input } = flawlessInput(run, assumptions, options.roleOf, undefined, plan);
+      const lineups = planLineups(input, options.seed ?? FLAWLESS_SEED, assumptions);
+      return input.maps.map((m, i) => ({ key: m.key, pairs: lineups[i]!.pairs.map((p) => ({ lead: p.lead, ...(p.back ? { back: p.back } : {}) })), solo: [...lineups[i]!.solo] }));
+    },
   };
 }

@@ -52,7 +52,7 @@ import { childJoinStats, classBaseStats, type JoinParent } from '../child-join';
 import { childParalogueGates, isChildParalogue } from '../child-paralogues';
 import { childSkills, type SkillParent } from '../child-skills';
 import { classGrowths, classMaxStats, className, promotionsOf } from '../classes';
-import { suggestDeployment, type DeployCandidate, type Deployment } from '../deploy';
+import { suggestDeployment, type DeployCandidate, type Deployment, type Pair } from '../deploy';
 import { COUNT_CAP, combatExp, expFoeOf, tierBonus, type ExpFoe } from '../exp';
 import type { Difficulty, RosterUnit } from '../roster';
 import type { Fighter, Foe, SupportLevel } from '../solver';
@@ -171,6 +171,17 @@ export type RunSimInput = {
    * lineups pair it until then.
    */
   readonly couples?: readonly (readonly [RosterUnit, RosterUnit])[];
+  /**
+   * The plan's lineups (#198), by map in `maps` order: a map with one plays it (`plannedDeployment`); a map without one
+   * plays the greedy lineup (`suggestDeployment` over the projection's army, the couples paired until they marry).
+   */
+  readonly lineups?: readonly (LineupPlan | undefined)[];
+};
+
+/** A lineup a plan names for one map (#198): its pairs (a Lead, and its Back if any) and its units alone. */
+export type LineupPlan = {
+  readonly pairs: readonly { readonly lead: RosterUnit; readonly back?: RosterUnit }[];
+  readonly solo: readonly RosterUnit[];
 };
 
 /** A stat's spread over the runs at the endpoint: 10th percentile, median, 90th, and the effective cap. */
@@ -910,14 +921,18 @@ function planner(input: RunSimInput, seed: number, assumptions: Assumptions): Pl
       const pinned = [...state.couples.values()]
         .filter(([a, b]) => here(a) && here(b) && !state.married.has(a) && !state.married.has(b))
         .map(([a, b]) => (leads(b) && !leads(a) ? { lead: b, back: a } : { lead: a, back: b }));
-      const d = suggestDeployment({
-        candidates: candidatesOf(state, extra),
-        forced: step.forced,
-        pinned,
-        max: step.deploy || state.army.size + extra.size,
-        foes: step.map.foes.map((g) => g.foe),
-        pool: (f) => pools.get(f) ?? [],
-      });
+      const max = step.deploy || state.army.size + extra.size;
+      const planned = input.lineups?.[k];
+      const d = planned
+        ? plannedDeployment(planned, step.forced, max, here, (a, b) => rankIn(state, a, b))
+        : suggestDeployment({
+            candidates: candidatesOf(state, extra),
+            forced: step.forced,
+            pinned,
+            max,
+            foes: step.map.foes.map((g) => g.foe),
+            pool: (f) => pools.get(f) ?? [],
+          });
       if (k === last && step.armory?.length) kit = kitFor(state, step, d);
       const lineup = lineupOf(state, d, extra, interner);
       const play = playMap({ map: step.map, lineup, bonds: couplesToMarry(state) }, runSeed(seed, k));
@@ -931,6 +946,46 @@ function planner(input: RunSimInput, seed: number, assumptions: Assumptions): Pl
     wear: (i) => (walk(i), wear[i]!),
     kit: () => (walk(last), kit),
   };
+}
+
+/**
+ * A plan's lineup for a map (#198) as the deployment the runs play: its pairs and units alone as it names them, less
+ * any unit not in the army there (a Back whose Lead is missing fights alone), forced units added alone, within the
+ * deploy count (forced units first). Pairs aren't scored: their coverage reads 0.
+ */
+function plannedDeployment(
+  plan: LineupPlan,
+  forced: readonly RosterUnit[],
+  max: number,
+  here: (u: RosterUnit) => boolean,
+  rank: (a: RosterUnit, b: RosterUnit) => SupportLevel | null,
+): Deployment {
+  const room = Math.max(max, forced.filter(here).length);
+  const deployed: RosterUnit[] = forced.filter(here);
+  const taken = new Set<RosterUnit>();
+  const fits = (n: number) => deployed.length + n <= room;
+  const add = (u: RosterUnit) => {
+    taken.add(u);
+    if (!deployed.includes(u)) deployed.push(u);
+  };
+  const cost = (u: RosterUnit) => (deployed.includes(u) ? 0 : 1);
+  const pairs: Pair[] = [];
+  for (const p of plan.pairs) {
+    const lead = here(p.lead) && !taken.has(p.lead) ? p.lead : undefined;
+    const back = p.back && here(p.back) && !taken.has(p.back) ? p.back : undefined;
+    const [l, b] = lead ? [lead, back] : [back, undefined];
+    if (!l || !fits(cost(l) + (b ? cost(b) : 0))) continue;
+    add(l);
+    if (b) add(b);
+    pairs.push({ lead: l, back: b, support: b ? rank(l, b) : null, coverage: 0 });
+  }
+  const solo: RosterUnit[] = [];
+  for (const u of [...plan.solo, ...forced]) {
+    if (!here(u) || taken.has(u) || !fits(cost(u))) continue;
+    add(u);
+    solo.push(u);
+  }
+  return { max, deployed, pairs, solo, forced: forced.filter(here) };
 }
 
 /** The plan's lineup for every map (see `planner`). */

@@ -133,6 +133,30 @@ expect(r.maps.map((x) => x.key)).toEqual(['a', 'b']);    for (const x of r.maps)
   });
 });
 
+describe('a plan’s lineups drive the simulated runs (#198)', () => {
+  const vaike = hero({ id: 'vaike', name: 'Vaike' });
+  const stahl = hero({ id: 'stahl', name: 'Stahl' });
+  const chrom = hero({ id: 'chrom', name: 'Chrom' });
+  const maps = [step(rout('a', [dummy(5, 2)]), { deploy: 3, forced: ['chrom'] }), step(rout('b', [dummy(5, 2)]), { deploy: 3, forced: ['chrom'] })];
+  const run = (lineups: RunSimInput['lineups']) => engine.simulateRuns({ army: [chrom, vaike, stahl], maps, difficulty: 'normal', ...(lineups ? { lineups } : {}) }, 1, 2);
+
+  it('fields the plan’s pairs and units alone where it names a lineup, forced units always', () => {
+    const r = run([{ pairs: [{ lead: 'stahl', back: 'vaike' }], solo: [] }, undefined]);
+    // Map a: the plan's pair, and Chrom (forced) though the plan leaves him out.
+    expect(r.maps[0]!.lineup).toMatchObject({ pairs: [{ lead: 'stahl', back: 'vaike' }], solo: ['chrom'], forced: ['chrom'] });
+    expect([...r.maps[0]!.lineup!.deployed].sort()).toEqual(['chrom', 'stahl', 'vaike']);
+    // Map b names none: the greedy lineup, as without a plan.
+    expect(r.maps[1]!.lineup).toEqual(run(undefined).maps[1]!.lineup);
+  });
+
+  it('leaves out a unit the plan names that isn’t in the army there, and keeps to the deploy count', () => {
+    const r = run([{ pairs: [{ lead: 'lucina', back: 'vaike' }, { lead: 'stahl' }], solo: ['frederick', 'vaike'] }, undefined]);
+    expect(r.maps[0]!.lineup).toMatchObject({ pairs: [{ lead: 'vaike' }, { lead: 'stahl' }], solo: ['chrom'] });
+    const crowded = engine.simulateRuns({ army: [chrom, vaike, stahl], maps: [step(rout('a', []), { deploy: 2, forced: ['chrom'] })], difficulty: 'normal', lineups: [{ pairs: [{ lead: 'vaike' }, { lead: 'stahl' }], solo: [] }] }, 1, 1);
+    expect(crowded.maps[0]!.lineup!.deployed).toEqual(['chrom', 'vaike']);
+  });
+});
+
 describe('the flawless chance of a recorded run (#186)', () => {
   const facts = withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal', gender: 'M', asset: 'mag', flaw: 'hp' });
   const played = (maps: readonly string[]) => maps.reduce((r, m, i) => addEntry(r, m, i + 1), runFromRoster(facts));

@@ -3,9 +3,9 @@
  * holds a snapshot: every unit's class, level, EXP, stats, skills, inventory and supports, plus the convoy and gold.
  * A new entry copies the one before; editing a past entry never reaches later ones, which are flagged instead.
  */
-import type { Assumptions, ChildId, Couple, DeploymentRole, Engine, FlawlessOptions, GoldSpread, HeldItem, MapOrderStep, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
+import type { Assumptions, ChildId, DeploymentRole, Engine, FlawlessOptions, GoldSpread, HeldItem, MapOrderStep, PlanPin, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
 import { chanceText } from './chance';
-import { EMPTY_SNAPSHOT, SUPPORT_LEVELS, addEntry, childJoinFrom, chromWedding, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, withUnit } from '../engine';
+import { EMPTY_SNAPSHOT, FLAWLESS_SEED, SUPPORT_LEVELS, addEntry, childJoinFrom, chromWedding, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, withUnit } from '../engine';
 import { removeClassChange, tierOfClass, withClassChange, withCountOverride, type Seal } from '../engine';
 import { entryAfterShopping, goldAfterShopping, removeShopLine, shopPrice, withShopLine, type ShopKind, type ShopLine } from '../engine';
 import { CHILD_UNITS } from '../game-data/children';
@@ -35,8 +35,8 @@ export type RunContext = {
   readonly prepare: (map: string) => void;
   /** Each unit's deployment role, as the preparation page reads it: the flawless chance's lineups use it (#186). */
   readonly roleOf?: (u: RosterUnit) => DeploymentRole;
-  /** The plan's marriages, as the Plan page has them (the adopted plan, else the suggested one): the children they bring join the flawless chance's army (#187). */
-  readonly marriages?: () => readonly Couple[];
+  /** The marriages the player pinned (#198): the seed keeps them, so the flawless chance's plan does. */
+  readonly pins?: () => readonly PlanPin[];
 };
 
 const RECORD_STEPS = ['Deployed units', 'Recruits', 'Deaths and marriages', 'Convoy and gold', 'Shopping'] as const;
@@ -109,16 +109,21 @@ const points = (p: number) => (p * 100).toFixed(1);
 
 const listOf = (xs: readonly string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
+/** What the headline is worked out from: the seed's runs and the player's pins (#198). */
+export type FlawlessReadoutOptions = Pick<FlawlessOptions, 'seed' | 'runs' | 'roleOf'> & { readonly pins?: readonly PlanPin[] };
+
 /**
- * The headline flawless chance (#186), as the Run view writes it: the chance with its simulation error (±, 95%) and
- * the ceiling beside it (#189), what it covers and rests on (units whose seal history is read as 0, units it can't
- * simulate, maps whose foes carry no weapons, the blind spots), and each map's no-death chance for the runs that reach
- * it with nobody lost.
+ * The headline flawless chance (#186), as the Run view writes it: the seed plan's (#198: its marriages, Robin and
+ * lineups, the player's pinned marriages kept) with its simulation error (±, 95%) and the ceiling beside it (#189), what
+ * it covers and rests on (units whose seal history is read as 0, units it can't simulate, maps whose foes carry no
+ * weapons, the blind spots), and each map's no-death chance for the runs that reach it with nobody lost.
  */
-export function flawlessReadout(engine: Engine, run: Run, options?: FlawlessOptions): { readonly text: string; readonly detail: string; readonly rows: readonly string[] } {
-  const r = engine.flawlessChance(run, options);
+export function flawlessReadout(engine: Engine, run: Run, options: FlawlessReadoutOptions = {}): { readonly text: string; readonly detail: string; readonly rows: readonly string[] } {
+  const { pins, ...sim } = options;
+  const step = engine.solveStep({ run, budget: 1, seed: sim.seed ?? FLAWLESS_SEED, ...(sim.runs ? { runs: sim.runs } : {}), ...(sim.roleOf ? { roleOf: sim.roleOf } : {}), ...(pins ? { pins } : {}) });
+  const r = step.chance!;
   if (!r.maps.length) return { text: 'Flawless chance: the endpoint is recorded, nothing left to simulate.', detail: '', rows: [] };
-  const ceiling = engine.ceiling(run, options);
+  const ceiling = engine.ceiling(run, { ...sim, plan: step.best });
   const gender = run.roster.run.gender;
   const names = (us: readonly RosterUnit[]) => listOf(us.map((u) => unitName(u, gender)));
   const first = r.maps[0]!.label;
@@ -129,6 +134,7 @@ export function flawlessReadout(engine: Engine, run: Run, options?: FlawlessOpti
   const spots = engine.blindSpots().filter((b) => r.blindSpots.includes(b.id));
   const detail = [
     `The chance no unit dies from ${first}${r.maps.length > 1 ? ` to ${last}` : ''} (${r.maps.length} map${r.maps.length === 1 ? '' : 's'}), each played by its suggested deployment while EXP and level-ups are rolled, over ${r.runs} simulated run${r.runs === 1 ? '' : 's'}; the ± is the simulation error (95%).`,
+    `It’s the seed plan’s: marriages${run.roster.run.gender && run.roster.run.asset && run.roster.run.flaw ? '' : ' and Robin'} matched on how much of ${ceiling?.label ?? 'the endpoint'} each child could beat at caps and how long it’s in the army, ${pins?.length ? 'your pinned marriages kept, ' : ''}the endpoint fielded as the plan’s army would fight it at caps, and each parent passing the skill its child’s build wants.`,
     ceiling?.chance !== undefined
       ? `The ceiling is the chance no unit dies on ${ceiling.label} with every unit at its effective caps (a base class promoted) and its recorded skills and weapons: the most any plan for this army could reach there.`
       : '',
@@ -181,7 +187,7 @@ function flawlessSection(ctx: RunContext): HTMLElement {
   const run = ctx.run;
   setTimeout(() => {
     if (!el.isConnected) return;
-    const r = READOUTS.get(run) ?? flawlessReadout(ctx.engine, run, { ...(ctx.roleOf ? { roleOf: ctx.roleOf } : {}), ...(ctx.marriages ? { marriages: ctx.marriages() } : {}) });
+    const r = READOUTS.get(run) ?? flawlessReadout(ctx.engine, run, { ...(ctx.roleOf ? { roleOf: ctx.roleOf } : {}), ...(ctx.pins ? { pins: ctx.pins() } : {}) });
     READOUTS.set(run, r);
     if (el.isConnected) el.replaceWith(draw(r));
   }, 0);
