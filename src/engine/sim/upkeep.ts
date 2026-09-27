@@ -76,6 +76,17 @@ function wearOf(g: SimGroup, base: Foe, drawn: readonly string[]): Wear {
 /** Armsthrift's chance to save a use: Luck × 2%. */
 const thrift = (u: SimUnit) => (u.fighter.skills.includes('Armsthrift') ? Math.min(1, (u.fighter.stats.lck * 2) / 100) : 0);
 
+/** Fronts outside the lineup's groups, one object per (interned) lead, back and support, so their wear stays cached. */
+const AD_HOC = new WeakMap<SimUnit, Map<string, SimGroup>>();
+function adHocGroup(lead: SimUnit, back: SimUnit | undefined, support: SupportLevel | null): SimGroup {
+  let m = AD_HOC.get(lead);
+  if (!m) AD_HOC.set(lead, (m = new Map()));
+  const k = back ? `${back.id}|${support ?? ''}` : '';
+  let g = m.get(k);
+  if (!g || (back && g.back !== back)) m.set(k, (g = { lead, ...(back ? { back } : {}), support }));
+  return g;
+}
+
 /** The expected strikes a side makes of `strikes`, stopping once `need` have landed at `hit` each. */
 function expectedStrikes(strikes: number, need: number, hit: number): number {
   // dist[k]: the chance k strikes have landed so far.
@@ -119,15 +130,23 @@ export function mapUpkeep(map: SimMap, play: MapPlay, lineup: readonly SimGroup[
   };
   const units = new Map<string, SimUnit>();
   const groups = new Map<string, SimGroup>();
+  const supports = new Map<string, SupportLevel | null>();
   for (const g of lineup) {
     for (const u of [g.lead, g.back]) if (u) units.set(u.id, u);
     groups.set(`${g.lead.id}|${g.back?.id ?? ''}`, g);
+    if (g.back) supports.set(`${g.back.id}|${g.lead.id}`, g.support);
   }
+  // A front the lineup doesn't list as a group (#183's stances: a unit apart, or the pair switched with its back in
+  // front): that unit alone, or that pair at the lineup pair's support.
   const groupOf = (lead: string, back: string | undefined): SimGroup | undefined => {
     const k = `${lead}|${back ?? ''}`;
-    let g = groups.get(k);
+    const listed = groups.get(k);
+    if (listed) return listed;
     const l = units.get(lead);
-    if (!g && l) groups.set(k, (g = { lead: l, ...(back && units.get(back) ? { back: units.get(back)! } : {}), support: null as SupportLevel | null }));
+    const b = back ? units.get(back) : undefined;
+    if (!l) return undefined;
+    const g = adHocGroup(l, b, b ? (supports.get(k) ?? null) : null);
+    groups.set(k, g);
     return g;
   };
   const foes = foesOf(map);
