@@ -217,6 +217,20 @@ function coverageModel(input: RunSimInput, cleared: readonly string[]) {
 
 type Model = ReturnType<typeof coverageModel>;
 
+/** Coverage models kept by what they read (the maps still to play, the cleared maps, the endpoint's foes): every Robin's seed (#201) shares one. */
+const models = new Map<string, Model>();
+const MODELS = 16;
+function coverageFor(input: RunSimInput, cleared: readonly string[]): Model {
+  const end = input.maps[input.maps.length - 1];
+  const k = JSON.stringify([input.difficulty, input.maps.map((m) => [m.key, m.map.id]), cleared, end ? [...end.map.foes, ...end.map.waves.flatMap((w) => w.groups)].map((g) => [g.key, g.foe.skills]) : [], end?.armory ?? null]);
+  let m = models.get(k);
+  if (m) return m;
+  m = coverageModel(input, cleared);
+  if (models.size >= MODELS) models.delete(models.keys().next().value!);
+  models.set(k, m);
+  return m;
+}
+
 const skillNames = (b: BuildMatch | undefined) => (b ? b.slots.flatMap((s) => (s.skill ? [s.skill.name] : [])) : []);
 const skillIds = (b: BuildMatch | undefined): SkillId[] => (b ? b.slots.flatMap((s) => (s.skill ? [s.skill.id] : [])) : []);
 
@@ -238,7 +252,7 @@ const shareOf = (beaten: number, foes: number, presence: number): EndpointCovera
 /** The endpoint coverage of one pairing in a run (the facade's, for the Why panel and tests). */
 export function endpointCoverage(run: Run, ctx: SeedContext, child: ChildId, parents: Couple, robin: PlanRobin): EndpointCoverage | undefined {
   const { input } = flawlessInput(run, ctx.assumptions, undefined, []);
-  const model = coverageModel(input, input.cleared ?? []);
+  const model = coverageFor(input, input.cleared ?? []);
   const r = robinRef(robin);
   const p = pairingsOf(parents, r).find((x) => x.child === child);
   return p ? pairingCoverage(ctx, model, p) : undefined;
@@ -305,7 +319,7 @@ export function placedForSupports(run: Run, assumptions: Assumptions, plan: Plan
 function seedOnce(run: Run, ctx: SeedContext, options: SeedOptions, forbidden: ReadonlySet<string>): Plan {
   const facts = run.roster.run;
   const base = flawlessInput(run, ctx.assumptions, options.roleOf, []);
-  const model = coverageModel(base.input, base.input.cleared ?? []);
+  const model = coverageFor(base.input, base.input.cleared ?? []);
   const snap = latestEntry(run)?.snapshot;
   const recorded: Couple[] = (base.input.married ?? []).filter((c): c is Couple => c[1] !== 'maiden');
   const recordedChrom = (base.input.married ?? []).find(([a, b]) => a === 'chrom' && b === 'maiden');

@@ -3,7 +3,7 @@
  * One worker per request: a new request, or `stop`, terminates the one before (a step can't be interrupted mid-way).
  * Where there's no Worker (tests), `startSolve` returns undefined and the page works the chance out itself.
  */
-import type { Assumptions, DeploymentRole, EditCost, PinCost, Plan, PlanPin, Readings, ReservesCursor, ReservesStep, Run, SolveCursor, SolveStep, WorthCursor, WorthStep } from '../engine';
+import type { Assumptions, DeploymentRole, EditCost, PinCost, Plan, PlanPin, Readings, ReservesCursor, ReservesStep, RobinCursor, RobinStep, Run, SolveCursor, SolveStep, WorthCursor, WorthStep } from '../engine';
 
 type Common = {
   readonly id: number;
@@ -46,6 +46,19 @@ export type SolveRequest =
       /** Where an earlier idle request stopped. */
       readonly worth?: WorthCursor;
       readonly reserves?: ReservesCursor;
+    })
+  | (Common & {
+      /**
+       * The Robin alternatives (#201): every option screened, the best of each gender and up to two more solved (or,
+       * once locked, the locked Robin), those in `solve` too, stepped against a time budget from `cursor`.
+       */
+      readonly kind: 'robin';
+      readonly pins?: readonly PlanPin[];
+      readonly budget: number;
+      readonly seconds: number;
+      readonly cursor?: RobinCursor;
+      readonly solve?: readonly string[];
+      readonly noRobin?: boolean;
     });
 
 /**
@@ -58,7 +71,8 @@ export type SolveReply =
   | { readonly id: number; readonly kind: 'pin-cost'; readonly cost: PinCost; readonly done: boolean }
   | { readonly id: number; readonly kind: 'readings'; readonly readings: Readings | undefined; readonly done: boolean }
   | { readonly id: number; readonly kind: 'cost'; readonly cost: EditCost; readonly done: boolean }
-  | { readonly id: number; readonly kind: 'idle'; readonly worth: WorthStep; readonly reserves: ReservesStep | undefined; readonly done: boolean };
+  | { readonly id: number; readonly kind: 'idle'; readonly worth: WorthStep; readonly reserves: ReservesStep | undefined; readonly done: boolean }
+  | { readonly id: number; readonly kind: 'robin'; readonly step: RobinStep; readonly done: boolean };
 
 /** A request as the page makes it: the client numbers it. */
 export type NewSolveRequest = SolveRequest extends infer R ? (R extends SolveRequest ? Omit<R, 'id'> : never) : never;

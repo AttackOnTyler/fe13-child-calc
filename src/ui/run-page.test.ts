@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, addEntry, createEngine, dismissMigrationNote, editEntry, exportRun, latestEntry, migrateRun, recordMarriage, runFromRoster, withPin, withRenown, withRun, withShopLine, withSideGoalPin, withSideGoalSecured, withSpouse, withItemPin, withItemsUsed, unitName, readUnits, type Route, type RosterUnit, type Run, type Snapshot, type UnitSnapshot } from '../engine';
-import { childStatsNote, flawlessReadout, heldText, itemPlanReadout, itemsUsedReadout, mapOrderReadout, migrationNoteReadout, solvedReadout, parseHeldText, parseSupportsText, roadmapReadout, shoppingReadout, sideGoalPlanReadout, sideGoalsReadout, supportsText } from './run-page';
+import { EMPTY_ROSTER, addEntry, createEngine, dismissMigrationNote, editEntry, exportRun, latestEntry, migrateRun, recordMarriage, runFromRoster, withPin, withRenown, withRun, withShopLine, withSideGoalPin, withSideGoalSecured, withSpouse, withItemPin, withItemsUsed, unitName, readUnits, withRobinLock, type Plan, type PlanRobin, type RobinStep, type Route, type RosterUnit, type Run, type Snapshot, type UnitSnapshot } from '../engine';
+import { childStatsNote, flawlessReadout, robinReadout, heldText, itemPlanReadout, itemsUsedReadout, mapOrderReadout, migrationNoteReadout, solvedReadout, parseHeldText, parseSupportsText, roadmapReadout, shoppingReadout, sideGoalPlanReadout, sideGoalsReadout, supportsText } from './run-page';
 import { chanceText } from './chance';
 
 describe('the map order readout (#179)', () => {
@@ -373,5 +373,100 @@ describe('the migration note (#205)', () => {
     const kept = withPin(run, { kind: 'keep', unit: 'lucina', keep: 'in' });
     expect(migrationNoteReadout(kept)!.keepIn.map((k) => k.unit)).toEqual(['owain']);
     expect(migrationNoteReadout(dismissMigrationNote(kept))).toBeUndefined();
+  });
+});
+
+describe('the Robin alternatives on the Run view (#201)', () => {
+  const engine = createEngine();
+  const run = runFromRoster(withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal' }));
+  const plan = (robin: PlanRobin, spouse: RosterUnit | null, units: [RosterUnit, 'paladin' | 'great-knight' | 'hero'][]): Plan => ({
+    robin,
+    wishlist: {
+      endpoint: 'endgame',
+      units: units.map(([unit, classId]) => ({ unit, position: 'solo', classId, build: [] })),
+      marriages: spouse ? [['robin', spouse]] : [],
+      children: [],
+      reserves: [],
+    },
+    roadmap: { order: ['endgame'], lineups: [], seals: [], items: [] },
+  });
+  const spd: PlanRobin = { gender: 'F', asset: 'spd', flaw: 'lck' };
+  const str: PlanRobin = { gender: 'M', asset: 'str', flaw: 'lck' };
+  const mag: PlanRobin = { gender: 'M', asset: 'mag', flaw: 'lck' };
+  const best = plan(spd, 'lonqu', [['lonqu', 'hero'], ['frederick', 'great-knight']]);
+  const other = plan(str, 'sumia', [['sumia', 'hero'], ['frederick', 'paladin']]);
+  const step: RobinStep = {
+    options: [
+      { key: 'M-str-lck', robin: str, screened: true, spouse: 'sumia', ceiling: 0.9, pick: 'gender', status: 'solved' },
+      { key: 'M-mag-lck', robin: mag, screened: true, spouse: 'olivia', ceiling: 0.8, status: 'open' },
+      { key: 'F-spd-lck', robin: spd, screened: true, spouse: 'lonqu', ceiling: 0.95, pick: 'gender', status: 'solved' },
+      { key: 'F-mag-lck', robin: { gender: 'F', asset: 'mag', flaw: 'lck' }, screened: false, spouse: null, ceiling: undefined, status: 'open' },
+    ],
+    solved: [
+      { key: 'F-spd-lck', robin: spd, pick: 'gender', plan: best, chance: 0.7, margin: 0.02, runs: 16, converged: true, cost: undefined, differences: { marriages: { added: [], removed: [] }, units: { added: [], removed: [] }, classes: [] } },
+      {
+        key: 'M-str-lck',
+        robin: str,
+        pick: 'gender',
+        plan: other,
+        chance: 0.6,
+        margin: 0.02,
+        runs: 16,
+        converged: true,
+        cost: { gain: -0.1, margin: 0.01, runs: 16, verdict: 'worse' },
+        differences: { marriages: { added: [['robin', 'sumia']], removed: [['robin', 'lonqu']] }, units: { added: ['sumia'], removed: ['lonqu'] }, classes: [{ unit: 'frederick', from: 'great-knight', to: 'paladin' }] },
+      },
+    ],
+    reference: 'F-spd-lck',
+    locked: undefined,
+    lockCost: undefined,
+    noRobin: undefined,
+    converged: false,
+    evaluations: 0,
+    cursor: { evaluations: 0 },
+  };
+
+  it('shows each solved Robin’s whole-wishlist chance, its cost against the best and how its wishlist differs', () => {
+    const r = robinReadout(engine, run, step, false);
+    expect(r.title).toBe('Robin: open · 2 of 4 solved');
+    expect(r.status).toBe('3 of 4 options screened by their seed and ceiling · comparing…');
+    expect(r.solved.map((x) => [x.text, x.lock])).toEqual([
+      ["Female, +Spd −Lck, marrying Lon'qu: 70.0% ±2.0 · the best (the best Female Robin)", true],
+      ["Male, +Str −Lck, marrying Sumia: 60.0% ±2.0 · −10.0 ±1.0 against the best · marries Robin × Sumia (not Robin × Lon'qu); fields Sumia (not Lon'qu); Frederick as Paladin (not Great Knight) (the best Male Robin)", true],
+    ]);
+    expect(r.rest.map((x) => [x.text, x.solve])).toEqual([
+      ['Male, +Mag −Lck, marrying Olivia: ceiling 80.0%', true],
+      ['Female, +Mag −Lck: not screened yet', true],
+    ]);
+    expect(r.lock).toBeUndefined();
+  });
+
+  it('keeps the no-Robin view as a toggle', () => {
+    expect(robinReadout(engine, run, step, true).noRobin).toBe('No-Robin view: working it out…');
+    const noRobin = { plan: best, chance: 0.65, margin: 0.02, cost: { gain: -0.05, margin: 0.01, runs: 16, verdict: 'worse' as const }, spouse: 'lonqu' as const };
+    expect(robinReadout(engine, run, { ...step, noRobin }, true).noRobin).toBe(
+      "No-Robin view (Robin no one’s parent: no Morgan, Lon'qu unmarried): 65.0% ±2.0, −5.0 ±1.0 against the best: what Robin’s marriage is worth",
+    );
+    expect(robinReadout(engine, run, { ...step, noRobin }, false).noRobin).toBeUndefined();
+  });
+
+  it('after the Lock, keeps the alternatives with what the lock cost', () => {
+    const locked = withRobinLock(run, str);
+    const after: RobinStep = {
+      ...step,
+      reference: 'M-str-lck',
+      locked: str,
+      solved: [
+        { ...step.solved[1]!, pick: 'locked', cost: undefined },
+        { ...step.solved[0]!, cost: { gain: 0.1, margin: 0.01, runs: 16, verdict: 'better' } },
+      ],
+      lockCost: { key: 'F-spd-lck', gain: 0.1, margin: 0.01, runs: 16, verdict: 'better' },
+    };
+    const r = robinReadout(engine, locked, after, false);
+    expect(r.title).toBe('Robin: locked, Male, +Str −Lck');
+    expect(r.lock).toBe('What this lock cost: +10.0 ±1.0 (Female, +Spd −Lck does better)');
+    expect(r.solved.map((x) => x.lock)).toEqual([false, false]);
+    expect(r.solved[1]!.text).toMatch(/^Female, \+Spd −Lck, marrying Lon'qu: 70\.0% ±2\.0 · \+10\.0 ±1\.0 against the locked Robin · /);
+    expect(robinReadout(engine, locked, { ...after, lockCost: undefined }, false).lock).toBe('What this lock cost: nothing measurable, among the Robins solved');
   });
 });

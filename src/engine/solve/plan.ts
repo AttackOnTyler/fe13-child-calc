@@ -136,9 +136,16 @@ export type Plan = {
  * - **Item (#193):** overrides the item plan for the first copy of its item the plan holds (by the time it arrives): a
  *   booster pin gives a booster (or Boots) to a unit, on a map when `key` is set, else on the first map the unit can
  *   drink it; a carrier pin hands a weapon to a unit from a map on ("Gradivus stays with Lucina from P21").
- * - The Robin Lock (#201) joins as another kind.
+ * - **Robin Lock (#201):** the Robin the player starts the game with. Locking writes it into the run facts (`withRobinLock`),
+ *   so only that Robin is solved from then on; `open` names the facts it filled, which lifting the lock opens again (the
+ *   Robin alternatives read "what this lock cost" on the run with it lifted).
  */
-export type PlanPin = MarriagePin | SpanPin | KeepPin | SideGoalPin | ItemPin;
+export type PlanPin = MarriagePin | SpanPin | KeepPin | SideGoalPin | ItemPin | RobinLockPin;
+
+/** The run facts a Robin Lock can fill. */
+export type RobinFact = 'gender' | 'asset' | 'flaw';
+
+export type RobinLockPin = { readonly kind: 'robin-lock'; readonly robin: PlanRobin; readonly open: readonly RobinFact[] };
 
 export type MarriagePin = {
   readonly kind: 'marriage';

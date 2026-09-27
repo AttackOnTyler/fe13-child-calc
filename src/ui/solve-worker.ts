@@ -4,9 +4,9 @@
  * solve is done and the run has pins, the worker is idle, so it works out the pin cost (#200): a second search with the
  * pins lifted (`liftPins`), from the best plan found with them, then `pinCost`. Then it reads the best plan's readings
  * (#197): the EXP forecast's first pass, then each pending milestone's suggested changes, one milestone a reply, within
- * `READING_SECONDS`. The page may also hand it idle work (#202):
- * the plan's unit worth and utility, then its reserves. It holds no logic: the search, its state (the cursor) and its
- * budgets are the engine's. Started by `solve-client.ts`, which terminates it to stop a solve.
+ * `READING_SECONDS`. The page may also hand it idle work (#202): the plan's unit worth and utility, then its reserves;
+ * or, on request, the Robin alternatives (#201), after the search, pin cost and readings. It holds no logic: the
+ * search, its state (the cursor) and its budgets are the engine's. Started by `solve-client.ts`, which terminates it to stop a solve.
  */
 import { EDIT_COST_BUDGET, READING_SECONDS, SOLVE_SECONDS, SUGGEST_RUNS, createEngine, type Assumptions, type DeploymentRole, type Engine, type Plan, type Run, type SolveCursor, type SuggestedChange } from '../engine';
 import type { SolveReply, SolveRequest } from './solve-client';
@@ -61,6 +61,19 @@ scope.onmessage = ({ data: m }) => {
       if (done) return;
       if (!worth.converged) worth = engine.unitWorth({ ...common, cursor: worth.cursor });
       else reserves = engine.reserves({ ...common, ...(reserves ? { cursor: reserves.cursor } : {}) });
+    }
+  }
+  if (m.kind === 'robin') {
+    // The Robin alternatives (#201), until every option is screened and the picks solved, or time runs out.
+    const end = performance.now() + m.seconds * 1000;
+    const common = { run: m.run, ...(m.pins ? { pins: m.pins } : {}), budget: m.budget, seed: m.seed, ...(m.solve ? { solve: m.solve } : {}), ...(m.noRobin ? { noRobin: true } : {}), ...(roleOf ? { roleOf } : {}) };
+    let cursor = m.cursor;
+    for (;;) {
+      const step = engine.robinAlternatives({ ...common, ...(cursor ? { cursor } : {}) });
+      cursor = step.cursor;
+      const done = step.converged || performance.now() >= end;
+      scope.postMessage({ id: m.id, kind: 'robin', step, done });
+      if (done) return;
     }
   }
   for (const [i, budget] of m.budgets.entries())

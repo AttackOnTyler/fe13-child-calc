@@ -18,7 +18,11 @@ import type { Run, Snapshot } from '../run';
 import { SIDE_GOAL_IDS, sideGoalById, type SideGoalId } from '../side-goals';
 import type { LineupPlan } from '../sim/run-sim';
 import { parseItemPins } from '../item-plan';
-import { marriagePins, type MarriagePin, type Plan, type PlanPin, type Position, type SpanPin, type SpanPosition } from './plan';
+import { marriagePins, type MarriagePin, type Plan, type PlanPin, type Position, type RobinFact, type SpanPin, type SpanPosition } from './plan';
+import { STATS, type Stat } from '../../game-data/stats';
+import { withRun } from '../roster';
+
+const ROBIN_FACTS: readonly RobinFact[] = ['gender', 'asset', 'flaw'];
 
 /** A pin's identity: two pins with the same key are the same choice (the later replaces the earlier). */
 export function pinKey(p: PlanPin): string {
@@ -34,6 +38,8 @@ export function pinKey(p: PlanPin): string {
     case 'booster':
     case 'carrier':
       return `${p.kind}:${p.item}`;
+    case 'robin-lock':
+      return 'robin-lock';
   }
 }
 
@@ -62,6 +68,11 @@ export function parsePins(v: unknown, itemPins?: unknown): PlanPin[] {
     else if (x.kind === 'side-goal' && SIDE_GOAL_IDS.includes(x.goal as SideGoalId) && (x.decision === 'chase' || x.decision === 'skip'))
       add({ kind: 'side-goal', goal: x.goal as SideGoalId, decision: x.decision });
     else if (x.kind === 'booster' || x.kind === 'carrier') parseItemPins([x]).forEach(add);
+    else if (x.kind === 'robin-lock' && isObject(x.robin)) {
+      const { gender, asset, flaw } = x.robin;
+      if ((gender === 'M' || gender === 'F') && STATS.includes(asset as Stat) && STATS.includes(flaw as Stat) && asset !== flaw)
+        add({ kind: 'robin-lock', robin: { gender, asset: asset as Stat, flaw: flaw as Stat }, open: ROBIN_FACTS.filter((f) => Array.isArray(x.open) && x.open.includes(f)) });
+    }
   }
   parseItemPins(itemPins).forEach(add);
   return [...out.values()];
@@ -123,6 +134,11 @@ export function livePins(run: Run, pins: readonly PlanPin[], keys: readonly stri
         return !lost(p.unit);
       case 'side-goal':
         return !played.has(sideGoalById(p.goal).map);
+      case 'robin-lock': {
+        // A lock the run facts no longer hold (changed by hand since) is dropped: the facts win.
+        const f = run.roster.run;
+        return f.gender === p.robin.gender && f.asset === p.robin.asset && f.flaw === p.robin.flaw;
+      }
       default:
         return true;
     }
@@ -138,8 +154,9 @@ export function withPin(run: Run, pin: PlanPin): Run {
 }
 
 /**
- * The run with pins lifted (all of them by default): gone from `Run.pins` and `Run.sideGoals`, and a pinned bond in the
- * latest entry unpinned. What the pin cost's second search solves.
+ * The run with pins lifted (all of them by default): gone from `Run.pins` and `Run.sideGoals`, a pinned bond in the
+ * latest entry unpinned, and a lifted Robin Lock's facts opened again (those it filled). What the pin cost's second
+ * search solves.
  */
 export function withoutPins(run: Run, lift?: readonly PlanPin[]): Run {
   const keys = lift ? new Set(lift.map(pinKey)) : undefined;
@@ -159,7 +176,9 @@ export function withoutPins(run: Run, lift?: readonly PlanPin[]): Run {
       }
     if (changed) entries = [...entries.slice(0, -1), { ...last, snapshot: { ...last.snapshot, spouses } }];
   }
-  return { ...base, entries, ...(pins.length ? { pins } : {}), ...(Object.keys(goals).length ? { sideGoals: goals } : {}) };
+  const lock = (run.pins ?? []).find((p) => p.kind === 'robin-lock' && lifted(p));
+  const roster = lock?.kind === 'robin-lock' && lock.open.length ? withRun(run.roster, Object.fromEntries(lock.open.map((f) => [f, null]))) : run.roster;
+  return { ...base, roster, entries, ...(pins.length ? { pins } : {}), ...(Object.keys(goals).length ? { sideGoals: goals } : {}) };
 }
 
 /** One lineup constraint on one map: a unit's position (or pair), out of the lineup, or in it anywhere (keep-in). */
@@ -321,6 +340,9 @@ export function brokenPins(plan: Plan, pins: readonly PlanPin[], forcedAt: (key:
   const couples = new Set(plan.wishlist.marriages.map((c) => [...c].sort().join('+')));
   // A marriage pin its marriages lack, or a rule-out they make.
   let n = pins.filter((p) => p.kind === 'marriage' && couples.has([...p.couple].sort().join('+')) === !!p.forbid).length;
+  // A Robin Lock on another Robin (#201).
+  const r = plan.robin;
+  n += pins.filter((p) => p.kind === 'robin-lock' && (p.robin.gender !== r.gender || p.robin.asset !== r.asset || p.robin.flaw !== r.flaw)).length;
   const keys = plan.roadmap.order;
   const rules = lineupRules(pins, keys);
   if (!rules) return n;
