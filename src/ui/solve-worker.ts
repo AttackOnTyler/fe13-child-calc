@@ -1,7 +1,8 @@
 /**
  * The anytime solve's Web Worker (#199; spec #175, Engine interfaces): a thin shell that loops the facade's stepping
  * call against a time budget and posts each step back, or reads an edit's cost at each budget it's given. It holds no
- * logic: the search, its state (the cursor) and its budgets are the engine's. Started by `solve-client.ts`, which
+ * logic: the search, its state (the cursor) and its budgets are the engine's. Once a solve is done, the page may hand
+ * it idle work (#202): the plan's unit worth and utility, then its reserves. Started by `solve-client.ts`, which
  * terminates it to stop a solve.
  */
 import { createEngine, type Assumptions, type Engine } from '../engine';
@@ -27,6 +28,20 @@ scope.onmessage = ({ data: m }) => {
       const done = step.converged || performance.now() >= end;
       scope.postMessage({ id: m.id, kind: 'step', step, done });
       if (done) return;
+    }
+  }
+  if (m.kind === 'idle') {
+    // Worth and utility first, then the reserves (they need the likely losses), until both settle or time runs out.
+    const end = performance.now() + m.seconds * 1000;
+    const common = { run: m.run, plan: m.plan, ...(m.pins ? { pins: m.pins } : {}), budget: m.budget, seed: m.seed, ...(roleOf ? { roleOf } : {}) };
+    let worth = engine.unitWorth({ ...common, ...(m.worth ? { cursor: m.worth } : {}) });
+    let reserves = m.reserves && engine.reserves({ ...common, budget: 0, cursor: m.reserves });
+    for (;;) {
+      const done = !!reserves?.converged || performance.now() >= end;
+      scope.postMessage({ id: m.id, kind: 'idle', worth, reserves, done });
+      if (done) return;
+      if (!worth.converged) worth = engine.unitWorth({ ...common, cursor: worth.cursor });
+      else reserves = engine.reserves({ ...common, ...(reserves ? { cursor: reserves.cursor } : {}) });
     }
   }
   for (const [i, budget] of m.budgets.entries())
