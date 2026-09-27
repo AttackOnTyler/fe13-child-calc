@@ -18,6 +18,10 @@
  * Side goals and renown (#191): each map's side goals are chased or skipped by the run's pins (`Run.sideGoals`), else
  * the default rule (`chaseByDefault`); renown's rewards (`renownAhead`) join the sure income and seals of the map that
  * crosses them, and those reached but not claimed are held from the start.
+ *
+ * Held items (#193): the latest entry's boosters, tonics and convoy weapons (and weapons no armory sells, in a unit's
+ * hands), each map's pick-ups (`itemSources`: a side goal's only with its part secured, other play-dependent ones not
+ * counted), and the plan's item uses on each map's preparations (`roadmap.items`); the early forced maps have none.
  */
 import { CHILD_UNITS, type ChildId } from '../game-data/children';
 import { MAPS, type ChapterData, type ChapterDifficulty } from '../game-data/chapters';
@@ -48,6 +52,7 @@ import { simulateCeiling, type Ceiling } from './sim/ceiling';
 import { simulateRuns, type ArmyUnit, type ChildRecruit, type RunSim, type RunSimInput, type RunSimMap, type RunSimSideGoal } from './sim/run-sim';
 import { sideGoalChoices } from './side-goals';
 import { renownAhead, rewardsValue, type RenownAhead } from './renown';
+import { hasPreparations, itemSources, simItems, simUses, type PlanSource } from './item-plan';
 import type { Plan } from './solve/plan';
 
 const WEAPON_KINDS = new Set(['sword', 'lance', 'axe', 'bow', 'tome', 'stone', 'beaststone']);
@@ -187,7 +192,16 @@ export function flawlessInput(
   roleOf?: (u: RosterUnit) => DeploymentRole,
   givenMarriages?: readonly Couple[],
   plan?: Plan,
-): { readonly input: RunSimInput; readonly notSimulated: readonly NotSimulated[]; readonly unknownHistory: readonly RosterUnit[]; readonly endpoint: string; readonly goldUnrecorded: boolean; readonly renown: RenownAhead } {
+): {
+  readonly input: RunSimInput;
+  readonly notSimulated: readonly NotSimulated[];
+  readonly unknownHistory: readonly RosterUnit[];
+  readonly endpoint: string;
+  readonly goldUnrecorded: boolean;
+  readonly renown: RenownAhead;
+  /** The held items the plan can spend (#193), counted or not. */
+  readonly sources: readonly PlanSource[];
+} {
   const run = plan ? withPlanRobin(given, plan) : given;
   const marriages = plan ? (plan.wishlist.marriages as readonly Couple[]) : givenMarriages;
   const difficulty: Difficulty = run.roster.run.difficulty ?? 'normal';
@@ -305,6 +319,10 @@ export function flawlessInput(
   // Side goals chased or skipped by the plan's pins, else the default rule; renown's rewards on their maps (#191).
   const choices = sideGoalChoices(run.sideGoals);
   const renown = renownAhead(run, order.steps, assumptions['paralogue-renown']);
+  // Held items (#193): the snapshot's and each map's pick-ups, and the plan's uses map by map.
+  const sources = itemSources(snap, order.steps, choices);
+  const items = simItems(sources, order.steps.map((s) => s.key));
+  const plannedItems = plan?.roadmap.items ?? [];
   const maps: RunSimMap[] = order.steps.map((step, k) => {
     const data = MAPS.find((m) => m.id === step.map)!;
     const joining: ArmyUnit[] = [];
@@ -355,6 +373,7 @@ export function flawlessInput(
         chase: decision === 'chase',
         parts: goal.parts.map((p, i) => ({ chase: { id: `${goal.id}#${i}`, actions: p.actions, by: p.by }, gold: p.gold, seals: p.seals })),
       }));
+    const uses = simUses(plannedItems, step.key);
     const m: RunSimMap = {
       key: step.key,
       label: `${data.label}${step.secret ? ' (secret route)' : ''}`,
@@ -370,6 +389,9 @@ export function flawlessInput(
       income: sureIncome(data) + reward.gold,
       seals: { master: sure.master + reward.master, second: sure.second + reward.second },
       ...(goals.length ? { sideGoals: goals } : {}),
+      ...(items.finds.get(step.key)?.length ? { finds: items.finds.get(step.key)! } : {}),
+      ...(uses.length ? { uses } : {}),
+      ...(hasPreparations(step.map) ? {} : { noPreparations: true }),
     };
     cleared.add(step.map);
     return m;
@@ -397,12 +419,14 @@ export function flawlessInput(
       ...lineups,
       // The plan's class changes (#194); without a plan, each unit's best promotion by the endpoint.
       ...(plan ? { seals: plan.roadmap.seals } : {}),
+      ...(items.held.length ? { held: items.held } : {}),
     },
     notSimulated,
     unknownHistory,
     endpoint: order.endpoint.key,
     goldUnrecorded,
     renown,
+    sources,
   };
 }
 
@@ -444,6 +468,16 @@ function recruitsOn(map: SimMap, onMap: ReadonlyMap<string, { readonly played: b
 /** Each couple once, from a map of spouses both ways. */
 const couplesOf = (spouses: ReadonlyMap<RosterUnit, RosterUnit>): [RosterUnit, RosterUnit][] =>
   [...spouses].filter(([a, b]) => spouses.get(b) !== a || a < b).map(([a, b]) => [a, b]);
+
+/**
+ * A run's held items (#193, `itemSources`) over the map order still to play: the latest entry's after its shopping,
+ * then each map's pick-ups, side goals chased by the run's pins or the default rule. `steps` are the map order's.
+ */
+export function runItemSources(run: Run): { readonly steps: MapOrder['steps']; readonly sources: readonly PlanSource[] } {
+  const steps = remainingMapOrder(run).steps;
+  const last = latestEntry(run);
+  return { steps, sources: itemSources(last ? entryAfterShopping(last) : EMPTY_SNAPSHOT, steps, sideGoalChoices(run.sideGoals)) };
+}
 
 /** The flawless chance of a run from the next map to the endpoint (see `simulateRuns`). */
 export function flawlessChance(run: Run, assumptions: Assumptions, options: FlawlessOptions = {}): FlawlessChance {

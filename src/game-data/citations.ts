@@ -129,3 +129,9 @@ export const FEW_CHILD_PARALOGUES: Citation = {
 export const FEW_PARALOGUE_7: Citation = { label: 'FEW Noble Lineage (P7, oldid 769016)', url: 'https://fireemblemwiki.org/w/index.php?oldid=769016' };
 export const JP_PARALOGUES: Citation = { label: 'JP 2ch wiki paralogues (p.144, 84, 145, 147, 138) and FAQ (p.19)', url: 'https://w.atwiki.jp/fireemblem3ds/pages/84.html' };
 export const FEW_LUCINA: Citation = { label: 'FEW Lucina (inheritance note)', url: 'https://fireemblemwiki.org/wiki/Lucina' };
+/** How the solve allocates stat boosters, tonics and held weapons (#166): the item plan's grilling and its facts. */
+export const ITEM_PLAN_GRILLING: Citation = {
+  label: 'How does the solve allocate stat boosters, tonics and held weapons? (#166)',
+  url: 'https://github.com/AttackOnTyler/fe13-child-calc/issues/166',
+};
+export const SF_ITEMS: Citation = { label: 'SF items', url: 'https://serenesforest.net/awakening/inventory/items/' };

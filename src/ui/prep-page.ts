@@ -4,7 +4,7 @@
  * inventory, against one foe at a time on the run's difficulty. Lunatic+ assumes the pool's worst case.
  */
 import type { ChapterDifficulty, Couple, Difficulty, Engine, FlawlessOptions, Foe, Matchup, Plan, PrepUnits, RosterUnit, Run, ShoppingLine, SimGroup, Snapshot } from '../engine';
-import { EMPTY_SNAPSHOT, KIT_FORGE_MT, REINFORCEMENT_RULE, bestWeapon, dangerFlags, deployCount, fighterOf, foeKey, foesOf, forcedOn, latestEntry, prepUnits, promotionAdvice, sealAvailability, sealsHeld, simLineup, suggestDeployment, suggestLoadout, unitName, withSeenSkills, type DeployCandidate, type DeploymentRole } from '../engine';
+import { EMPTY_SNAPSHOT, KIT_FORGE_MT, NO_PREPARATIONS, REINFORCEMENT_RULE, bestWeapon, dangerFlags, deployCount, fighterOf, foeKey, foesOf, forcedOn, latestEntry, prepUnits, promotionAdvice, sealAvailability, sealsHeld, simLineup, suggestDeployment, suggestLoadout, unitName, withSeenSkills, type DeployCandidate, type DeploymentRole } from '../engine';
 import { chanceText } from './chance';
 import { goldRange, goldText } from './run-page';
 import { CHILD_UNITS } from '../game-data/children';
@@ -297,11 +297,11 @@ function loadouts(
   );
 }
 
-const WHY: Readonly<Record<ShoppingLine['kind'], string>> = { rebuy: 'runs dry before the next armory', seal: 'for a promotion', kit: 'endpoint kit' };
+const WHY: Readonly<Record<ShoppingLine['kind'], string>> = { rebuy: 'runs dry before the next armory', seal: 'for a promotion', tonic: 'the item plan’s tonic for this map', kit: 'endpoint kit' };
 
 /**
  * The shopping list for the next armory stop (#190): what the simulated runs buy there, in priority order (rebuys,
- * seals, the endpoint kit), each with the chance a run makes it, and the gold on arrival as a range.
+ * seals, tonics, the endpoint kit), each with the chance a run makes it, and the gold on arrival as a range.
  */
 export function shoppingReadout(engine: Engine, run: Run, options?: FlawlessOptions): { readonly title: string; readonly note: string; readonly rows: readonly (readonly string[])[] } {
   const r = engine.flawlessChance(run, options);
@@ -309,7 +309,7 @@ export function shoppingReadout(engine: Engine, run: Run, options?: FlawlessOpti
   if (!stop) return { title: 'Shopping list', note: r.maps.length ? 'No simulated run reaches an open armory with nobody lost.' : 'The endpoint is recorded: nothing left to buy for.', rows: [] };
   const note =
     `Gold on arrival: ${goldRange(stop.gold)}${r.goldUnrecorded ? ' (your latest entry records no gold, read as none)' : ''}. ` +
-    'What the simulated runs buy here, in priority order: rebuys for items that would run dry before the next armory, a seal when a promotion needs one and none is held, then at the endpoint the endpoint kit, dropping what wins fewest matchups per gold when gold runs short. Only Bullion is sold; merchants are random, so their stock isn’t counted.';
+    'What the simulated runs buy here, in priority order: rebuys for items that would run dry before the next armory, a seal when a promotion needs one and none is held, the item plan’s tonics for this map, then at the endpoint the endpoint kit, dropping what wins fewest matchups per gold when gold runs short. Only Bullion is sold; merchants are random, so their stock isn’t counted.';
   const rows = stop.lines.map((l) => [
     l.name,
     `${l.action === 'forge' ? `Forge ${l.item} to +${KIT_FORGE_MT} Mt` : `Buy ${l.item}`} (${WHY[l.kind]})`,
@@ -320,6 +320,61 @@ export function shoppingReadout(engine: Engine, run: Run, options?: FlawlessOpti
 }
 
 type Shopping = ReturnType<typeof shoppingReadout>;
+
+/** The seed plans the page reads (#198), by run: the shopping list and the "before this map" list share one. */
+const PLANS = new WeakMap<Run, Plan>();
+const planOf = (ctx: PrepContext): Plan | undefined => {
+  if (!ctx.plan) return undefined;
+  let p = PLANS.get(ctx.run);
+  if (!p) PLANS.set(ctx.run, (p = ctx.plan(ctx.roleOf)));
+  return p;
+};
+
+const BEFORE_VERB = { booster: 'Drink', tonic: 'Drink', boots: 'Use', handover: 'Hand over' } as const;
+
+/**
+ * The "before this map" list (#193): what the plan's item plan does in this map's preparations, in its order: boosters
+ * and tonics to drink (a tonic bought first when none is held), weapons to hand to their carrier. A map with no
+ * preparation phase says so.
+ */
+export function beforeThisMapReadout(engine: Engine, run: Run, map: string, plan: Plan | undefined): { readonly note: string; readonly rows: readonly string[] } {
+  if (NO_PREPARATIONS.has(map)) return { note: 'No preparation phase: the game fields everyone on this map, so nothing is used before it.', rows: [] };
+  const gender = run.roster.run.gender;
+  const name = (u: RosterUnit | 'convoy') => (u === 'convoy' ? 'the convoy' : unitName(u, gender));
+  const items = plan ? engine.beforeThisMap(run, plan, map) : [];
+  const rows = items.map((b) =>
+    b.kind === 'handover'
+      ? `Hand over ${b.item}: ${name(b.from!)} → ${name(b.unit)}`
+      : `${BEFORE_VERB[b.kind]} ${b.item}: ${name(b.unit)}${b.kind === 'tonic' ? (b.buy ? ' (buy it first: 150G)' : ' (held)') : ''}${b.kind === 'boots' ? ' (your call: outside the model)' : ''}`,
+  );
+  return { note: rows.length ? 'In the preparations, before you start the map. Tick each as you do it; Record results asks what you used.' : 'The plan uses no items before this map.', rows };
+}
+
+type BeforeList = ReturnType<typeof beforeThisMapReadout>;
+const BEFORE = new WeakMap<Run, BeforeList>();
+
+/** The "before this map" list (#193): it seeds the plan, so the page renders first and the list fills in after. */
+function beforeThisMap(ctx: PrepContext): HTMLElement {
+  const draw = (b: BeforeList | undefined) =>
+    h(
+      'details',
+      { class: 'before-map', open: true },
+      h('summary', {}, b ? `Before this map (${b.rows.length})` : 'Before this map: working it out…'),
+      b ? h('p', { class: 'muted small' }, b.note) : null,
+      ...(b?.rows ?? []).map((r) => h('label', { class: 'row small' }, h('input', { type: 'checkbox' }), ` ${r}`)),
+    );
+  const done = BEFORE.get(ctx.run);
+  if (done) return draw(done);
+  const el = draw(undefined);
+  const run = ctx.run;
+  setTimeout(() => {
+    if (!el.isConnected) return;
+    const b = BEFORE.get(run) ?? beforeThisMapReadout(ctx.engine, run, ctx.map, planOf(ctx));
+    BEFORE.set(run, b);
+    if (el.isConnected) el.replaceWith(draw(b));
+  }, 0);
+  return el;
+}
 
 /** Shopping lists already worked out, by run (a run is replaced, never edited). */
 const SHOPPING = new WeakMap<Run, Shopping>();
@@ -349,7 +404,8 @@ function shopping(ctx: PrepContext): HTMLElement {
   const run = ctx.run;
   setTimeout(() => {
     if (!el.isConnected) return;
-    const s = SHOPPING.get(run) ?? shoppingReadout(ctx.engine, run, { roleOf: ctx.roleOf, ...(ctx.plan ? { plan: ctx.plan(ctx.roleOf) } : {}) });
+    const plan = planOf(ctx);
+    const s = SHOPPING.get(run) ?? shoppingReadout(ctx.engine, run, { roleOf: ctx.roleOf, ...(plan ? { plan } : {}) });
     SHOPPING.set(run, s);
     if (el.isConnected) el.replaceWith(draw(s));
   }, 0);
@@ -500,6 +556,7 @@ export function prepPage(ctx: PrepContext): HTMLElement[] {
       lplus ? checklist(ctx, foes, pool, seen) : null,
       deploymentSection(ctx, deployment, byUnit, prep, gender),
       loadouts(deployment, byUnit, snap, foes, poolFor, gender),
+      beforeThisMap(ctx),
       shopping(ctx),
       seals(ctx, deployment, byUnit, snap, foes, poolFor, gender, prep.mapOnly),
       howToRun(ctx.engine, m.id),

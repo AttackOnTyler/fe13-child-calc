@@ -20,6 +20,8 @@
  *   coverage, each couple the plan marries paired until it marries), so the seed decides only the endpoint's, the
  *   wishlist's. The map order is the route's template. Its class changes (#194, `plannedSeals`) take every unit to its
  *   wishlist class (a unit off the wishlist to its best promotion) by the endpoint.
+ *   Its item plan (#193, `seedItems`) places each held item where it wins the wishlist the most at the endpoint,
+ *   item pins kept.
  *
  * Deterministic: the same run and pins give the same seed. Cheap: no map is played (a Full route seed takes about
  * 0.15 s, 0.2 s with Robin open, plus about 0.25 s for the builds the first time); the flawless chance is its
@@ -51,6 +53,7 @@ import { remainingMapOrder } from '../map-order';
 import type { BuildMatch, ChildResult, Pairing, ParentRef, RobinRef } from '../types';
 import type { PageSubject } from '../unit-page';
 import { hungarian } from './hungarian';
+import { seedItems } from './items';
 import type { Plan, PlanLineup, PlanPin, PlanRobin, WishlistChild, WishlistUnit } from './plan';
 
 /** What the seed needs from the engine: pairings as it resolves them, and builds from the play context's templates. */
@@ -67,7 +70,7 @@ export type SeedContext = {
 };
 
 export type SeedOptions = {
-  /** Hard constraints: a pinned couple marries. */
+  /** Hard constraints: a pinned couple marries; an item pin places its item (#193). */
   readonly pins?: readonly PlanPin[];
   /** Each unit's deployment role for the greedy lineups; by default the roster's tag, a child leads (until #212). */
   readonly roleOf?: (u: RosterUnit) => DeploymentRole;
@@ -244,7 +247,7 @@ export function seedPlan(run: Run, ctx: SeedContext, options: SeedOptions = {}):
   // Non-starters (#194, #199): a couple that can't reach S before its deadline brings no child. Move its child's
   // paralogue later where it can move; a couple still stuck isn't matched again (pins and records stay).
   const forbidden = new Set<string>();
-  const pinned = new Set((options.pins ?? []).map((p) => coupleKey(p.couple)));
+  const pinned = new Set((options.pins ?? []).flatMap((p) => (p.kind === 'marriage' ? [coupleKey(p.couple)] : [])));
   for (let i = 0; ; i++) {
     const plan = placedForSupports(run, ctx.assumptions, seedOnce(run, ctx, options, forbidden));
     const stuck = nonStarters(run, ctx.assumptions, plan).filter((c) => !pinned.has(coupleKey(c)));
@@ -306,6 +309,7 @@ function seedOnce(run: Run, ctx: SeedContext, options: SeedOptions, forbidden: R
   const married = new Set<RosterUnit>([...recorded.flat(), ...(recordedChrom ? ['chrom' as const] : [])]);
   const pinned: Couple[] = [];
   for (const pin of options.pins ?? []) {
+    if (pin.kind !== 'marriage') continue;
     const [a, b] = pin.couple;
     if (married.has(a) || married.has(b) || pinned.some((c) => c.includes(a) || c.includes(b))) continue;
     pinned.push([a, b]);
@@ -391,7 +395,7 @@ export function planFor(run: Run, ctx: SeedContext, options: SeedOptions, robin:
     roadmap: { order: [], lineups: [], seals: [], items: [] },
   };
   const planned = withPlanRobin(run, shell);
-  const { input, endpoint } = flawlessInput(planned, ctx.assumptions, options.roleOf, marriages as Couple[] as [RosterUnit, RosterUnit][]);
+  const { input, endpoint, sources } = flawlessInput(planned, ctx.assumptions, options.roleOf, marriages as Couple[] as [RosterUnit, RosterUnit][]);
   const r = robinRef(robin);
   const inArmy = new Set(input.army.map((a) => a.id));
 
@@ -435,7 +439,7 @@ export function planFor(run: Run, ctx: SeedContext, options: SeedOptions, robin:
   return {
     robin,
     wishlist: { endpoint, units, marriages: marriages.map(([a, b]) => [a, b] as const), children, reserves: [] },
-    roadmap: { order: input.maps.map((m) => m.key), lineups, seals: plannedSeals(input, (u) => classOf.get(u), endpoint), items: [] },
+    roadmap: { order: input.maps.map((m) => m.key), lineups, seals: plannedSeals(input, (u) => classOf.get(u), endpoint), items: seedItems(input, sources, army, options.pins ?? [], ctx.assumptions) },
   };
 }
 

@@ -3,6 +3,7 @@
  * inventory tables with Fire Emblem Wiki's effects (items/list.ts); SF's forging page gives the rules.
  */
 import { ITEM_LIST } from './items/list';
+import type { Stat } from './stats';
 
 export type ItemKind = 'sword' | 'lance' | 'axe' | 'bow' | 'tome' | 'staff' | 'stone' | 'beaststone' | 'item';
 /** A weapon deals bonus damage (three times Mt) to these units. */
@@ -111,6 +112,35 @@ export function sellPrice(item: GameItem, usesLeft?: number): number {
   const left = item.uses ? Math.min(usesLeft ?? item.uses, item.uses) / item.uses : 1;
   return Math.floor(share * left + 1e-9);
 }
+
+/**
+ * Stat boosters and tonics (#193; SF items, the list's descriptions; the item-plan grilling, #166): a booster raises its
+ * stat for good by 2 (the Seraph Robe HP by 5) and never raises the cap; a tonic raises it by as much until the map's
+ * end, and can pass the cap. Boots (+2 Move, once per unit) and the Arms Scroll (every weapon rank +1 level) are held
+ * items too, but the simulation has no movement or weapon ranks.
+ */
+export const STAT_BOOSTERS: Readonly<Record<string, Stat>> = {
+  'Seraph Robe': 'hp',
+  'Energy Drop': 'str',
+  'Spirit Dust': 'mag',
+  'Secret Book': 'skl',
+  Speedwing: 'spd',
+  'Goddess Icon': 'lck',
+  Dracoshield: 'def',
+  Talisman: 'res',
+};
+export const TONICS: Readonly<Record<string, Stat>> = {
+  'HP Tonic': 'hp',
+  'Strength Tonic': 'str',
+  'Magic Tonic': 'mag',
+  'Skill Tonic': 'skl',
+  'Speed Tonic': 'spd',
+  'Luck Tonic': 'lck',
+  'Defense Tonic': 'def',
+  'Resistance Tonic': 'res',
+};
+/** What a booster or tonic adds to its stat: +5 HP, else +2. */
+export const statItemGain = (stat: Stat): number => (stat === 'hp' ? 5 : 2);
 
 /** Weapon and item disagreements between SF and FEW: SF's value is used (the ticket's primary source). */
 export type ItemDisagreement = { readonly id: string; readonly item: string; readonly used: string; readonly other: string; readonly status: 'open' | 'resolved'; readonly why: string };

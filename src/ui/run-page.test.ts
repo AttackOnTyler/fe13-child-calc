@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, addEntry, createEngine, editEntry, latestEntry, recordMarriage, runFromRoster, withRenown, withRun, withShopLine, withSideGoalPin, withSideGoalSecured, type Route, type RosterUnit, type Run, type Snapshot, type UnitSnapshot } from '../engine';
-import { childStatsNote, flawlessReadout, heldText, mapOrderReadout, solvedReadout, parseHeldText, parseSupportsText, roadmapReadout, shoppingReadout, sideGoalPlanReadout, sideGoalsReadout, supportsText } from './run-page';
+import { EMPTY_ROSTER, addEntry, createEngine, editEntry, latestEntry, recordMarriage, runFromRoster, withRenown, withRun, withShopLine, withSideGoalPin, withSideGoalSecured, withItemPin, withItemsUsed, unitName, type Route, type RosterUnit, type Run, type Snapshot, type UnitSnapshot } from '../engine';
+import { childStatsNote, flawlessReadout, heldText, itemPlanReadout, itemsUsedReadout, mapOrderReadout, solvedReadout, parseHeldText, parseSupportsText, roadmapReadout, shoppingReadout, sideGoalPlanReadout, sideGoalsReadout, supportsText } from './run-page';
 import { chanceText } from './chance';
 
 describe('the map order readout (#179)', () => {
@@ -258,5 +258,48 @@ describe('side goals and renown on the Run view (#191)', () => {
     const after = sideGoalsReadout(engine, recorded, 'e2');
     expect(after.goals[0]).toMatchObject({ secured: false, note: 'as you recorded it' });
     expect(after.renown).toBe('Renown after this map: 55 (reached: Glass Sword).');
+  });
+});
+
+describe('the item plan on the Run view and Record results’ items used (#193)', () => {
+  const engine = createEngine();
+  const facts = withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal', gender: 'M', asset: 'mag', flaw: 'hp' });
+  const played = (maps: readonly string[], from = runFromRoster(facts)) => maps.reduce((r, m, i) => addEntry(r, m, from.entries.length + i + 1), from);
+  const steps = engine.mapOrder(played([])).steps;
+  const all = steps.map((s) => s.map);
+  const start = played(all.slice(0, -2));
+  const run = editEntry(start, latestEntry(start)!.id, (s) => ({ ...s, convoy: [{ item: 'Energy Drop', uses: 1 }, { item: 'Boots', uses: 1 }] }), 1);
+  const label = (key: string) => engine.maps().find((m) => m.id === steps.find((s) => s.key === key)!.map)!.label;
+  const plan = engine.seedPlan(run);
+  const drop = plan.roadmap.items.find((p) => p.item === 'Energy Drop')!;
+
+  it('shows each held item’s planned use, Boots outside the model, and the tonics to buy per map', () => {
+    const r = itemPlanReadout(engine, run, plan, undefined);
+    expect(r.rows.find((x) => x.item === 'Energy Drop')).toMatchObject({ text: `Energy Drop (held): ${unitName(drop.unit, 'M')} at ${label(drop.key)}`, pin: { kind: 'booster', unit: undefined } });
+    expect(r.rows.find((x) => x.item === 'Boots')!.text).toBe('Boots (held): your call, outside the model (it has no movement): pin it to assign them');
+    const buys = plan.roadmap.items.filter((p) => p.source === 'buy');
+    expect(r.tonics).toEqual(buys.length ? [`Endgame: ${buys.length} tonic${buys.length === 1 ? '' : 's'}, ${(buys.length * 150).toLocaleString('en-US')}G`] : []);
+    expect(r.summary).toMatch(/^Item plan: \d+ of \d+ held items used/);
+  });
+
+  it('keeps a pin, marked as pinned', () => {
+    const pinned = withItemPin(run, { kind: 'booster', item: 'Energy Drop', unit: 'chrom' });
+    const pins = pinned.itemPins!;
+    const r = itemPlanReadout(engine, pinned, engine.seedPlan(pinned, { pins }), undefined, pins);
+    const row = r.rows.find((x) => x.item === 'Energy Drop')!;
+    expect(row.text).toMatch(/^Energy Drop \(held\): Chrom at .* \(pinned\)$/);
+    expect(row.pin).toMatchObject({ kind: 'booster', unit: 'chrom' });
+  });
+
+  it('pre-fills the items used step from the plan before the map, and keeps what’s recorded', () => {
+    const map = steps.find((s) => s.key === drop.key)!.map;
+    const done = played(all.slice(all.length - 2, all.indexOf(map) + 1), run);
+    const entry = latestEntry(done)!.id;
+    const r = itemsUsedReadout(engine, done, entry, plan);
+    expect(r.note).toBe('Pre-filled from the plan’s “before this map” list: untick what you didn’t use, add what you did.');
+    expect(r.items).toContainEqual({ item: 'Energy Drop', unit: drop.unit, used: true, text: `Energy Drop → ${unitName(drop.unit, 'M')}` });
+    const recorded = itemsUsedReadout(engine, withItemsUsed(done, entry, [], 2), entry, plan);
+    expect(recorded.note).toBe('As you recorded it: tick what was used.');
+    expect(recorded.items).toContainEqual(expect.objectContaining({ item: 'Energy Drop', used: false }));
   });
 });

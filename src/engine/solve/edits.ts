@@ -20,7 +20,11 @@
  * - **Paralogue places:** a child paralogue (a movable step) moves one map earlier or later, never past the endpoint.
  * - **Seals:** a planned class change is needed by an earlier map (a quarter, half or three quarters of the way), or
  *   by the endpoint.
- * - **Item uses and side goals:** none yet: item uses come with #193, side goals' chase/skip edits with #191's pins.
+ * - **Item uses (#193):** a booster or tonic goes to another wishlist unit on its map, or its unit takes it one step
+ *   earlier or later (a quarter of the route, to the next or previous map with a preparation phase); a weapon's
+ *   carrier from a map changes to another wishlist unit who wields its kind. An item pin is a hard constraint: a pinned
+ *   item's uses aren't edited. Boots and the Arms Scroll aren't edited (no pin: no use).
+ * - **Side goals:** none yet: their chase/skip edits come with #191's pins.
  *
  * **Non-starters first (#194):** while the best plan has a couple that can't reach S by its deadline, the edits that
  * could fix it come first: its child's paralogue moved later (`placedForSupports`), then the marriages touching it.
@@ -30,6 +34,9 @@ import { MAPS } from '../../game-data/chapters';
 import { CHROM_FALLBACK_PARTNER } from '../../game-data/supports';
 import { STATS, type Stat } from '../../game-data/stats';
 import { flawlessInput } from '../flawless';
+import { hasPreparations, heldKind } from '../item-plan';
+import { itemByName } from '../../game-data/items';
+import { classWeaponKinds } from '../supply';
 import { remainingMapOrder } from '../map-order';
 import { rosterUnits, stateOf, unitName, type Couple, type RosterUnit } from '../roster';
 import { CHILD_UNITS, type ChildId } from '../../game-data/children';
@@ -41,7 +48,7 @@ import { sealReaches } from '../sim/class-changes';
 import { mapsToS } from '../milestones';
 import { pairThresholds, pointsOfRank } from '../sim/support-growth';
 import { latestEntry, type Run } from '../run';
-import type { Plan, PlanLineup, PlanRobin, WishlistChild } from './plan';
+import type { Plan, PlanItem, PlanLineup, PlanRobin, WishlistChild } from './plan';
 import { UNAVAILABLE, genderOf, pairingsOf, placedForSupports, planFor, robinRef, type SeedContext, type SeedOptions } from './seed';
 import type { Edit, EditHints } from './step';
 
@@ -104,7 +111,7 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
   const recorded: Couple[] = (base.input.married ?? []).flatMap(([a, b]) => (b === 'maiden' ? [] : [[a, b] as const]));
   const fixed = new Set<RosterUnit>(recorded.flat());
   if ((base.input.married ?? []).some(([a, b]) => a === 'chrom' && b === 'maiden')) fixed.add('chrom');
-  for (const pin of options.pins ?? []) if (!pin.couple.some((u) => fixed.has(u))) pin.couple.forEach((u) => fixed.add(u));
+  for (const pin of options.pins ?? []) if (pin.kind === 'marriage' && !pin.couple.some((u) => fixed.has(u))) pin.couple.forEach((u) => fixed.add(u));
   const snap = latestEntry(run)?.snapshot;
   const fielded = new Set<RosterUnit>([...base.input.army.map((a) => a.id), ...base.input.maps.flatMap((m) => [...m.joining, ...m.later].map((a) => a.id)), 'robin']);
   const units = rosterUnits({ ...facts, gender });
@@ -333,5 +340,53 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
     }
   }
 
-  // Item uses (#193) and side goals (#191): none yet.
+  // Item uses (#193): another unit, another map, another carrier; pinned items stay as the pins have them.
+  const pinnedItems = new Set((options.pins ?? []).flatMap((p) => (p.kind === 'booster' || p.kind === 'carrier' ? [p.item] : [])));
+  const wishlist = plan.wishlist.units.map((w) => w.unit);
+  const classOf = (u: RosterUnit) => plan.wishlist.units.find((w) => w.unit === u)?.classId ?? entering.get(u)?.classId;
+  const inArmyBy = (u: RosterUnit, at: number) => (from.get(u) ?? (plan.wishlist.children.some((c) => c.child === u) ? Infinity : 0)) <= at;
+  const keyAt = new Map(keys.map((k, i) => [k, i]));
+  const mapOf = (k: string) => order.steps.find((s) => s.key === k)?.map ?? '';
+  const stride = Math.max(1, Math.floor(keys.length / 4));
+  /** The map index a quarter of the route from `i` (clamped), then on to the next map that way with a preparation phase. */
+  const shifted = (i: number, dir: number): number | undefined => {
+    let j = Math.min(keys.length - 1, Math.max(0, i + dir * stride));
+    while (j >= 0 && j < keys.length && !hasPreparations(mapOf(keys[j]!))) j += dir;
+    return j >= 0 && j < keys.length && j !== i ? j : undefined;
+  };
+  /** The map index a source arrives after (-1: held now). */
+  const arrivesAfter = (source: string) => (source.startsWith('held:') ? -1 : (keyAt.get(source.slice(0, source.indexOf(':'))) ?? -1));
+  const withItems = (items: readonly PlanItem[]): Plan => ({ ...plan, roadmap: { ...plan.roadmap, items } });
+  const itemEdit = (what: string, label: string, items: readonly PlanItem[]): Edit => ({ kind: 'item', key: `item:${what}`, label, make: () => withItems(items) });
+  const replaced = (p: PlanItem, next: PlanItem) => plan.roadmap.items.map((x) => (x === p ? next : x));
+  for (const p of plan.roadmap.items) {
+    if (pinnedItems.has(p.item)) continue;
+    const kind = heldKind(p.item);
+    const at = keyAt.get(p.key);
+    if (at === undefined) continue;
+    const tag = `${p.source}@${p.key}>${p.unit}`;
+    if (kind === 'booster' || kind === 'tonic') {
+      for (const u of wishlist)
+        if (u !== p.unit && inArmyBy(u, at)) yield itemEdit(`${tag}:unit:${u}`, `${name(u)} takes ${p.item} on ${mapLabel(p.key)} instead of ${name(p.unit)}`, replaced(p, { ...p, unit: u }));
+      // A booster held from the start or found earlier can move; a tonic stays on its map's armory (a held one can move).
+      if (kind === 'tonic' && p.source === 'buy') continue;
+      for (const dir of [-1, 1]) {
+        const j = shifted(at, dir);
+        if (j === undefined || !inArmyBy(p.unit, j) || j <= arrivesAfter(p.source)) continue;
+        const k = keys[j]!;
+        yield itemEdit(`${tag}:map:${k}`, `${name(p.unit)} takes ${p.item} on ${mapLabel(k)} instead of ${mapLabel(p.key)}`, replaced(p, { ...p, key: k }));
+      }
+      continue;
+    }
+    if (kind !== 'weapon') continue;
+    const item = itemByName(p.item);
+    if (!item) continue;
+    for (const u of wishlist) {
+      const c = classOf(u);
+      if (u === p.unit || !c || !inArmyBy(u, at) || !classWeaponKinds(className(c, entering.get(u)?.gender ?? gender)).has(item.kind)) continue;
+      yield itemEdit(`${tag}:carrier:${u}`, `${name(u)} carries ${p.item} from ${mapLabel(p.key)} instead of ${name(p.unit)}`, replaced(p, { ...p, unit: u }));
+    }
+  }
+
+  // Side goals (#191): none yet.
 }

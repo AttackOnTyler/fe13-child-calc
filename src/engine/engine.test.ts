@@ -413,6 +413,7 @@ describe('assumption overrides', () => {
       'child-after-parent-death',
       'child-join-rounding', 'child-join-cap', 'maiden-join-stats', 'paralogue-renown',
       'class-change-internal-level', 'army-spread', 'support-past-threshold', 'chrom-wedding-olivia', 'chrom-wedding-tie-order', 'tome-miss-use',
+      'booster-to-child', 'booster-at-cap', 'tonic-stacking', 'item-in-preparations',
     ]);
     expect(engine.assumptions().every((a) => a.sources.length > 0 && a.why.length > 0)).toBe(true);
     expect(status(engine, 'maiden-growths')).toMatchObject({ isDefault: true, pairingsAffected: 1 + ASSET_FLAWS });

@@ -3,7 +3,7 @@
  * holds a snapshot: every unit's class, level, EXP, stats, skills, inventory and supports, plus the convoy and gold.
  * A new entry copies the one before; editing a past entry never reaches later ones, which are flagged instead.
  */
-import type { Assumptions, ChildId, CloseCall, DeploymentRole, Engine, FlawlessChance, FlawlessOptions, GoldSpread, HeldItem, MapOrderStep, Milestone, MilestonePoint, Plan, PlanPin, PlanProposal, PrunedComp, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
+import type { Assumptions, ChildId, CloseCall, DeploymentRole, Engine, FlawlessChance, FlawlessOptions, GoldSpread, HeldItem, ItemPin, ItemPlanRow, ItemUsed, MapOrderStep, Milestone, MilestonePoint, Plan, PlanPin, PlanProposal, PrunedComp, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
 import { chanceText, differenceText } from './chance';
 import { startSolve } from './solve-client';
 import { SOLVE_SECONDS, STEP_BUDGET, rosterUnits } from '../engine';
@@ -11,6 +11,7 @@ import { EMPTY_SNAPSHOT, FLAWLESS_SEED, SUPPORT_LEVELS, addEntry, childJoinFrom,
 import { removeClassChange, tierOfClass, withClassChange, withCountOverride, type Seal } from '../engine';
 import { entryAfterShopping, goldAfterShopping, removeShopLine, shopPrice, withShopLine, type ShopKind, type ShopLine } from '../engine';
 import { withRenown, withSideGoalPin, withSideGoalSecured, type SideGoalDecision, type SideGoalId } from '../engine';
+import { withItemPin, withItemsUsed } from '../engine';
 import { CHILD_UNITS } from '../game-data/children';
 import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
 import { h } from './dom';
@@ -38,11 +39,11 @@ export type RunContext = {
   readonly prepare: (map: string) => void;
   /** Each unit's deployment role, as the preparation page reads it: the flawless chance's lineups use it (#186). */
   readonly roleOf?: (u: RosterUnit) => DeploymentRole;
-  /** The marriages the player pinned (#198): the seed keeps them, so the flawless chance's plan does. */
+  /** The marriages the player pinned (#198) and the run's item pins (#193): the seed keeps them, so the flawless chance's plan does. */
   readonly pins?: () => readonly PlanPin[];
 };
 
-const RECORD_STEPS = ['Deployed units', 'Recruits', 'Deaths and marriages', 'Convoy and gold', 'Shopping', 'Side goals and renown'] as const;
+const RECORD_STEPS = ['Deployed units', 'Recruits', 'Deaths and marriages', 'Convoy and gold', 'Shopping', 'Side goals and renown', 'Items used'] as const;
 
 export function runView(ctx: RunContext): HTMLElement[] {
   if (ctx.showingMaps || ctx.maps.map) {
@@ -174,6 +175,9 @@ export type FlawlessReadout = {
   readonly found: readonly string[];
   /** The plan's roadmap (#194); absent once the endpoint is recorded. */
   readonly roadmap?: ReturnType<typeof roadmapReadout>;
+  /** The plan's item plan (#193), and the plan itself (its wishlist offers the item pins' units); absent once the endpoint is recorded. */
+  readonly items?: ItemPlanReadout;
+  readonly plan?: Plan;
 };
 
 /**
@@ -251,6 +255,8 @@ function readoutOf(
     : [];
   const status = progress ? (progress.done ? (progress.converged ? ' · searched' : '') : ' · searching…') : '';
   return {
+    items: itemPlanReadout(engine, run, plan, r, pins),
+    plan,
     text: `Flawless chance: ${chanceText(r.chance)} ±${points(r.margin)} · ${ceiling?.chance !== undefined ? `ceiling ${chanceText(ceiling.chance)}` : 'no ceiling yet'}${status}`,
     detail: detail.join(' '),
     rows: r.maps.map((m) => {
@@ -265,6 +271,92 @@ function readoutOf(
     roadmap: roadmapReadout(engine, run, plan),
     found,
   };
+}
+
+/** One item plan row as the Run view writes it (#193), with what its pin select offers. */
+export type ItemRowView = {
+  readonly source: string;
+  readonly item: string;
+  readonly text: string;
+  /** The pin it takes (a booster pin for boosters and Boots, a carrier pin for weapons), its unit if pinned, and its map. */
+  readonly pin: { readonly kind: ItemPin['kind']; readonly unit: RosterUnit | undefined; readonly key: string } | undefined;
+};
+
+export type ItemPlanReadout = { readonly summary: string; readonly rows: readonly ItemRowView[]; readonly tonics: readonly string[] };
+
+const ITEM_IDLE = {
+  'outside-model': 'your call, outside the model (it has no movement): pin it to assign them',
+  'no-rank': 'no planned use: it counts only where a rank unlocks a weapon on the route or in the kit, and weapon ranks aren’t recorded',
+  uncounted: 'not counted',
+  'no-gain': 'no planned use: no wishlist unit wins more with it',
+} as const;
+
+/**
+ * The item plan (#193) as the Run view writes it: one row per held item, owned or expected, with its planned use (a
+ * weapon's carrier from each map on), its arrival chance when it arrives only in some runs, and, with no use, why and
+ * its sell price; then tonics to buy per map ("Endgame: 6 tonics, 900G").
+ */
+export function itemPlanReadout(engine: Engine, run: Run, plan: Plan, chance: FlawlessChance | undefined, pins: readonly PlanPin[] = []): ItemPlanReadout {
+  const gender = run.roster.run.gender;
+  const name = (u: RosterUnit) => unitName(u, gender);
+  const steps = engine.mapOrder(run).steps;
+  const label = (key: string) => {
+    const st = steps.find((x) => x.key === key);
+    const m = st && engine.maps().find((x) => x.id === st.map);
+    return m ? `${m.label}${st!.secret ? ' (secret route)' : ''}` : key;
+  };
+  const p = engine.itemPlan(run, plan, { ...(chance ? { chance } : {}), pins });
+  const where = (r: ItemPlanRow) => (r.after ? `, ${label(r.after)}` : r.holder ? ` (${name(r.holder)} holds it)` : ' (held)');
+  const rows = p.rows.map((r): ItemRowView => {
+    const use =
+      r.kind === 'weapon'
+        ? r.uses.map((u) => `${name(u.unit)} from ${label(u.key)}`).join(', ')
+        : r.uses.map((u) => `${name(u.unit)} at ${label(u.key)}`).join(', ');
+    const arrives = r.uses.length && r.arrival !== undefined && (r.after || r.arrival < 1) ? ` · arrives in ${chanceText(r.arrival, { miss: 'misses', make: 'arrives' })} of runs` : '';
+    const idle = r.idle ? `${r.idle === 'uncounted' ? `${ITEM_IDLE.uncounted} (${r.note})` : ITEM_IDLE[r.idle]}${r.sell && r.idle !== 'outside-model' ? ` · sell: ${goldText(r.sell)}` : ''}` : '';
+    const text = `${r.item}${where(r)}: ${use || idle}${r.pinned ? ' (pinned)' : ''}${arrives}`;
+    const at = r.uses[0]?.key ?? (r.after ? steps[steps.findIndex((x) => x.key === r.after) + 1]?.key : steps[0]?.key);
+    const pinKind = r.kind === 'booster' || r.kind === 'boots' ? 'booster' : r.kind === 'weapon' ? 'carrier' : undefined;
+    const pinned = (run.itemPins ?? []).find((x) => x.kind === pinKind && x.item === r.item);
+    return { source: r.source, item: r.item, text, pin: pinKind && at ? { kind: pinKind, unit: pinned?.unit, key: pinned?.key ?? at } : undefined };
+  });
+  const tonics = p.tonics.map((t) => `${label(t.key)}: ${t.count} tonic${t.count === 1 ? '' : 's'}, ${goldText(t.gold)}`);
+  const used = p.rows.filter((r) => r.uses.length).length;
+  return { summary: `Item plan: ${used} of ${p.rows.length} held items used${p.tonics.length ? `, tonics on ${p.tonics.length} map${p.tonics.length === 1 ? '' : 's'}` : ''}`, rows, tonics };
+}
+
+/** The item plan section (#193): its rows with their pin selects, and the tonics to buy per map. */
+function itemPlanSection(ctx: RunContext, r: ItemPlanReadout | undefined, plan: Plan | undefined): HTMLElement {
+  const gender = ctx.run.roster.run.gender;
+  const choices = plan?.wishlist.units.map((u) => u.unit) ?? [];
+  const pin = (row: ItemRowView, unit: string) => {
+    if (!row.pin) return;
+    const u = (unit || row.pin.unit) as RosterUnit;
+    const p: ItemPin = row.pin.kind === 'booster' ? { kind: 'booster', item: row.item, unit: u } : { kind: 'carrier', item: row.item, unit: u, key: row.pin.key };
+    ctx.setRun(withItemPin(ctx.run, p, !unit));
+  };
+  return h(
+    'details',
+    { class: 'banner item-plan' },
+    h('summary', {}, h('b', {}, r?.summary ?? 'Item plan: working it out…')),
+    ...(r?.rows ?? []).map((row) =>
+      h(
+        'div',
+        { class: 'row small' },
+        h('span', {}, row.text),
+        row.pin
+          ? h(
+              'select',
+              { 'aria-label': `${row.item}: ${row.pin.kind === 'booster' ? 'who drinks it' : 'who carries it'}`, onchange: (ev) => pin(row, (ev.target as HTMLSelectElement).value) },
+              h('option', { value: '', ...(row.pin.unit ? {} : { selected: 'selected' }) }, 'Plan decides'),
+              ...[...new Set([...choices, ...(row.pin.unit ? [row.pin.unit] : [])])].map((u) => h('option', { value: u, ...(row.pin!.unit === u ? { selected: 'selected' } : {}) }, unitName(u, gender))),
+            )
+          : null,
+      ),
+    ),
+    r?.tonics.length ? h('div', { class: 'small' }, h('b', {}, 'Tonics to buy: '), r.tonics.join(' · ')) : null,
+    r ? h('span', { class: 'muted small' }, 'Boosters give +2 (+5 HP) from their map on, never past the cap; tonics +2 for one map, past it; weapons go to their carrier. Each is used in the map’s preparations (the early forced maps have none). A pin keeps your choice; the plan places the rest where they win the wishlist the most.') : null,
+  );
 }
 
 /** A side goal's decision as the Run view writes it (#191): a pin, or the default rule's reason. */
@@ -370,6 +462,64 @@ function sideGoalsStep(ctx: RunContext, e: RunEntry): HTMLElement[] {
   ];
 }
 
+/**
+ * Record results' items used step (#193), as the Run view writes it: the items used in the map's preparations as
+ * recorded, else pre-filled from the "before this map" list of `plan` (the plan before this entry), each with a tick.
+ */
+export function itemsUsedReadout(engine: Engine, run: Run, entry: string, plan: Plan | undefined): { readonly note: string; readonly items: readonly (ItemUsed & { readonly used: boolean; readonly text: string })[] } {
+  const r = engine.itemsUsed(run, entry, plan);
+  const planned = r.recorded ? engine.itemsUsed({ ...run, entries: run.entries.map((e) => (e.id === entry ? { ...e, itemsUsed: undefined } : e)) }, entry, plan).items : [];
+  const all = [...r.items, ...planned.filter((p) => !r.items.some((x) => x.item === p.item && x.unit === p.unit))];
+  const gender = run.roster.run.gender;
+  return {
+    note: r.recorded ? 'As you recorded it: tick what was used.' : all.length ? 'Pre-filled from the plan’s “before this map” list: untick what you didn’t use, add what you did.' : 'The plan used no items before this map: add any you used.',
+    items: all.map((x) => ({ ...x, used: r.items.includes(x), text: `${x.item} → ${unitName(x.unit, gender)}` })),
+  };
+}
+
+/** The plans before each entry (#193), by the entry before it: the items used step pre-fills from them. */
+const PLANS_BEFORE = new WeakMap<object, Plan>();
+const NO_ENTRY = {};
+
+/** The items used step (#193): ticks pre-filled from the plan, and a row to add an item used. */
+function itemsUsedStep(ctx: RunContext, e: RunEntry): HTMLElement[] {
+  const i = ctx.run.entries.findIndex((x) => x.id === e.id);
+  const prev = ctx.run.entries[i - 1] ?? NO_ENTRY;
+  let plan = PLANS_BEFORE.get(prev);
+  if (!plan) {
+    const pins = ctx.pins?.();
+    plan = ctx.engine.seedPlan({ ...ctx.run, entries: ctx.run.entries.slice(0, i) }, { ...(ctx.roleOf ? { roleOf: ctx.roleOf } : {}), ...(pins ? { pins } : {}) });
+    PLANS_BEFORE.set(prev, plan);
+  }
+  const r = itemsUsedReadout(ctx.engine, ctx.run, e.id, plan);
+  const set = (items: readonly ItemUsed[]) => ctx.setRun(withItemsUsed(ctx.run, e.id, items, ctx.now()));
+  const used = r.items.filter((x) => x.used).map(({ item, unit }) => ({ item, unit }));
+  const units = Object.keys(e.snapshot.units) as RosterUnit[];
+  let item = '';
+  let unit: RosterUnit | '' = '';
+  return [
+    h('p', { class: 'muted small' }, r.note),
+    ...r.items.map((x) =>
+      h(
+        'label',
+        { class: 'row' },
+        h('input', { type: 'checkbox', checked: x.used, onchange: (ev) => set((ev.target as HTMLInputElement).checked ? [...used, { item: x.item, unit: x.unit }] : used.filter((u) => !(u.item === x.item && u.unit === x.unit))) }),
+        ` ${x.text}`,
+      ),
+    ),
+    h(
+      'div',
+      { class: 'row small' },
+      'Also used: ',
+      input('', (v) => (item = v.trim()), { placeholder: 'Energy Drop', 'aria-label': 'Item used' }),
+      ' by ',
+      h('select', { 'aria-label': 'Used by', onchange: (ev) => (unit = (ev.target as HTMLSelectElement).value as RosterUnit) }, h('option', { value: '' }, '—'), ...units.map((u) => h('option', { value: u }, unitName(u, ctx.run.roster.run.gender)))),
+      h('button', { class: 'mini', onclick: () => item && unit && set([...used, { item, unit }]) }, 'Add'),
+    ),
+    h('span', { class: 'muted small' }, 'Asked rather than read from stat jumps: a +2 over what was expected could be a level-up.'),
+  ];
+}
+
 /** Gold as the app writes it: 12,500G. */
 export const goldText = (g: number) => `${Math.round(g).toLocaleString('en-US')}G`;
 
@@ -388,7 +538,7 @@ let live: { run: Run; el: HTMLElement } | undefined;
 /**
  * The flawless chance (#186) under the map order. The solve's Web Worker (#199) works it out off the page: the
  * headline updates as it improves the best plan, with what it found listed below (a full solve the first time, about
- * 30 s; a re-solve after an edit or a recorded map, about 5 s). Without a worker the page works out the seed plan's.
+ * 30 s; a re-solve after an edit or a recorded map, about 5 s). Without a worker the page works out the seed plan's. The item plan (#193) reads the same plan and runs.
  */
 function flawlessSection(ctx: RunContext): HTMLElement {
   const draw = (r: FlawlessReadout | undefined) =>
@@ -402,6 +552,7 @@ function flawlessSection(ctx: RunContext): HTMLElement {
         ? h('details', { class: 'roadmap' }, h('summary', {}, h('b', {}, r.roadmap.title)), h('ol', { class: 'small' }, ...r.roadmap.rows.map((x) => h('li', {}, x))))
         : null,
       r?.found.length ? h('ul', { class: 'small solve-found' }, ...r.found.map((x) => h('li', {}, x))) : null,
+      r?.items ? itemPlanSection(ctx, r.items, r.plan) : null,
     );
   const run = ctx.run;
   const el = draw(READOUTS.get(run));
@@ -481,7 +632,8 @@ export function childStatsNote(run: Run, e: RunEntry, u: RosterUnit, assumptions
 /**
  * Record results (#118): the entry is already a copy of the last, so every step only records changes: deployed units,
  * the map's recruits (pre-filled), deaths and marriages, convoy and gold at the map's end, shopping (#192), then side
- * goals secured (pre-filled from the map's finds) and renown, asked once for the run (#191).
+ * goals secured (pre-filled from the map's finds) and renown, asked once for the run (#191), then the items used in the
+ * map's preparations (pre-filled from the plan's "before this map" list, #193).
  */
 function recordResults(ctx: RunContext, e: RunEntry, step: number): HTMLElement {
   const i = ctx.run.entries.findIndex((x) => x.id === e.id);
@@ -542,8 +694,10 @@ function recordResults(ctx: RunContext, e: RunEntry, step: number): HTMLElement 
         return [h('p', { class: 'muted small' }, 'Gold and items as the map ended, before any shopping.'), goldAndConvoy(ctx, e), problems(e.snapshot)];
       case 4:
         return [shoppingSection(ctx, e)];
-      default:
+      case 5:
         return sideGoalsStep(ctx, e);
+      default:
+        return itemsUsedStep(ctx, e);
     }
   })();
   const last = step === RECORD_STEPS.length - 1;

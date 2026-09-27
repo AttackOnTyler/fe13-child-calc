@@ -22,6 +22,8 @@ import { parseClassChanges, parseCountOverrides, type ClassChange } from './inte
 import { entryAfterShopping, parseShopLines, type ShopLine } from './shopping';
 import { parseSideGoalPlan, parseSideGoalsSecured, type SideGoalId, type SideGoalPlan } from './side-goals';
 import { parseRenown, type RunRenown } from './renown';
+import { parseItemPins, parseItemsUsed, type ItemUsed } from './item-plan';
+import type { ItemPin } from './solve/plan';
 import { EMPTY_ROSTER, parseRoster, withSpouse, withState, type Roster, type RosterUnit, type RunFacts } from './roster';
 
 export type SupportLevel = 'C' | 'B' | 'A' | 'S';
@@ -76,6 +78,8 @@ export type RunEntry = {
   readonly shopping?: readonly ShopLine[];
   /** The side goals on this map secured or not, as Record results set them (#191); absent: pre-filled from the convoy. */
   readonly sideGoals?: Readonly<Partial<Record<SideGoalId, boolean>>>;
+  /** The items used in this map's preparations, as Record results set them (#193); absent: pre-filled from the plan. */
+  readonly itemsUsed?: readonly ItemUsed[];
 };
 
 export type Run = {
@@ -92,6 +96,8 @@ export type Run = {
   readonly sideGoals?: SideGoalPlan;
   /** The file's renown, asked once (#191): its start and the rewards already claimed. */
   readonly renown?: RunRenown;
+  /** Item pins (#193): a booster (or Boots) to a unit, a weapon's carrier from a map on; the plan keeps them. */
+  readonly itemPins?: readonly ItemPin[];
 };
 
 export const EMPTY_SNAPSHOT: Snapshot = { units: {}, convoy: [], gold: null, states: {}, spouses: {} };
@@ -515,6 +521,7 @@ export function parseRun(raw: unknown): Run {
     const classChanges = parseClassChanges(e.classChanges);
     const shopping = parseShopLines(e.shopping);
     const sideGoals = parseSideGoalsSecured(e.sideGoals);
+    const itemsUsed = parseItemsUsed(e.itemsUsed);
     return [
       {
         id: typeof e.id === 'string' && e.id ? e.id : `e${i + 1}`,
@@ -526,6 +533,7 @@ export function parseRun(raw: unknown): Run {
         ...(classChanges.length ? { classChanges } : {}),
         ...(shopping.length ? { shopping } : {}),
         ...(Object.keys(sideGoals).length ? { sideGoals } : {}),
+        ...(itemsUsed ? { itemsUsed } : {}),
       },
     ];
   });
@@ -538,7 +546,8 @@ export function parseRun(raw: unknown): Run {
   const withCounts: Run = Object.keys(counts).length ? { ...base, countOverrides: counts } : base;
   const pins = parseSideGoalPlan(raw.sideGoals);
   const renown = parseRenown(raw.renown);
-  const withGoals: Run = { ...withCounts, ...(Object.keys(pins).length ? { sideGoals: pins } : {}), ...(renown ? { renown } : {}) };
+  const itemPins = parseItemPins(raw.itemPins);
+  const withGoals: Run = { ...withCounts, ...(Object.keys(pins).length ? { sideGoals: pins } : {}), ...(renown ? { renown } : {}), ...(itemPins.length ? { itemPins } : {}) };
   return Object.keys(seen).length ? { ...withGoals, seen } : withGoals;
 }
 

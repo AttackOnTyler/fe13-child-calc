@@ -70,8 +70,13 @@ export type PlanLineup = {
  */
 export type PlanSeal = { readonly unit: RosterUnit; readonly classId: ClassId; readonly seal: 'master' | 'second'; readonly key: string };
 
-/** A held item's planned use or carrier (#193): the item, who holds or uses it, and from which map. */
-export type PlanItem = { readonly item: string; readonly unit: RosterUnit; readonly key: string };
+/**
+ * A held item's planned use or carrier (#193; `item-plan.ts`): the item, the unit, the map key, and which copy
+ * (`source`, an `ItemSource` id). A booster is drunk by the unit in that map's preparations; a tonic too (a held one
+ * first, else bought at an open armory there: `source` is `buy`); a weapon is handed to its carrier there and stays
+ * with it until the weapon's next entry. Boots and the Arms Scroll get one only from a pin, and it moves nothing.
+ */
+export type PlanItem = { readonly item: string; readonly unit: RosterUnit; readonly key: string; readonly source: string };
 
 /** The way from today to the wishlist. */
 export type Roadmap = {
@@ -103,10 +108,19 @@ export type Plan = {
 };
 
 /**
- * A pin (#200 adds span, carrier, side-goal and keep-in/out pins): a hard constraint on the solve. A marriage pin keeps
- * a couple the player wants. Recorded facts are never pins.
+ * A pin (#200 adds span, side-goal and keep-in/out pins): a hard constraint on the solve. A marriage pin keeps a couple
+ * the player wants. An item pin (#193) overrides the item plan for the first copy of its item the plan holds (by the
+ * time it arrives): a booster pin gives a booster (or Boots) to a unit, on a map when `key` is set, else on the first
+ * map the unit can drink it; a carrier pin hands a weapon to a unit from a map on ("Gradivus stays with Lucina from
+ * P21"). Recorded facts are never pins.
  */
-export type PlanPin = { readonly kind: 'marriage'; readonly couple: readonly [RosterUnit, RosterUnit] };
+export type PlanPin =
+  | { readonly kind: 'marriage'; readonly couple: readonly [RosterUnit, RosterUnit] }
+  | { readonly kind: 'booster'; readonly item: string; readonly unit: RosterUnit; readonly key?: string }
+  | { readonly kind: 'carrier'; readonly item: string; readonly unit: RosterUnit; readonly key: string };
+
+/** The item pins among a plan's pins (#193), as the Run stores them. */
+export type ItemPin = Extract<PlanPin, { readonly kind: 'booster' | 'carrier' }>;
 
 /** An improvement the search found (#199): the plan with the edit, what it changes, and its gain in flawless chance. */
 export type PlanProposal = {
@@ -192,8 +206,8 @@ export type SolveCursor = {
  * The roster's pinned marriages as marriage pins, each couple once: what the player kept on today's Plan page, until
  * the pins move into the plan's edits (#205). A lost pin (either unit dead, missed or benched) isn't one.
  */
-export function marriagePins(roster: Roster): PlanPin[] {
-  const out: PlanPin[] = [];
+export function marriagePins(roster: Roster): Extract<PlanPin, { readonly kind: 'marriage' }>[] {
+  const out: Extract<PlanPin, { readonly kind: 'marriage' }>[] = [];
   for (const [u, s] of Object.entries(roster.spouses) as [RosterUnit, Roster['spouses'][RosterUnit]][])
     if (s?.bond === 'pinned' && !pinLoss(roster, u) && !out.some((p) => p.couple.includes(u))) out.push({ kind: 'marriage', couple: [u, s.partner] });
   return out;
