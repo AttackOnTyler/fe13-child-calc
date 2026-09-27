@@ -412,7 +412,7 @@ describe('assumption overrides', () => {
       'inherit-duplicate-skill', 'inherit-same-skill', 'inherit-ineligible-bottom', 'inherit-last-skill',
       'child-after-parent-death',
       'child-join-rounding', 'child-join-cap', 'maiden-join-stats', 'paralogue-renown',
-      'class-change-internal-level', 'army-spread', 'support-past-threshold', 'chrom-wedding-olivia', 'chrom-wedding-tie-order', 'tome-miss-use',
+      'class-change-internal-level', 'army-spread', 'support-past-threshold', 'chrom-wedding-lost-candidate', 'tome-miss-use',
       'booster-to-child', 'booster-at-cap', 'tonic-stacking', 'item-in-preparations',
     ]);
     expect(engine.assumptions().every((a) => a.sources.length > 0 && a.why.length > 0)).toBe(true);
@@ -428,6 +428,9 @@ describe('assumption overrides', () => {
     const flavia = ds.find((d) => d.id === 'D2')!;
     expect(flavia.winning.value).toBe('+2');
     expect(flavia.losing.map((l) => l.value)).toEqual(['+1']);
+    // Chrom's Chapter 11 wedding: SF's tests settle the tie order, Olivia's threshold and what counts as a rank.
+    expect(ds.map((d) => d.id)).toEqual(expect.arrayContaining(['chrom-wedding-tie-order', 'chrom-wedding-olivia', 'chrom-wedding-viewed']));
+    expect(ds.find((d) => d.id === 'chrom-wedding-olivia')!.losing[0]!.value).toMatch(/C/);
     for (const d of ds) {
       for (const s of [...d.winning.sources, ...d.losing.flatMap((l) => l.sources)]) expect(s.url).toMatch(/^https?:\/\//);
     }

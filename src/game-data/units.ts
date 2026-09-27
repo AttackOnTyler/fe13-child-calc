@@ -91,10 +91,10 @@ export const FIRST_GEN_UNITS = {
   yenfay: { name: "Yen'fay", gender: 'M', growths: { hp: 60, str: 45, mag: 10, skl: 45, spd: 50, lck: 60, def: 30, res: 20 }, modifiers: { str: 1, mag: -2, skl: 2, spd: 4, lck: 0, def: -1, res: -2 }, classes: ['myrmidon', 'wyvern-rider', 'archer'], passesClasses: PASSES_NO_CLASSES },
   aversa: { name: "Aversa", gender: 'F', growths: { hp: 45, str: 25, mag: 45, skl: 35, spd: 40, lck: 65, def: 30, res: 30 }, modifiers: { str: -1, mag: 3, skl: 1, spd: 1, lck: -2, def: 0, res: 0 }, classes: ['pegasus-knight', 'wyvern-rider', 'dark-mage'], passesClasses: PASSES_NO_CLASSES },
   priam: { name: "Priam", gender: 'M', growths: { hp: 80, str: 60, mag: 10, skl: 40, spd: 30, lck: 50, def: 40, res: 10 }, modifiers: { str: 3, mag: -2, skl: 1, spd: 0, lck: 0, def: 2, res: -2 }, classes: ['mercenary', 'myrmidon', 'fighter'], passesClasses: PASSES_NO_CLASSES },
-  // Chrom's wife only if, at the end of Chapter 11, he has (almost) no support with any candidate (under 1 point with
-  // each) or all of them are married; otherwise the game marries him to the candidate he has the highest rank with (FEW
-  // Inheritance oldid 752340, SF Support Basics, JP-112). Olivia's threshold and the tie order are unsettled (SF Support
-  // Basics vs JP-27 / JP-89): see `CHROM_FALLBACK_PARTNER` in supports.ts. Not an S-support partner.
+  // Chrom's wife only if, at the end of Chapter 11, he has under 1 point (after rounding) with every candidate not
+  // married to someone else, or all of them are married; otherwise the game marries him to a candidate by his supports
+  // (SF Support Basics and its forum tests, topics 39984 and 40418; FEW Inheritance oldid 752340, FEW Maiden oldid
+  // 660417, JP-112): the full rule is on `CHROM_FALLBACK_PARTNER` in supports.ts. Not an S-support partner.
   // #13: she has no class set and passes no classes (SF-JS, FEW Maiden).
   // #13: modifiers resolved to all 0 (JP 2ch wiki p.79 "MOB村娘", FEW Lucina/Stats, SF-JS `'Maiden': empty`).
   // Growths are published nowhere (SF-JS `'Maiden': unknown`, FEW "??"), so they come from the assumptions.

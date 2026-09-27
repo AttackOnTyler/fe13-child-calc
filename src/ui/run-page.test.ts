@@ -135,7 +135,11 @@ describe('the roadmap readout (#194)', () => {
     expect(r.title).toBe(`Roadmap: ${milestones.length} milestones${stuck ? ` · ${stuck} non-starter${stuck === 1 ? '' : 's'}` : ''}`);
     expect(r.rows).toHaveLength(milestones.length);
     const chrom = milestones.findIndex((m) => m.id === 'support:chrom+sumia');
-    expect(r.rows[chrom]).toMatch(/^Chrom and Sumia reach S by the end of Chapter 11 \(fixed\): start fighting together between Chapter \d+ and Chapter \d+ \(\d maps\)$/);
+    expect(r.rows[chrom]).toMatch(/^Chrom marries Sumia at the end of Chapter 11 \(fixed\): a C with him viewed before Chapter 11; start fighting together between Chapter \d+ and Chapter \d+ \(1 map\)$/);
+    const olivia = engine.seedPlan(fresh, { pins: [{ kind: 'marriage', couple: ['chrom', 'olivia'] }] });
+    expect(roadmapReadout(engine, fresh, olivia).rows).toContain(
+      'Chrom marries Olivia at the end of Chapter 11 (fixed): 2 points with him on Chapter 11 (3 combats as his Support Unit), with no C with him viewed for Sumia, Sully and Maribelle',
+    );
     const kjelle = milestones.findIndex((m) => m.id === 'recruit:kjelle');
     expect(r.rows[kjelle]).toBe('Recruit Kjelle (Sully and Stahl) on Paralogue 8, before Endgame');
     const pass = milestones.find((m) => m.kind === 'skill' && m.unit === 'sumia' && m.for.kind === 'pass' && m.for.child === 'lucina');

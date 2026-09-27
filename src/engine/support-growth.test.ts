@@ -130,20 +130,28 @@ describe('Chrom’s wedding at the end of Chapter 11 in the simulation (#188)', 
     expect(wife(sim({ army: [cs, ...women], maps: [ch11(1, 1), end] }))!.b).toBe('sumia');
     // One combat with Sully on Chapter 11: 3 points to her B.
     expect(wife(sim({ army: [cs, ...women], maps: [ch11(2, 1), end], couples: [['chrom', 'sully']] }))!.b).toBe('sully');
-    // Sully and Maribelle tied: SF puts Sully first, the JP wiki Maribelle.
+    // Sully and Maribelle tied: Sully first.
     const sm = chrom([{ partner: 'sully', rank: 'C' }, { partner: 'maribelle', rank: 'C' }]);
     expect(wife(sim({ army: [sm, ...women], maps: [ch11(1, 1), end] }))!.b).toBe('sully');
-    const jp = createEngine(resolveAssumptions({ 'chrom-wedding-tie-order': 'jp' }));
-    expect(wife(sim({ army: [sm, ...women], maps: [ch11(1, 1), end] }, jp))!.b).toBe('maribelle');
   });
 
-  it('marries Olivia from 2 points with no C elsewhere (SF), or only from a C (JP), and the Maiden with no points', () => {
+  it('marries Olivia from 2 points with no viewed C elsewhere, from 1 point alone, and the Maiden with no points', () => {
     // Three combats with Olivia: 2 points, short of their C at 4.
-    const input = { army: [chrom(), ...women], maps: [ch11(2, 3), end], couples: [['chrom', 'olivia']] as const };
-    expect(wife(sim(input))!.b).toBe('olivia');
-    const jp = createEngine(resolveAssumptions({ 'chrom-wedding-olivia': 'rank-c' }));
-    expect(wife(sim(input, jp))!.b).toBe('maiden');
+    expect(wife(sim({ army: [chrom(), ...women], maps: [ch11(2, 3), end], couples: [['chrom', 'olivia']] }))!.b).toBe('olivia');
+    // One: 1 point, and nobody else has any.
+    expect(wife(sim({ army: [chrom(), ...women], maps: [ch11(2, 1), end], couples: [['chrom', 'olivia']] }))!.b).toBe('olivia');
+    // A viewed C with Sully beats her 2 points.
+    expect(wife(sim({ army: [chrom([{ partner: 'sully', rank: 'C' }]), ...women], maps: [ch11(2, 3), end], couples: [['chrom', 'olivia']] }))!.b).toBe('sully');
     expect(wife(sim({ army: [chrom(), ...women], maps: [ch11(1, 1), end] }))!.b).toBe('maiden');
+  });
+
+  it('counts a rank reached on Chapter 11 itself as not viewed: no rank, 0 points to go', () => {
+    // Four combats with Sumia on Chapter 11 reach her C (2 points), unviewed at the wedding: Sully's viewed C wins.
+    const r = sim({ army: [chrom([{ partner: 'sully', rank: 'C' }]), ...women], maps: [ch11(2, 4), end], couples: [['chrom', 'sumia']] });
+    expect(wife(r)!.b).toBe('sully');
+    // Reached the map before, it's viewed on the world map in between: a C tied with Sully's, 4 to go each, Sumia first.
+    const before = sim({ army: [chrom([{ partner: 'sully', rank: 'C' }]), ...women], maps: [step('m1', 4), ch11(1, 0), end], couples: [['chrom', 'sumia']] });
+    expect(wife(before)!.b).toBe('sumia');
   });
 
   it('gives Lucina the mother the run married Chrom to', () => {

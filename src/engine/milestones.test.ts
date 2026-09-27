@@ -32,16 +32,32 @@ const playedThrough = (last: string, units: Partial<Record<string, UnitSnapshot>
 };
 
 describe('support milestones (#194)', () => {
-  it('fixes Chrom’s wife’s deadline at the end of Chapter 11, a window counted in maps', () => {
+  it('makes Chrom’s wife win the game’s Chapter 11 rule, fixed at its end: a C with him viewed before Chapter 11', () => {
     const m = byId(all, 'support:chrom+sumia');
+    // The wedding makes it an S: no S needed before it.
     expect(m).toMatchObject({ kind: 'support', rank: 'S', fixed: true, nonStarter: false, units: ['chrom', 'sumia'], at: { key: 'chapter-11', when: 'end' } });
     if (m?.kind !== 'support') throw new Error('no support milestone');
+    expect(m.wedding).toEqual({ needs: 'viewed-c', rivals: ['sully', 'maribelle', 'olivia'] });
     const { earliest, latest, deadline, maps } = m.window;
-    expect(deadline).toEqual(m.at);
-    expect(maps).toBe(engine.supportCurve('chrom', 'sumia')!.mapsToS);
-    // The latest start leaves the curve's maps before the deadline: Chapter 11 itself counts.
-    expect(latest!.index).toBe(deadline.index + 1 - maps);
+    // Viewed on the world map before Chapter 11: reached by the end of the map before it.
+    expect(deadline).toMatchObject({ key: 'chapter-11', when: 'start' });
+    expect(maps).toBe(engine.supportCurve('chrom', 'sumia')!.mapsTo.C);
+    expect(latest!.index).toBe(deadline.index - maps);
     expect(earliest!.index).toBeLessThanOrEqual(latest!.index);
+  });
+
+  it('lets Olivia win Chrom’s wedding on Chapter 11 itself: 2 points there, with no other candidate’s C viewed', () => {
+    const olivia = engine.seedPlan(fresh, { pins: [{ kind: 'marriage', couple: ['chrom', 'olivia'] }] });
+    const m = byId(engine.milestones(fresh, olivia), 'support:chrom+olivia');
+    expect(m).toMatchObject({ kind: 'support', rank: 'S', fixed: true, nonStarter: false, at: { key: 'chapter-11', when: 'end' } });
+    if (m?.kind !== 'support') throw new Error('no support milestone');
+    expect(m.wedding).toEqual({ needs: 'olivia-points', rivals: ['sumia', 'sully', 'maribelle'] });
+    expect(m.window).toMatchObject({ earliest: { key: 'chapter-11' }, latest: { key: 'chapter-11' }, deadline: { key: 'chapter-11', when: 'end' }, maps: 1 });
+    // A C with Sumia already viewed shuts her out.
+    const chrom = { ...unit('Lord', 10), supports: [{ partner: 'sumia' as const, rank: 'C' as const }] };
+    const run = playedThrough('chapter-5', { chrom: chrom as UnitSnapshot });
+    const late = byId(engine.milestones(run, engine.seedPlan(run, { pins: [{ kind: 'marriage', couple: ['chrom', 'olivia'] }] })), 'support:chrom+olivia');
+    expect(late).toMatchObject({ nonStarter: true, wedding: { shutOutBy: ['sumia'] } });
   });
 
   it('puts a couple’s deadline at its child’s paralogue entry, and detects a non-starter', () => {

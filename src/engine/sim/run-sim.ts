@@ -964,12 +964,14 @@ function afterMap(state: RunState, step: RunSimMap, at: number, play: MapPlay, r
   for (const u of state.army.values()) u.boost = {};
   for (const f of step.finds ?? []) if (!f.part || play.chased?.[f.part] === true) state.pool.set(f.id, f);
   earn(state, step.map, play, rng, difficulty, assumptions);
+  // Chrom's wedding reads the ranks viewed before Chapter 11: those its points reached by the map before.
+  const viewed = step.map.id === CHROM_WEDDING_MAP ? new Map(state.supports) : undefined;
   growSupports(state, play, at, assumptions['support-past-threshold']);
   for (const a of step.later) if (!state.army.has(a.id)) join(state, a);
   for (const u of state.arriving) if (!state.army.has(u.base.id)) state.army.set(u.base.id, u);
   state.arriving = [];
   state.cleared.add(step.map.id);
-  if (step.map.id === CHROM_WEDDING_MAP) chromWedding(state, at, assumptions);
+  if (viewed) chromWedding(state, at, viewed, assumptions);
 }
 
 /** The chased side goals' parts, as the map play takes them (#191); undefined when the plan chases none there. */
@@ -1073,8 +1075,13 @@ function growSupports(state: RunState, play: MapPlay, at: number, rule: Assumpti
   for (const [a, b] of state.couples.values()) if (!state.married.has(a) && !state.married.has(b) && rankIn(state, a, b) === 'S') marry(state, a, b, at);
 }
 
-/** Chrom's wedding at the end of Chapter 11 when he's unmarried, by the game's rule over the run's points. */
-function chromWedding(state: RunState, at: number, assumptions: Assumptions) {
+/**
+ * Chrom's wedding at the end of Chapter 11 when he's unmarried, by the game's rule over the run's points. A rank is
+ * viewed only if `viewed` (the points as Chapter 11 began) reached it: one reached on Chapter 11 itself is pending, no
+ * new rank and 0 points to go, as there's no world-map stop before the wedding. A candidate out of the army (lost) is
+ * skipped only under the `chrom-wedding-lost-candidate` reading that says so.
+ */
+function chromWedding(state: RunState, at: number, viewed: ReadonlyMap<string, number>, assumptions: Assumptions) {
   if (state.married.has('chrom')) return;
   const candidates: RosterUnit[] = [...CHROM_WEDDING_CANDIDATES, ...(state.robin === 'F' ? (['robin'] as const) : [])];
   const standing: Partial<Record<RosterUnit, ChromStanding>> = {};
@@ -1082,11 +1089,13 @@ function chromWedding(state: RunState, at: number, assumptions: Assumptions) {
     const t = pairThresholds('chrom', c, state.robin);
     if (!t) continue;
     const points = state.supports.get(pairKey('chrom', c)) ?? 0;
-    const next = SUPPORT_LEVELS.map((r) => t[r]).find((need) => need !== undefined && need > points);
-    standing[c] = { points, rank: rankOf(points, t, false), toNext: next === undefined ? Infinity : next - points };
+    const rank = rankOf(viewed.get(pairKey('chrom', c)) ?? 0, t, false);
+    const next = SUPPORT_LEVELS.slice(rank ? SUPPORT_LEVELS.indexOf(rank) + 1 : 0).map((r) => t[r]).find((need) => need !== undefined);
+    standing[c] = { points, rank, toNext: next === undefined ? Infinity : Math.max(0, next - points) };
   }
-  const marriedElsewhere = new Set(candidates.filter((c) => state.married.has(c)));
-  marry(state, 'chrom', chromWifeByPoints(candidates, marriedElsewhere, standing, assumptions), at);
+  const lost = (c: RosterUnit) => assumptions['chrom-wedding-lost-candidate'] === 'skipped' && !state.army.has(c);
+  const out = new Set(candidates.filter((c) => state.married.has(c) || lost(c)));
+  marry(state, 'chrom', chromWifeByPoints(candidates, out, standing), at);
 }
 
 /** Robin's gender, from the army or a recruit. */
