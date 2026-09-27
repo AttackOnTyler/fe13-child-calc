@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chanceText, differenceText, killText, stressText } from './chance';
+import { chanceText, chanceWithMargin, differenceText, killText, marginText, pointsText, riskText, signedPoints, stressText } from './chance';
 
 describe('chance wording (#181; spec #175’s Why panel wording)', () => {
   it('reads a chance in percent, one decimal', () => {
@@ -65,5 +65,23 @@ describe('a stress-test range (#211)', () => {
     // No lower than the headline (the plan does as well or better under it): no range.
     expect(stressText(0.42, 0.43, 'Rally reaches no pair')).toBeUndefined();
     expect(stressText(0.42, 0.4199, 'Rally reaches no pair')).toBeUndefined();
+  });
+});
+
+describe('points of chance', () => {
+  it('reads a worth, a difference and a ± the same way everywhere', () => {
+    expect(pointsText(0.015)).toBe('1.5');
+    expect(signedPoints(0.012)).toBe('+1.2');
+    expect(signedPoints(-0.034)).toBe('−3.4');
+    expect(signedPoints(0.0002)).toBe('0.0');
+    expect(marginText(0.008)).toBe('±0.8');
+    expect(marginText(Number.NaN)).toBe('±?');
+    expect(chanceWithMargin({ chance: 0.42, margin: 0.05 })).toBe('42.0% ±5.0');
+  });
+
+  it('reads a threat as plain percent, floored at under 0.1%', () => {
+    expect(riskText(0.004)).toBe('0.4%');
+    expect(riskText(0.0004)).toBe('under 0.1%');
+    expect(riskText(0)).toBe('0%');
   });
 });

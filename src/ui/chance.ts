@@ -15,12 +15,17 @@ const DEFAULT_WORDS: ChanceWords = { miss: 'loses a unit', make: 'flawless' };
 
 const runs = (p: number) => Math.round(1 / p).toLocaleString('en-US');
 
+/** Points of chance, as a worth, a stake or a ± reads: 0.015 → "1.5". */
+export function pointsText(p: number): string {
+  return (p * 100).toFixed(1);
+}
+
 export function chanceText(p: number, words: ChanceWords = DEFAULT_WORDS): string {
   if (p >= 1) return '100%';
   if (p <= 0) return '0%';
   if (p > 0.999) return 'over 99.9%';
   if (p < 0.001) return 'under 0.1%';
-  const pct = `${(p * 100).toFixed(1)}%`;
+  const pct = `${pointsText(p)}%`;
   if (p >= 0.9) return `${pct} (${words.miss} about 1 run in ${runs(1 - p)})`;
   if (p <= 0.1) return `${pct} (${words.make} about 1 run in ${runs(p)})`;
   return pct;
@@ -35,7 +40,7 @@ export function killText(p: number): string {
   if (p <= 0) return '0%';
   if (p > 0.999) return 'over 99.9%';
   if (p < 0.001) return 'under 0.1%';
-  return `${(p * 100).toFixed(1)}% (kills someone about 1 run in ${runs(p)})`;
+  return `${pointsText(p)}% (kills someone about 1 run in ${runs(p)})`;
 }
 
 /**
@@ -49,10 +54,28 @@ export function stressText(chance: number, stressed: number, bad: string): strin
 }
 
 /** Points of chance with a sign, as a difference reads: −0.002 → "−0.2", 0.012 → "+1.2" (a minus sign, not a hyphen). */
-const signedPoints = (d: number) => {
-  const s = (Math.abs(d) * 100).toFixed(1);
+export function signedPoints(d: number): string {
+  const s = pointsText(Math.abs(d));
   return s === '0.0' ? s : `${d < 0 ? '−' : '+'}${s}`;
-};
+}
+
+/** A simulation or paired error (95%) as it reads beside its number: 0.008 → "±0.8"; "±?" when it isn't known. */
+export function marginText(m: number): string {
+  return `±${Number.isFinite(m) ? pointsText(m) : '?'}`;
+}
+
+/** A chance with its simulation error: "42.0% ±5.0". */
+export function chanceWithMargin(c: { readonly chance: number; readonly margin: number }): string {
+  return `${chanceText(c.chance)} ${marginText(c.margin)}`;
+}
+
+/**
+ * A threat's chance on the preparation page (a group's chance of killing someone): plain percent, floored at
+ * "under 0.1%", with no "1 run in N" (the threats list reads them side by side).
+ */
+export function riskText(p: number): string {
+  return p <= 0 ? '0%' : p < 0.001 ? 'under 0.1%' : `${pointsText(p)}%`;
+}
 
 /**
  * How a paired difference in flawless chance reads (#199; spec #175, The Why panel's wording): an edit's gain and its
@@ -60,6 +83,6 @@ const signedPoints = (d: number) => {
  * difference (−0.2 ±0.3)"; otherwise "+1.2 ±0.3".
  */
 export function differenceText(gain: number, margin: number, close = false): string {
-  const pm = `±${Number.isFinite(margin) ? (margin * 100).toFixed(1) : '?'}`;
+  const pm = marginText(margin);
   return close ? `no measurable difference (${signedPoints(gain)} ${pm})` : `${signedPoints(gain)} ${pm}`;
 }

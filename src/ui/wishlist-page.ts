@@ -40,7 +40,7 @@ import {
 import { adoptedOf } from '../engine';
 import { CHILD_UNITS, type ChildId } from '../game-data/children';
 import { SKILLS } from '../game-data/skills';
-import { differenceText } from './chance';
+import { differenceText, marginText, pointsText } from './chance';
 import { h } from './dom';
 import { guide } from './guide';
 import { LABELS, LEDGER_UI, type LedgerStatus } from './labels';
@@ -61,26 +61,23 @@ export type WishlistContext = HeadlineContext & {
 
 // ---- readouts ----
 
-/** A worth or cost in points of chance: 0.123 → "12.3". */
-const points = (p: number) => (p * 100).toFixed(1);
-
 /** A unit's worth as its row reads it: "forced" for Chrom and Robin, else the points lost without it, and its utility. */
 export function worthText(w: UnitWorth | undefined, gender: Gender | null | undefined): string {
   if (!w) return 'worth …';
   if (w.forced) return 'forced';
   if (w.worth === undefined) return 'worth …';
-  const pm = w.margin !== undefined && Number.isFinite(w.margin) ? ` ±${points(w.margin)}` : '';
+  const pm = w.margin !== undefined && Number.isFinite(w.margin) ? ` ${marginText(w.margin)}` : '';
   const withChildren = w.children.length ? ` with ${w.children.map((c) => unitName(c, gender)).join(' and ')}` : '';
-  const utility = w.utility !== undefined && w.utility > 0 ? ` · utility ${points(w.utility)}${w.utilityMargin !== undefined && Number.isFinite(w.utilityMargin) ? ` ±${points(w.utilityMargin)}` : ''}` : '';
-  return `worth ${points(w.worth)}${pm}${withChildren}${utility}${w.settled ? '' : ' (provisional)'}`;
+  const utility = w.utility !== undefined && w.utility > 0 ? ` · utility ${pointsText(w.utility)}${w.utilityMargin !== undefined && Number.isFinite(w.utilityMargin) ? ` ${marginText(w.utilityMargin)}` : ''}` : '';
+  return `worth ${pointsText(w.worth)}${pm}${withChildren}${utility}${w.settled ? '' : ' (provisional)'}`;
 }
 
 /** A worth's numbers (#210): the worth and its utility, each explained as the worth. */
 export function worthMarks(w: UnitWorth | undefined): WhyMark[] {
   if (!w || w.forced || w.worth === undefined) return [];
-  const pm = w.margin !== undefined && Number.isFinite(w.margin) ? ` ±${points(w.margin)}` : '';
-  const utility = w.utility !== undefined && w.utility > 0 ? `utility ${points(w.utility)}` : '';
-  return [[`worth ${points(w.worth)}${pm}`, `worth:${w.unit}`], ...(utility ? [[utility, `worth:${w.unit}`] as WhyMark] : [])];
+  const pm = w.margin !== undefined && Number.isFinite(w.margin) ? ` ${marginText(w.margin)}` : '';
+  const utility = w.utility !== undefined && w.utility > 0 ? `utility ${pointsText(w.utility)}` : '';
+  return [[`worth ${pointsText(w.worth)}${pm}`, `worth:${w.unit}`], ...(utility ? [[utility, `worth:${w.unit}`] as WhyMark] : [])];
 }
 
 const READING_WORDS = { 'on-track': 'on track', 'at-risk': 'at risk', behind: 'behind' } as const;
