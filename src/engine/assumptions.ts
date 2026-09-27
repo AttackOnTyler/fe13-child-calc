@@ -23,6 +23,9 @@ import {
   RESEARCH_SKILL_INHERITANCE,
   RESEARCH_DEATH_AFTER_MARRIAGE,
   JP_CHILDREN,
+  JP_CHILDREN_MIRROR,
+  JP_PK_CHILDREN,
+  RESEARCH_CHILD_RECRUITMENT,
   SF_CHILDREN,
   type Assumed,
   type Citation,
@@ -42,7 +45,7 @@ type AssumptionValues = {
   'main-story-target-breakpoint': number;
   /** A parent's pick is a skill the child already has: the slot is wasted, or the next skill up passes. */
   'inherit-duplicate-skill': 'wasted' | 'next-skill';
-  /** Both parents' picks are the same skill: the child gets one copy, or the second parent's next skill passes. */
+  /** Both parents' picks are the same skill: one parent's next skill up passes (which one is unknown), or the child gets one copy. */
   'inherit-same-skill': 'one-copy' | 'next-skill';
   /** An ineligible skill (DLC, Special Dance) at the bottom: the next eligible one up passes, or nothing does. */
   'inherit-ineligible-bottom': 'next-eligible' | 'nothing';
@@ -191,9 +194,10 @@ export const ASSUMPTION_REGISTRY: { readonly [K in AssumptionId]: AssumptionDef<
     id: 'inherit-duplicate-skill',
     label: 'Inheriting a skill the child already has',
     why:
-      'When a parent’s lowest equipped skill is one the child starts with (Nowi passing Odd Rhythm to Nah), no source says ' +
-      'whether that inheritance is wasted or the game moves up to the parent’s next equipped skill. FEW’s “lowest eligible skill” fits either.',
-    sources: [SF_CHILDREN, FEW_INHERITANCE, FEW_LUCINA, RESEARCH_SKILL_INHERITANCE],
+      'When a parent’s lowest equipped skill is one the child starts with (Nowi passing Odd Rhythm to Nah), the JP 2ch mirror wiki ' +
+      'says the inheritance slot is wasted. It is a single source with no test cited; 天馬騎士団 says it isn’t known, ' +
+      'and FEW’s “lowest eligible skill” fits either.',
+    sources: [JP_CHILDREN_MIRROR, JP_PK_CHILDREN, SF_CHILDREN, FEW_INHERITANCE, FEW_LUCINA, RESEARCH_SKILL_INHERITANCE, RESEARCH_CHILD_RECRUITMENT],
     default: 'wasted',
     alternatives: [{ label: 'The next skill up passes instead', value: 'next-skill' }],
     input: 'choice',
@@ -204,12 +208,15 @@ export const ASSUMPTION_REGISTRY: { readonly [K in AssumptionId]: AssumptionDef<
   'inherit-same-skill': entry({
     id: 'inherit-same-skill',
     label: 'Both parents passing the same skill',
-    why: 'No source says whether the child gets one copy and loses the second inheritance, or the second parent’s next skill passes.',
-    sources: [SF_CHILDREN, FEW_INHERITANCE, RESEARCH_SKILL_INHERITANCE],
-    default: 'one-copy',
-    alternatives: [{ label: 'The second parent’s next skill passes', value: 'next-skill' }],
+    why:
+      '天馬騎士団’s children page says that when both parents’ picks are the same skill, one parent’s second-lowest skill passes instead, ' +
+      'and which parent yields isn’t known. A player report there: Stahl × Sully, skills not reordered, gave a Kjelle with both ' +
+      'Discipline and Outdoor Fighter. It is a single source; no source backs one copy.',
+    sources: [JP_PK_CHILDREN, SF_CHILDREN, FEW_INHERITANCE, RESEARCH_SKILL_INHERITANCE, RESEARCH_CHILD_RECRUITMENT],
+    default: 'next-skill',
+    alternatives: [{ label: 'One copy, the other inheritance is lost (unsourced)', value: 'one-copy' }],
     input: 'choice',
-    format: (v) => (v === 'one-copy' ? 'One copy (the second is lost)' : 'The second parent’s next skill passes'),
+    format: (v) => (v === 'one-copy' ? 'One copy (the other is lost)' : 'One parent’s next skill up passes instead (which parent isn’t known)'),
     parse: (raw) => (raw === 'one-copy' || raw === 'next-skill' ? raw : undefined),
     affects: 'the inheritance notes in the Skills drawer',
   }),
@@ -231,11 +238,12 @@ export const ASSUMPTION_REGISTRY: { readonly [K in AssumptionId]: AssumptionDef<
     id: 'inherit-last-skill',
     label: 'Which equipped skill is “last”',
     why:
-      'FEW’s Inheritance page says the most recently activated skill passes; its character notes say the lowest skill in the equipped list. ' +
-      'They are taken to be the same (a newly equipped skill goes to the bottom), but no source confirms it.',
-    sources: [FEW_INHERITANCE, FEW_LUCINA, SF_CHILDREN, RESEARCH_SKILL_INHERITANCE],
+      'Every source that describes the equipped list says the bottom (last) skill passes: the JP 2ch wiki, FEW’s character notes and ' +
+      '天馬騎士団, where a player test (reordering Tharja’s and her husband’s skills after a reset) confirms it. FEW’s Inheritance page ' +
+      'says the most recently activated skill, which is the same skill in practice, since a re-equipped skill goes to the bottom.',
+    sources: [JP_CHILDREN, JP_PK_CHILDREN, FEW_LUCINA, FEW_INHERITANCE, SF_CHILDREN, RESEARCH_SKILL_INHERITANCE, RESEARCH_CHILD_RECRUITMENT],
     default: 'bottom-slot',
-    alternatives: [{ label: 'The most recently equipped skill', value: 'most-recent' }],
+    alternatives: [{ label: 'The most recently equipped skill (no source of its own)', value: 'most-recent' }],
     input: 'choice',
     format: (v) => (v === 'bottom-slot' ? 'The bottom equipped slot' : 'The most recently equipped skill'),
     parse: (raw) => (raw === 'bottom-slot' || raw === 'most-recent' ? raw : undefined),

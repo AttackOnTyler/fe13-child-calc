@@ -249,7 +249,7 @@ export function buildSkillView(input: SkillViewInput, settings: SkillViewSetting
     caveats.push(
       assumptions['inherit-same-skill'] === 'one-copy'
         ? 'If both parents pass the same skill, the child gets one copy and loses the other inheritance.'
-        : 'If both parents pass the same skill, the second parent’s next skill up passes instead.',
+        : 'If both parents pass the same skill, one parent’s next skill up passes instead (which parent isn’t known).',
     );
   }
 
