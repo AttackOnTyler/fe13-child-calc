@@ -90,11 +90,13 @@ import {
   type ColumnGroup,
   type ScoringPrefs,
 } from './scoring-prefs';
-import { validationPanel, withOverride } from './validation';
+import { isRuleAssumption, validationPanel, withOverride } from './validation';
 import { rosterPage } from './roster-page';
 import { unitsView, type UnitsContext } from './unit-page';
 import { runView, solveState } from './run-page';
-import { installWhy, whyOpen, whyPanel, type WhyContext } from './why';
+import { installWhy, setAssumptionsTab, whyOpen, whyPanel, type WhyContext } from './why';
+import { statedAssumptionsTab } from './stated-assumptions';
+import { onChecksProgress } from './checks-view';
 import { notOnTrack, unitWorthOf, wishlistPage, worthText } from './wishlist-page';
 import { prepPage } from './prep-page';
 import { CHILD_UNITS } from '../game-data/children';
@@ -2296,7 +2298,17 @@ function renderParts(parts: readonly Part[]): void {
     drawerPairing = undefined;
     replaceRegion('main', main, [
       ...(view === 'validation'
-        ? [validationPanel({ engine, assumptions, selfTest, setOverride, resetAll: () => applyOverrides({}), render, rules: { engine, run, rules: checkedRules, setRules, evidence: ruleEvidence(run), now: () => Date.now() } })]
+        ? [
+            validationPanel({
+              engine,
+              assumptions,
+              selfTest,
+              setOverride,
+              // Rules' answers stay: they're answered and reopened in the stated assumptions tab (#211).
+              resetAll: () => applyOverrides(Object.fromEntries(Object.entries(overrides).filter(([id]) => isRuleAssumption(id as AssumptionId)))),
+              render,
+            }),
+          ]
         : view === 'roster'
           ? rosterPage({ engine, roster, setRoster, clearAll: clearRosterState })
           : view === 'units'
@@ -2412,7 +2424,7 @@ function whyContext(): WhyContext {
   const s = solveState(run);
   const p = s?.progress;
   const headline = p
-    ? { plan: p.best, chance: p.chance, adopted: s!.plan, ...(p.readings ? { readings: p.readings } : {}), solved: true }
+    ? { plan: p.best, chance: p.chance, adopted: s!.plan, ...(p.readings ? { readings: p.readings } : {}), ...(p.stress ? { stress: p.stress } : {}), solved: true }
     : s?.chance
       ? { plan: s.plan, chance: s.chance, adopted: s.plan, ...(s.readings ? { readings: s.readings } : {}), solved: false }
       : undefined;
@@ -2434,6 +2446,26 @@ function whyContext(): WhyContext {
 
 // Every number on the Run view and the Wishlist tab opens the Why panel (#210): one handler for them all.
 installWhy(document, () => renderParts(['panel']));
+
+// The panel's second tab (#211): the stated assumptions list, the one place rules are answered by hand or reopened.
+setAssumptionsTab((ctx) => {
+  const p = solveState(run)?.progress;
+  return statedAssumptionsTab({
+    engine: ctx.engine,
+    ...(ctx.assumptions ? { assumptions: ctx.assumptions } : {}),
+    run: ctx.run,
+    setRun,
+    rules: checkedRules,
+    setRules,
+    evidence: ruleEvidence(run),
+    now: () => Date.now(),
+    ...(ctx.headline ? { plan: ctx.headline.adopted ?? ctx.headline.plan, headline: { chance: ctx.headline.chance.chance, ...(ctx.headline.stress ? { stress: ctx.headline.stress } : {}), solved: !!p?.done } } : {}),
+  });
+});
+// The stakes land as the worker works them out: the tab follows them.
+onChecksProgress(() => {
+  if (whyShown()) renderParts(['panel']);
+});
 
 function render(): void {
   const app = document.getElementById('app')!;

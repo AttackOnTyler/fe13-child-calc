@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chanceText, differenceText, killText } from './chance';
+import { chanceText, differenceText, killText, stressText } from './chance';
 
 describe('chance wording (#181; spec #175’s Why panel wording)', () => {
   it('reads a chance in percent, one decimal', () => {
@@ -56,5 +56,14 @@ describe('a fight’s kill chance (#210)', () => {
     expect(killText(0.9995)).toBe('over 99.9%');
     expect(killText(1)).toBe('100%');
     expect(killText(0)).toBe('0%');
+  });
+});
+
+describe('a stress-test range (#211)', () => {
+  it('reads how low the chance could go under a blind spot’s bad case, as the spec words it', () => {
+    expect(stressText(0.42, 0.318, 'two attackers reach each exposed pair')).toBe('as low as 31.8% if two attackers reach each exposed pair');
+    // No lower than the headline (the plan does as well or better under it): no range.
+    expect(stressText(0.42, 0.43, 'Rally reaches no pair')).toBeUndefined();
+    expect(stressText(0.42, 0.4199, 'Rally reaches no pair')).toBeUndefined();
   });
 });

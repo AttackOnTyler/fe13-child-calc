@@ -536,6 +536,8 @@ button.skill.linkish { padding: 0 6px; font-size: 11px; }
 .why-rows tr.drill:hover td { background: var(--hover); }
 .why-stop { color: var(--muted); border-left: 3px solid var(--line); padding-left: 8px; }
 .why-spot { padding: 3px 0; }
+/* The headline's stress-test ranges and its link to the stated assumptions (#211), under the chance. */
+.stress-ranges { display: block; margin: 2px 0 0 14px; color: var(--muted); }
 .chip.lean-warn { color: var(--warn); border-color: var(--warn); }
 .chip.lean-ok { color: var(--pos); border-color: var(--pos); }
 .chip.lean-dim { color: var(--muted); }
