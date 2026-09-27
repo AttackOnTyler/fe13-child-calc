@@ -201,7 +201,7 @@ export const DEEPER: readonly DeeperEntry[] = [
     question: 'What am I facing on this map?',
     answer: [
       'Run › Maps lists every map; each shows its chapter data on your difficulty (or one you pick to look ahead).',
-      'Win and lose conditions, deploy count, forced units and recruits; the boss; every enemy group with its items, skills and what sets it moving; reinforcements; items, and the shop.',
+      'Win and lose conditions, deploy count, forced units and recruits; the boss; every enemy group with its items, skills and what sets it moving; reinforcement waves by turn, each group with its weapon and where it appears (waves set off by an event show that event); items, and the shop.',
       'On Normal, reinforcements arrive before your phase. On Hard and up they arrive at the start of enemy phase and can act at once.',
       'Lunatic+ is Lunatic with two extra random skills per enemy, from Pass, Hawkeye, Luna+, Vantage+, Counter, Aegis+ and Pavise+ (no Counter, Aegis+ or Pavise+ before Chapter 3).',
     ],

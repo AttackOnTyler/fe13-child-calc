@@ -42,7 +42,8 @@ import type { BuildTemplate } from '../curated/builds';
 import { skillCard } from './skill-card';
 import { unitPage, unitReach, type FrontDoor, type FrontDoorTile, type OpinionBlock, type OpinionMark, type PageSubject, type PageUnitId, type ParentedChild, type PartnerChild, type PartnerRow, type UnitPage } from './unit-page';
 import { SPOTPASS_UNITS } from '../game-data/join';
-import { CHAPTER_DISAGREEMENTS, MAPS, lunaticPlusPoolFor, type ChapterData, type ChapterDisagreement } from '../game-data/chapters';
+import { CHAPTER_DISAGREEMENTS, MAPS, lunaticPlusPoolFor, type ChapterData, type ChapterDifficulty as MapDifficulty, type ChapterDisagreement } from '../game-data/chapters';
+import { mapWaves, type MapWaves } from './waves';
 import { matchBuilds, matchTemplate, shownMatch, templateSummary, templatesFor } from './builds';
 import type { SkillId } from '../game-data/skills';
 import { createScorer } from './scoring';
@@ -106,6 +107,7 @@ export { CHAPTER_GUIDE, type GuideEntry } from '../curated/chapter-guide';
 export { classIdByName, classWeaponKinds, openStock, promotionAdvice, sealAvailability, sealsHeld, supplyList, type PromotionAdvice, type SealAvailability, type StockItem, type Supply } from './supply';
 export { coverage, deployCount, deployMax, deployRoleOf, forcedOn, suggestDeployment, suggestLoadout, type DeployCandidate, type Deployment, type Loadout, type Pair } from './deploy';
 export { childParalogueGates, isChildParalogue, type ChildParalogueGate, type ParalogueGateState } from './child-paralogues';
+export { type MapWaves, type Wave, type WaveGroup } from './waves';
 export { bestWeapon, classTypes, dangerFlags, foeKey, foeOf, foesOf, matchup, pairUpBonus, statValue, type DangerFlag, type Fighter, type Foe, type Matchup } from './solver';
 export {
   EMPTY_RUN,
@@ -326,6 +328,11 @@ export type Engine = {
   lunaticPlusPool(map: ChapterData): readonly string[];
   /** FEW/SF disagreements in the chapter data, resolved or open. */
   chapterDisagreements(): readonly ChapterDisagreement[];
+  /**
+   * A map's reinforcement waves on a difficulty (#178; Lunatic+ reads Lunatic's): the turns each joins, its foe groups
+   * (each with a foe for the map solver), conditions kept as text, and any line of FEW's not read, text kept.
+   */
+  mapWaves(map: string, difficulty: MapDifficulty): MapWaves;
   /** A map's chapter-guide entries (#123), grouped by source, each with its source's name and link. */
   chapterGuide(map: string): readonly { readonly source: { readonly id: string; readonly name: string; readonly link: string }; readonly entries: readonly GuideEntry[] }[];
   /** The first-gen units with a page (#101), in roster order, SpotPass last. Robin's page comes from the run facts. */
@@ -720,6 +727,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
   // The table's Best build column asks for many pairings; cache by pairing, context, DLC reach (and template).
   const buildCache = new Map<string, readonly BuildMatch[]>();
   const filteredCache = new Map<string, BuildMatch | undefined>();
+  const wavesCache = new Map<string, MapWaves>();
   const builds = (r: ChildResult, settings: SkillViewSettings): readonly BuildMatch[] => {
     const k = `${r.key}|${settings.context}|${dlcOf(settings)}`;
     let found = buildCache.get(k);
@@ -1375,6 +1383,15 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     mapOrder: remainingMapOrder,
     lunaticPlusPool: lunaticPlusPoolFor,
     chapterDisagreements: () => CHAPTER_DISAGREEMENTS,
+    mapWaves: (id, difficulty) => {
+      const k = `${id}|${difficulty}`;
+      if (!wavesCache.has(k)) {
+        const map = MAPS.find((m) => m.id === id);
+        if (!map) throw new Error(`No chapter data for ${id}`);
+        wavesCache.set(k, mapWaves(map, difficulty));
+      }
+      return wavesCache.get(k)!;
+    },
     chapterGuide: (map) => {
       const entries = CHAPTER_GUIDE.filter((e) => e.map === map);
       const sources = [...new Set(entries.map((e) => e.source))];
