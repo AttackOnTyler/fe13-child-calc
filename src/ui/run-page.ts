@@ -3,8 +3,9 @@
  * holds a snapshot: every unit's class, level, EXP, stats, skills, inventory and supports, plus the convoy and gold.
  * A new entry copies the one before; editing a past entry never reaches later ones, which are flagged instead.
  */
-import type { Engine, HeldItem, MapOrderStep, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitSnapshot } from '../engine';
-import { SUPPORT_LEVELS, addEntry, chromWedding, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, withUnit } from '../engine';
+import type { Assumptions, ChildId, Engine, HeldItem, MapOrderStep, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitSnapshot } from '../engine';
+import { EMPTY_SNAPSHOT, SUPPORT_LEVELS, addEntry, childJoinFrom, chromWedding, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, withUnit } from '../engine';
+import { CHILD_UNITS } from '../game-data/children';
 import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
 import { h } from './dom';
 import { guide } from './guide';
@@ -12,6 +13,8 @@ import { mapsView, type MapsContext } from './maps-page';
 
 export type RunContext = {
   readonly engine: Engine;
+  /** The resolved assumptions the engine was built with: a child's join stats read them (#155). */
+  readonly assumptions?: Assumptions;
   readonly run: Run;
   readonly setRun: (run: Run) => void;
   readonly now: () => number;
@@ -50,7 +53,7 @@ function nextMapSection(ctx: RunContext): HTMLElement {
     return m.kind === 'xenologue' ? m.label : `${m.label}: ${m.title}`;
   };
   const record = (map: string) => {
-    const next = addEntry(ctx.run, map, ctx.now());
+    const next = addEntry(ctx.run, map, ctx.now(), undefined, ctx.assumptions);
     ctx.setRun(next);
     ctx.setRecording({ entry: latestEntry(next)!.id, step: 0 });
   };
@@ -108,6 +111,26 @@ function mapOrderSection(ctx: RunContext): HTMLElement {
 }
 
 /**
+ * Where a child recruit's stats came from (#155), or which parent kept them blank: its parents in the entry before the
+ * map. Null for anyone who isn't a child.
+ */
+export function childStatsNote(run: Run, e: RunEntry, u: RosterUnit, assumptions?: Assumptions): string | null {
+  if (!(u in CHILD_UNITS)) return null;
+  const i = run.entries.findIndex((x) => x.id === e.id);
+  const j = childJoinFrom(run, run.entries[i - 1]?.snapshot ?? EMPTY_SNAPSHOT, u as ChildId, assumptions);
+  const name = (x: RosterUnit | 'maiden') => (x === 'maiden' ? 'the Maiden' : unitName(x, run.roster.run.gender));
+  const child = name(u);
+  if (j.unmarried) return `${child}: ${name(j.unmarried)} isn’t married in the entry before this map, so ${child}’s stats are blank: record them from the game.`;
+  if (j.missing.length) {
+    const who = j.missing.map(name).join(' and ');
+    return `${child}: ${who}’s stats aren’t logged in the entry before this map, so ${child}’s stats are blank: record them from the game.`;
+  }
+  if (!j.join || !j.parents) return null;
+  const maiden = j.parents[1] === 'maiden' ? ' (the Maiden’s side is an assumption)' : '';
+  return `${child}: worked out from ${j.parents.map(name).join(' and ')} as they were on entering this map${maiden}.`;
+}
+
+/**
  * Record results (#118): the entry is already a copy of the last, so every step only records changes: deployed units,
  * the map's recruits (pre-filled), deaths and marriages, then convoy and gold.
  */
@@ -126,10 +149,16 @@ function recordResults(ctx: RunContext, e: RunEntry, step: number): HTMLElement 
     switch (step) {
       case 0:
         return [h('p', { class: 'muted small' }, 'Update who levelled, promoted or reclassed. Leave the rest: it’s copied from last time.'), unitTable(ctx, e, veterans, true)];
-      case 1:
+      case 1: {
+        const notes = recruits.map((u) => childStatsNote(ctx.run, e, u, ctx.assumptions)).filter((n): n is string => n !== null);
         return recruits.length
-          ? [h('p', { class: 'muted small' }, 'Filled in from their join data (a child’s stats come from the game).'), unitTable(ctx, e, recruits)]
+          ? [
+              h('p', { class: 'muted small' }, 'Filled in from their join data; a child’s stats from its parents as they were on entering this map.'),
+              ...notes.map((n) => h('p', { class: 'small' }, n)),
+              unitTable(ctx, e, recruits),
+            ]
           : [h('p', { class: 'muted' }, 'No one joined on this map.')];
+      }
       case 2:
         return [
           h('p', { class: 'muted small' }, casual ? 'Casual: a unit that falls comes back after the map, so nothing changes.' : 'Classic: a unit that falls is dead for good.'),
@@ -312,7 +341,7 @@ function chapterLog(ctx: RunContext): HTMLElement {
           {
             onclick: () => {
               const label = pick === 'other' ? (prompt('What did you play?') ?? 'Other') : undefined;
-              const next = addEntry(run, pick, ctx.now(), label);
+              const next = addEntry(run, pick, ctx.now(), label, ctx.assumptions);
               ctx.setRun(next);
               ctx.setOpenEntry(next.entries[next.entries.length - 1]!.id);
             },
@@ -320,7 +349,7 @@ function chapterLog(ctx: RunContext): HTMLElement {
           'Add entry',
         ),
       ),
-      h('span', { class: 'muted small' }, 'A new entry starts as a copy of the last; the map’s recruits are filled in from their join data.'),
+      h('span', { class: 'muted small' }, 'A new entry starts as a copy of the last; the map’s recruits are filled in from their join data, a child’s from its parents.'),
     ),
     ...newest.map((e, i) => entryBlock(ctx, e, i === 0, flagged.has(e.id))),
   );

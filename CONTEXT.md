@@ -167,6 +167,10 @@ _Avoid_: Rating, review, expert score
 When and how a first-gen unit or Robin joins (chapter or paralogue, recruit condition), its join class and level, and its base stats per difficulty.
 _Avoid_: Recruitment info, bases (alone)
 
+**Join stats**:
+The stats a child joins with, at level 10 in its start class: per stat, a third (rounded down) of each parent's stat above its current class base plus the child's absolute base, then the start class's base. Read from the parents as they are on entering the child's paralogue (Lucina: the start of Chapter 13); Morgan's parents are Robin and Robin's spouse.
+_Avoid_: Child bases (alone), inherited stats
+
 **Starting skill**:
 A skill a unit already has when it joins. A unit keeps every skill it learns, so a starting skill stays reachable even when its class set can't teach it (Walhart's Conquest, Priam's Luna).
 _Avoid_: Personal skill (only Conquest and Shadowgift are personal)

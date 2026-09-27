@@ -6,6 +6,7 @@ import {
   EMPTY_RUN,
   addEntry,
   childParalogueGates,
+  childJoinFrom,
   editEntry,
   exportRun,
   flaggedEntries,
@@ -26,6 +27,7 @@ import {
   withUnit,
   type RosterUnit,
   type Run,
+  type UnitSnapshot,
 } from './index';
 
 const facts = withRun(EMPTY_ROSTER, { gender: 'M', asset: 'mag', flaw: 'str', difficulty: 'lunatic', route: 'main-story' });
@@ -313,5 +315,55 @@ describe('review fixes (#131–#133 review)', () => {
     expect(p.joining).toEqual([]);
     expect(p.mapOnly).toEqual(['chrom', 'robin']);
     expect(prepUnits(runFromRoster(facts), 'prologue').mapOnly).toEqual([]);
+  });
+});
+
+describe('a child’s join stats in Record results (#155)', () => {
+  const stats = (hp: number, str: number, mag: number, skl: number, spd: number, lck: number, def: number, res: number) => ({ hp, str, mag, skl, spd, lck, def, res });
+  const unit = (cls: string, st: UnitSnapshot['stats']): UnitSnapshot => ({ class: cls, level: 10, promoted: true, reclassed: false, exp: 0, stats: st, skills: [], inventory: [], supports: [] });
+  const logged = (units: Partial<Record<RosterUnit, UnitSnapshot>>, marriages: [RosterUnit, RosterUnit][] = []): Run => {
+    let run = editEntry(runFromRoster(facts), 'e1', (s) => ({ ...s, units }), 1);
+    for (const [a, b] of marriages) run = recordMarriage(run, 'e1', a, b, 1);
+    return run;
+  };
+  const joinBefore = (run: Run, child: Parameters<typeof childJoinFrom>[2]) => childJoinFrom(run, latestEntry(run)!.snapshot, child);
+  // SF forums 33434: Chrom (Great Lord) and Sumia (Dark Flier) on entering Chapter 13.
+  const chrom = unit('Great Lord', stats(52, 27, 7, 27, 31, 27, 23, 14));
+  const sumia = unit('Dark Flier', stats(46, 24, 16, 37, 37, 30, 10, 25));
+
+  it('fills Lucina from her parents as they were on entering: 38/18/7/25/25/23/13/11', () => {
+    const run = addEntry(logged({ chrom, sumia }, [['chrom', 'sumia']]), 'chapter-13', 2);
+    expect(latestEntry(run)!.snapshot.units.lucina).toMatchObject({ class: 'Lord', level: 10, stats: stats(38, 18, 7, 25, 25, 23, 13, 11) });
+  });
+
+  it('keeps a child’s stats blank when the other parent’s stats aren’t logged, and names that parent', () => {
+    const before = logged({ chrom, sumia: unit('Dark Flier', null) }, [['chrom', 'sumia']]);
+    expect(latestEntry(addEntry(before, 'chapter-13', 2))!.snapshot.units.lucina!.stats).toBeNull();
+    expect(joinBefore(before, 'lucina')).toMatchObject({ join: null, missing: ['sumia'] });
+    // A parent not in the log at all is missing too.
+    expect(joinBefore(logged({ chrom }, [['chrom', 'sumia']]), 'lucina')).toMatchObject({ join: null, missing: ['sumia'] });
+  });
+
+  it('names the fixed parent when it has no spouse in the log', () => {
+    expect(joinBefore(logged({ sumia }), 'cynthia')).toMatchObject({ join: null, unmarried: 'sumia' });
+  });
+
+  it('counts the Maiden’s side as 0 for Lucina when Chrom is recorded married to her', () => {
+    const run = addEntry(logged({ chrom }, [['chrom', 'maiden']]), 'chapter-13', 2);
+    // floor(((52 − 23) + 0 + 12) / 3) + 16 = 29.
+    expect(latestEntry(run)!.snapshot.units.lucina!.stats!.hp).toBe(29);
+  });
+
+  it('never infers the Maiden: with no recorded wife, Lucina’s stats stay blank and Chrom is named', () => {
+    const before = logged({ chrom });
+    expect(latestEntry(addEntry(before, 'chapter-13', 2))!.snapshot.units.lucina!.stats).toBeNull();
+    expect(joinBefore(before, 'lucina')).toMatchObject({ join: null, unmarried: 'chrom' });
+  });
+
+  it('brings Morgan in with Robin and Robin’s spouse, in the spouse’s starting class', () => {
+    const robin = unit('Tactician', stats(40, 15, 20, 20, 20, 15, 12, 12));
+    const run = addEntry(logged({ robin, sumia }, [['robin', 'sumia']]), 'paralogue-12', 2);
+    // Robin (M): Morgan is a daughter, in Sumia's Pegasus Knight. Spd: floor(((20 − 5) + (37 − 10) + 6) / 3) + 8 = 24.
+    expect(latestEntry(run)!.snapshot.units['morgan-f']).toMatchObject({ class: 'Pegasus Knight', level: 10, stats: { spd: 24 } });
   });
 });

@@ -17,6 +17,10 @@ export const SF_CLASS_BASES: Citation = { label: 'SF class base stats', url: 'ht
 export const SF_CALCULATIONS: Citation = { label: 'SF calculations (doubling)', url: 'https://serenesforest.net/awakening/miscellaneous/calculations/' };
 export const SF_CHILDREN: Citation = { label: 'SF children', url: 'https://serenesforest.net/awakening/characters/children/' };
 export const SF_BASES: Citation = { label: 'SF base stats (main story)', url: 'https://serenesforest.net/awakening/characters/base-stats/main-story/' };
+export const SFF_CHILD_BASES: Citation = {
+  label: 'SF forums 33434, calculating children’s base stats',
+  url: 'https://forums.serenesforest.net/topic/33434-calculating-childrens-base-stats/',
+};
 export const SF_RECRUITMENT: Citation = { label: 'SF recruitment (main story)', url: 'https://serenesforest.net/awakening/characters/recruitment/main-story/' };
 
 export const FEW_GROWTH_MODULE: Citation = {
@@ -38,6 +42,7 @@ export const FEW_PARALOGUE_22: Citation = { label: 'FEW Paralogue 22 (NPC Aversa
 export const FANDOM_OLIVIA: Citation = { label: 'Fandom Olivia', url: 'https://fireemblem.fandom.com/wiki/Olivia' };
 export const FANDOM_AVERSA: Citation = { label: 'Fandom Aversa', url: 'https://fireemblem.fandom.com/wiki/Aversa' };
 export const FEW_LUCINA_STATS: Citation = { label: 'FEW Lucina/Stats', url: 'https://fireemblemwiki.org/wiki/Lucina/Stats?oldid=746071' };
+export const FEW_CHARSTATS: Citation = { label: 'FEW Template:CharStats FE13', url: 'https://fireemblemwiki.org/wiki/Template:CharStats_FE13' };
 export const FEW_KJELLE_STATS: Citation = { label: 'FEW Kjelle/Stats', url: 'https://fireemblemwiki.org/wiki/Kjelle/Stats' };
 export const FEW_LORD: Citation = { label: 'FEW Lord', url: 'https://fireemblemwiki.org/wiki/Lord' };
 export const FEW_THIEF: Citation = { label: 'FEW Thief', url: 'https://fireemblemwiki.org/wiki/Thief' };

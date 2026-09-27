@@ -49,7 +49,10 @@ export const CLASS_BASES: Readonly<Partial<Record<ClassId, { readonly any?: Clas
   'valkyrie': { any: { stats: { hp: 19, str: 0, mag: 5, skl: 4, spd: 8, lck: 0, def: 3, res: 8 }, mov: 8, weapons: ['tome', 'staff'] } },
   'villager': { any: { stats: { hp: 16, str: 1, mag: 0, skl: 1, spd: 1, lck: 0, def: 1, res: 0 }, mov: 5, weapons: ['lance'] } },
   'dancer': { any: { stats: { hp: 16, str: 1, mag: 1, skl: 5, spd: 8, lck: 0, def: 3, res: 1 }, mov: 5, weapons: ['sword'] } },
+  'taguel': { any: { stats: { hp: 18, str: 2, mag: 0, skl: 4, spd: 5, lck: 0, def: 3, res: 2 }, mov: 6, weapons: ['stone'] } },
+  'manakete': { any: { stats: { hp: 18, str: 2, mag: 0, skl: 1, spd: 1, lck: 0, def: 2, res: 2 }, mov: 6, weapons: ['stone'] } },
   'lodestar': { any: { stats: { hp: 21, str: 9, mag: 1, skl: 10, spd: 10, lck: 0, def: 8, res: 4 }, mov: 6, weapons: ['sword'] } },
   'dread-fighter': { any: { stats: { hp: 22, str: 8, mag: 4, skl: 7, spd: 9, lck: 0, def: 7, res: 10 }, mov: 6, weapons: ['sword', 'axe', 'tome'] } },
   'bride': { any: { stats: { hp: 21, str: 7, mag: 6, skl: 11, spd: 10, lck: 0, def: 7, res: 6 }, mov: 6, weapons: ['lance', 'bow', 'staff'] } },
+  'conqueror': { any: { stats: { hp: 24, str: 10, mag: 3, skl: 9, spd: 8, lck: 0, def: 12, res: 5 }, mov: 8, weapons: ['sword', 'lance', 'axe'] } },
 };

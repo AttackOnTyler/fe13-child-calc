@@ -4,12 +4,17 @@
  * ranks, plus the convoy, gold, unit states and marriages. The roster's unit states and spouses come from the latest
  * entry; everything else on the roster (Run facts, rule-outs, the saved plan, deploy flags) stays on the run.
  */
-import { CHILD_UNITS } from '../game-data/children';
+import { CHILD_UNITS, type ChildId } from '../game-data/children';
 import { MAPS, type ChapterData } from '../game-data/chapters';
+import type { ClassId } from '../game-data/classes';
 import { JOIN_DATA, basesOn } from '../game-data/join';
-import { STATS, type Gender, type Stat } from '../game-data/stats';
+import { ASSET_FLAW, ROBIN_MODIFIERS } from '../game-data/robin';
+import { MOD_STATS, STATS, type Gender, type ModStat, type Modifiers, type Stat } from '../game-data/stats';
 import { childParalogueGates } from './child-paralogues';
-import { className } from './classes';
+import { DEFAULT_ASSUMPTIONS, type Assumptions } from './assumptions';
+import { childJoinStats, classBaseStats, type ChildJoinStats, type JoinParent } from './child-join';
+import { className, startClass } from './classes';
+import { classIdByName } from './supply';
 import { robinBases } from './unit-page';
 import { FORGE, forgeProblem, itemByName } from '../game-data/items';
 import { FIRST_GEN_UNITS, type UnitId } from '../game-data/units';
@@ -125,19 +130,96 @@ function setupStat(text: string, stat: Stat, run: RunFacts): number {
   return Number(stat === run.asset && m[3] ? m[3] : stat === run.flaw && m[2] ? m[2] : m[1]);
 }
 
+/** A unit's gender in the run: Robin's from the run facts (null until set). */
+function genderIn(run: Run, u: RosterUnit): Gender | null {
+  if (u === 'robin') return run.roster.run.gender ?? null;
+  return u in CHILD_UNITS ? CHILD_UNITS[u as ChildId].gender : FIRST_GEN_UNITS[u as UnitId].gender;
+}
+
+/** Where a child's join stats stand in the log (#155): worked out, or why not. */
+export type ChildJoin = {
+  /** Its parents: the fixed one, then its recorded spouse (the Maiden, if recorded as Chrom's wife); null if unmarried. */
+  readonly parents: readonly [RosterUnit, RosterUnit | 'maiden'] | null;
+  /** The fixed parent with no spouse in the log. */
+  readonly unmarried?: RosterUnit;
+  /** Parents whose stats, or a class with known bases, aren't logged. */
+  readonly missing: readonly RosterUnit[];
+  /** The child's start class, when its parents are known (Morgan's follows the spouse). */
+  readonly startClass: ClassId | null;
+  readonly join: ChildJoinStats | null;
+};
+
+/** Morgan's start class: the spouse's starting class, or a Tactician after a Lord, Dancer or Conqueror (classes.ts). */
+function morganStart(child: ChildId, spouse: RosterUnit | 'maiden', assumptions: Assumptions): ClassId | null {
+  if (spouse === 'maiden' || spouse === 'robin') return null;
+  const secondGen = spouse in CHILD_UNITS;
+  const baseClass = secondGen ? CHILD_UNITS[spouse as ChildId].defaultClassSet[0] : FIRST_GEN_UNITS[spouse as UnitId].classes[0];
+  return baseClass ? startClass(CHILD_UNITS[child], { baseClass, secondGen }, assumptions).startClass : null;
+}
+
+/** A first-gen parent's or Robin's cap modifiers; a child parent's depend on its own parents, so they're left out. */
+function parentModifiers(run: Run, u: RosterUnit | 'maiden'): Modifiers | undefined {
+  if (u === 'robin') {
+    const { asset, flaw } = run.roster.run;
+    if (!asset || !flaw) return undefined;
+    return Object.fromEntries(MOD_STATS.map((s) => [s, ROBIN_MODIFIERS[s] + (ASSET_FLAW[asset].assetModifier[s] ?? 0) + (ASSET_FLAW[flaw].flawModifier[s] ?? 0)])) as Record<ModStat, number>;
+  }
+  return u in CHILD_UNITS ? undefined : FIRST_GEN_UNITS[u as UnitId].modifiers;
+}
+
 /**
- * A recruit's first snapshot (#116): a first-gen unit or Robin from its join data, a child from the map's record. A
- * setup used only on one map (Premonition's Chrom and Robin, #131) is the map's record, stats and all.
+ * A child's join stats from a snapshot of its parents (#155): the entry before its map, so the parents as they were on
+ * entering. Its parents are the fixed one and that one's recorded spouse (Morgan: Robin's). The Maiden, recorded as
+ * Chrom's wife (#154), has no stats: her side is an assumption. The stats are worked out only when both parents' stats
+ * and classes are logged there.
  */
-export function recruitSnapshot(unit: RosterUnit, run: Run, fromMap?: Pick<MapRecruit, 'class' | 'level' | 'inventory' | 'stats'>): UnitSnapshot {
+export function childJoinFrom(run: Run, before: Snapshot, child: ChildId, assumptions: Assumptions = DEFAULT_ASSUMPTIONS): ChildJoin {
+  const fixed: RosterUnit = CHILD_UNITS[child].fixedParent;
+  const bond = before.spouses[fixed];
+  const spouse = bond?.bond === 'married' ? bond.partner : undefined;
+  if (!spouse) return { parents: null, unmarried: fixed, missing: [], startClass: null, join: null };
+  const start = CHILD_UNITS[child].fixedParent === 'robin' ? morganStart(child, spouse, assumptions) : (CHILD_UNITS[child].defaultClassSet[0] ?? null);
+  const missing: RosterUnit[] = [];
+  const parentOf = (u: RosterUnit | 'maiden'): JoinParent | null => {
+    if (u === 'maiden') return 'maiden';
+    const snap = before.units[u];
+    const cls = snap && classIdByName(snap.class);
+    const gender = genderIn(run, u);
+    if (!snap?.stats || !cls || !gender || !classBaseStats(cls, gender)) return (missing.push(u), null);
+    return { stats: snap.stats, class: cls, gender };
+  };
+  const a = parentOf(fixed);
+  const b = parentOf(spouse);
+  const parents = [fixed, spouse] as const;
+  if (!a || !b || !start) return { parents, missing, startClass: start, join: null };
+  const ma = parentModifiers(run, fixed);
+  const mb = parentModifiers(run, spouse);
+  const modifiers = ma && mb && (Object.fromEntries(MOD_STATS.map((s) => [s, ma[s] + mb[s] + 1])) as Record<ModStat, number>);
+  return { parents, missing, startClass: start, join: childJoinStats({ child, parents: [a, b], startClass: start, ...(modifiers ? { modifiers } : {}) }, assumptions) };
+}
+
+/**
+ * A recruit's first snapshot (#116): a first-gen unit or Robin from its join data. A child's comes from its parents in
+ * `before`, the snapshot before its map (#155); without them its stats stay blank. A setup used only on one map
+ * (Premonition's Chrom and Robin, #131) is the map's record, stats and all.
+ */
+export function recruitSnapshot(
+  unit: RosterUnit,
+  run: Run,
+  fromMap?: Pick<MapRecruit, 'class' | 'level' | 'inventory' | 'stats'>,
+  before: Snapshot = EMPTY_SNAPSHOT,
+  assumptions: Assumptions = DEFAULT_ASSUMPTIONS,
+): UnitSnapshot {
   if (fromMap?.stats) {
     const stats = Object.fromEntries(STATS.map((s) => [s, setupStat(fromMap.stats![s], s, run.roster.run)])) as Record<Stat, number>;
     return { class: fromMap.class, level: Number(fromMap.level) || 1, promoted: false, reclassed: false, exp: 0, stats, skills: [], inventory: startingItems(fromMap), supports: [] };
   }
   const difficulty = run.roster.run.difficulty === 'normal' ? 'normal' : run.roster.run.difficulty === 'hard' ? 'hard' : run.roster.run.difficulty ? 'lunatic' : 'normal';
   if (unit !== 'robin' && unit in CHILD_UNITS) {
-    // A child's stats depend on its parents: record them from the game.
-    return { class: fromMap?.class ?? '', level: Number(fromMap?.level) || 1, promoted: false, reclassed: false, exp: 0, stats: null, skills: [], inventory: startingItems(fromMap), supports: [] };
+    const child = unit as ChildId;
+    const j = childJoinFrom(run, before, child, assumptions);
+    const cls = j.startClass ? className(j.startClass, CHILD_UNITS[child].gender) : (fromMap?.class ?? '');
+    return { class: cls, level: Number(fromMap?.level) || 1, promoted: false, reclassed: false, exp: 0, stats: j.join?.stats ?? null, skills: [], inventory: startingItems(fromMap), supports: [] };
   }
   const j = JOIN_DATA[unit as Exclude<UnitId, 'maiden'> | 'robin'];
   // Robin's bases shift with the run's asset and flaw.
@@ -187,22 +269,26 @@ export function heldProblems(h: HeldItem): string[] {
 
 /**
  * The next entry, for the map played: a copy of the latest snapshot, with the map's recruits the snapshot doesn't have
- * yet filled in (#116). The Robin recruit is skipped until Robin's gender is set, and a setup used only on the map
- * (Premonition's, #131) never joins the army.
+ * yet filled in (#116), a child's stats from its parents in that snapshot (#155). The Robin and Morgan recruits are
+ * skipped until Robin's gender is set, and a setup used only on the map (Premonition's, #131) never joins the army.
  */
-export function addEntry(run: Run, map: string, now: number, label?: string): Run {
+export function addEntry(run: Run, map: string, now: number, label?: string, assumptions: Assumptions = DEFAULT_ASSUMPTIONS): Run {
   const prev = latestEntry(run)?.snapshot ?? EMPTY_SNAPSHOT;
   const units: Partial<Record<RosterUnit, UnitSnapshot>> = { ...prev.units };
-  for (const [unit, r] of newRecruits(run, prev, map)) if (!mapOnly(r)) units[unit] = recruitSnapshot(unit, run, r);
+  for (const [unit, r] of newRecruits(run, prev, map)) if (!mapOnly(r)) units[unit] = recruitSnapshot(unit, run, r, prev, assumptions);
   const n = run.entries.reduce((m, e) => Math.max(m, Number(e.id.slice(1)) || 0), 0) + 1;
   const entry: RunEntry = { id: `e${n}`, map, ...(label ? { label } : {}), snapshot: { ...prev, units }, createdAt: now };
   return { ...run, entries: [...run.entries, entry] };
 }
 
-/** A map's recruits the snapshot doesn't have yet, as roster units. The Robin recruit waits for Robin's gender. */
+/**
+ * A map's recruits the snapshot doesn't have yet, as roster units. The Robin recruit waits for Robin's gender, and so
+ * does Morgan, who is the other gender.
+ */
 function newRecruits(run: Run, snap: Snapshot, map: string): [RosterUnit, MapRecruit][] {
+  const robin = run.roster.run.gender;
   return (MAPS.find((m) => m.id === map)?.recruits ?? []).flatMap((r): [RosterUnit, MapRecruit][] => {
-    const unit = UNIT_BY_NAME.get(r.unit);
+    const unit = r.unit === 'Morgan' ? robin && (robin === 'M' ? 'morgan-f' : 'morgan-m') : UNIT_BY_NAME.get(r.unit);
     return unit && !snap.units[unit] && (unit !== 'robin' || run.roster.run.gender) ? [[unit, r]] : [];
   });
 }
@@ -235,7 +321,7 @@ export function prepUnits(run: Run, map: string): PrepUnits {
   for (const [unit, r] of newRecruits(run, snap, map)) {
     if (!alive(unit)) continue;
     if (mapOnly(r) || /^Automatically from turn 1\b/.test(r.how ?? '')) {
-      units.push([unit, recruitSnapshot(unit, run, r)]);
+      units.push([unit, recruitSnapshot(unit, run, r, snap)]);
       (mapOnly(r) ? onlyHere : joining).push(unit);
     } else later.push({ unit, how: r.how });
   }

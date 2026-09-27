@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, addEntry, createEngine, runFromRoster, withRun, type Route } from '../engine';
-import { heldText, mapOrderReadout, parseHeldText, parseSupportsText, supportsText } from './run-page';
+import { EMPTY_ROSTER, addEntry, createEngine, editEntry, latestEntry, recordMarriage, runFromRoster, withRun, type Route, type RosterUnit, type UnitSnapshot } from '../engine';
+import { childStatsNote, heldText, mapOrderReadout, parseHeldText, parseSupportsText, supportsText } from './run-page';
 
 describe('the map order readout (#179)', () => {
   const engine = createEngine();
@@ -40,5 +40,29 @@ describe('the chapter log’s short text fields', () => {
     const s = [{ partner: 'sumia' as const, rank: 'A' as const }];
     expect(parseSupportsText(supportsText(s))).toEqual(s);
     expect(parseSupportsText('sumia Z; lissa C')).toEqual([{ partner: 'lissa', rank: 'C' }]);
+  });
+});
+
+describe('Record results’ recruits step (#155)', () => {
+  const facts = withRun(EMPTY_ROSTER, { gender: 'M', asset: 'mag', flaw: 'str', difficulty: 'lunatic', route: 'main-story' });
+  const stats = { hp: 46, str: 24, mag: 16, skl: 37, spd: 37, lck: 30, def: 10, res: 25 };
+  const unit = (cls: string, st: UnitSnapshot['stats']): UnitSnapshot => ({ class: cls, level: 10, promoted: true, reclassed: false, exp: 0, stats: st, skills: [], inventory: [], supports: [] });
+  const recorded = (units: Partial<Record<RosterUnit, UnitSnapshot>>, wife: RosterUnit | null) => {
+    let run = editEntry(runFromRoster(facts), 'e1', (s) => ({ ...s, units }), 1);
+    if (wife) run = recordMarriage(run, 'e1', 'chrom', wife, 1);
+    run = addEntry(run, 'chapter-13', 2);
+    return (u: RosterUnit) => childStatsNote(run, latestEntry(run)!, u);
+  };
+
+  it('names the parent whose stats kept a child’s blank', () => {
+    const note = recorded({ chrom: unit('Great Lord', stats), sumia: unit('Dark Flier', null) }, 'sumia');
+    expect(note('lucina')).toBe('Lucina: Sumia’s stats aren’t logged in the entry before this map, so Lucina’s stats are blank: record them from the game.');
+    expect(note('chrom')).toBeNull();
+  });
+
+  it('says which parents a child’s stats were worked out from', () => {
+    expect(recorded({ chrom: unit('Great Lord', stats), sumia: unit('Dark Flier', stats) }, 'sumia')('lucina')).toBe('Lucina: worked out from Chrom and Sumia as they were on entering this map.');
+    expect(recorded({ chrom: unit('Great Lord', stats) }, 'maiden')('lucina')).toBe('Lucina: worked out from Chrom and the Maiden as they were on entering this map (the Maiden’s side is an assumption).');
+    expect(recorded({ chrom: unit('Great Lord', stats) }, null)('lucina')).toBe('Lucina: Chrom isn’t married in the entry before this map, so Lucina’s stats are blank: record them from the game.');
   });
 });

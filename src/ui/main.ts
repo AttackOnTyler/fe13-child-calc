@@ -2443,6 +2443,7 @@ function renderParts(parts: readonly Part[]): void {
           : view === 'run'
           ? runView({
               engine,
+              assumptions,
               run,
               setRun,
               now: () => Date.now(),

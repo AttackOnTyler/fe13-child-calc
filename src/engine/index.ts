@@ -33,6 +33,7 @@ import {
   startClass,
 } from './classes';
 import { inheritGrowths, inheritModifiers, type ParentProfile } from './inheritance';
+import { childJoinStats, type ChildJoinInput, type ChildJoinStats } from './child-join';
 import { buildSkillView, candidatesFor, firstGenSkills, ref, secondGenSkills, skillRank, skillReach, type SkillViewInput, type SkillViewSettings } from './skills';
 import { BUILD_TEMPLATES } from '../curated/builds';
 import { UNIT_OPINIONS, type OpinionUnit } from '../curated/unit-opinion';
@@ -102,6 +103,7 @@ export {
 } from './assumptions';
 export { DEFAULT_SPEED, RALLY_OPTIONS, TONIC_SPD } from './speed';
 export { routeMapOrder, type Endpoint, type MapOrder, type MapOrderStep } from './map-order';
+export { childJoinStats, classBaseStats, type ChildJoinInput, type ChildJoinStats, type JoinParent } from './child-join';
 export type { Citation } from '../game-data/citations';
 export { CHAPTER_GUIDE, type GuideEntry } from '../curated/chapter-guide';
 export { classIdByName, classWeaponKinds, openStock, promotionAdvice, sealAvailability, sealsHeld, supplyList, type PromotionAdvice, type SealAvailability, type StockItem, type Supply } from './supply';
@@ -114,6 +116,7 @@ export {
   EMPTY_SNAPSHOT,
   SUPPORT_LEVELS,
   addEntry,
+  childJoinFrom,
   editEntry,
   exportRun,
   flaggedEntries,
@@ -133,6 +136,7 @@ export {
   withRoster,
   withSeenSkills,
   withUnit,
+  type ChildJoin,
   type HeldItem,
   type LaterRecruit,
   type MapOffer,
@@ -274,6 +278,11 @@ export type Engine = {
   /** Class max + modifier (+10 except HP with Limit Breaker), or undefined if the child can't reach the class. */
   effectiveCaps(result: ChildResult, id: ClassId, limitBreaker: boolean): Readonly<Record<Stat, number>> | undefined;
   classMaxStats(id: ClassId, gender: Gender): Readonly<Record<Stat, number>>;
+  /**
+   * A child's join stats (#155) from its parents' stats and current classes as they are on entering its paralogue,
+   * under this engine's assumptions. Morgan needs its start class.
+   */
+  childJoinStats(input: ChildJoinInput): ChildJoinStats;
   /** Class growths, with Conqueror's Skl/Spd read from the assumptions. */
   classGrowths(id: ClassId, gender: Gender): Growths;
   /** The curated presets, in menu order. */
@@ -1277,6 +1286,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     effectiveCaps: (r, id, limitBreaker) =>
       reachOf(r).has(id) ? effectiveCaps(id, genderOf(r), r.modifiers, limitBreaker) : undefined,
     classMaxStats,
+    childJoinStats: (input) => childJoinStats(input, assumptions),
     classGrowths: (id, gender) => classGrowths(id, gender, assumptions),
     presets: () => PRESET_LIST,
     score: (settings) => {
