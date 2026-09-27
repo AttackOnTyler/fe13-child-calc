@@ -17,6 +17,7 @@ import { className, startClass } from './classes';
 import { classIdByName } from './supply';
 import { robinBases } from './unit-page';
 import { FORGE, forgeProblem, itemByName } from '../game-data/items';
+import { SKILLS } from '../game-data/skills';
 import { FIRST_GEN_UNITS, type UnitId } from '../game-data/units';
 import { parseClassChanges, parseCountOverrides, type ClassChange } from './internal-level';
 import { entryAfterShopping, parseShopLines, type ShopLine } from './shopping';
@@ -363,7 +364,8 @@ export function recruitSnapshot(
     reclassed: false,
     exp: 0,
     stats: Object.fromEntries(STATS.map((s) => [s, bases[s]])) as Record<Stat, number>,
-    skills: j.startingSkills.slice(0, 5),
+    // By name, as Record results writes skills and the combat math reads them (the join data keys them by id).
+    skills: j.startingSkills.slice(0, 5).map((id) => SKILLS[id].name),
     inventory: startingItems(fromMap),
     supports: [],
   };

@@ -35,6 +35,33 @@ const stats = (hp: number, str: number, mag: number, skl: number, spd: number, l
 const weapon = (name: string, forge?: { mt: number; hit: number; crit: number }) => ({ item: itemByName(name)!, ...(forge ? { forge } : {}) });
 const frederick: Fighter = { name: 'Frederick', className: 'Great Knight', stats: stats(28, 13, 2, 12, 10, 6, 14, 3), skills: [], weapon: weapon('Silver Lance') };
 
+describe('skills in the combat math (realism pass)', () => {
+  // Hits 90% either way, no doubling (clamped at 0 and 100 like the game).
+  const mid = stats(30, 10, 0, 10, 10, 10, 5, 5);
+  const swordsman = (skills: string[] = []): Fighter => ({ name: 'Swordsman', className: 'Myrmidon', stats: mid, skills, weapon: weapon('Iron Sword') });
+  const foe = (skills: string[] = [], w = 'Iron Lance'): Foe => ({ name: 'Foe', className: 'Soldier', count: 1, stats: mid, weapon: itemByName(w), skills, boss: false });
+
+  it('adds a faire’s +5 to the lead’s hits with its kind, and to the foe’s', () => {
+    const plain = matchup(swordsman(), undefined, null, foe());
+    expect(matchup(swordsman(['Swordfaire']), undefined, null, foe()).damage).toBe(plain.damage + 5);
+    expect(matchup(swordsman(['Lancefaire']), undefined, null, foe()).damage).toBe(plain.damage);
+    expect(matchup(swordsman(), undefined, null, foe(['Lancefaire'])).worstHit).toBe(plain.worstHit + 5);
+  });
+
+  it('adds a breaker’s +50 Hit and Avoid against its kind, and the hit and avoid skills', () => {
+    const plain = matchup(swordsman(), undefined, null, foe());
+    const breaker = matchup(swordsman(['Lancebreaker']), undefined, null, foe());
+    expect([breaker.hit, breaker.foeHit]).toEqual([Math.min(100, plain.hit + 50), Math.max(0, plain.foeHit - 50)]);
+    const broken = matchup(swordsman(), undefined, null, foe(['Swordbreaker']));
+    expect([broken.hit, broken.foeHit]).toEqual([Math.max(0, plain.hit - 50), Math.min(100, plain.foeHit + 50)]);
+    // Against another kind, nothing.
+    expect(matchup(swordsman(['Axebreaker']), undefined, null, foe()).hit).toBe(plain.hit);
+    expect(matchup(swordsman(['Hit Rate +20']), undefined, null, foe()).hit).toBe(Math.min(100, plain.hit + 20));
+    expect(matchup(swordsman(['Avoid +10']), undefined, null, foe()).foeHit).toBe(Math.max(0, plain.foeHit - 10));
+    expect(matchup(swordsman(), undefined, null, foe(['Avoid +10'])).hit).toBe(Math.max(0, plain.hit - 10));
+  });
+});
+
 describe('the map solver’s combat math', () => {
   it('reads FEW’s stat text at its worst for the player', () => {
     expect(statValue('16~18')).toBe(18);

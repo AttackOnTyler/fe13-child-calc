@@ -283,6 +283,21 @@ describe('what a unit carries into a map (realism pass)', () => {
   });
 });
 
+describe('the plan’s builds in the runs (realism pass)', () => {
+  it('equips each build skill once the unit has learned it, and the combat math reads it', () => {
+    // A foe that hits back: Avoid +10 (a Myrmidon's Lv 1 skill) lowers its hit chance on the hero.
+    const biter: Foe = { ...dummy(3, 40), name: 'Biter', weapon: item('Iron Axe'), stats: stats(40, 18, 0, 10, 0, 5, 0, 0) };
+    const maps = [step(rout('a', [])), step(rout('b', [biter])), step(rout('end', []))];
+    const input = { army: [hero()], maps, difficulty: 'normal' as const };
+    const plain = engine.simulateRuns(input, 1, 1);
+    const built = engine.simulateRuns({ ...input, builds: { lonqu: ['avoid-plus-10', 'vantage'] } }, 1, 1);
+    // Vantage comes at Lv 10: not learned, not equipped.
+    expect(built.units[0]!.skills).toEqual(['Avoid +10']);
+    expect(plain.units[0]!.skills).toEqual([]);
+    expect(built.maps[1]!.noDeath!).toBeGreaterThan(plain.maps[1]!.noDeath!);
+  });
+});
+
 describe('a map the play can’t win (realism pass)', () => {
   it('counts a map that runs out of turns unwon as not cleared: the run doesn’t get past it', () => {
     // A foe the hero can't hurt and that can't hurt it: nobody dies, and the map is never won.

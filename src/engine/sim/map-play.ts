@@ -302,7 +302,7 @@ export const MAX_TURNS = 50;
  */
 export const EXPOSURE_RISK = 0.01;
 const LUNATIC_PLUS_DRAWS = 2;
-const BLIND_SPOTS: readonly BlindSpotId[] = ['one-worst-attacker', 'held-back-out-of-reach', 'equal-share-of-actions', 'likely-result', 'bosses-hold'];
+const BLIND_SPOTS: readonly BlindSpotId[] = ['one-worst-attacker', 'held-back-out-of-reach', 'equal-share-of-actions', 'likely-result', 'bosses-hold', 'skills-in-combat'];
 /** A heal's small worth beyond the danger it lifts: HP topped up now is HP in hand for the turns to come. */
 const TOP_UP = 0.01;
 /** Choices this close count as equal (a stance change needs a real difference). */
@@ -1422,6 +1422,9 @@ class MapState {
    */
   engage(ctx: PolicyContext): Action | undefined {
     if (this.exposed.size || !this.foes.length || this.acts.some((a) => a.kind === 'talk')) return undefined;
+    // Nothing left that attacks (only bosses holding their ground): waiting costs nothing, so a careful player heals up
+    // before the risky attack, while a staff can still lift a hurt front (the realism pass).
+    if (!ctx.threats.length && this.healingLeft()) return undefined;
     let best: { readonly action: Action; readonly risk: number } | undefined;
     const consider = (action: Action, risk: number) => {
       if (!best || risk < best.risk - EPS) best = { action, risk };
@@ -1456,6 +1459,13 @@ class MapState {
       best = { action: { kind: 'bait', group: gi, risk, value: 0 }, risk };
     }
     return best?.action;
+  }
+
+  /** Whether a staff with uses could still heal an armed front that's hurt (a healer that acted heals next turn). */
+  private healingLeft(): boolean {
+    const hurt = this.front.some((a, gi) => this.armed(gi) && !this.npcFronts.has(gi) && this.hp[a.unit]! < this.units[a.unit]!.fighter.stats.hp);
+    if (!hurt) return false;
+    return this.front.some((a) => this.kits[a.unit]!.staves.some((st) => st.effect.kind !== 'rescue' && st.reach > 0 && this.uses[a.unit]![st.item]! > 0));
   }
 
   /** Whether front `gi` would hurt the foe worst for it on enemy phase: a bait that can't counter moves nothing. */

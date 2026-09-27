@@ -19,7 +19,7 @@
 import { CLASSES, type ClassData, type ClassId } from '../../game-data/classes';
 import { STATS, type Gender, type Modifiers, type Stat } from '../../game-data/stats';
 import { CHILD_UNITS } from '../../game-data/children';
-import type { SkillId } from '../../game-data/skills';
+import { SKILLS, type SkillId } from '../../game-data/skills';
 import type { Assumptions, BlindSpotId, RunBlindSpotId } from '../assumptions';
 import { classBaseStats } from '../child-join';
 import { childSkills, type SkillParent } from '../child-skills';
@@ -77,6 +77,14 @@ export function fullClass(classId: ClassId, gender: Gender): ClassId {
     if (!best || total > best.total) best = { to, total };
   }
   return best?.to ?? classId;
+}
+
+/** A unit with the plan's build equipped first, then its own skills, five at most. */
+function withBuild(a: ArmyUnit, build: readonly SkillId[] | undefined): ArmyUnit {
+  if (!build?.length) return a;
+  const skills: string[] = [];
+  for (const n of [...build.map((id) => SKILLS[id].name), ...a.skills]) if (skills.length < 5 && !skills.includes(n)) skills.push(n);
+  return { ...a, skills };
 }
 
 /** A unit at its full build, as a deployment candidate. */
@@ -196,7 +204,8 @@ export function ceilingArmy(
     const u = army.has(c.id) ? undefined : childUnit(c, army, assumptions);
     if (u) army.set(u.id, u);
   }
-  const fielded = [...army.values()].map(capped);
+  // At its full build every skill of the plan's build is learned and equipped (the realism pass), then its own.
+  const fielded = [...army.values()].map((a) => capped(withBuild(a, input.builds?.[a.id])));
   const pools = new Map<Foe, readonly string[]>(end.map.foes.map((g) => [g.foe, g.pool ?? []]));
   const lineup = suggestDeployment({
     candidates: fielded,

@@ -167,6 +167,18 @@ function bonusOf(back: Fighter, support: SupportLevel | null): Partial<Record<Mo
 }
 const NO_BONUS: Partial<Record<ModStat, number>> = {};
 
+/** The faire and breaker skills by weapon kind (SF Skills): +5 Str or Mag with the kind; +50 Hit and Avoid against it. */
+const FAIRE: Readonly<Record<string, string>> = { sword: 'Swordfaire', lance: 'Lancefaire', axe: 'Axefaire', bow: 'Bowfaire', tome: 'Tomefaire' };
+const BREAKER: Readonly<Record<string, string>> = { sword: 'Swordbreaker', lance: 'Lancebreaker', axe: 'Axebreaker', bow: 'Bowbreaker', tome: 'Tomebreaker' };
+const has = (skills: readonly string[] | ReadonlySet<string>, name: string | undefined) => !!name && (Array.isArray(skills) ? skills.includes(name) : (skills as ReadonlySet<string>).has(name));
+/** A faire's +5 when the weapon is its kind. */
+const faireOf = (skills: readonly string[] | ReadonlySet<string>, w: GameItem | undefined) => (w && has(skills, FAIRE[w.kind]) ? 5 : 0);
+/** A breaker's +50 Hit and Avoid when the other side's weapon is its kind. */
+const breakerOf = (skills: readonly string[] | ReadonlySet<string>, other: GameItem | undefined) => (other && has(skills, BREAKER[other.kind]) ? 50 : 0);
+/** Hit Rate +20 and Avoid +10 (SF Skills). */
+const hitSkill = (skills: readonly string[] | ReadonlySet<string>) => (has(skills, 'Hit Rate +20') ? 20 : 0);
+const avoidSkill = (skills: readonly string[] | ReadonlySet<string>) => (has(skills, 'Avoid +10') ? 10 : 0);
+
 /**
  * One lead + back pair against one foe. `lunaticPlus` lists the Lunatic+ skills to assume (the map's pool) when the
  * foe's were not recorded; recorded skills come in `foe.skills`. With `paired` false the back is an adjacent ally
@@ -185,7 +197,11 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
   const effective = effectiveOn(w, foe.className);
   if (effective) notes.push(`${w!.name} is effective: Mt tripled`);
   const tri = triangle(w, foe.weapon);
-  const attack = (magic ? st('mag') : st('str')) + ws.mt * (effective ? 3 : 1);
+  // Faires, breakers and the hit and avoid skills, both sides (the realism pass): the rest of a unit's skills are procs
+  // and stat bonuses the exchange doesn't play (`skills-in-combat`).
+  const leadAvoid = breakerOf(lead.skills, foe.weapon) + avoidSkill(lead.skills);
+  const foeAvoid = breakerOf(skills, w) + avoidSkill(skills);
+  const attack = (magic ? st('mag') : st('str')) + faireOf(lead.skills, w) + ws.mt * (effective ? 3 : 1);
   let damage = Math.max(0, attack - (magic ? foe.stats.res : foe.stats.def));
   // Aegis covers bows, tomes and dragonstones; Pavise the rest, beaststones included (SF Skills).
   const aegisSide = (x: GameItem | undefined, m: boolean) => m || x?.kind === 'bow' || x?.kind === 'stone';
@@ -207,7 +223,7 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
     const bmagic = !!bw && (bw.kind === 'tome' || bw.magic === true);
     const bws = weaponStats(back.weapon);
     const beff = effectiveOn(bw, foe.className);
-    backDamage = Math.max(0, (bmagic ? back.stats.mag : back.stats.str) + bws.mt * (beff ? 3 : 1) - (bmagic ? foe.stats.res : foe.stats.def));
+    backDamage = Math.max(0, (bmagic ? back.stats.mag : back.stats.str) + faireOf(back.skills, bw) + bws.mt * (beff ? 3 : 1) - (bmagic ? foe.stats.res : foe.stats.def));
     const bPlus = aegisSide(bw, bmagic) ? skills.has('Aegis+') : skills.has('Pavise+');
     if (bPlus || dragonskin) {
       backDamage = Math.floor(backDamage / 2);
@@ -217,7 +233,7 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
     dualStrikeRate = clamp(skl / 4 + STRIKE_BY_SUPPORT[support ?? 'none'] + (lead.skills.includes('Dual Strike+') || back.skills.includes('Dual Strike+') ? 10 : 0));
     // The dual strike itself uses the back's own stats and weapon; a back with no weapon can't strike.
     if (bw) {
-      backHit = clamp(bws.hit + (back.stats.skl * 3 + back.stats.lck) / 2 + 5 * triangle(bw, foe.weapon) - (foe.stats.spd * 3 + foe.stats.lck) / 2);
+      backHit = clamp(bws.hit + (back.stats.skl * 3 + back.stats.lck) / 2 + 5 * triangle(bw, foe.weapon) + breakerOf(back.skills, foe.weapon) + hitSkill(back.skills) - ((foe.stats.spd * 3 + foe.stats.lck) / 2 + breakerOf(skills, bw) + avoidSkill(skills)));
       backCrit = clamp(bws.crit + back.stats.skl / 2 - foe.stats.lck);
     } else backDamage = 0;
   }
@@ -234,7 +250,7 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
   if (feff) notes.push(`${foe.name}’s ${fw!.name} is effective against the lead`);
   const leadDef = fmagic ? st('res') : st('def');
   const luna = skills.has('Luna+');
-  const worstHit = Math.max(0, (fmagic ? foe.stats.mag : foe.stats.str) + fmt * (feff ? 3 : 1) - (luna ? Math.floor(leadDef / 2) : leadDef));
+  const worstHit = Math.max(0, (fmagic ? foe.stats.mag : foe.stats.str) + faireOf(skills, fw) + fmt * (feff ? 3 : 1) - (luna ? Math.floor(leadDef / 2) : leadDef));
   const foeHits = fw ? (fw.brave ? 2 : 1) * (doubled ? 2 : 1) : 0;
   // Counter returns the lead's damage when it hits in melee and doesn't kill.
   const melee = !w || (w.range ?? '1') === '1';
@@ -248,9 +264,9 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
     : 0;
   const survives = worstRound < lead.stats.hp;
   const [sHit, sAvo, sCrit, sCritAvo] = back ? dualSupport(SUPPORT_RANK[support ?? 'none']) : [0, 0, 0, 0];
-  const hit = clamp(ws.hit + (st('skl') * 3 + st('lck')) / 2 + sHit + 5 * tri - (foe.stats.spd * 3 + foe.stats.lck) / 2);
+  const hit = clamp(ws.hit + (st('skl') * 3 + st('lck')) / 2 + sHit + 5 * tri + breakerOf(lead.skills, foe.weapon) + hitSkill(lead.skills) - ((foe.stats.spd * 3 + foe.stats.lck) / 2 + foeAvoid));
   const crit = clamp(ws.crit + st('skl') / 2 + sCrit - foe.stats.lck);
-  const foeHit = skills.has('Hawkeye') ? 100 : clamp(fhit + (foe.stats.skl * 3 + foe.stats.lck) / 2 - 5 * tri - ((st('spd') * 3 + st('lck')) / 2 + sAvo));
+  const foeHit = skills.has('Hawkeye') ? 100 : clamp(fhit + (foe.stats.skl * 3 + foe.stats.lck) / 2 - 5 * tri + breakerOf(skills, w) + hitSkill(skills) - ((st('spd') * 3 + st('lck')) / 2 + sAvo + leadAvoid));
   const foeCrit = clamp(fcrit + foe.stats.skl / 2 - (st('lck') + sCritAvo));
   if (skills.has('Hawkeye')) notes.push('Hawkeye: the foe always hits');
   if (luna) notes.push('Luna+: the foe’s hits ignore half your defence');
