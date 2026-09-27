@@ -15,10 +15,12 @@
  * of the Full route costs about 0.3 s, and the plan's projection about 0.8 s (the anytime solve's worker, #199, takes
  * that off the page).
  *
- * Each run's state is a `RunState`, walked map by map: `beforeMap` (joins, promotions), the play, then `afterMap` (EXP
- * and level-ups, later recruits). Later tickets extend the same walk:
- * - #187: a child joins at paralogue entry in `beforeMap`, its join stats from its parents' stats in this run's state
- *   (`childJoinStats` over `state.army`), as another `RunSimMap.joining`-like list keyed by the child's paralogue.
+ * Each run's state is a `RunState`, walked map by map: `beforeMap` (joins, children read at entry, promotions), the
+ * play, then `afterMap` (EXP and level-ups, later recruits and children). Children (#187): a child paralogue is entered
+ * only when its gates hold in the run (`childParalogueGates` over the run's cleared maps and marriages; a closed one
+ * isn't played); on entry the child's join stats (`childJoinStats`) and skills (`childSkills`) are read from its
+ * parents as they stand in this run, and it joins the army after the map (Lucina: read at the start of Chapter 13,
+ * joining at its end, as the chapter data has her). Later tickets extend the same walk:
  * - #188: support points per pair per map from `play.units[id].together`, kept on `state.supports` in `afterMap`.
  * - #190: gold and held items per run on `state.gold`, Bullion in `afterMap`, the shopping list in `beforeMap`.
  * - #194 replaces the promotion rule below (`PROMOTION_RULE`) with the roadmap's class-reached milestones.
@@ -27,14 +29,19 @@ import { CLASSES, type ClassData, type ClassId, type ClassTier } from '../../gam
 import { STATS, type Gender, type Growths, type Modifiers, type Stat } from '../../game-data/stats';
 import type { DeploymentRole } from '../../curated/deployment';
 import type { Assumptions, BlindSpotId, RunBlindSpotId } from '../assumptions';
-import { classBaseStats } from '../child-join';
+import { CHILD_UNITS, type ChildId } from '../../game-data/children';
+import type { SkillId } from '../../game-data/skills';
+import { childJoinStats, classBaseStats, type JoinParent } from '../child-join';
+import { childParalogueGates, isChildParalogue } from '../child-paralogues';
+import { childSkills, type SkillParent } from '../child-skills';
 import { classGrowths, classMaxStats, className, promotionsOf } from '../classes';
 import { suggestDeployment, type DeployCandidate, type Deployment } from '../deploy';
-import { COUNT_CAP, combatExp, expFoeOf, type ExpFoe } from '../exp';
+import { COUNT_CAP, combatExp, expFoeOf, tierBonus, type ExpFoe } from '../exp';
 import type { Difficulty, RosterUnit } from '../roster';
 import type { Fighter, Foe, SupportLevel } from '../solver';
 import { playMap, type MapPlay, type SimFoeGroup, type SimGroup, type SimMap, type SimUnit } from './map-play';
 import { createRng, runSeed, type Rng } from './random';
+import type { SimItem } from './sustain';
 
 export type Weapon = NonNullable<Fighter['weapon']>;
 
@@ -60,7 +67,29 @@ export type ArmyUnit = {
   readonly modifiers: Modifiers;
   readonly skills: readonly string[];
   readonly weapons: readonly Weapon[];
+  /** Staves and potions it can spend uses of on a map (#182's sustain); each map starts with the uses recorded. */
+  readonly items?: readonly SimItem[];
   readonly supports: readonly { readonly partner: RosterUnit; readonly rank: SupportLevel }[];
+  readonly role: DeploymentRole;
+};
+
+/**
+ * A child who joins when its map is entered (#187): what doesn't depend on the run. Its join stats and skills are read
+ * from its parents as they stand in the run on entry, and it joins the army after the map.
+ */
+export type ChildRecruit = {
+  readonly id: ChildId;
+  readonly name: string;
+  /** The fixed parent, then its spouse (recorded, or the plan's); the Maiden as Chrom's wife when he marries no one else. */
+  readonly parents: readonly [RosterUnit, RosterUnit | 'maiden'];
+  /** A parent's fixed pass (Chrom's, Walhart's, Aversa's, or a Chrom child's to Morgan), fixed parent first. */
+  readonly fixed?: readonly [SkillId | undefined, SkillId | undefined];
+  /** Morgan's start class (its other parent's); every other child joins in its fixed class. */
+  readonly startClass?: ClassId;
+  readonly growths: Growths;
+  readonly modifiers: Modifiers;
+  readonly weapons: readonly Weapon[];
+  readonly items?: readonly SimItem[];
   readonly role: DeploymentRole;
 };
 
@@ -80,6 +109,8 @@ export type RunSimMap = {
   readonly mapOnly: readonly ArmyUnit[];
   /** Recruits who come later in the map (a talk, a later turn): in the army from the next map. */
   readonly later: readonly ArmyUnit[];
+  /** Children read on entering it (a child paralogue, or Chapter 13 for Lucina), in the army from the next map (#187). */
+  readonly children?: readonly ChildRecruit[];
   /** Whether Master Seals are sold in an armory by this map's preparations (a merchant's aren't counted on). */
   readonly masterSeals: boolean;
 };
@@ -90,6 +121,13 @@ export type RunSimInput = {
   readonly difficulty: Difficulty;
   /** Master Seals held at the start (convoy and inventories). */
   readonly masterSealsHeld?: number;
+  /** Maps already played (the chapter log's): a child paralogue's gates read them (#187). */
+  readonly cleared?: readonly string[];
+  /**
+   * Units married by the time a child paralogue is reached: the recorded marriages and the plan's (the plan's are
+   * taken as made in time until supports are simulated, #188; the `plan-marriages-made` blind spot).
+   */
+  readonly married?: readonly RosterUnit[];
 };
 
 /** A stat's spread over the runs at the endpoint: 10th percentile, median, 90th, and the effective cap. */
@@ -104,12 +142,17 @@ export type UnitForecast = {
   readonly level: StatSpread;
   readonly exp: number;
   readonly stats: Readonly<Record<Stat, StatSpread>>;
+  /** Its equipped skills: as recorded, or a child's as it joined (its class's and its parents' passes, #187). */
+  readonly skills: readonly string[];
 };
 
 export type RunSimMapResult = {
   readonly key: string;
   readonly label: string;
-  /** The chance of reaching it with nobody lost: the flawless chance through the map before. */
+  /**
+   * The chance of reaching it with nobody lost: the flawless chance through the map before. A child paralogue whose
+   * gates don't hold in a run isn't played there, and that run isn't counted here (#187).
+   */
   readonly reach: number;
   /**
    * The map's no-death chance for the runs that reach it with nobody lost (each run weighted by its chance of getting
@@ -148,7 +191,7 @@ export type RunSim = {
 export const PROMOTION_RULE = { level: 20 } as const;
 
 /** The run simulation's own blind spots (see BLIND_SPOTS): what it simplifies between maps. */
-const RUN_BLIND_SPOTS: readonly RunBlindSpotId[] = ['promotes-at-cap', 'lead-takes-exp', 'no-new-children', 'kit-as-recorded'];
+const RUN_BLIND_SPOTS: readonly RunBlindSpotId[] = ['promotes-at-cap', 'lead-takes-exp', 'plan-marriages-made', 'kit-as-recorded'];
 
 /** Special classes (Dancer, Villager, Taguel, Manakete, the DLC classes) level to 30; base and advanced to 20. */
 export const levelCap = (tier: ClassTier): number => (tier === 'special' ? 30 : 20);
@@ -169,6 +212,11 @@ type Live = {
 export type RunState = {
   readonly army: Map<RosterUnit, Live>;
   masterSealsHeld: number;
+  /** Maps played, recorded ones included: the child paralogues' gates read them. */
+  readonly cleared: Set<string>;
+  readonly married: ReadonlySet<RosterUnit>;
+  /** Children read on entering this map, who join after it. */
+  arriving: Live[];
 };
 
 /** Class growths by class and gender, per set of assumptions (Conqueror's are assumed). */
@@ -257,7 +305,7 @@ const internalOf = (u: Live, difficulty: Difficulty) => u.level + u.bonus + Math
 /** Rounded stats as the combat math reads them. */
 const shownStats = (u: Live): Record<Stat, number> => Object.fromEntries(STATS.map((s) => [s, Math.floor(u.stats[s] + 1e-9)])) as Record<Stat, number>;
 
-const fighterOf = (u: Live, stats: Record<Stat, number>): Fighter => ({
+const fighterOf = (u: Live, stats: Readonly<Record<Stat, number>>): Fighter => ({
   name: u.base.name,
   className: className(u.classId, u.base.gender),
   stats,
@@ -309,7 +357,7 @@ function lineupOf(state: RunState, d: Deployment, extra: ReadonlyMap<RosterUnit,
     const key = `${id}|${u.classId}|${STATS.map((s) => stats[s]).join(',')}`;
     let su = interner.units.get(key);
     if (!su) {
-      interner.units.set(key, (su = { id, fighter: fighterOf(u, stats), weapons: u.base.weapons }));
+      interner.units.set(key, (su = { id, fighter: fighterOf(u, stats), weapons: u.base.weapons, ...(u.base.items?.length ? { items: u.base.items } : {}) }));
       interner.keys.set(su, key);
     }
     return su;
@@ -336,23 +384,98 @@ function lineupOf(state: RunState, d: Deployment, extra: ReadonlyMap<RosterUnit,
 
 /** The units a map can field: the army, its opening recruits and its own setups. */
 function candidatesOf(state: RunState, extra: ReadonlyMap<RosterUnit, Live>): DeployCandidate[] {
-  return [...state.army.values(), ...extra.values()].map((u) => ({ unit: u.base.id, role: u.base.role, fighter: fighterOf(u, shownStats(u)), weapons: u.base.weapons, supports: u.base.supports }));
+  return [...state.army.values(), ...extra.values()].map((u) => ({
+    unit: u.base.id,
+    role: u.base.role,
+    fighter: fighterOf(u, shownStats(u)),
+    weapons: u.base.weapons,
+    ...(u.base.items?.length ? { items: u.base.items } : {}),
+    supports: u.base.supports,
+  }));
 }
 
-/** A map's preparations: its opening recruits join (and its own setups are fielded), then promotions. */
-function beforeMap(state: RunState, step: RunSimMap, reading: Assumptions['class-change-internal-level']): Map<RosterUnit, Live> {
+/** Whether a map is entered in this run: a child paralogue only when its gates hold (Chapter 13 cleared, its parent married, its place reachable). */
+function entered(state: RunState, step: RunSimMap): boolean {
+  const id = step.map.id;
+  if (!isChildParalogue(id)) return true;
+  return childParalogueGates({ cleared: state.cleared, married: state.married }).some((g) => g.map === id && g.playable);
+}
+
+/**
+ * A child as it joins (#187): join stats from its parents' stats and classes as they stand on entry (stored stats; the
+ * projection's are fractional, which the formula's floor absorbs), skills from their equipped skills. Undefined when a
+ * parent isn't in the run's army (lost, or never simulated) or is in a class with no published bases.
+ */
+function childOf(state: RunState, c: ChildRecruit, assumptions: Assumptions): Live | undefined {
+  const side = (u: RosterUnit | 'maiden'): { join: JoinParent; skills: SkillParent } | undefined => {
+    if (u === 'maiden') return { join: 'maiden', skills: 'maiden' };
+    const p = state.army.get(u);
+    if (!p || !classBaseStats(p.classId, p.base.gender)) return undefined;
+    return { join: { stats: p.stats, class: p.classId, gender: p.base.gender }, skills: { skills: p.base.skills } };
+  };
+  const a = side(c.parents[0]);
+  const b = side(c.parents[1]);
+  if (!a || !b) return undefined;
+  const fixed = (s: SkillParent, f: SkillId | undefined): SkillParent => (f && s !== 'maiden' ? { ...s, fixed: f } : s);
+  const join = childJoinStats({ child: c.id, parents: [a.join, b.join], ...(c.startClass ? { startClass: c.startClass } : {}), modifiers: c.modifiers }, assumptions);
+  const { skills } = childSkills({ child: c.id, parents: [fixed(a.skills, c.fixed?.[0]), fixed(b.skills, c.fixed?.[1])], startClass: join.class, level: join.level }, assumptions);
+  const gender = CHILD_UNITS[c.id].gender;
+  return liveOf({
+    id: c.id,
+    name: c.name,
+    gender,
+    classId: join.class,
+    level: join.level,
+    exp: 0,
+    count: 0,
+    bonus: tierBonus(CLASSES[join.class].tier),
+    stats: join.stats,
+    growths: c.growths,
+    modifiers: c.modifiers,
+    skills,
+    weapons: c.weapons,
+    ...(c.items ? { items: c.items } : {}),
+    supports: [],
+    role: c.role,
+  });
+}
+
+/**
+ * A map's preparations: its opening recruits join (and its own setups are fielded), its children are read from their
+ * parents on entry, then promotions. Undefined when the map isn't entered in this run (a closed child paralogue).
+ */
+function beforeMap(state: RunState, step: RunSimMap, assumptions: Assumptions): Map<RosterUnit, Live> | undefined {
+  if (!entered(state, step)) return undefined;
   for (const a of step.joining) if (!state.army.has(a.id)) state.army.set(a.id, liveOf(a));
-  promote(state, step, reading);
+  state.arriving = [];
+  for (const c of step.children ?? []) {
+    if (state.army.has(c.id)) continue;
+    const u = childOf(state, c, assumptions);
+    if (u) state.arriving.push(u);
+  }
+  promote(state, step, assumptions['class-change-internal-level']);
   return new Map(step.mapOnly.map((a) => [a.id, liveOf(a)]));
 }
 
-/** After a map: EXP and level-ups from its fights, then the recruits who came during it. */
+/** After a map: EXP and level-ups from its fights, then the recruits and children who came during it. */
 function afterMap(state: RunState, step: RunSimMap, play: MapPlay, rng: Rng | null, difficulty: Difficulty, assumptions: Assumptions) {
   earn(state, step.map, play, rng, difficulty, assumptions);
   for (const a of step.later) if (!state.army.has(a.id)) state.army.set(a.id, liveOf(a));
+  for (const u of state.arriving) if (!state.army.has(u.base.id)) state.army.set(u.base.id, u);
+  state.arriving = [];
+  state.cleared.add(step.map.id);
 }
 
-const newState = (input: RunSimInput): RunState => ({ army: new Map(input.army.map((a) => [a.id, liveOf(a)])), masterSealsHeld: input.masterSealsHeld ?? 0 });
+const newState = (input: RunSimInput): RunState => ({
+  army: new Map(input.army.map((a) => [a.id, liveOf(a)])),
+  masterSealsHeld: input.masterSealsHeld ?? 0,
+  cleared: new Set(input.cleared ?? []),
+  married: new Set(input.married ?? []),
+  arriving: [],
+});
+
+/** The lineup of a map no run enters. */
+const NOBODY: Deployment = { max: 0, deployed: [], pairs: [], solo: [], forced: [] };
 
 /**
  * The plan's lineups: the map order walked with average growths (no rolls), each map's lineup the suggested deployment
@@ -360,7 +483,6 @@ const newState = (input: RunSimInput): RunState => ({ army: new Map(input.army.m
  * (`lineup(i)`), so maps no run reaches cost nothing.
  */
 function planner(input: RunSimInput, seed: number, assumptions: Assumptions): (i: number) => Deployment {
-  const reading = assumptions['class-change-internal-level'];
   const state = newState(input);
   const interner = newInterner();
   const done: Deployment[] = [];
@@ -368,7 +490,11 @@ function planner(input: RunSimInput, seed: number, assumptions: Assumptions): (i
     while (done.length <= i) {
       const k = done.length;
       const step = input.maps[k]!;
-      const extra = beforeMap(state, step, reading);
+      const extra = beforeMap(state, step, assumptions);
+      if (!extra) {
+        done.push(NOBODY);
+        continue;
+      }
       const pools = new Map<Foe, readonly string[]>(step.map.foes.map((g) => [g.foe, g.pool ?? []]));
       const d = suggestDeployment({
         candidates: candidatesOf(state, extra),
@@ -397,13 +523,13 @@ export function planLineups(input: RunSimInput, seed: number, assumptions: Assum
  */
 const LOST = 1e-9;
 
-type Endpoint = Map<RosterUnit, { name: string; classes: Map<string, { runs: number; caps: Record<Stat, number>; levelCap: number }>; level: number[]; exp: number[]; stats: Record<Stat, number[]> }>;
+type Endpoint = Map<RosterUnit, { name: string; skills: readonly string[]; classes: Map<string, { runs: number; caps: Record<Stat, number>; levelCap: number }>; level: number[]; exp: number[]; stats: Record<Stat, number[]> }>;
 
 /** One run's army entering the endpoint, for the expected stats' spread. */
 function recordEndpoint(atEnd: Endpoint, state: RunState) {
   for (const u of state.army.values()) {
     let e = atEnd.get(u.base.id);
-    if (!e) atEnd.set(u.base.id, (e = { name: u.base.name, classes: new Map(), level: [], exp: [], stats: Object.fromEntries(STATS.map((s) => [s, []])) as unknown as Record<Stat, number[]> }));
+    if (!e) atEnd.set(u.base.id, (e = { name: u.base.name, skills: u.base.skills, classes: new Map(), level: [], exp: [], stats: Object.fromEntries(STATS.map((s) => [s, []])) as unknown as Record<Stat, number[]> }));
     const cls = className(u.classId, u.base.gender);
     const c = e.classes.get(cls);
     e.classes.set(cls, { runs: (c?.runs ?? 0) + 1, caps: c?.caps ?? capsOf(u), levelCap: levelCap(u.tier) });
@@ -423,7 +549,6 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
   const n = Math.max(1, Math.floor(runs));
   const plan = planner(input, seed, assumptions);
   const lineups: (Deployment | undefined)[] = input.maps.map(() => undefined);
-  const reading = assumptions['class-change-internal-level'];
   const interner = newInterner();
   const samples: number[] = [];
   const reach = input.maps.map(() => 0);
@@ -441,8 +566,10 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
       // A run that has lost a unit adds nothing more to the chance, the maps' chances or the endpoint's stats.
       if (flawless < LOST) break;
       const step = input.maps[i]!;
-      const extra = beforeMap(state, step, reading);
+      const extra = beforeMap(state, step, assumptions);
       if (i === last) recordEndpoint(atEnd, state);
+      // A child paralogue whose gates don't hold in this run isn't played.
+      if (!extra) continue;
       const play = playMap({ map: step.map, lineup: lineupOf(state, (lineups[i] ??= plan(i)), extra, interner) }, runSeed(rs, i));
       reach[i]! += flawless;
       noDeath[i]! += flawless * play.noDeath;
@@ -482,6 +609,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
         level: spread(e.level, top),
         exp: spread(e.exp, 100).median,
         stats: Object.fromEntries(STATS.map((s) => [s, spread(e.stats[s], caps[s])])) as Record<Stat, StatSpread>,
+        skills: e.skills,
       };
     }),
   };

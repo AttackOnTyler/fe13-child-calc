@@ -34,6 +34,7 @@ import {
 } from './classes';
 import { inheritGrowths, inheritModifiers, type ParentProfile } from './inheritance';
 import { childJoinStats, type ChildJoinInput, type ChildJoinStats } from './child-join';
+import { childSkills, type ChildSkills, type ChildSkillsInput } from './child-skills';
 import { buildSkillView, candidatesFor, firstGenSkills, ref, secondGenSkills, skillRank, skillReach, type SkillViewInput, type SkillViewSettings } from './skills';
 import { BUILD_TEMPLATES } from '../curated/builds';
 import { UNIT_OPINIONS, type OpinionUnit } from '../curated/unit-opinion';
@@ -116,6 +117,7 @@ export {
 export { DEFAULT_SPEED, RALLY_OPTIONS, TONIC_SPD } from './speed';
 export { routeMapOrder, type Endpoint, type MapOrder, type MapOrderStep } from './map-order';
 export { childJoinStats, classBaseStats, type ChildJoinInput, type ChildJoinStats, type JoinParent } from './child-join';
+export { fixedPass, startSkills, type ChildSkills, type ChildSkillsInput, type SkillParent } from './child-skills';
 export type { Citation } from '../game-data/citations';
 export { CHAPTER_GUIDE, type GuideEntry } from '../curated/chapter-guide';
 export { classIdByName, classWeaponKinds, openStock, promotionAdvice, sealAvailability, sealsHeld, supplyList, type PromotionAdvice, type SealAvailability, type StockItem, type Supply } from './supply';
@@ -125,7 +127,7 @@ export { type MapWaves, type Wave, type WaveGroup } from './waves';
 export { type ArmySpread, type SimItem } from './sim/sustain';
 export { MAX_TURNS, type MapPlay, type MapPlayInput, type SimAct, type SimFight, type SimFoeGroup, type SimGroup, type SimMap, type SimTurn, type SimUnit, type SimUnitTally, type SimWave } from './sim/map-play';
 export { simLineup, type SimMapOptions } from './sim/sim-map';
-export { PROMOTION_RULE, levelCap, type ArmyUnit, type RunSim, type RunSimInput, type RunSimMap, type RunSimMapResult, type StatSpread, type UnitForecast } from './sim/run-sim';
+export { PROMOTION_RULE, levelCap, type ArmyUnit, type ChildRecruit, type RunSim, type RunSimInput, type RunSimMap, type RunSimMapResult, type StatSpread, type UnitForecast } from './sim/run-sim';
 export { FLAWLESS_RUNS, FLAWLESS_SEED, fighterOf, type FlawlessChance, type FlawlessOptions, type NotSimulated } from './flawless';
 export { effectiveCaps, type Ceiling, type CeilingUnit } from './sim/ceiling';
 export { BLIND_SPOTS, type BlindSpot, type BlindSpotId, type RunBlindSpotId } from './assumptions';
@@ -327,6 +329,11 @@ export type Engine = {
    * under this engine's assumptions. Morgan needs its start class.
    */
   childJoinStats(input: ChildJoinInput): ChildJoinStats;
+  /**
+   * The skills a child joins with (#187): its start class's up to Lv 10, then each parent's bottom-slot eligible skill
+   * as equipped on entering its paralogue, with the fixed passes and the inheritance assumptions.
+   */
+  childSkills(input: ChildSkillsInput): ChildSkills;
   /** Class growths, with Conqueror's Skl/Spd read from the assumptions. */
   classGrowths(id: ClassId, gender: Gender): Growths;
   /** The curated presets, in menu order. */
@@ -1411,6 +1418,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       reachOf(r).has(id) ? effectiveCaps(id, genderOf(r), r.modifiers, limitBreaker) : undefined,
     classMaxStats,
     childJoinStats: (input) => childJoinStats(input, assumptions),
+    childSkills: (input) => childSkills(input, assumptions),
     classGrowths: (id, gender) => classGrowths(id, gender, assumptions),
     presets: () => PRESET_LIST,
     score: (settings) => {

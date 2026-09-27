@@ -425,7 +425,7 @@ export const isDefaultValue = (id: AssumptionId, value: unknown) =>
 export type BlindSpotId = 'one-worst-attacker' | 'equal-share-of-actions' | 'rally-reaches-every-pair' | 'likely-result' | 'bosses-hold';
 
 /** The run simulation's own blind spots (#186): how it walks the army from one map to the next. */
-export type RunBlindSpotId = 'promotes-at-cap' | 'lead-takes-exp' | 'no-new-children' | 'kit-as-recorded';
+export type RunBlindSpotId = 'promotes-at-cap' | 'lead-takes-exp' | 'plan-marriages-made' | 'kit-as-recorded';
 
 export type BlindSpot = {
   readonly id: BlindSpotId | RunBlindSpotId;
@@ -501,10 +501,12 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
     touches: ['flawless'],
   },
   {
-    id: 'no-new-children',
-    label: 'No new children join yet',
-    why: 'A child not yet in the chapter log doesn’t join the simulated army at its paralogue: the maps after it are played without it.',
-    lean: 'low',
+    id: 'plan-marriages-made',
+    label: 'The plan’s marriages are made in time',
+    why:
+      'A child joins at its paralogue once its fixed parent is married. Supports aren’t simulated yet, so a marriage the plan makes counts as made ' +
+      'by the time the paralogue is reached, and a child whose fixed parent the plan leaves unmarried never joins.',
+    lean: 'high',
     touches: ['flawless'],
   },
   {

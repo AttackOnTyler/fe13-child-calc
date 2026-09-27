@@ -2464,6 +2464,8 @@ function renderParts(parts: readonly Part[]): void {
                 let roles: ReturnType<typeof engine.roles> | undefined;
                 return (u: RosterUnit) => deployRoleOf(u, roster, (roles ??= engine.roles(roster, planSettings())));
               })(),
+              // The plan's marriages (#187): the adopted plan's, else the suggested one's.
+              marriages: () => roster.savedPlan?.marriages ?? engine.plan(roster, planSettings()).marriages.map((m) => [m.husband, m.wife] as const),
               recording,
               setRecording: (r) => {
                 recording = r;
