@@ -2,11 +2,11 @@
  * The guide's Going deeper questions as data: each has a one-line answer (or, for Why this spouse?, three steps), a
  * jump to the view and control that answers it, and a Terms fold for the drill-down-only words. Entries never tick.
  */
-import { DEFAULT_PRIORITY, type ChildId } from '../engine';
+import type { ChildId } from '../engine';
 import type { GuideTarget } from './guide';
-import { BASIS_LABELS, LABELS, ROLE_UI } from './labels';
+import { BASIS_LABELS, EXPLORER_NOTE, LABELS, OPINION_NOTE } from './labels';
 
-export type DeeperId = 'strongest' | 'why-spouse' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners' | 'robin-preview' | 'front-door-pairings' | 'unit-opinion' | 'map-data' | 'chapter-log' | 'record-results' | 'matchups' | 'threats' | 'deployment' | 'supply' | 'how-to-run';
+export type DeeperId = 'strongest' | 'pairing-build' | 'robin' | 'preset' | 'scoring' | 'assumption' | 'unit-class-tree' | 'unit-partners' | 'robin-preview' | 'front-door-pairings' | 'unit-opinion' | 'map-data' | 'chapter-log' | 'record-results' | 'matchups' | 'threats' | 'deployment' | 'supply' | 'how-to-run';
 
 /**
  * Where an entry's jump goes: the All children leaderboard, a child's table (the one `guideChild` picks, with its Robin
@@ -31,7 +31,7 @@ export type DeeperEntry = {
   readonly terms: readonly DeeperTerm[];
 };
 
-const { runFacts, inPlan, scoreWithThis, allChildren, skills, assumption, validation, plan, spdToTarget, spdBeyond, lock } = LABELS;
+const { runFacts, allChildren, skills, assumption, validation, spdToTarget, spdBeyond, lock } = LABELS;
 const bases = Object.values(BASIS_LABELS).join(' / ');
 
 const PAIRING: DeeperTerm = {
@@ -40,7 +40,7 @@ const PAIRING: DeeperTerm = {
 };
 const SCORE: DeeperTerm = {
   term: 'score',
-  def: `0–100: how good a pairing’s child is, in its best class. The tables score with the Scoring sidebar’s preset; the ${LABELS.plan} scores each child with its plan preset.`,
+  def: `0–100: how good a pairing’s child is, in its best class, under the Scoring sidebar’s preset. ${EXPLORER_NOTE}`,
 };
 
 export const DEEPER: readonly DeeperEntry[] = [
@@ -49,25 +49,11 @@ export const DEEPER: readonly DeeperEntry[] = [
     question: 'Who’s strongest overall?',
     answer: `${allChildren}: every child’s best score, ranked.`,
     jump: { to: 'leaderboard', target: 'leaderboard' },
-    terms: [SCORE, PAIRING],
-  },
-  {
-    id: 'why-spouse',
-    question: 'Why this spouse for this child?',
-    answer: [
-      'Open the child from the left rail.',
-      `Click “${plan}: ‹preset› ${scoreWithThis}”, so the table scores with the preset the ${plan} uses.`,
-      `Find the ${inPlan} row: that’s the plan’s pairing. The rows above it score higher alone, but the plan weighs every child at once.`,
-    ],
-    jump: { to: 'child', target: 'score-with-plan-preset' },
     terms: [
+      SCORE,
       PAIRING,
-      { term: 'variable parent', def: 'The parent your marriage picks (the other, the fixed parent, it always has). The table compares them row by row.' },
-      {
-        term: 'blocked pairing',
-        def: 'A pairing your roster contradicts: hard (✕) when it can no longer happen (a unit is dead, missed or married to someone else), soft (!) when it only goes against a pin or a bench.',
-      },
-      { term: inPlan, def: `The row is in the saved marriage plan (${LABELS.adoptPlan}).` },
+      { term: 'variable parent', def: 'The parent your marriage picks (the other, the fixed parent, it always has). A child’s table compares them row by row.' },
+      { term: 'blocked pairing', def: 'A pairing your roster rules out (✕): a unit it needs is dead, missed or married to someone else.' },
     ],
   },
   {
@@ -83,7 +69,7 @@ export const DEEPER: readonly DeeperEntry[] = [
   {
     id: 'robin',
     question: 'Which Robin does this child want?',
-    answer: `Expand the child’s Robin row with ▸: its asset × flaw heatmap scores every Robin (the name itself opens Robin’s page on that Robin). To get that Robin, raise the child’s priority and ${lock} Robin from the ${plan}’s pick line.`,
+    answer: `Expand the child’s Robin row with ▸: its asset × flaw heatmap scores every Robin under your preset (the name itself opens Robin’s page on that Robin). The run’s Robin is chosen by flawless chance, not by one child: the Run view’s Robin card compares Robins, and you ${lock} one there.`,
     jump: { to: 'child', target: 'robin-heatmap', robinRow: true },
     lockedAnswer: 'Robin is locked, so there’s nothing left to choose.',
     terms: [],
@@ -91,14 +77,12 @@ export const DEEPER: readonly DeeperEntry[] = [
   {
     id: 'preset',
     question: 'Which preset suits this child?',
-    answer: `Its plan preset is derived: the preset where it stands highest against the cast, in its best role. Switch the Scoring sidebar’s preset to compare its table under others, and pin a role or preset on the ${plan}’s Roles matrix if you want a different build.`,
+    answer: 'Switch the Scoring sidebar’s preset to compare its table under each one. The wishlist picks each unit’s class and build by flawless chance, from the route’s build templates; a preset never changes it.',
     jump: { to: 'child', target: 'scoring-preset' },
     terms: [
       {
-        term: 'sidebar preset vs plan preset',
-        def:
-          `The Scoring sidebar’s preset is how the tables score, for every child at once. A plan preset is how the ${plan} judges ` +
-          `one child, and it sets the child’s ${ROLE_UI.lead.short}/${ROLE_UI.battery.short}/${ROLE_UI.staff.short} letter. A child’s table opens on its plan preset; picking a sidebar preset explores others and never changes the plan.`,
+        term: 'preset vs wishlist',
+        def: `The Scoring sidebar’s preset is how the explorer (the tables, unit pages and front doors) scores, for every child at once. ${EXPLORER_NOTE}`,
       },
     ],
   },
@@ -106,8 +90,8 @@ export const DEEPER: readonly DeeperEntry[] = [
     id: 'scoring',
     question: 'Can I change how children are scored?',
     answer:
-      `Yes: the basis, the Spd target and edits to a preset’s weights change the ${plan} (editing a preset’s weights re-scores every ` +
-      'child on that preset). Picking a sidebar preset only changes the tables.',
+      'Yes: the preset, the basis, the Spd target and edits to a preset’s weights re-score the explorer (the tables, unit pages and front doors). ' +
+      'They never change the wishlist, which ranks by flawless chance.',
     jump: { to: 'scoring', target: 'scoring-basis' },
     terms: [
       {
@@ -151,10 +135,10 @@ export const DEEPER: readonly DeeperEntry[] = [
     question: 'Who should this unit marry?',
     answer: [
       'Partners on a unit page lists everyone it can S-support, Robin included, with the children each marriage produces.',
-      'Each child is scored in its plan preset; rows are sorted by the best child, so one great child beats two middling ones.',
-      `Marks show a marriage that happened, the saved plan’s pick (◆), a dead partner, and a blocked marriage with why.`,
+      'Each child is scored in your Scoring sidebar preset; rows are sorted by the best child, so one great child beats two middling ones.',
+      'Marks show a marriage that happened, a dead partner, and a blocked marriage with why.',
       'Each row names the pair’s support curve: most marriages are slow (S in 8 maps fighting together at best), and each woman has one fast husband (S in 7), most also a medium one.',
-      `It never changes your plan: Plan → opens the ${plan}, where pinning the marriage shows what it costs the rest.`,
+      'It never changes your plan: Wishlist entry → on the page opens the unit’s row on the Wishlist tab, where a marriage edit shows what the marriage costs your run.',
     ],
     jump: { to: 'unit', target: 'unit-partners' },
     terms: [{ term: 'Partners', def: 'A unit page’s list of possible spouses and the children each marriage produces, read-only.' }],
@@ -165,7 +149,7 @@ export const DEEPER: readonly DeeperEntry[] = [
     answer: [
       `Robin’s page follows the ${runFacts}: your Robin’s gender and asset/flaw.`,
       'Until they’re set, a Preview bar lets you try any Robin. The page, its builds and its Partners follow the preview, and nothing is saved.',
-      'Partners show Morgan, plus the partner’s own child where Robin is a parent. With a child partner, Morgan uses that child’s saved-plan pairing, else its best pairing left, and says which.',
+      'Partners show Morgan, plus the partner’s own child where Robin is a parent. With a child partner, Morgan uses that child’s best pairing left, and says which.',
     ],
     jump: { to: 'robin', target: 'robin-preview' },
     terms: [{ term: 'preview', def: 'A Robin tried on Robin’s page while the Run facts leave Robin open. It never writes to the Run facts.' }],
@@ -175,7 +159,7 @@ export const DEEPER: readonly DeeperEntry[] = [
     question: 'What’s true of this child whoever its parents are?',
     answer: [
       'A child’s front door (Units › Children) shows what every pairing shares: its fixed parent, start class, default class set, personal growths, and what the fixed parent always passes (Chrom’s Aether to Lucina).',
-      'Its best parents show as tiles, ranked as the pairing table ranks them under the Scoring sidebar’s preset; a tile opens that pairing, and a link opens the full table.',
+      'Its best parents show as tiles, ranked as the pairing table ranks them under the Scoring sidebar’s preset (the front door names it); a tile opens that pairing, and a link opens the full table. The wishlist’s parents for it are on the Wishlist tab: Wishlist entry → goes there.',
       'The Robin line says whether the child can marry Robin and, with Robin set, the best Morgan that gives. Morgan’s own front door waits on Robin.',
     ],
     jump: { to: 'door', target: 'front-door-pairings' },
@@ -189,10 +173,11 @@ export const DEEPER: readonly DeeperEntry[] = [
       'The loadout is matched against what the unit can reach, like a build template (“4/5”), so you can see whether you can follow it.',
       '♥ and ⚠ mark the partners and parents a source recommends or warns against, on Partners and on the front door, even outside the top 5.',
       'Ellery’s opinions come from AI summaries of his videos, checked against the game data first; wrong cells were left out and named in the note.',
+      `${OPINION_NOTE} Where a source’s tier strongly disagrees with the unit’s worth to your plan (rated S or A but worth under 1 point, or C or F but worth 5 points or more), the worth shows beside it, once the Wishlist tab has worked it out. It never shows on the Wishlist tab or in the inbox.`,
     ],
     jump: { to: 'unit', target: 'unit-opinion' },
     terms: [
-      { term: 'unit opinion', def: 'What a named source says about one unit in a play context. Shown beside the app’s scores, never scored.' },
+      { term: 'unit opinion', def: 'What a named source says about one unit in a play context. Shown beside the explorer’s scores; the wishlist never reads it.' },
       { term: 'provenance', def: 'How a source reached the app and how far to trust it. Hover the source link.' },
     ],
   },
@@ -338,13 +323,8 @@ export function deeperView(entry: DeeperEntry, robinLocked: boolean): { answer: 
   return { answer: typeof entry.answer === 'string' ? [entry.answer] : entry.answer, jump: entry.jump };
 }
 
-/**
- * The child a table jump shows: the last child opened, else the top-priority child (the first of `children` on a tie).
- * `children` are the ones in this run, in rail order.
- */
-export function guideChild(lastOpened: ChildId | undefined, priorities: Readonly<Partial<Record<ChildId, number>>>, children: readonly ChildId[]): ChildId {
-  if (lastOpened && children.includes(lastOpened)) return lastOpened;
-  const priority = (c: ChildId) => priorities[c] ?? DEFAULT_PRIORITY;
-  return children.reduce((best, c) => (priority(c) > priority(best) ? c : best), children[0]!);
+/** The child a table jump shows: the last child opened, else the first of `children` (the ones in this run, in rail order). */
+export function guideChild(lastOpened: ChildId | undefined, children: readonly ChildId[]): ChildId {
+  return lastOpened && children.includes(lastOpened) ? lastOpened : children[0]!;
 }
 

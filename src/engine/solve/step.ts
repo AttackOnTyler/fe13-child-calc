@@ -42,7 +42,6 @@
  * search's whole state, including the plans it holds), so the worker can post it and a later step resume it.
  * What already happened is the starting state, never a pin: the evaluation reads the log first.
  */
-import type { DeploymentRole } from '../../curated/deployment';
 import type { FlawlessChance } from '../flawless';
 import type { RosterUnit } from '../roster';
 import type { Run } from '../run';
@@ -131,8 +130,6 @@ export type SolveStepInput = {
   readonly display?: number;
   /** The cursor the previous step returned, passed back unchanged; absent on a first step. */
   readonly cursor?: SolveCursor;
-  /** Each unit's deployment role for the greedy lineups (until #212). */
-  readonly roleOf?: (u: RosterUnit) => DeploymentRole;
 };
 
 export type SolveStep = {
@@ -355,7 +352,6 @@ export type EditCostInput = {
   /** Runs it's first compared on, doubling up to `cap`; `SEARCH_RUNS` by default. */
   readonly runs?: number;
   readonly cap?: number;
-  readonly roleOf?: (u: RosterUnit) => DeploymentRole;
   /** Pins the edited plan plays under besides the run's: a keep-in or keep-out edit's own (#203, `UnitEdit.play`). */
   readonly pins?: readonly PlanPin[];
 };
@@ -402,7 +398,7 @@ export function editCost(
 }
 
 export type PinCostInput = {
-  /** The run; its pins (`Run.pins`, its side goals, the Plan page's pinned marriages) are the ones costed. */
+  /** The run; its pins (`Run.pins` and its side goals) are the ones costed. */
   readonly run: Run;
   /** Pins besides the run's, as `solveStep` takes them. */
   readonly pins?: readonly PlanPin[];
@@ -417,7 +413,6 @@ export type PinCostInput = {
   readonly budget: number;
   readonly runs?: number;
   readonly cap?: number;
-  readonly roleOf?: (u: RosterUnit) => DeploymentRole;
 };
 
 /**

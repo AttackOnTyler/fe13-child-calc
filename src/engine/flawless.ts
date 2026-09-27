@@ -5,8 +5,8 @@
  * forced units, and its recruits joining as Record results would add them (`recruitSnapshot`).
  *
  * Children (#187) are read on entering the map that recruits them (their paralogue; Chapter 13 for Lucina), from their
- * fixed parent and its spouse in the run. The recorded marriages are facts; the plan's (`marriages`: the adopted plan
- * by default) are made in a run only once the pair reaches S there (#188), and an unmarried Chrom marries at the end
+ * fixed parent and its spouse in the run. The recorded marriages are facts; the plan's are made in a run only once the
+ * pair reaches S there (#188), and an unmarried Chrom marries at the end
  * of Chapter 11 by the game's rule. So a child is listed once per spouse its fixed parent can have: the recorded one,
  * else the plan's, Chrom (for a Chapter 11 candidate) and, for Lucina, each candidate and the Maiden. A child with
  * none, or whose parent the simulation doesn't play, doesn't join (`notSimulated`, why `child`).
@@ -33,9 +33,8 @@ import { FIRST_GEN_UNITS, type UnitId } from '../game-data/units';
 import { itemByName } from '../game-data/items';
 import { SKILLS, type SkillId } from '../game-data/skills';
 import { CLASSES } from '../game-data/classes';
-import type { DeploymentRole } from '../curated/deployment';
 import { assumed, isAssumed, type Assumptions } from './assumptions';
-import { deployCount, deployRoleOf, forcedOn } from './deploy';
+import { deployCount, forcedOn } from './deploy';
 import { COUNT_CAP, tierBonus } from './exp';
 import { classGrowths } from './classes';
 import { internalLevels } from './internal-level';
@@ -93,17 +92,10 @@ export type FlawlessOptions = {
   /** Every chance is seeded: the same run, options and seed give the same chance. */
   readonly seed?: number;
   readonly runs?: number;
-  /** Each unit's deployment role for the lineups (the preparation page's); by default the roster's tag, a child leads. */
-  readonly roleOf?: (u: RosterUnit) => DeploymentRole;
   /**
-   * The plan's marriages (#187): who marries whom where the log hasn't recorded it, for the children they bring. By
-   * default the adopted plan's, then the roster's pins.
-   */
-  readonly marriages?: readonly Couple[];
-  /**
-   * A plan to evaluate (#198): its marriages (in place of `marriages`), its Robin where the run facts leave Robin open,
-   * its roadmap's map order and lineups, and the skills its parents pass. Without one, the old path: the suggested
-   * deployment on every map and the given marriages (#212 retires it).
+   * A plan to evaluate (#198): its marriages, its Robin where the run facts leave Robin open, its roadmap's map order
+   * and lineups, and the skills its parents pass. Without one, the suggested deployment on every map and only the
+   * recorded marriages.
    */
   readonly plan?: Plan;
 };
@@ -213,7 +205,7 @@ function plannedOrder(order: MapOrder, plan: Plan | undefined): MapOrder {
 export function flawlessInput(
   given: Run,
   assumptions: Assumptions,
-  roleOf?: (u: RosterUnit) => DeploymentRole,
+  /** Marriages to make where the log hasn't recorded them, without a plan (the seed builds a plan from them). */
   givenMarriages?: readonly Couple[],
   plan?: Plan,
 ): {
@@ -234,7 +226,6 @@ export function flawlessInput(
   // The runs start from the latest entry after its shopping (#192): its gold, items and seals as they left the armory.
   const last = latestEntry(run);
   const snap = last ? entryAfterShopping(last) : EMPTY_SNAPSHOT;
-  const role = roleOf ?? ((u: RosterUnit) => deployRoleOf(u, run.roster, new Map()));
   const alive = (u: RosterUnit) => !isLost(run, snap, u);
   const levels = internalLevels(run, assumptions['class-change-internal-level']);
   const notSimulated: NotSimulated[] = [];
@@ -264,7 +255,6 @@ export function flawlessInput(
       weaponUses: f.weaponUses,
       ...(f.items.length ? { items: f.items } : {}),
       supports: s.supports,
-      role: role(u),
     };
   };
 
@@ -272,7 +262,7 @@ export function flawlessInput(
   const recorded = new Map<RosterUnit, RosterUnit>();
   for (const spouses of [run.roster.spouses, snap.spouses])
     for (const [u, sp] of Object.entries(spouses) as [RosterUnit, { partner: RosterUnit; bond: string } | undefined][]) if (sp?.bond === 'married') recorded.set(u, sp.partner);
-  const planned = marriages ?? run.roster.savedPlan?.marriages ?? (Object.entries(run.roster.spouses).flatMap(([u, sp]) => (sp?.bond === 'pinned' ? [[u, sp.partner]] : [])) as Couple[]);
+  const planned = marriages ?? [];
   const spouseOf = new Map(recorded);
   for (const [a, b] of planned) {
     if (spouseOf.has(a) || spouseOf.has(b)) continue;
@@ -330,7 +320,6 @@ export function flawlessInput(
       modifiers: side.modifiers,
       weapons: f.weapons,
       ...(f.items.length ? { items: f.items } : {}),
-      role: role(u),
       ...(lost[0] || lost[1] ? { lost } : {}),
     };
   };
@@ -528,7 +517,7 @@ export function runItemSources(run: Run): { readonly steps: MapOrder['steps']; r
 
 /** The flawless chance of a run from the next map to the endpoint (see `simulateRuns`). */
 export function flawlessChance(run: Run, assumptions: Assumptions, options: FlawlessOptions = {}): FlawlessChance {
-  const { input, notSimulated, unknownHistory, endpoint, goldUnrecorded, renown } = flawlessInput(run, assumptions, options.roleOf, options.marriages, options.plan);
+  const { input, notSimulated, unknownHistory, endpoint, goldUnrecorded, renown } = flawlessInput(run, assumptions, undefined, options.plan);
   const sim = simulateRuns(input, options.seed ?? FLAWLESS_SEED, options.runs ?? FLAWLESS_RUNS, assumptions);
   return { ...sim, notSimulated, unknownHistory, endpoint, goldUnrecorded, renown };
 }
@@ -538,7 +527,7 @@ export function flawlessChance(run: Run, assumptions: Assumptions, options: Flaw
  * its effective caps; undefined once the endpoint is recorded. Lunatic+ plays it on the flawless chance's seeds.
  */
 export function flawlessCeiling(run: Run, assumptions: Assumptions, options: FlawlessOptions = {}): Ceiling | undefined {
-  const { input } = flawlessInput(run, assumptions, options.roleOf, options.marriages, options.plan);
+  const { input } = flawlessInput(run, assumptions, undefined, options.plan);
   return simulateCeiling(input, options.seed ?? FLAWLESS_SEED, options.runs ?? FLAWLESS_RUNS, assumptions);
 }
 

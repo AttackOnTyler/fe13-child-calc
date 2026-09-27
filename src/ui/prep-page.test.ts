@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, addEntry, createEngine, deployCount, deployRoleOf, editEntry, foesOf, forcedOn, itemByName, latestEntry, mapSpanPin, prepUnits, runFromRoster, simLineup, suggestDeployment, unitName, withPin, withRun, type Difficulty, type Plan, type Run, type SimGroup, type Snapshot } from '../engine';
+import { EMPTY_ROSTER, addEntry, createEngine, deployCount, editEntry, foesOf, forcedOn, itemByName, latestEntry, mapSpanPin, prepUnits, runFromRoster, simLineup, suggestDeployment, unitName, withPin, withRun, type Difficulty, type Plan, type Run, type SimGroup, type Snapshot } from '../engine';
 import { PREP_STEPS, fighterOf, noDeathReadout, prepReadout, shoppingReadout, type PrepReadout } from './prep-page';
 
 describe('the shopping list (#190)', () => {
@@ -238,7 +238,7 @@ describe('the no-death chance of a fresh run’s first maps (#183)', () => {
     const m = engine.maps().find((x) => x.id === map)!;
     const candidates = prep.units.flatMap(([unit, u]) => {
       const f = fighterOf(unitName(unit, 'M'), u);
-      return f ? [{ unit, role: deployRoleOf(unit, run.roster, new Map()), fighter: f.fighter, weapons: f.weapons, items: f.items, supports: u.supports }] : [];
+      return f ? [{ unit, fighter: f.fighter, weapons: f.weapons, items: f.items, supports: u.supports }] : [];
     });
     const opening = [...prep.joining, ...prep.mapOnly];
     const max = deployCount(m.conditions[table]?.deploy ?? '', opening.map((u) => unitName(u))) || candidates.length;

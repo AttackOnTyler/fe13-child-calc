@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SPEED, EMPTY_ROSTER, createEngine, quotasFor, withRun, withSpouse, withState, type PlanSettings, type Roster } from './index';
+import { DEFAULT_SPEED, EMPTY_ROSTER, createEngine, withRun, withSpouse, withState, type ExplorerSettings, type Roster } from './index';
 
 const engine = createEngine();
-const settings: PlanSettings = {
+const settings: ExplorerSettings = {
   context: 'all',
   preset: 'physical-lead',
   edits: {},
@@ -10,10 +10,6 @@ const settings: PlanSettings = {
   dlc: false,
   speed: DEFAULT_SPEED,
   supportRank: 'A',
-  priorities: {},
-  overrides: {},
-  roleOverrides: {},
-  quotas: quotasFor('all'),
 };
 const roster: Roster = withRun(EMPTY_ROSTER, { gender: 'M', asset: 'mag', flaw: 'str' });
 
@@ -37,22 +33,22 @@ describe('a unit’s Partners', () => {
     expect(robin.children.every((c) => c.key.includes('robin') && c.key.includes('mag/str'))).toBe(true);
   });
 
-  it('scores a child whose plan preset has no weights (Battery) in its Lead role preset', () => {
-    const roles = engine.roles(roster, settings);
+  it('scores every child in the explorer’s preset, never a plan preset (#212)', () => {
     const rows = engine.partners('sumia', roster, settings);
     for (const c of rows.flatMap((r) => r.children)) {
       expect(c.score).toBeDefined();
-      if (roles.get(c.child)?.role === 'battery') expect(c.preset).not.toBe('battery');
+      expect(c.preset).toBe('physical-lead');
     }
+    const magical = engine.partners('sumia', roster, { ...settings, preset: 'magical-lead' });
+    expect(magical.flatMap((r) => r.children).every((c) => c.preset === 'magical-lead')).toBe(true);
   });
 
-  it('marks the planned partner, the married one, and blocked or dead partners with the reason', () => {
-    const r1 = { ...withSpouse(roster, 'sumia', 'chrom', 'married'), savedPlan: { robin: null, marriages: [['chrom', 'sumia'] as const, ['frederick', 'olivia'] as const] } };
+  it('marks the married partner, and blocked or dead partners with the reason', () => {
+    const r1 = withSpouse(roster, 'sumia', 'chrom', 'married');
     const sumia = engine.partners('sumia', r1, settings);
-    expect(sumia.find((r) => r.partner === 'chrom')).toMatchObject({ married: true, planned: true, blocked: undefined });
+    expect(sumia.find((r) => r.partner === 'chrom')).toMatchObject({ married: true, blocked: undefined });
     expect(sumia.find((r) => r.partner === 'henry')!.blocked).toMatch(/Sumia/);
     const olivia = engine.partners('olivia', withState(r1, 'gaius', 'dead'), settings);
-    expect(olivia.find((r) => r.partner === 'frederick')!.planned).toBe(true);
     expect(olivia.find((r) => r.partner === 'gaius')).toMatchObject({ dead: true });
     expect(olivia.find((r) => r.partner === 'gaius')!.blocked).toBeDefined();
   });
@@ -94,14 +90,13 @@ describe('Robin’s page', () => {
     expect(sumia.children.every((c) => c.key.includes('robin:mag/str'))).toBe(true);
   });
 
-  it('names the pairing a child partner brings to Morgan: the saved plan’s, else its best left', () => {
+  it('names the pairing a child partner brings to Morgan: its best left, its parents’ marriage once recorded', () => {
     const best = engine.partners(mag, EMPTY_ROSTER, settings).find((r) => r.partner === 'lucina')!;
-    expect(best.via).toMatchObject({ from: 'best' });
     expect(best.via!.label).toMatch(/^Lucina ← /);
     expect(best.children.map((c) => c.child)).toEqual(['morgan-f']);
-    const planned = { ...EMPTY_ROSTER, savedPlan: { robin: null, marriages: [['chrom', 'olivia'] as const] } };
-    const row = engine.partners(mag, planned, settings).find((r) => r.partner === 'lucina')!;
-    expect(row.via).toEqual({ label: 'Lucina ← Olivia', from: 'plan' });
+    const married = withSpouse(EMPTY_ROSTER, 'chrom', 'olivia', 'married');
+    const row = engine.partners(mag, married, settings).find((r) => r.partner === 'lucina')!;
+    expect(row.via).toEqual({ label: 'Lucina ← Olivia' });
     expect(row.children[0]!.key).toContain('lucina<olivia');
   });
 
@@ -124,9 +119,7 @@ describe('Robin’s page', () => {
       }
     }
     // Nor for Robin (M): Lucina's mother can't be the Robin marrying her.
-    const saved = { ...EMPTY_ROSTER, savedPlan: { robin: null, marriages: [['chrom', 'robin'] as const] } };
-    const lucina = engine.partners(mag, saved, settings).find((r) => r.partner === 'lucina')!;
-    expect(lucina.via).toMatchObject({ from: 'best' });
+    const lucina = engine.partners(mag, EMPTY_ROSTER, settings).find((r) => r.partner === 'lucina')!;
     expect(lucina.via!.label).not.toMatch(/Robin/);
     expect(lucina.children[0]?.score).toEqual(expect.any(Number));
   });

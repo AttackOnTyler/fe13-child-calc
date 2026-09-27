@@ -139,7 +139,7 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
   };
 
   // Marriages: who's fixed (recorded, pinned), who can still marry, and whom.
-  const base = flawlessInput(run, ctx.assumptions, options.roleOf, []);
+  const base = flawlessInput(run, ctx.assumptions, []);
   const recorded: Couple[] = (base.input.married ?? []).flatMap(([a, b]) => (b === 'maiden' ? [] : [[a, b] as const]));
   const fixed = new Set<RosterUnit>(recorded.flat());
   if ((base.input.married ?? []).some(([a, b]) => a === 'chrom' && b === 'maiden')) fixed.add('chrom');

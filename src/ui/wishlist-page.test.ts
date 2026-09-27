@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, addEntry, createEngine, runFromRoster, unitName, withPin, withRun, type EditCost, type ReservesStep, type RosterUnit, type UnitWorth, type WorthStep } from '../engine';
-import { costText, notOnTrack, unitEditsReadout, wishlistReadout, worthText } from './wishlist-page';
+import { EMPTY_ROSTER, addEntry, createEngine, rosterOf, rosterUnits, runFromRoster, unitName, withPin, withRoster, withRun, withSpouse, withState, type EditCost, type ReservesStep, type RosterUnit, type UnitWorth, type WorthStep } from '../engine';
+import { childrenLedger, costText, notOnTrack, unitEditsReadout, wishlistReadout, worthText } from './wishlist-page';
 import type { UnitEditView } from './solve-client';
 
 const worth = (w: Partial<UnitWorth> & { unit: RosterUnit }): UnitWorth => ({ forced: false, worth: undefined, margin: undefined, utility: undefined, utilityMargin: undefined, runs: 0, children: [], settled: false, ...w });
@@ -52,6 +52,25 @@ describe('the Wishlist tab’s sheet (#203)', () => {
       expect(shown?.reading?.text).toBe(`${{ 'on-track': 'on track', 'at-risk': 'at risk', behind: 'behind' }[x.reading]}${x.pending ? '?' : ''}`);
       expect(shown?.reading?.title.startsWith(`${name(x.unit)}: `)).toBe(true);
     }
+  });
+
+  it('keeps a children ledger read from the run and the plan, never a score (#212)', () => {
+    const ledger = childrenLedger(run, plan);
+    const children = rosterUnits(run.roster.run).filter((u) => u.kind === 'child').map((u) => u.id);
+    expect(ledger.map((e) => e.child)).toEqual(children);
+    for (const e of ledger) {
+      const wished = plan.wishlist.children.find((c) => c.child === e.child);
+      expect(e.status).toBe(wished ? 'wished' : 'out');
+      expect(e.parents).toBe(wished ? `${name(wished.parents[0])} × ${name(wished.parents[1])}` : '—');
+      if (wished) expect(e.passes).toMatch(/^passes .* \/ /);
+    }
+    // The Roster's facts win: a dead child, a missed one, and a child whose parents the log marries.
+    const lucina = ledger.find((e) => e.child === 'lucina')!;
+    const facts2 = withState(withState(withSpouse(rosterOf(run), 'lissa', 'lonqu', 'married'), 'lucina', 'dead'), 'kjelle', 'missed');
+    const after = childrenLedger(withRoster(run, facts2), plan);
+    expect(after.find((e) => e.child === 'lucina')).toMatchObject({ status: 'dead', parents: lucina.parents });
+    expect(after.find((e) => e.child === 'kjelle')!.status).toBe('missed');
+    expect(after.find((e) => e.child === 'owain')!.status).toBe('married');
   });
 
   it('lists the reserves in order, each naming the loss it mainly covers, and gives them no reading', () => {

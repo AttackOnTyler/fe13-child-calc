@@ -305,84 +305,28 @@ button.skill.linkish { padding: 0 6px; font-size: 11px; }
   .unit { grid-template-columns: 1fr; gap: 4px; }
 }
 
-/* Plan: the whole-roster marriage plan, its diff against the saved plan, and child priorities in the sidebar. */
-.chip.block.in-plan { color: #c59bff; border-color: #6a4f94; }
-.plan-view { padding: 8px 12px 24px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
-.plan-view > div { max-width: 1000px; }
+/* Banners and small shared controls. */
 .banner { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
-.banner.ok { border-color: #3f7a47; color: var(--pos); }
 .banner.warn-b { border-color: #8a6a2c; }
-.left-out { color: var(--warn); }
-.left-out .why { cursor: help; }
-.banner.hard { border-color: #7a3a3a; color: var(--neg); display: block; }
-.banner .adopt { margin-top: 4px; border-color: var(--accent); }
-.robin-pick .lock { margin-left: 4px; border-color: var(--accent); }
-table.plan td { padding: 4px 6px; vertical-align: middle; }
-table.plan td.uname { font-weight: 600; }
-table.plan td.children { white-space: normal; }
-table.plan tr.married td.bond { color: var(--pos); }
-/* A child chip opens its table, scored with its plan preset for the visit. */
-button.pchild { display: inline-block; margin: 1px 4px 1px 0; padding: 1px 6px; background: transparent; border-color: transparent; text-align: left; }
-button.pchild:hover, button.pchild:focus-visible { border-color: var(--accent); background: var(--hover); }
-/* The plan's pairing on a visit from the marriage table: its own tint, not only the saved plan's ◆. */
+/* A table row visited from a unit page's partner or a front door's tile: its own tint. */
 .grid tr.planned th, .grid tr.planned td { background: #2a2140; }
 .grid tr.planned th.stick { box-shadow: inset 3px 0 0 #c59bff; }
-button.chip.plan-preset.visit { color: #c59bff; border-color: #6a4f94; }
 .mini { padding: 0 5px; font-size: 11px; margin-left: 2px; }
 .mini.on { background: #243349; border-color: var(--accent); }
-.ruleouts { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.plan-side { margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
-.plan-side p { margin: 0 0 6px; }
-.prio { display: grid; grid-template-columns: 1fr auto; gap: 2px 6px; align-items: center; padding: 3px 0; border-bottom: 1px solid var(--line); }
-.prio .ppreset { grid-column: 1 / -1; }
-.prio .derived { grid-column: 1 / -1; }
-.ppreset { display: inline-flex; gap: 4px; align-items: center; }
-.ppreset select { font: inherit; font-size: 11px; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 2px; max-width: 170px; }
-.chip.set { color: var(--accent); border-color: #3a6394; }
-.chip.suggested { color: #d8b45a; border-color: #7a6427; }
 .chip.curve-slow { color: var(--muted); margin-left: 4px; cursor: help; }
 .chip.curve-medium { color: var(--accent); margin-left: 4px; cursor: help; }
 .chip.curve-fast { color: var(--pos); border-color: #3f7a47; margin-left: 4px; cursor: help; }
-button.chip.plan-preset { cursor: pointer; background: transparent; color: var(--accent); border-color: #3a6394; }
-button.chip.plan-preset:disabled { cursor: default; color: var(--muted); border-color: var(--line); }
+/* The explorer's header (#212): the tables and unit pages rank by your presets, not by flawless chance. */
+.explorer-note { margin: 2px 0; }
 
-/* Roster: the children ledger. */
+/* Wishlist: the children ledger (#212: from the run and the plan). */
 .rsec.ledger { max-width: none; }
 .ledger-scroll { overflow-x: auto; }
 .grid.ledger td { vertical-align: middle; }
-.lstatus.married { color: var(--pos); }
-.lstatus.pinned { color: var(--accent); }
-.lstatus.on-hold { color: var(--warn); }
-.lstatus.broken { color: var(--neg); }
-.lstatus.left-out { color: var(--warn); }
-.lstatus.unborn, .lstatus.dead { color: var(--neg); }
-.grid.ledger tr.ledger-dead td.uname, .grid.ledger tr.ledger-unborn td.uname { text-decoration: line-through; color: var(--muted); }
-.prio .seg button { padding: 0 6px; }
-
-/* Deployment composition */
-.unit .deploy { display: flex; gap: 6px; align-items: center; margin-top: 2px; font-size: 11px; font-weight: normal; }
-.unit .deploy label { display: inline-flex; align-items: center; gap: 2px; cursor: pointer; }
-.unit .deploy select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 2px; }
-.comp { display: flex; gap: 6px; align-items: flex-start; margin: 0 0 6px; }
-.comp-strip { font-size: 12px; line-height: 1.6; font-variant-numeric: tabular-nums; }
-.ledger .comp-strip { margin-top: 6px; }
-.comp-note { margin: 2px 0 0; line-height: 1.4; }
-.q { white-space: nowrap; }
-.q-ok { color: var(--pos); }
-.q-under { color: var(--warn); }
-.q-over { color: var(--neg); font-weight: 700; }
-.quota-edit { display: grid; gap: 3px; margin: 0 0 8px; font-size: 12px; }
-.quota-edit label { display: flex; gap: 4px; align-items: center; }
-.quota-edit label > span { width: 80px; }
-.quota-edit input { width: 44px; font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 2px; }
-.quota-edit button { justify-self: start; }
-.chip.role { margin-left: 2px; color: var(--muted); cursor: help; }
-.chip.role-battery { color: var(--accent); border-color: #3a6394; }
-.chip.role-staff { color: #c59bff; border-color: #6a4f94; }
-.pin-broken { color: var(--neg); cursor: help; }
-.pin-on-hold { color: var(--warn); cursor: help; }
-.banner.pin-broken { border-color: #7a3a3a; display: block; }
-.banner.pin-on-hold { border-color: #8a6a2c; display: block; }
+.lstatus.married, .lstatus.wished { color: var(--pos); }
+.lstatus.out { color: var(--muted); }
+.lstatus.missed, .lstatus.dead { color: var(--neg); }
+.grid.ledger tr.ledger-dead td.uname, .grid.ledger tr.ledger-missed td.uname { text-decoration: line-through; color: var(--muted); }
 
 /* Guide: welcome box, checklist dock and its pill, and the highlight a step's jump leaves on its control. */
 .topbar .guide-open { margin-left: auto; }
@@ -441,25 +385,6 @@ button.gd-deeper-head:hover { background: var(--hover); }
   /* The open Scoring sheet has the screen: the pill waits for it to close (? Guide still opens the dock). */
   .shell:has(.panel.open) ~ .guide-layer .gd-pillbox { display: none; }
 }
-
-/* Role matrix (#97) */
-.role-matrix { margin-top: 16px; }
-.role-matrix .panel-head { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-.rm td, .rm th { vertical-align: top; }
-.rm-cell { cursor: pointer; min-width: 150px; }
-.rm-cell:hover { background: var(--hover, rgba(127, 127, 127, 0.12)); }
-.rm-cell.on { box-shadow: inset 3px 0 0 var(--accent, #7fb4ff); }
-.rm-cell.pinned { outline: 1px dashed var(--accent, #7fb4ff); outline-offset: -2px; }
-.rm-cell.disq { opacity: 0.55; }
-.rm-bar { height: 4px; background: var(--line); border-radius: 2px; margin-bottom: 2px; }
-.rm-bar i { display: block; height: 100%; background: var(--accent, #7fb4ff); border-radius: 2px; }
-.rm .tag { font-size: 11px; margin-left: 4px; color: var(--muted); }
-.rm .tag.fit { color: var(--pos, #5fc48a); }
-.rm .tag.pinned { color: var(--accent, #7fb4ff); }
-.rm .tag.warn { color: var(--neg, #f0a35e); }
-.rm tr.out td { color: var(--muted); }
-.chip.src.fit { color: var(--pos, #5fc48a); }
-.chip.src.pinned { color: var(--accent, #7fb4ff); }
 
 /* Units view and unit pages (#101) */
 .units, .unit-page { padding: 12px 16px; }

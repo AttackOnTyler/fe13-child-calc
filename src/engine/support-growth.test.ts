@@ -30,7 +30,6 @@ const unit = (id: ArmyUnit['id'], gender: 'M' | 'F', more: Partial<ArmyUnit> = {
   skills: [],
   weapons: [{ item: itemByName('Iron Sword')! }],
   supports: [],
-  role: 'lead',
   ...more,
 });
 /** A woman with no weapon: apart she has nothing safe to do, so she stays paired as the back. */
@@ -99,7 +98,7 @@ describe('supports in the simulated runs (#188)', () => {
   });
 
   it('recruits a child only when its parents’ marriage is made by its paralogue', () => {
-    const kjelle: ChildRecruit = { id: 'kjelle', name: 'Kjelle', parents: ['sully', 'stahl'], growths: zero, modifiers: noMods, weapons: [{ item: itemByName('Iron Lance')! }], role: 'lead' };
+    const kjelle: ChildRecruit = { id: 'kjelle', name: 'Kjelle', parents: ['sully', 'stahl'], growths: zero, modifiers: noMods, weapons: [{ item: itemByName('Iron Lance')! }] };
     const run = (n: number) =>
       sim({ army: [unit('stahl', 'M'), back('sully')], maps: [...maps(n), step('paralogue-8', 0, { children: [kjelle] }), end], cleared: ['chapter-13'], couples: [['sully', 'stahl']] });
     // Sully and Stahl are a medium pair: S in 7 maps together.
@@ -155,7 +154,7 @@ describe('Chrom’s wedding at the end of Chapter 11 in the simulation (#188)', 
   });
 
   it('gives Lucina the mother the run married Chrom to', () => {
-    const lucina = (mother: ChildRecruit['parents'][1]): ChildRecruit => ({ id: 'lucina', name: 'Lucina', parents: ['chrom', mother], growths: zero, modifiers: noMods, weapons: [{ item: itemByName('Iron Sword')! }], role: 'lead' });
+    const lucina = (mother: ChildRecruit['parents'][1]): ChildRecruit => ({ id: 'lucina', name: 'Lucina', parents: ['chrom', mother], growths: zero, modifiers: noMods, weapons: [{ item: itemByName('Iron Sword')! }] });
     const ch13 = step('chapter-13', 0, { children: [lucina('sumia'), lucina('sully'), lucina('maiden')] });
     const r = sim({ army: [chrom([{ partner: 'sully', rank: 'C' }]), ...women], maps: [ch11(1, 1), ch13, end] });
     // Sully's bottom skill passes.

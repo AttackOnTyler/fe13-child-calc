@@ -78,7 +78,7 @@ export type Readings = {
   readonly stats: readonly UnitStats[];
 };
 
-export type ReadingsOptions = Pick<FlawlessOptions, 'seed' | 'runs' | 'roleOf'> & {
+export type ReadingsOptions = Pick<FlawlessOptions, 'seed' | 'runs'> & {
   /** The plan's EXP forecast (#195), when already worked out; else it's simulated. */
   readonly forecast?: ExpForecast;
   /** Suggested changes read so far, by milestone id (#195, `suggestedChanges`). */
@@ -190,12 +190,12 @@ export function growthPercentile(from: number, levels: number, growth: number, c
  * rolls from there (personal plus class growth, up to its effective caps), as the flawless chance's runs roll them. A
  * class change or a stat booster in between isn't read: such a unit gets none.
  */
-export function recordedStats(run: Run, assumptions: Assumptions, options: Pick<FlawlessOptions, 'roleOf'> = {}): UnitStats[] {
+export function recordedStats(run: Run, assumptions: Assumptions): UnitStats[] {
   const latest = latestEntry(run);
   if (!latest || run.entries.length < 2) return [];
   const before = removeEntry(run, latest.id);
   const prior = latestEntry(before)!.snapshot;
-  const { input } = flawlessInput(before, assumptions, options.roleOf);
+  const { input } = flawlessInput(before, assumptions);
   return input.army.flatMap((a) => {
     const now = latest.snapshot.units[a.id];
     const was = prior.units[a.id];
@@ -219,7 +219,7 @@ export function readings(
 ): Readings {
   const reserves = plan.wishlist.reserves.map((r) => r.unit);
   const units = [...plan.wishlist.units.map((w) => w.unit), ...plan.wishlist.children.map((c) => c.child)];
-  const stats = options.stats ?? recordedStats(run, assumptions, options);
+  const stats = options.stats ?? recordedStats(run, assumptions);
   return readUnits(ms, forecast.milestones, {
     units,
     reserves,

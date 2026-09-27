@@ -3,7 +3,7 @@ import { SOURCES } from '../curated/sources';
 import { UNIT_OPINIONS, type OpinionUnit } from '../curated/unit-opinion';
 import { CHILD_UNITS, type ChildId } from '../game-data/children';
 import { ROBIN_SUPPORTS } from '../game-data/supports';
-import { DEFAULT_SPEED, EMPTY_ROSTER, createEngine, quotasFor, withRun, type PageUnitId, type PlanSettings, type RobinRef, type ScoreSettings } from './index';
+import { DEFAULT_SPEED, EMPTY_ROSTER, createEngine, withRun, type PageUnitId, type ExplorerSettings, type RobinRef, type ScoreSettings } from './index';
 
 const engine = createEngine();
 const dlc = { context: 'apotheosis', dlc: true } as const;
@@ -55,7 +55,7 @@ describe('unit opinion (curated)', () => {
   });
 });
 
-const settings: PlanSettings = {
+const settings: ExplorerSettings = {
   context: 'all',
   preset: 'physical-lead',
   edits: {},
@@ -63,10 +63,6 @@ const settings: PlanSettings = {
   dlc: false,
   speed: DEFAULT_SPEED,
   supportRank: 'A',
-  priorities: {},
-  overrides: {},
-  roleOverrides: {},
-  quotas: quotasFor('all'),
 };
 
 describe('opinions on pages', () => {

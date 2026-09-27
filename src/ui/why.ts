@@ -12,10 +12,8 @@
 import {
   FLAWLESS_SEED,
   rescoreSeed,
-  rosterUnits,
   type Assumptions,
   type Comparison,
-  type DeploymentRole,
   type Engine,
   type ExplainContext,
   type Explanation,
@@ -146,7 +144,6 @@ export type WhyContext = {
   readonly headline:
     | { readonly plan: Plan; readonly chance: RunSim; readonly solved: boolean; readonly adopted?: Plan; readonly readings?: ExplainContext['readings'] }
     | undefined;
-  readonly roleOf?: (u: RosterUnit) => DeploymentRole;
   readonly pins?: () => readonly PlanPin[];
   /** Opens a map's matchups (the Maps list), where a fight's trail stops. */
   readonly openMap?: (map: string) => void;
@@ -174,7 +171,6 @@ export function explainContext(ctx: WhyContext, id?: string): ExplainContext {
     ...(hd?.readings ? { readings: hd.readings } : {}),
     // A milestone is the roadmap's: the adopted plan's.
     ...(id?.startsWith('milestone:') && hd?.adopted ? { milestones: milestonesOf(ctx.engine, ctx.run, hd.adopted) } : {}),
-    ...(ctx.roleOf ? { roleOf: ctx.roleOf } : {}),
     ...(worth ? { worth } : {}),
     ...(w && unit ? { without: { [unit]: w.without } } : {}),
     comparisons: comps,
@@ -186,13 +182,12 @@ function ask(ctx: WhyContext, id: string, e: Explanation): void {
   if (!e.pending || !ctx.assumptions || !ctx.headline || asking === id) return;
   const seed = ctx.headline.solved ? rescoreSeed(FLAWLESS_SEED) : FLAWLESS_SEED;
   const runs = ctx.headline.chance.runs;
-  const roles = ctx.roleOf ? Object.fromEntries(rosterUnits(ctx.run.roster.run).map((u) => [u.id, ctx.roleOf!(u.id)])) : undefined;
   const pins = ctx.pins?.();
   if (e.pending === 'other') {
     const key = id.slice('edit:'.length);
     const held = comparisons.get(key);
     if (!held?.plans) return;
-    const started = startSolve({ kind: 'why', assumptions: ctx.assumptions, run: ctx.run, plan: held.plans.other, base: held.plans.base, seed, runs, ...(roles ? { roles } : {}) }, (reply) => {
+    const started = startSolve({ kind: 'why', assumptions: ctx.assumptions, run: ctx.run, plan: held.plans.other, base: held.plans.base, seed, runs }, (reply) => {
       if (reply.kind !== 'why' || !reply.base) return;
       others.set(key, { other: reply.chance, base: reply.base });
       if (asking === id) asking = undefined;
@@ -204,7 +199,7 @@ function ask(ctx: WhyContext, id: string, e: Explanation): void {
   const unit = id.slice('worth:'.length) as RosterUnit;
   const plan = worthRead?.plan;
   if (!plan) return;
-  const started = startSolve({ kind: 'why', assumptions: ctx.assumptions, run: ctx.run, plan, unit, seed: FLAWLESS_SEED, runs, ...(pins ? { pins } : {}), ...(roles ? { roles } : {}) }, (reply) => {
+  const started = startSolve({ kind: 'why', assumptions: ctx.assumptions, run: ctx.run, plan, unit, seed: FLAWLESS_SEED, runs, ...(pins ? { pins } : {}) }, (reply) => {
     if (reply.kind !== 'why' || !reply.base) return;
     withouts.set(unit, { without: reply.chance, base: reply.base });
     if (asking === id) asking = undefined;

@@ -1,98 +1,54 @@
-import { stateOf, type Couple, type PlayContext, type Roster, type RosterUnit, type UnitState } from '../engine';
-import { CHILD_UNITS } from '../game-data/children';
+import { stateOf, type PlayContext, type Roster, type RosterUnit, type UnitState } from '../engine';
 import { dismissLoss, type GuidePrefs } from './guide-prefs';
-import type { PlanPrefs } from './plan-prefs';
 import { DEFAULT_PREFS } from './scoring-prefs';
 
 /**
- * What the guide's checklist can tick, read from stored state only (never the DOM): the roster, the plan preferences
- * and their act flags, and the play context.
+ * What the guide's checklist can tick, read from stored state only (never the DOM): the roster and the play context.
+ * The Plan page's facts (Deploy edited, priorities set, a child benched, the plan adopted) went with it (#212).
  */
 export type GuideFacts = {
   /** The run's difficulty and route are set in Run facts (#108). */
   readonly runSetUp: boolean;
   /** The play context is no longer the default. */
   readonly contextChosen: boolean;
-  readonly deployEdited: boolean;
-  readonly prioritiesSet: boolean;
-  /** Robin is locked: every run fact is set (by the Plan's Lock or in Run facts), so there is no Robin left to pick. */
+  /** Robin is locked: every run fact is set (by the Robin Lock or in Run facts), so there is no Robin left to pick. */
   readonly robinLocked: boolean;
-  /** A child is benched: the Fresh run's bench step is about children only (#127). */
-  readonly childBenched: boolean;
-  /** The run's marriage plan is adopted. */
-  readonly planAdopted: boolean;
-  /**
-   * The adopted plan still holds: none of its couples has lost a partner (dead or missed) short of a marriage, and every
-   * real marriage is one of its couples. A loss unsets it until the re-plan is adopted; a bench, a what-if, doesn't.
-   */
-  readonly adoptedPlanHolds: boolean;
   /** A unit is dead or missed. */
   readonly unitLost: boolean;
-  /** A marriage really happened (✓ Married), not only a pin. */
+  /** A marriage really happened (✓ Married). */
   readonly marriageRecorded: boolean;
 };
 
 /** Hard losses: gone for good. */
 const LOST: readonly UnitState[] = ['dead', 'missed'];
 
-/**
- * The real marriages (✓ Married) the adopted plan doesn't hold, each couple once; none without an adopted plan. The
- * Adopt tick and the loss prompt both read it: a marriage the plan made is progress, not a loss.
- */
-export function offPlanMarriages({ savedPlan, spouses }: Roster): Couple[] {
-  if (!savedPlan) return [];
-  const planned = new Set(savedPlan.marriages.flatMap(([a, b]) => [`${a}+${b}`, `${b}+${a}`]));
-  const seen = new Set<RosterUnit>();
-  return (Object.keys(spouses) as RosterUnit[]).flatMap((u): Couple[] => {
-    const s = spouses[u];
-    if (s?.bond !== 'married' || seen.has(u)) return [];
-    seen.add(u).add(s.partner);
-    return planned.has(`${u}+${s.partner}`) ? [] : [[u, s.partner]];
-  });
-}
-
-/** The adopted plan still holds: no couple of it has lost a partner short of a marriage, and no real marriage is off it. */
-function adoptedPlanHolds(roster: Roster): boolean {
-  const { savedPlan, spouses } = roster;
-  if (!savedPlan) return false;
-  const lost = (u: RosterUnit) => LOST.includes(stateOf(roster, u));
-  const married = (a: RosterUnit, b: RosterUnit) => spouses[a]?.partner === b && spouses[a]?.bond === 'married';
-  return savedPlan.marriages.every(([a, b]) => married(a, b) || !(lost(a) || lost(b))) && offPlanMarriages(roster).length === 0;
-}
-
-export function guideFacts(roster: Roster, { acts }: PlanPrefs, context: PlayContext): GuideFacts {
+export function guideFacts(roster: Roster, context: PlayContext): GuideFacts {
   const { gender, asset, flaw } = roster.run;
   const units = Object.keys(roster.states) as RosterUnit[];
   const states = units.map((u) => stateOf(roster, u));
   return {
     runSetUp: !!roster.run.difficulty && !!roster.run.route,
     contextChosen: context !== DEFAULT_PREFS.context,
-    deployEdited: acts.deployEditedAt !== undefined,
-    prioritiesSet: acts.prioritiesSetAt !== undefined,
     robinLocked: !!gender && !!asset && !!flaw,
-    childBenched: units.some((u) => u in CHILD_UNITS && stateOf(roster, u) === 'benched'),
-    planAdopted: roster.savedPlan !== null,
-    adoptedPlanHolds: adoptedPlanHolds(roster),
     unitLost: states.some((s) => LOST.includes(s)),
     marriageRecorded: Object.values(roster.spouses).some((s) => s?.bond === 'married'),
   };
 }
 
-/** Each loss the roster records, as a stable event key: `dead:<unit>`, `missed:<unit>`, or `married:<a>+<b>` off the plan. */
+/** Each loss the roster records, as a stable event key: `dead:<unit>` or `missed:<unit>`. */
 function currentLosses(roster: Roster): string[] {
-  const lost = (Object.keys(roster.states) as RosterUnit[]).flatMap((u) => {
+  return (Object.keys(roster.states) as RosterUnit[]).flatMap((u) => {
     const s = stateOf(roster, u);
     return LOST.includes(s) ? [`${s}:${u}`] : [];
   });
-  return [...lost, ...offPlanMarriages(roster).map((c) => `married:${[...c].sort().join('+')}`)];
 }
 
 /** The loss prompt can show: the dock is open or on its pill, in Fresh run or Explore. */
 const promptable = ({ dock, journey }: GuidePrefs): boolean => dock !== 'closed' && journey !== 'loss';
 
 /**
- * The loss prompt: the new losses to offer After a loss for, or none while it can't show. A dead or missed unit, or a
- * real marriage off the adopted plan, is new until the prompt is taken or dismissed, or it is settled.
+ * The loss prompt: the new losses to offer After a loss for, or none while it can't show. A dead or missed unit is new
+ * until the prompt is taken or dismissed, or it is settled. (A marriage off the plan is the inbox's loss item, #208.)
  */
 export function lossPrompt(roster: Roster, prefs: GuidePrefs): string[] {
   return promptable(prefs) ? currentLosses(roster).filter((e) => !prefs.lossEvents.includes(e)) : [];

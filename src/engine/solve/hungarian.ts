@@ -1,6 +1,6 @@
 /**
  * Min-cost assignment of every row to a distinct column (rows ≤ columns): the column index per row. The classic
- * O(n²m) Hungarian algorithm with potentials. The seed's marriages (#198) and today's marriage plan both match on it.
+ * O(n²m) Hungarian algorithm with potentials. The seed's marriages (#198) match on it.
  */
 export function hungarian(cost: readonly (readonly number[])[]): number[] {
   const n = cost.length;

@@ -6,7 +6,7 @@
  * edit never stops the search.
  * Where there's no Worker (tests), `startSolve` returns undefined and the page works the chance out itself.
  */
-import type { Assumptions, DeploymentRole, EditCost, PinCost, Plan, PlanPin, Readings, ReservesCursor, ReservesStep, RobinCursor, RobinStep, RosterUnit, Run, RunSim, SolveCursor, SolveStep, UnitEdit, WhatItCost, WorthCursor, WorthStep } from '../engine';
+import type { Assumptions, EditCost, PinCost, Plan, PlanPin, Readings, ReservesCursor, ReservesStep, RobinCursor, RobinStep, RosterUnit, Run, RunSim, SolveCursor, SolveStep, UnitEdit, WhatItCost, WorthCursor, WorthStep } from '../engine';
 
 /** A unit's edit as the worker posts it (#203): its plan is built and costed in the worker. */
 export type UnitEditView = Pick<UnitEdit, 'kind' | 'key' | 'label' | 'pins'>;
@@ -16,8 +16,6 @@ type Common = {
   readonly assumptions: Assumptions;
   readonly run: Run;
   readonly seed: number;
-  /** Each unit's deployment role, as the page reads it (until #212). */
-  readonly roles?: Readonly<Record<string, DeploymentRole>>;
 };
 
 export type SolveRequest =

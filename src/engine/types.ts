@@ -9,7 +9,6 @@ import type { AssumptionId } from './assumptions';
 import type { PresetData, PresetId, ScoringRole, Weights } from '../curated/presets';
 import type { BuildContext, Confidence } from '../curated/builds';
 import type { Blocking, Roster, RunFacts } from './roster';
-import type { ChildDeploymentRole, Quotas } from '../curated/deployment';
 
 export type RobinRef = { readonly kind: 'robin'; readonly gender: Gender; readonly asset: Stat; readonly flaw: Stat };
 
@@ -158,32 +157,22 @@ export type ScoreSettings = {
   readonly supportRank: SupportRank;
 };
 
-/** The marriage plan's scoring inputs: each child scores in its plan preset, in Auto class, with the global rest. */
-export type PlanSettings = {
+/**
+ * The explorer's scoring inputs (#212: `scoring:v1`), for a unit page's Partners: each child scores in the explorer's
+ * preset, in Auto class, with the global rest. The wishlist never reads them; it ranks by flawless chance.
+ */
+export type ExplorerSettings = {
   readonly context: PlayContext;
-  /** The global preset: the plan preset of a child out of the cast (Morgan before Robin is set) without an override. */
+  /** The explorer's preset. */
   readonly preset: PresetId;
   /** The user's preset edits, which apply wherever a preset is used. */
   readonly edits: Readonly<Partial<Record<PresetId, { readonly weights: Weights; readonly mixed: boolean }>>>;
-  /** The global basis; a Support-role plan preset scores on Caps+LB when it is Growths. */
+  /** The global basis; a Support-role preset scores on Caps+LB when it is Growths. */
   readonly basis: ScoreBasis;
   /** DLC classes are Auto candidates. */
   readonly dlc: boolean;
   readonly speed: SpeedSettings;
   readonly supportRank: SupportRank;
-  /** 0–3 per child; 1 when unset. */
-  readonly priorities: Readonly<Partial<Record<ChildId, number>>>;
-  /** Preset overrides: a preset the user pinned, niche ones included; its deployment role comes with it. */
-  readonly overrides: Readonly<Partial<Record<ChildId, PresetId>>>;
-  /** Role overrides: a deployment role the user pinned; the role preset inside it stays derived. */
-  readonly roleOverrides: Readonly<Partial<Record<ChildId, ChildDeploymentRole>>>;
-  /** The play context's composition quotas, which army fit meets. */
-  readonly quotas: Quotas;
-  /**
-   * The no-Robin view (#98): Robin is removed as a parent from every pool, Morgan leaves the cast and Robin isn't counted
-   * as deployed; standing, role presets, army fit and the plan rerun under it. Pairing tables are unchanged.
-   */
-  readonly noRobin?: boolean;
 };
 
 export type PairingScore = {

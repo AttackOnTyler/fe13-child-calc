@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, addEntry, createEngine, marriagePins, rescoreSeed, runFromRoster, withRun, withSpouse, type Plan, type RosterUnit } from './index';
+import { EMPTY_ROSTER, addEntry, createEngine, rescoreSeed, runFromRoster, withRun, withSpouse, type Plan, type RosterUnit } from './index';
 import { SKILLS } from '../game-data/skills';
 
 /**
@@ -79,8 +79,6 @@ describe('the seed (#198)', () => {
     expect(spouseIn(plan, 'vaike')).toBe('sully');
     expect(plan.wishlist.children.find((c) => c.child === 'lucina')?.parents).toEqual(['chrom', wife]);
     expect(plan.wishlist.children.find((c) => c.child === child)?.parents).toEqual([wife, 'chrom']);
-    // The Plan page's pins are the seed's marriage pins, each couple once.
-    expect(marriagePins(withSpouse(facts, 'vaike', 'sully', 'pinned'))).toEqual([{ kind: 'marriage', couple: ['vaike', 'sully'] }]);
     // A pin on a recorded marriage's unit can't hold: the record wins.
     const clash = engine.seedPlan(recorded, { pins: [{ kind: 'marriage', couple: ['chrom', 'sumia'] }] });
     expect(spouseIn(clash, 'chrom')).toBe(wife);
@@ -164,8 +162,8 @@ describe('a plan’s roadmap (#198)', () => {
     const plan = engine.seedPlan(late);
     const lineups = engine.roadmapLineups(late, plan);
     expect(lineups.map((l) => l.key)).toEqual(['chapter-25', 'endgame']);
-    // Chapter 25: the greedy lineup, as the old path picks it.
-    const old = engine.flawlessChance(late, { runs: 1, marriages: plan.wishlist.marriages as [RosterUnit, RosterUnit][] }).maps[0]!.lineup!;
+    // Chapter 25: the greedy lineup, as the plan with no named lineup plays it.
+    const old = engine.flawlessChance(late, { runs: 1, plan: { ...plan, roadmap: { ...plan.roadmap, lineups: [] } } }).maps[0]!.lineup!;
     expect(lineups[0]!.pairs.map((p) => p.lead)).toEqual(old.pairs.map((p) => p.lead));
     // Endgame: the wishlist's, less anyone the army doesn't have there.
     const named = plan.roadmap.lineups[0]!;

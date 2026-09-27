@@ -9,12 +9,9 @@ import {
   latestEntry,
   rosterOf,
   runFromRoster,
-  withDeploy,
-  withDeployRole,
   withPin,
   withRuleOut,
   withRun,
-  withSavedPlan,
   withSpouse,
   withState,
   type Run,
@@ -31,23 +28,29 @@ const PLAN_V1 = 'fe13-child-calc:plan:v1';
 const ROSTER_V1 = 'fe13-child-calc:roster:v1';
 
 const facts = withRun(EMPTY_ROSTER, { gender: 'M', asset: 'mag', flaw: 'hp', difficulty: 'normal', mode: 'classic', route: 'main-story' });
-// Today's roster: a pinned marriage, one broken by a death, a rule-out, Deploy flags, a Benched unit, the adopted plan
-// and a deployment role.
+// A `run:v1` roster: a pinned marriage, one broken by a death, a rule-out, a Benched unit, and (fields `run:v2` no
+// longer has, #212: added to the file below) Deploy flags, the adopted plan and a deployment role.
 const roster = [
   (r: typeof facts) => withSpouse(r, 'chrom', 'sumia', 'pinned'),
   (r: typeof facts) => withSpouse(r, 'gaius', 'maribelle', 'pinned'),
   (r: typeof facts) => withState(r, 'maribelle', 'dead'),
   (r: typeof facts) => withSpouse(r, 'vaike', 'cordelia', 'married'),
   (r: typeof facts) => withRuleOut(r, 'lonqu', 'olivia', true),
-  (r: typeof facts) => withDeploy(r, 'frederick', false),
-  (r: typeof facts) => withDeploy(r, 'kellam', true),
   (r: typeof facts) => withState(r, 'stahl', 'benched'),
-  (r: typeof facts) => withSavedPlan(r, { robin: null, marriages: [['chrom', 'sumia']] }),
-  (r: typeof facts) => withDeployRole(r, 'miriel', 'staff'),
 ].reduce((r, f) => f(r), facts);
 const v1Run: Run = addEntry(addEntry(runFromRoster(roster), 'prologue', 1), 'chapter-1', 2);
 /** As `run:v1` held it. */
-const v1 = { ...JSON.parse(exportRun(v1Run)), version: 1 };
+const exported = JSON.parse(exportRun(v1Run));
+const v1 = {
+  ...exported,
+  version: 1,
+  roster: {
+    ...exported.roster,
+    deploy: { frederick: false, kellam: true },
+    savedPlan: { robin: null, marriages: [['chrom', 'sumia']] },
+    deployRoles: { miriel: 'staff' },
+  },
+};
 const plan = {
   priorities: { lucina: 3, owain: 2, inigo: 0, kjelle: 1, nah: 2 },
   overrides: { kjelle: 'lancekiller' },
@@ -94,7 +97,8 @@ describe('run:v2 in storage (#205)', () => {
       expect(now.run).toEqual(facts.run);
       expect(now.spouses).toEqual({ vaike: { partner: 'cordelia', bond: 'married' }, cordelia: { partner: 'vaike', bond: 'married' } });
       expect(now.states).toEqual({ maribelle: 'dead' });
-      expect([now.ruleOuts, now.savedPlan, now.deploy, now.deployRoles]).toEqual([[], null, {}, {}]);
+      expect(now.ruleOuts).toEqual([]);
+      for (const gone of ['savedPlan', 'deploy', 'deployRoles']) expect(now).not.toHaveProperty(gone);
       // The chapter log comes across as it was.
       expect(run.entries.map((e) => [e.id, e.map, e.createdAt])).toEqual(v1Run.entries.map((e) => [e.id, e.map, e.createdAt]));
       expect(latestEntry(run)!.snapshot.units).toEqual(latestEntry(v1Run)!.snapshot.units);

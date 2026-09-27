@@ -3,7 +3,7 @@
  * Lead / Back rows, each unit with its class, 5-skill build, worth (and utility), parents and passed skills, and its
  * reading; clicking a unit lists every edit that touches it with its cost ("costing…", then provisional, then settled),
  * keeping it in or out among them; the reserves in order, each naming the loss it mainly covers; and the children
- * ledger. The reference is variant D on branch `prototype/wishlist-editing` (its variant B sheet is this tab).
+ * ledger (child, fixed parent, the wishlist's parents and passes, status; #212). The reference is variant D on branch `prototype/wishlist-editing` (its variant B sheet is this tab).
  *
  * It reads the solve the Run view's headline runs (`solveState`): the adopted plan (#206: the plan the search started
  * from, as the inbox reads it and every edit is costed against; never the search's best, which is a proposal) and its
@@ -15,16 +15,16 @@ import {
   EDIT_COST_BUDGET,
   FLAWLESS_SEED,
   STEP_BUDGET,
-  composition,
   pinKey,
+  rosterOf,
   rosterUnits,
+  stateOf,
   unitName,
   withPin,
   withoutPins,
   type EditCost,
   type Engine,
   type Gender,
-  type LedgerEntry,
   type Milestone,
   type Plan,
   type PlanPin,
@@ -42,11 +42,10 @@ import { SKILLS } from '../game-data/skills';
 import { differenceText } from './chance';
 import { h } from './dom';
 import { guide } from './guide';
-import { LABELS, LEDGER_UI, LEFT_OUT_UI } from './labels';
-import { compositionStrip, priorityControl, roleChip, sourceChip, type ChildPlanControls } from './plan-page';
+import { LABELS, LEDGER_UI, type LedgerStatus } from './labels';
 import { flawlessSection, readingRow, solveState, type HeadlineContext } from './run-page';
 import { startSolve, type UnitEditView } from './solve-client';
-import { unitLink } from './unit-links';
+import { unitLink, type OpenUnit } from './unit-links';
 import { setComparison, setWorth, whyNumber, whyText, type WhyMark } from './why';
 
 export type WishlistContext = HeadlineContext & {
@@ -55,8 +54,8 @@ export type WishlistContext = HeadlineContext & {
   readonly setOpen: (unit: RosterUnit | undefined) => void;
   /** Draws the page again: the worker's replies land through it. */
   readonly refresh: () => void;
-  /** The children ledger's controls: the same priorities and plan presets as the Plan sidebar (until #212). */
-  readonly ledger: ChildPlanControls;
+  /** Opens a unit's page: the children ledger's links. */
+  readonly openUnit: OpenUnit;
 };
 
 // ---- readouts ----
@@ -136,6 +135,8 @@ export function wishlistReadout(
 ): WishlistReadout {
   const gender = run.roster.run.gender ?? plan.robin.gender;
   const name = (u: RosterUnit | 'maiden') => unitName(u, gender);
+  // Unit states and spouses live in the latest entry.
+  const roster = rosterOf(run);
   const genders = new Map<RosterUnit, Gender>(rosterUnits({ ...run.roster.run, gender }).map((u) => [u.id, u.gender]));
   const genderOf = (u: RosterUnit): Gender | undefined => (u === 'robin' ? plan.robin.gender : (genders.get(u) ?? (u in CHILD_UNITS ? CHILD_UNITS[u as ChildId].gender : undefined)));
   const worth = new Map(given.worth?.units.map((w) => [w.unit, w]) ?? []);
@@ -259,24 +260,29 @@ export function unitEditsReadout(run: Run, edits: readonly UnitEditView[] | unde
 /** A plan's idle work (#202) as it arrives: worth and utility, then the reserves. */
 type IdleState = { worth?: WorthStep; reserves?: ReservesStep; done: boolean };
 const IDLE = new WeakMap<Plan, IdleState>();
+
+/**
+ * A unit's worth to the run's adopted plan, once the idle work has it (#202); undefined before. Unit pages read it to
+ * show unit opinion beside the worth where they strongly disagree (#212).
+ */
+export function unitWorthOf(run: Run, unit: RosterUnit): UnitWorth | undefined {
+  const plan = solveState(run)?.plan;
+  return plan ? IDLE.get(plan)?.worth?.units.find((w) => w.unit === unit) : undefined;
+}
 /** A unit's edits on a plan, as the worker lists and costs them. */
 type EditsState = { edits?: readonly UnitEditView[]; costs: Map<string, EditCost>; done: boolean };
 const EDITS = new WeakMap<Plan, Map<RosterUnit, EditsState>>();
 /** The idle work's time budget: unit worth takes about 10 s at a few runs, the reserves as long again. */
 const IDLE_SECONDS = 120;
 
-const rolesOf = (ctx: HeadlineContext) =>
-  ctx.roleOf ? Object.fromEntries(rosterUnits(ctx.run.roster.run).map((u) => [u.id, ctx.roleOf!(u.id)])) : undefined;
-
 /** Starts the idle work for the plan once the solve is done (it stops if a new solve starts). */
 function idleFor(ctx: WishlistContext, plan: Plan, working: boolean): IdleState | undefined {
   const held = IDLE.get(plan);
   if (held || working || !ctx.assumptions) return held;
   const pins = ctx.pins?.();
-  const roles = rolesOf(ctx);
   const state: IdleState = { done: false };
   const started = startSolve(
-    { kind: 'idle', assumptions: ctx.assumptions, run: ctx.run, plan, seed: FLAWLESS_SEED, budget: STEP_BUDGET, seconds: IDLE_SECONDS, ...(pins ? { pins } : {}), ...(roles ? { roles } : {}) },
+    { kind: 'idle', assumptions: ctx.assumptions, run: ctx.run, plan, seed: FLAWLESS_SEED, budget: STEP_BUDGET, seconds: IDLE_SECONDS, ...(pins ? { pins } : {}) },
     (reply) => {
       if (reply.kind !== 'idle') return;
       state.worth = reply.worth;
@@ -297,10 +303,9 @@ function editsFor(ctx: WishlistContext, plan: Plan, unit: RosterUnit): EditsStat
   const held = byUnit.get(unit);
   if (held || !ctx.assumptions) return held;
   const pins = ctx.pins?.();
-  const roles = rolesOf(ctx);
   const state: EditsState = { costs: new Map(), done: false };
   const started = startSolve(
-    { kind: 'edits', assumptions: ctx.assumptions, run: ctx.run, plan, unit, seed: FLAWLESS_SEED, budgets: [EDIT_COST_BUDGET.provisional, EDIT_COST_BUDGET.settled], ...(pins ? { pins } : {}), ...(roles ? { roles } : {}) },
+    { kind: 'edits', assumptions: ctx.assumptions, run: ctx.run, plan, unit, seed: FLAWLESS_SEED, budgets: [EDIT_COST_BUDGET.provisional, EDIT_COST_BUDGET.settled], ...(pins ? { pins } : {}) },
     (reply) => {
       if (reply.kind === 'edits') {
         state.edits = reply.edits;
@@ -382,78 +387,77 @@ function editsMenu(ctx: WishlistContext, plan: Plan, unit: RosterUnit, name: str
   );
 }
 
-/** The children ledger (moved here from the Roster, #203): each child's fixed parent, plan or marriage, best remaining and status. */
-function childrenLedger(ctl: ChildPlanControls, plan: Plan): HTMLElement {
-  const gender = ctl.roster.run.gender;
-  const ledger = ctl.engine.ledger(ctl.roster, ctl.settings);
-  const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
-  const pairing = (c: LedgerEntry['planned']) =>
-    c ? [h('span', {}, c.parent), ' ', h('b', { class: 'num' }, c.score === undefined ? '—' : String(c.score))] : [h('span', { class: 'muted' }, '—')];
-  const wished = (id: ChildId) => {
-    const c = plan.wishlist.children.find((x) => x.child === id);
-    return c ? `${unitName(c.parents[0], gender ?? plan.robin.gender)} × ${unitName(c.parents[1], gender ?? plan.robin.gender)}` : 'not in it';
-  };
-  const row = (e: LedgerEntry) => {
+/** One child's row on the children ledger (#212): its fixed parent, the wishlist's parents and passes, and its status. */
+export type LedgerRow = {
+  readonly child: ChildId;
+  readonly name: string;
+  readonly fixedParent: RosterUnit;
+  /** "Chrom × Olivia", or "—" when the wishlist doesn't recruit it. */
+  readonly parents: string;
+  /** "passes Aether / Galeforce" (the fixed parent's, then the spouse's); empty when not in the wishlist. */
+  readonly passes: string;
+  readonly status: LedgerStatus;
+};
+
+/**
+ * The children ledger (moved here from the Roster, #203; #212 reads it from the run and the plan only, never a score):
+ * each child of the run with its fixed parent, the wishlist's parents and passes, and its status: dead or missed from
+ * the Roster, parents married once the log records it, else in the wishlist or not.
+ */
+export function childrenLedger(run: Run, plan: Plan): LedgerRow[] {
+  const gender = run.roster.run.gender ?? plan.robin.gender;
+  const name = (u: RosterUnit | 'maiden') => unitName(u, gender);
+  // Unit states and spouses live in the latest entry.
+  const roster = rosterOf(run);
+  return rosterUnits({ ...run.roster.run, gender }).flatMap((u): LedgerRow[] => {
+    if (u.kind !== 'child') return [];
+    const child = u.id as ChildId;
+    const fixedParent = CHILD_UNITS[child].fixedParent;
+    const wished = plan.wishlist.children.find((c) => c.child === child);
+    const st = stateOf(roster, child);
+    const married = roster.spouses[fixedParent]?.bond === 'married';
+    const status: LedgerStatus = st === 'dead' ? 'dead' : st === 'missed' ? 'missed' : married ? 'married' : wished ? 'wished' : 'out';
+    return [
+      {
+        child,
+        name: u.name,
+        fixedParent,
+        parents: wished ? `${name(wished.parents[0])} × ${name(wished.parents[1])}` : '—',
+        passes: wished ? `passes ${wished.passes.map((p) => (p ? skillName(p) : '—')).join(' / ')}` : '',
+        status,
+      },
+    ];
+  });
+}
+
+function ledgerSection(ctx: WishlistContext, plan: Plan): HTMLElement {
+  const gender = ctx.run.roster.run.gender ?? plan.robin.gender;
+  const row = (e: LedgerRow) => {
     const st = LEDGER_UI[e.status];
-    const same = e.best && e.best.key === e.planned?.key;
-    const statusHint = [e.leftOut ? `${st.hint}. ${LEFT_OUT_UI[e.leftOut].hint}` : st.hint, ...(e.saved?.reasons ?? [])].join('\n');
-    const preset = ctl.engine.planPreset(e.child, ctl.roster, ctl.settings);
     return h(
       'tr',
       { class: `ledger-${e.status}` },
-      h('td', { class: 'uname' }, unitLink(ctl.openUnit, e.child, e.name), ' ', roleChip(ctl, e.child)),
-      h('td', { class: 'muted' }, unitLink(ctl.openUnit, e.fixedParent, unitName(e.fixedParent, gender))),
-      h('td', { title: 'The wishlist’s parents for it' }, wished(e.child)),
-      h('td', { title: e.status === 'married' ? 'Its parents’ marriage' : 'The marriage plan’s pairing' }, ...(e.saved ? [h('s', {}, e.saved.parent), ' → '] : []), ...pairing(e.planned)),
-      h(
-        'td',
-        { title: 'Its best pairing in its plan preset that can still happen, whatever the rest of the plan' },
-        ...(same ? [h('span', { class: 'muted' }, '= plan')] : pairing(e.best)),
-        e.delta ? h('span', { class: `small ${e.delta > 0 ? 'pos' : 'neg'}` }, ` ${signed(e.delta)}`) : null,
-      ),
-      h(
-        'td',
-        { class: `lstatus ${e.status}`, title: statusHint },
-        `${st.mark} ${st.label}`,
-        e.leftOut ? h('span', { class: 'small' }, ` · ${LEFT_OUT_UI[e.leftOut].label}`) : null,
-        e.notes.length ? h('span', { class: 'warn', title: e.notes.join('\n'), 'aria-label': e.notes.join('. ') }, ' ⚠') : null,
-      ),
-      h('td', {}, priorityControl(ctl, e.child, e.name)),
-      h(
-        'td',
-        {},
-        h(
-          'span',
-          { class: 'ppreset' },
-          ctl.presetLabel(preset),
-          ' ',
-          sourceChip(ctl.engine.roles(ctl.roster, ctl.settings).get(e.child)),
-          ' ',
-          h('button', { class: 'mini', title: 'Set roles and presets on the Plan’s role matrix', onclick: ctl.openRoles }, 'Roles →'),
-        ),
-      ),
+      h('td', { class: 'uname' }, unitLink(ctx.openUnit, e.child, e.name)),
+      h('td', { class: 'muted' }, unitLink(ctx.openUnit, e.fixedParent, unitName(e.fixedParent, gender))),
+      h('td', { title: 'The wishlist’s parents for it' }, e.parents, e.passes ? h('span', { class: 'muted small' }, ` · ${e.passes}`) : null),
+      h('td', { class: `lstatus ${e.status}`, title: st.hint }, `${st.mark} ${st.label}`),
     );
   };
   return h(
     'section',
     { ...guide('children-ledger'), class: 'rsec ledger', 'aria-label': 'Children ledger' },
     h('h3', {}, 'Children ledger'),
-    h('p', { class: 'muted' }, 'Each child with its fixed parent, the wishlist’s parents for it, and its status, scored in its plan preset. Priority and preset are the same controls as the Plan sidebar.'),
+    h('p', { class: 'muted' }, 'Each child with its fixed parent, the wishlist’s parents and the skills they pass, and its status.'),
     h(
       'div',
       { class: 'ledger-scroll' },
       h(
         'table',
         { class: 'grid ledger' },
-        h(
-          'thead',
-          {},
-          h('tr', {}, h('th', {}, 'Child'), h('th', {}, 'Fixed parent'), h('th', {}, 'Wishlist'), h('th', {}, 'Plan / marriage'), h('th', {}, LABELS.bestRemaining), h('th', {}, LABELS.ledgerStatus), h('th', {}, 'Priority'), h('th', {}, 'Plan preset')),
-        ),
-        h('tbody', {}, ...ledger.map(row)),
+        h('thead', {}, h('tr', {}, h('th', {}, 'Child'), h('th', {}, 'Fixed parent'), h('th', {}, 'Wishlist'), h('th', {}, LABELS.ledgerStatus))),
+        h('tbody', {}, ...childrenLedger(ctx.run, plan).map(row)),
       ),
     ),
-    compositionStrip(composition(ctl.roster, ctl.engine.plan(ctl.roster, ctl.settings), ctl.quotas, ctl.settings.noRobin)),
   );
 }
 
@@ -461,7 +465,7 @@ export function wishlistPage(ctx: WishlistContext): HTMLElement[] {
   const headline = flawlessSection(ctx);
   const state = solveState(ctx.run);
   const head = h('div', { class: 'main-head' }, h('h2', {}, 'Wishlist'));
-  if (!state) return [head, h('div', { class: 'scroll wishlist' }, headline, h('p', { class: 'muted' }, 'Working out the plan…'), childrenLedger(ctx.ledger, ctx.engine.seedPlan(ctx.run)))];
+  if (!state) return [head, h('div', { class: 'scroll wishlist' }, headline, h('p', { class: 'muted' }, 'Working out the plan…'), ledgerSection(ctx, ctx.engine.seedPlan(ctx.run)))];
   const { plan, progress, working } = state;
   const idle = idleFor(ctx, plan, working);
   // What the Why panel explains here (#210): each unit's worth, and what each reserve restores.
@@ -526,7 +530,7 @@ export function wishlistPage(ctx: WishlistContext): HTMLElement[] {
           ].filter((e): e is HTMLElement => !!e);
         }),
       ),
-      childrenLedger(ctx.ledger, plan),
+      ledgerSection(ctx, plan),
     ),
   ];
 }

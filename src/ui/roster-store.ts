@@ -6,7 +6,7 @@ import { EMPTY_RUN, migrateRun, parseRun, rosterOf, withRoster, type Roster, typ
  *
  * The first read with no `run:v2` migrates once (`migrateRun`) from `run:v1` with `plan:v1`, or from a roster saved
  * before the chapter log, and saves the result with its migration note. `run:v1` and `plan:v1` stay untouched: `run:v1`
- * as a backup for one release, `plan:v1` for today's Plan page until #212 retires it.
+ * as a backup for one release; `plan:v1` is read only by the migration (#212 retired the Plan page).
  */
 const KEY = 'fe13-child-calc:run:v2';
 const V1_KEY = 'fe13-child-calc:run:v1';
