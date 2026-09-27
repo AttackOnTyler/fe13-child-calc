@@ -26,6 +26,18 @@ export function chanceText(p: number, words: ChanceWords = DEFAULT_WORDS): strin
   return pct;
 }
 
+/**
+ * A fight's kill chance (#210; spec #175, The Why panel's wording): percent with "1 run in N" always added ("12.1%
+ * (kills someone about 1 run in 8)"), capped like any chance.
+ */
+export function killText(p: number): string {
+  if (p >= 1) return '100%';
+  if (p <= 0) return '0%';
+  if (p > 0.999) return 'over 99.9%';
+  if (p < 0.001) return 'under 0.1%';
+  return `${(p * 100).toFixed(1)}% (kills someone about 1 run in ${runs(p)})`;
+}
+
 /** Points of chance with a sign, as a difference reads: −0.002 → "−0.2", 0.012 → "+1.2" (a minus sign, not a hyphen). */
 const signedPoints = (d: number) => {
   const s = (Math.abs(d) * 100).toFixed(1);

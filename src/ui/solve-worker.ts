@@ -82,6 +82,16 @@ scope.onmessage = ({ data: m }) => {
       if (done) return;
     }
   }
+  if (m.kind === 'why') {
+    // The Why panel's drill-down (#210): an edit's other plan, or the plan without a unit and the plan itself (worth).
+    const options = { seed: m.seed, runs: m.runs, ...(roleOf ? { roleOf } : {}) };
+    if (!m.unit) {
+      const chance = engine.flawlessChance(m.run, { ...options, plan: m.plan });
+      return void scope.postMessage({ id: m.id, kind: 'why', chance, ...(m.base ? { base: engine.flawlessChance(m.run, { ...options, plan: m.base }) } : {}), done: true });
+    }
+    const without = engine.worthChance(m.run, m.plan, m.unit, { ...options, ...(m.pins ? { pins: m.pins } : {}) });
+    return void scope.postMessage({ id: m.id, kind: 'why', chance: without, base: engine.flawlessChance(m.run, { ...options, plan: m.plan }), done: true });
+  }
   if (m.kind === 'edits') return unitEdits(engine, m, roleOf);
   if (m.kind === 'all-edits') return allEdits(engine, m, roleOf);
   if (m.kind === 'one-pin-cost') {

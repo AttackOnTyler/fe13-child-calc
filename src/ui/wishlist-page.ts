@@ -47,6 +47,7 @@ import { compositionStrip, priorityControl, roleChip, sourceChip, type ChildPlan
 import { flawlessSection, readingRow, solveState, type HeadlineContext } from './run-page';
 import { startSolve, type UnitEditView } from './solve-client';
 import { unitLink } from './unit-links';
+import { setComparison, setWorth, whyNumber, whyText, type WhyMark } from './why';
 
 export type WishlistContext = HeadlineContext & {
   /** The unit whose edits are open (view state). */
@@ -74,6 +75,14 @@ export function worthText(w: UnitWorth | undefined, gender: Gender | null | unde
   return `worth ${points(w.worth)}${pm}${withChildren}${utility}${w.settled ? '' : ' (provisional)'}`;
 }
 
+/** A worth's numbers (#210): the worth and its utility, each explained as the worth. */
+export function worthMarks(w: UnitWorth | undefined): WhyMark[] {
+  if (!w || w.forced || w.worth === undefined) return [];
+  const pm = w.margin !== undefined && Number.isFinite(w.margin) ? ` ±${points(w.margin)}` : '';
+  const utility = w.utility !== undefined && w.utility > 0 ? `utility ${points(w.utility)}` : '';
+  return [[`worth ${points(w.worth)}${pm}`, `worth:${w.unit}`], ...(utility ? [[utility, `worth:${w.unit}`] as WhyMark] : [])];
+}
+
 const READING_WORDS = { 'on-track': 'on track', 'at-risk': 'at risk', behind: 'behind' } as const;
 
 /** One unit on the sheet: what its row shows. */
@@ -85,8 +94,10 @@ export type UnitRowView = {
   /** Its build's skill names, in slot order. */
   readonly build: readonly string[];
   readonly worth: string;
-  /** Its reading (#197), with the roadmap's line for it as the hover; undefined until the readings are in. */
-  readonly reading?: { readonly kind: Reading['reading']; readonly text: string; readonly title: string };
+  /** Its worth's numbers, for the Why panel (#210): the worth and the utility. */
+  readonly worthMarks?: readonly WhyMark[];
+  /** Its reading (#197), with the roadmap's line for it as the hover; undefined until the readings are in. `why`: its worst milestone's explanation. */
+  readonly reading?: { readonly kind: Reading['reading']; readonly text: string; readonly title: string; readonly why?: string };
   /** A child's parents and the skills each passes: "Chrom × Olivia · passes Aether / Galeforce". */
   readonly parents?: string;
 };
@@ -98,8 +109,8 @@ export type WishlistReadout = {
   readonly rows: readonly { readonly lead: UnitRowView; readonly back?: UnitRowView }[];
   /** Units the plan needs off the endpoint lineup (a parent there for its child), with their worth and reading. */
   readonly others: readonly UnitRowView[];
-  /** The reserves in order, each naming the loss it mainly covers; empty until they're chosen. */
-  readonly reserves: readonly { readonly unit: RosterUnit; readonly text: string }[];
+  /** The reserves in order, each naming the loss it mainly covers; empty until they're chosen. `marks`: what it restores, for the Why panel. */
+  readonly reserves: readonly { readonly unit: RosterUnit; readonly text: string; readonly marks?: readonly WhyMark[] }[];
   readonly reservesNote: string;
   /** Units not on track (the tab's count). */
   readonly notOnTrack: number;
@@ -135,7 +146,7 @@ export function wishlistReadout(
     if (!given.readings || reserves.has(u)) return undefined;
     const r = given.readings.readings.find((x) => x.unit === u);
     if (!r) return { kind: 'on-track', text: 'on track', title: 'No milestones left' };
-    return { kind: r.reading, text: `${READING_WORDS[r.reading]}${r.pending ? '?' : ''}`, title: readingRow(r, milestones, gender) };
+    return { kind: r.reading, text: `${READING_WORDS[r.reading]}${r.pending ? '?' : ''}`, title: readingRow(r, milestones, gender), ...(r.worst ? { why: `milestone:${r.worst.id}` } : {}) };
   };
   const child = (u: RosterUnit) => plan.wishlist.children.find((c) => c.child === u);
   const view = (u: RosterUnit, position: UnitRowView['position'], classId?: string, build: readonly string[] = []): UnitRowView => {
@@ -148,6 +159,7 @@ export function wishlistReadout(
       cls: classId ? engine.className(classId as never, genderOf(u)) : '',
       build: build.map(skillName),
       worth: worthText(worth.get(u), gender),
+      worthMarks: worthMarks(worth.get(u)),
       ...(r ? { reading: r } : {}),
       ...(c ? { parents: `${name(c.parents[0])} × ${name(c.parents[1])} · passes ${c.passes.map((p) => (p ? skillName(p) : '—')).join(' / ')}` } : {}),
     };
@@ -164,8 +176,12 @@ export function wishlistReadout(
   const needed = [...new Set([...(given.readings?.readings.map((r) => r.unit) ?? []), ...(given.worth?.units.map((w) => w.unit) ?? [])])].filter((u) => !fielded.has(u) && !reserves.has(u));
   const others = needed.map((u) => view(u, 'Solo'));
   const reserveRows = reserveList.map((r, i) => {
-    const restores = 'restores' in r ? ` · restores ${differenceText((r as ReserveReading).restores, (r as ReserveReading).margin)}` : '';
-    return { unit: r.unit, text: `${i + 1}. ${name(r.unit)} covers ${r.covers ? name(r.covers) : 'no single loss'}${restores}` };
+    const restores = 'restores' in r ? differenceText((r as ReserveReading).restores, (r as ReserveReading).margin) : '';
+    return {
+      unit: r.unit,
+      text: `${i + 1}. ${name(r.unit)} covers ${r.covers ? name(r.covers) : 'no single loss'}${restores ? ` · restores ${restores}` : ''}`,
+      ...(restores ? { marks: [[restores, `edit:reserve:${r.unit}`]] as WhyMark[] } : {}),
+    };
   });
   const reservesNote = reserveRows.length
     ? 'In order: who steps in first. Each covers the likely loss it restores the most flawless chance for (the loss it mainly covers), weighted by how often the plan’s runs lose that unit.'
@@ -318,8 +334,12 @@ function unitCell(ctx: WishlistContext, u: UnitRowView): HTMLElement {
       h('button', { class: 'linkish', title: on ? 'Close its edits' : 'Every edit that touches it, with its cost', 'aria-expanded': on ? 'true' : 'false', onclick: () => ctx.setOpen(on ? undefined : u.unit) }, h('b', {}, u.name)),
       u.cls ? h('span', { class: 'muted small' }, ` ${u.cls}`) : null,
       ' ',
-      h('span', { class: 'small wl-worth', title: 'Unit worth: the flawless chance the plan loses without it, over every lineup it plays in (a parent’s includes its children); utility is the part from its staff, Dance, Rally or Rescue actions' }, u.worth),
-      u.reading ? h('span', { class: `chip wl-reading ${u.reading.kind}`, title: u.reading.title }, u.reading.text) : null,
+      h('span', { class: 'small wl-worth', title: 'Unit worth: the flawless chance the plan loses without it, over every lineup it plays in (a parent’s includes its children); utility is the part from its staff, Dance, Rally or Rescue actions' }, ...whyText(u.worth, u.worthMarks ?? [])),
+      u.reading
+        ? u.reading.why
+          ? h('button', { type: 'button', class: `chip wl-reading why-chip ${u.reading.kind}`, title: u.reading.title, 'data-why': u.reading.why }, u.reading.text)
+          : h('span', { class: `chip wl-reading ${u.reading.kind}`, title: u.reading.title }, u.reading.text)
+        : null,
     ),
     u.build.length ? h('div', { class: 'small wl-build' }, ...u.build.map((s) => h('span', { class: 'skill' }, s))) : null,
     u.parents ? h('div', { class: 'muted small' }, u.parents) : null,
@@ -330,6 +350,13 @@ function editsMenu(ctx: WishlistContext, plan: Plan, unit: RosterUnit, name: str
   const state = editsFor(ctx, plan, unit);
   const r = unitEditsReadout(ctx.run, state?.edits, state?.costs ?? new Map());
   const locked = robinLocked(ctx.run);
+  /** An edit's cost, explained in the Why panel (#210). */
+  const costOf = (row: EditRowView): string | HTMLElement => {
+    const c = state?.costs.get(row.key);
+    if (!c || c.runs === 0) return row.cost;
+    setComparison(`unit:${unit}:${row.key}`, { kind: 'edit', label: row.label, gain: c.gain, margin: c.margin, runs: c.runs, close: c.settled && (c.verdict === 'close' || c.verdict === 'unclear'), settled: c.settled });
+    return whyNumber(row.cost, `edit:unit:${unit}:${row.key}`);
+  };
   const act = (row: EditRowView) =>
     row.pinned
       ? h('button', { class: 'mini', title: 'Lift its pins', onclick: () => ctx.setRun(withoutPins(ctx.run, row.pins)) }, 'undo')
@@ -348,7 +375,7 @@ function editsMenu(ctx: WishlistContext, plan: Plan, unit: RosterUnit, name: str
         { ...(g.rows.length <= 6 ? { open: true } : {}) },
         h('summary', { class: 'small' }, `${g.title} (${g.rows.length})`),
         ...g.rows.map((row) =>
-          h('div', { class: `row small wl-edit${row.pinned ? ' on' : ''}` }, h('span', {}, row.label), ' ', h('span', { class: `cost ${row.phase}` }, row.cost), ' ', act(row)),
+          h('div', { class: `row small wl-edit${row.pinned ? ' on' : ''}` }, h('span', {}, row.label), ' ', h('span', { class: `cost ${row.phase}` }, costOf(row)), ' ', act(row)),
         ),
       ),
     ),
@@ -437,6 +464,10 @@ export function wishlistPage(ctx: WishlistContext): HTMLElement[] {
   if (!state) return [head, h('div', { class: 'scroll wishlist' }, headline, h('p', { class: 'muted' }, 'Working out the plan…'), childrenLedger(ctx.ledger, ctx.engine.seedPlan(ctx.run)))];
   const { plan, progress, working } = state;
   const idle = idleFor(ctx, plan, working);
+  // What the Why panel explains here (#210): each unit's worth, and what each reserve restores.
+  if (idle?.worth) setWorth(plan, idle.worth.units);
+  for (const x of idle?.reserves?.reserves ?? [])
+    setComparison(`reserve:${x.unit}`, { kind: 'reserve', label: `${unitName(x.unit, ctx.run.roster.run.gender ?? plan.robin.gender)} as a reserve`, gain: x.restores, margin: x.margin, runs: x.runs });
   const r = wishlistReadout(ctx.engine, ctx.run, plan, {
     ...(idle?.worth ? { worth: idle.worth } : {}),
     ...(idle?.reserves ? { reserves: idle.reserves } : {}),
@@ -485,7 +516,12 @@ export function wishlistPage(ctx: WishlistContext): HTMLElement[] {
         ...r.reserves.flatMap((x) => {
           const u = { unit: x.unit, name: unitName(x.unit, ctx.run.roster.run.gender ?? plan.robin.gender) } as UnitRowView;
           return [
-            h('div', { class: `row wl-res${ctx.open === x.unit ? ' sel' : ''}` }, h('button', { class: 'linkish', title: 'Every edit that touches it, with its cost', onclick: () => ctx.setOpen(ctx.open === x.unit ? undefined : x.unit) }, x.text)),
+            h(
+              'div',
+              { class: `row wl-res${ctx.open === x.unit ? ' sel' : ''}` },
+              h('button', { class: 'linkish', title: 'Every edit that touches it, with its cost', onclick: () => ctx.setOpen(ctx.open === x.unit ? undefined : x.unit) }, x.marks?.length ? x.text.slice(0, x.text.indexOf(x.marks[0]![0])) : x.text),
+              ...(x.marks?.length ? whyText(x.text.slice(x.text.indexOf(x.marks[0]![0])), x.marks) : []),
+            ),
             menu(u),
           ].filter((e): e is HTMLElement => !!e);
         }),

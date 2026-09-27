@@ -595,3 +595,37 @@ button.gd-deeper-head:hover { background: var(--hover); }
 .inbox .what-it-cost ul { margin: 2px 0 4px; }
 .next-map .nudge { display: block; color: var(--warn); margin: 2px 0 4px; }
 .rail-item .num.warn { color: var(--warn); }
+
+/* The Why panel (#210): every number on the Run view and the Wishlist tab opens it beside the page. */
+.why-num { background: none; border: 0; border-bottom: 1px dotted var(--accent); border-radius: 0; padding: 0; margin: 0; color: inherit; font: inherit; cursor: pointer; }
+.why-num:hover, .why-num:focus-visible { color: var(--accent); }
+.why-chip { background: none; font: inherit; cursor: pointer; }
+.shell.why-open { grid-template-columns: 170px 1fr 420px; }
+.why .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-align: left; }
+.why-tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+.why-tabs button.on { background: #243349; border-color: var(--accent); }
+.why-crumbs { display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; color: var(--muted); font-size: 12px; }
+.why-crumbs b { color: var(--text); }
+.why-close { margin-left: auto; }
+.why-value { font-size: 20px; margin: 8px 0 2px; font-variant-numeric: tabular-nums; }
+.why-lead { margin: 4px 0; }
+.why-math { color: var(--muted); padding-left: 16px; margin: 4px 0; }
+.why-rows { width: 100%; border-collapse: collapse; }
+.why-rows td { padding: 2px 4px; vertical-align: top; }
+.why-rows td.v { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.why-rows td.v.neg { color: var(--neg); }
+.why-rows td.v.pos { color: var(--pos); }
+.why-rows td.bar { width: 22%; }
+.why-rows td.bar i { display: block; height: 7px; border-radius: 2px; margin-top: 4px; }
+.why-rows td.bar i.neg { background: var(--neg); }
+.why-rows td.bar i.pos { background: var(--pos); }
+.why-rows tr.drill { cursor: pointer; }
+.why-rows tr.drill:hover td { background: var(--hover); }
+.why-stop { color: var(--muted); border-left: 3px solid var(--line); padding-left: 8px; }
+.why-spot { padding: 3px 0; }
+.chip.lean-warn { color: var(--warn); border-color: var(--warn); }
+.chip.lean-ok { color: var(--pos); border-color: var(--pos); }
+.chip.lean-dim { color: var(--muted); }
+@media (max-width: 700px) {
+  .shell.why-open { grid-template-columns: 1fr; }
+}

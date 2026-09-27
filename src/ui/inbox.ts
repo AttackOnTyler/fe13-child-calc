@@ -24,7 +24,7 @@
  * `inboxReadout` and `afterLockReadout` are what the page draws, from the solve's progress and the costs the worker has
  * read (tested); `inboxView` draws them and wires the worker's `edits` slot.
  */
-import type { CostRow, EditCost, Engine, LossItem, Milestone, MilestoneMoves, MilestonePoint, MovedProposal, NewEdit, PinCost, Plan, PlanBreak, PlanPin, PlanProposal, PlanRobin, Reading, RosterUnit, Run, RunLoss, CloseCall } from '../engine';
+import type { Comparison, CostRow, EditCost, Engine, LossItem, Milestone, MilestoneMoves, MilestonePoint, MovedProposal, NewEdit, PinCost, Plan, PlanBreak, PlanPin, PlanProposal, PlanRobin, Reading, RosterUnit, Run, RunLoss, CloseCall } from '../engine';
 import { EDIT_COST_BUDGET, FLAWLESS_SEED, STEP_BUDGET, adoptedOf, behindFixes, pinKey, proposalId, robinLock, rosterUnits, unitName, whatChanged, withDismissedChange, withDismissedProposal, withEdit, withLossesSettled, withRobinLock, withoutEdit } from '../engine';
 import { SKILLS } from '../game-data/skills';
 import { STAT_LABELS } from '../game-data/stats';
@@ -32,6 +32,7 @@ import { chanceText, differenceText } from './chance';
 import { h } from './dom';
 import { startSolve, type UnitEditView } from './solve-client';
 import { milestoneShort, pinText, type RunContext, type SolveProgress } from './run-page';
+import { setComparison, whyNumber, whyText, type WhyMark } from './why';
 
 /** A Robin option as the page writes it: "Female, +Spd −Lck". */
 export const robinName = (r: PlanRobin) => `${r.gender === 'M' ? 'Male' : 'Female'}, +${STAT_LABELS[r.asset]} −${STAT_LABELS[r.flaw]}`;
@@ -55,7 +56,12 @@ export type InboxState = {
   readonly pinCosts: ReadonlyMap<string, PinCost>;
 };
 
-export type InboxRow = { readonly key: string; readonly text: string };
+export type InboxRow = {
+  readonly key: string;
+  readonly text: string;
+  /** Its numbers, for the Why panel (#210). */
+  readonly marks?: readonly WhyMark[];
+};
 
 export type InboxItem =
   | { readonly kind: 'headline' }
@@ -135,14 +141,14 @@ export function inboxReadout(run: Run, state: InboxState): Inbox {
     items.push({
       kind: 'proposals',
       title: 'The search found better',
-      rows: proposals.map((p) => ({ key: proposalId(p), text: `${p.edits.join('; ')}: ${differenceText(p.gain, p.margin)}`, proposal: p })),
+      rows: proposals.map((p) => ({ key: proposalId(p), text: `${p.edits.join('; ')}: ${differenceText(p.gain, p.margin)}`, marks: [[differenceText(p.gain, p.margin), `edit:proposal:${proposalId(p)}`]], proposal: p })),
     });
   const calls = progress?.closeCalls ?? [];
   if (calls.length)
     items.push({
       kind: 'close-calls',
       title: 'Close calls: no measurable difference; pick whichever you like',
-      rows: calls.map((c) => ({ key: c.key, text: `${c.label}: ${differenceText(c.gain, c.margin, true)}`, call: c })),
+      rows: calls.map((c) => ({ key: c.key, text: `${c.label}: ${differenceText(c.gain, c.margin, true)}`, marks: [[differenceText(c.gain, c.margin, true), `edit:close:${c.key}`]], call: c })),
     });
 
   items.push(anythingElseItem(state), yourEditsItem(run, state));
@@ -463,9 +469,11 @@ export function afterLockReadout(engine: Engine, run: Run, state: InboxState): A
   const proposalRow = (p: PlanProposal, how = ''): FixRow => ({
     key: proposalId(p),
     text: `${how}${p.edits.join('; ')}: ${differenceText(p.gain, p.margin)}`,
+    marks: [[differenceText(p.gain, p.margin), `edit:proposal:${proposalId(p)}`]],
     proposal: p,
     ...(required ? { required: true } : {}),
   });
+  const worstMarks = (r: Reading): WhyMark[] => (r.worst?.reached ? [[chanceText(r.worst.chance), `milestone:${r.worst.id}`]] : []);
   const worstOf = (r: Reading) => {
     const m = r.worst && ms.find((x) => x.id === r.worst!.id);
     return !r.worst ? 'no milestones left' : `${m ? milestoneShort(m, r.unit, gender) : r.worst.id} ${r.worst.reached ? chanceText(r.worst.chance) : '(no run reaches it with nobody lost)'}`;
@@ -484,6 +492,7 @@ export function afterLockReadout(engine: Engine, run: Run, state: InboxState): A
         return {
           key: `at-risk:${r.unit}`,
           text: `${name(r.unit)}: ${worstOf(r)}`,
+          marks: worstMarks(r),
           fix: c && edit ? { key: `fix:${r.unit}`, text: `${capital(words!)}: ${chanceText(c.chance)}${c.flawless ? `, flawless chance ${signed(c.flawless)}` : ''}`, edit } : r.pending ? { key: `fix:${r.unit}`, text: 'Reading the changes that could bring it back…' } : undefined,
         };
       }),
@@ -499,7 +508,7 @@ export function afterLockReadout(engine: Engine, run: Run, state: InboxState): A
         const fixes = [...(f.roadmap ? [proposalRow(f.roadmap, 'Roadmap: ')] : []), ...(f.wishlist ? [proposalRow(f.wishlist, 'Wishlist change: ')] : [])];
         const why = r.why === 'non-starter' ? 'a non-starter in the maps left' : r.why === 'deadline' ? 'its deadline map has started' : 'no single change brings it back to 80%';
         const note = fixes.length ? '' : !progress?.done ? 'Re-solving: its proposal comes when the search finds one.' : 'The re-solve found no plan that moves its milestones and does better.';
-        return { key: `behind:${r.unit}`, text: `${name(r.unit)}: ${worstOf(r)} · ${why}`, fixes, note };
+        return { key: `behind:${r.unit}`, text: `${name(r.unit)}: ${worstOf(r)} · ${why}`, marks: worstMarks(r), fixes, note };
       }),
     });
 
@@ -533,6 +542,12 @@ export function afterLockReadout(engine: Engine, run: Run, state: InboxState): A
   return { title, items, open, nudge: open ? `${open} item${open === 1 ? '' : 's'} above still need${open === 1 ? 's' : ''} you (you can play anyway)` : undefined };
 }
 
+/** The pins' cost in "Your edits", for the Why panel (#210; the headline hands the panel the comparison). */
+const pinCostMark = (p: SolveProgress | undefined): WhyMark | undefined => {
+  const pc = p?.pinCost;
+  return pc && [differenceText(pc.cost, pc.margin, pc.verdict === 'close' || pc.verdict === 'unclear'), 'edit:pin-cost'];
+};
+
 /** Points of chance with a sign: "+1.2", "−0.4". */
 const signed = (p: number) => `${p < 0 ? '−' : '+'}${Math.abs(p * 100).toFixed(1)}`;
 
@@ -552,8 +567,11 @@ export type WhatChangedReadout = {
    * What it cost (#208), in flawless points: each row's words, and for a missed milestone the unit whose behind re-solve
    * it links to; `costNote` while it's worked out, or when there's nothing to price.
    */
-  readonly cost: readonly { readonly text: string; readonly behind?: RosterUnit }[];
+  readonly cost: readonly { readonly text: string; readonly behind?: RosterUnit; /** Its price, for the Why panel (#210). */ readonly marks?: readonly WhyMark[]; readonly comparison?: { readonly key: string; readonly comparison: Comparison } }[];
   readonly costNote: string;
+  /** The chance line's numbers (#210): the headline now, and the move (a difference of two estimates, not paired). */
+  readonly marks?: readonly WhyMark[];
+  readonly comparison?: Comparison;
 };
 
 /** A What it cost row in words (#208): what happened, then its points and ±. */
@@ -612,13 +630,33 @@ export function whatChangedReadout(engine: Engine, run: Run, progress: SolveProg
   const improvements = !progress ? 'Re-solving from your plan…' : found ? `The re-solve found ${found} improvement${found === 1 ? '' : 's'}: in the inbox below.` : progress.done ? 'The re-solve found no improvement on your plan.' : 'Re-solving from your plan…';
   // What it cost (#208): priced after the readings, on the same runs each.
   const priced = progress?.cost?.value;
-  const cost = (priced && priced.entry === w.entry ? priced.rows : []).map((r) => ({
-    text: costRowText(r, name),
-    ...(r.kind === 'milestone' && progress?.readings?.readings.some((x) => x.unit === r.unit && x.reading === 'behind') ? { behind: r.unit! } : {}),
-  }));
+  const cost: WhatChangedReadout['cost'][number][] = (priced && priced.entry === w.entry ? priced.rows : []).map((r) => {
+    const text = costRowText(r, name);
+    const key = `cost:${w.entry}:${r.key}`;
+    return {
+      text,
+      ...(r.kind === 'milestone' && progress?.readings?.readings.some((x) => x.unit === r.unit && x.reading === 'behind') ? { behind: r.unit! } : {}),
+      // Its price, for the Why panel (#210): the event undone on the same runs.
+      marks: [[differenceText(r.points, r.margin), `edit:${key}`]],
+      comparison: { key, comparison: { kind: 'cost', label: text.slice(0, text.indexOf(': ') > 0 ? text.indexOf(': ') : undefined), gain: r.points, margin: r.margin, runs: priced!.runs } },
+    };
+  });
   if (priced && priced.entry === w.entry && priced.small) cost.push({ text: `${priced.small.count} smaller row${priced.small.count === 1 ? '' : 's'} (under 0.1 points each): ${signed(priced.small.points)} points together` });
   const costNote = !progress?.cost ? 'What it cost: pricing each event on the same runs…' : cost.length ? `In flawless points on ${priced!.runs} paired runs each (negative: what it cost).` : 'What it cost: nothing on this map moved the flawless chance.';
-  return { entry: w.entry, title: `What changed on ${label}`, chance, exp, readings, improvements, cost, costNote };
+  const moved = w.before && w.after ? { gain: w.after.chance - w.before.chance, margin: Math.hypot(w.before.margin, w.after.margin) } : undefined;
+  const marks: WhyMark[] = w.after ? [[withMargin(w.after), 'flawless'], ...(moved ? [[`${signed(moved.gain)} points`, `edit:changed:${w.entry}`] as WhyMark] : [])] : [];
+  return {
+    entry: w.entry,
+    title: `What changed on ${label}`,
+    chance,
+    exp,
+    readings,
+    improvements,
+    cost,
+    costNote,
+    marks,
+    ...(moved ? { comparison: { kind: 'changed' as const, label: `What changed on ${label}`, ...moved } } : {}),
+  };
 }
 
 // ---- the page ----
@@ -770,7 +808,7 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
       'div',
       { class: `row small${r.required ? ' required' : ''}` },
       r.required ? h('span', { class: 'chip warn small' }, 'required') : null,
-      h('span', {}, r.text),
+      h('span', {}, ...whyText(r.text, r.marks ?? [])),
       r.proposal ? h('button', { class: 'mini', title: 'Adopt this plan: the search carries on from it', onclick: () => accept(r.proposal!) }, action) : null,
       r.proposal ? h('button', { class: 'mini ghost', title: 'Hide it: the plan stays as it is', onclick: () => set(withDismissedProposal(run, r.key)) }, 'Dismiss') : null,
       r.proposal
@@ -789,7 +827,7 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
     const actions = item('actions');
     const checks = item('checks');
     const list = (i: { readonly title: string; readonly rows: readonly InboxRow[] } | undefined, cls: string) =>
-      i ? h('div', { class: `banner ${cls}` }, h('b', {}, i.title), h('ul', { class: 'small' }, ...i.rows.map((r) => h('li', {}, r.text)))) : null;
+      i ? h('div', { class: `banner ${cls}` }, h('b', {}, i.title), h('ul', { class: 'small' }, ...i.rows.map((r) => h('li', {}, ...whyText(r.text, r.marks ?? []))))) : null;
     return h(
       'div',
       { class: 'inbox-decisions' },
@@ -830,7 +868,7 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
             'div',
             { class: 'banner at-risk' },
             h('b', {}, risk.title),
-            ...risk.rows.map((r) => h('div', { class: 'inbox-unit' }, h('div', { class: 'small' }, r.text), r.fix ? (r.fix.edit ? fixRow(r.fix) : h('div', { class: 'muted small' }, r.fix.text)) : null)),
+            ...risk.rows.map((r) => h('div', { class: 'inbox-unit' }, h('div', { class: 'small' }, ...whyText(r.text, r.marks ?? [])), r.fix ? (r.fix.edit ? fixRow(r.fix) : h('div', { class: 'muted small' }, r.fix.text)) : null)),
           )
         : null,
       behind
@@ -838,7 +876,7 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
             'div',
             { class: 'banner behind' },
             h('b', {}, behind.title),
-            ...behind.rows.map((r) => h('div', { class: 'inbox-unit', id: `inbox-${r.key.replace(':', '-')}` }, h('div', { class: 'small' }, r.text), ...r.fixes.map((f) => fixRow(f)), r.note ? h('div', { class: 'muted small' }, r.note) : null)),
+            ...behind.rows.map((r) => h('div', { class: 'inbox-unit', id: `inbox-${r.key.replace(':', '-')}` }, h('div', { class: 'small' }, ...whyText(r.text, r.marks ?? [])), ...r.fixes.map((f) => fixRow(f)), r.note ? h('div', { class: 'muted small' }, r.note) : null)),
           )
         : null,
       list(actions, 'map-actions'),
@@ -850,12 +888,14 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
   const changed = (): HTMLElement => {
     const w = whatChangedReadout(ctx.engine, run, progressOf.get(run));
     if (!w) return h('div', { class: 'what-changed-none' });
+    if (w.comparison) setComparison(`changed:${w.entry}`, w.comparison);
+    for (const r of w.cost) if (r.comparison) setComparison(r.comparison.key, r.comparison.comparison);
     const block = (title: string, rows: readonly string[]) => (rows.length ? h('div', {}, h('b', { class: 'small' }, title), h('ul', { class: 'small' }, ...rows.map((x) => h('li', {}, x)))) : null);
     return h(
       'div',
       { class: 'banner what-changed' },
       h('b', {}, w.title),
-      h('div', { class: 'small' }, w.chance),
+      h('div', { class: 'small' }, ...whyText(w.chance, w.marks ?? [])),
       block('EXP against the forecast', w.exp),
       block('Readings that moved', w.readings),
       h('div', { class: 'small' }, w.improvements),
@@ -864,7 +904,7 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
             'div',
             { class: 'what-it-cost' },
             h('b', { class: 'small' }, 'What it cost'),
-            h('ul', { class: 'small' }, ...w.cost.map((r) => h('li', {}, r.text, r.behind ? h('a', { href: `#inbox-behind-${r.behind}`, class: 'small', title: 'Its behind re-solve, in the inbox below', onclick: (e: Event) => (e.preventDefault(), document.getElementById(`inbox-behind-${r.behind}`)?.scrollIntoView({ behavior: 'smooth' })) }, ' → its re-solve') : null))),
+            h('ul', { class: 'small' }, ...w.cost.map((r) => h('li', {}, ...whyText(r.text, r.marks ?? []), r.behind ? h('a', { href: `#inbox-behind-${r.behind}`, class: 'small', title: 'Its behind re-solve, in the inbox below', onclick: (e: Event) => (e.preventDefault(), document.getElementById(`inbox-behind-${r.behind}`)?.scrollIntoView({ behavior: 'smooth' })) }, ' → its re-solve') : null))),
           )
         : null,
       h('span', { class: 'muted small' }, w.costNote),
@@ -887,7 +927,7 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
               h(
                 'div',
                 { class: 'row small' },
-                h('span', {}, r.text),
+                h('span', {}, ...whyText(r.text, r.marks ?? [])),
                 h('button', { class: 'mini', title: 'Adopt this plan: the search carries on from it', onclick: () => set(withEdit(run, { label: r.proposal.edits.join('; '), plan: r.proposal.plan, accepted: true, cost: { gain: r.proposal.gain, margin: r.proposal.margin, verdict: 'better' } })) }, 'Accept'),
                 h('button', { class: 'mini ghost', title: 'Hide it: the plan stays as it is', onclick: () => set(withDismissedProposal(run, r.key)) }, 'Dismiss'),
               ),
@@ -903,7 +943,7 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
               h(
                 'div',
                 { class: 'row small' },
-                h('span', {}, r.text),
+                h('span', {}, ...whyText(r.text, r.marks ?? [])),
                 h('button', { class: 'mini', title: 'Take it: the chance can’t tell it from the plan', onclick: () => set(withEdit(run, { label: r.call.label, plan: r.call.plan, accepted: true, cost: { gain: r.call.gain, margin: r.call.margin, verdict: 'close' } })) }, 'Take it'),
               ),
             ),
@@ -934,7 +974,7 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
           'div',
           { class: 'row small' },
           h('span', {}, r.label),
-          h('span', { class: r.cost === 'costing…' || r.cost.endsWith('provisional') ? 'muted' : '' }, r.cost),
+          h('span', { class: r.cost === 'costing…' || r.cost.endsWith('provisional') ? 'muted' : '' }, costNumber(r.key, r.label, r.cost)),
           h(
             'button',
             { class: 'mini', disabled: !r.ready, title: r.apply === 'pin' ? 'Pin it: a hard constraint every plan keeps' : 'Make it: your plan becomes this one', onclick: () => make(r.key) },
@@ -972,6 +1012,15 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
     );
   };
 
+  /** An edit's cost, explained in the Why panel (#210): against the held plan, its per-map rows from its edited plan. */
+  const costNumber = (key: string, label: string, text: string): string | HTMLElement => {
+    const c = s.costs.get(key);
+    if (!c) return text;
+    const edited = s.edited.get(key);
+    const base = heldPlan(run, progressOf.get(run));
+    setComparison(`choice:${key}`, { kind: 'edit', label, gain: c.gain, margin: c.margin, runs: c.runs, close: c.settled && (c.verdict === 'close' || c.verdict === 'unclear'), settled: c.settled }, edited && base ? { other: edited, base } : undefined);
+    return whyNumber(text, `edit:choice:${key}`);
+  };
   const yourEdits = (): HTMLElement => {
     const y = item('your-edits')!;
     return h(
@@ -980,16 +1029,20 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
       h('b', {}, y.title),
       ...y.rows.map((r) => {
         const e = run.edits![r.index]!;
+        // Its cost, for the Why panel (#210): its pins' own cost once read, else its cost when made.
+        const own = e.pins?.length ? s.pinCosts.get(editPinsKey(e.pins)) : undefined;
+        const c = own ? { gain: own.cost, margin: own.margin, runs: own.runs, verdict: own.verdict } : e.cost;
+        if (c) setComparison(`yours:${r.index}`, { kind: own ? 'pin-cost' : 'edit', label: e.label, gain: c.gain, margin: c.margin, ...('runs' in c ? { runs: c.runs } : {}), close: c.verdict === 'close' || (!!own && c.verdict === 'unclear') });
         return h(
           'div',
           { class: 'row small' },
           h('span', {}, r.text),
-          r.cost ? h('span', { class: 'muted' }, r.cost) : null,
+          r.cost ? h('span', { class: 'muted' }, ...(c ? whyText(r.cost, [[r.cost.replace(/^(costs|gained|cost when made) /, ''), `edit:yours:${r.index}`]]) : [r.cost])) : null,
           r.ask ? h('button', { class: 'mini ghost', title: 'Work out what this pin costs on its own', onclick: () => askPinCost(ctx, e.pins!) }, 'Cost?') : null,
           h('button', { class: 'mini', title: 'Undo this edit', onclick: () => set(withoutEdit(run, r.index)) }, 'Undo'),
         );
       }),
-      y.pinCost ? h('div', { class: 'small' }, y.pinCost) : null,
+      y.pinCost ? h('div', { class: 'small' }, ...whyText(y.pinCost, [pinCostMark(progressOf.get(run))])) : null,
       h('span', { class: 'muted small' }, y.note),
     );
   };
