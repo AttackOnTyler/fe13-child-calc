@@ -488,7 +488,7 @@ function fightExplanation(c: Resolved, id: string): Explanation | undefined {
   const g = rep.groups.get(f.foe);
   if (!front || !g) return undefined;
   const foe = g.foe;
-  const drawn = rep.play.skills[f.foe] ?? [];
+  const drawn = f.drawn ?? rep.play.skills[f.foe] ?? [];
   const pair = rep.lineup.find((x) => (x.lead.id === f.lead && x.back?.id === f.back) || (x.lead.id === f.back && x.back?.id === f.lead));
   const best = bestWeapon(front.unit.fighter, front.unit.weapons, back?.unit.fighter, pair?.support ?? null, foe, drawn, !!back);
   const m = best?.result;
