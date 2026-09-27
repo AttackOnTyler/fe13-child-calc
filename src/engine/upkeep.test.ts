@@ -270,6 +270,19 @@ describe('gold and the shopping list in the simulated runs (#190)', () => {
   });
 });
 
+describe('what a unit carries into a map (realism pass)', () => {
+  it('carries five items, the weapons that deal most to this map’s foes: a Wyrmslayer against wyverns', () => {
+    // 30 HP, Def 10, no weapon: a sword's round (10 a hit, doubled) leaves one standing; a Wyrmslayer's (Mt tripled) fells it.
+    const wyvern: Foe = { ...dummy(3, 30), name: 'Wyvern', className: 'Wyvern Rider', stats: stats(30, 0, 0, 0, 0, 0, 10, 0) };
+    const swords = ['Bronze Sword', 'Iron Sword', 'Steel Sword', 'Killing Edge', 'Rapier', 'Armorslayer', 'Wyrmslayer'].map((n) => ({ item: item(n) }));
+    const hoarder = hero({ weapons: swords, items: [{ item: item('Vulnerary'), uses: 3 }] });
+    const r = engine.simulateRuns({ army: [hoarder], maps: [step(rout('a', [wyvern]))], difficulty: 'normal' }, 1, 1);
+    // One wyvern a turn, each in one round.
+    expect(r.maps[0]!.turns).toBe(3);
+    expect(r.exp[0]!.units[0]!.kills).toEqual({ Wyvern: 3 });
+  });
+});
+
 describe('a map the play can’t win (realism pass)', () => {
   it('counts a map that runs out of turns unwon as not cleared: the run doesn’t get past it', () => {
     // A foe the hero can't hurt and that can't hurt it: nobody dies, and the map is never won.

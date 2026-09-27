@@ -18,7 +18,7 @@
  */
 import { FORGE, forgeCost, itemByName, type GameItem } from '../../game-data/items';
 import type { Assumptions } from '../assumptions';
-import { bestWeapon, type Fighter, type Foe, type SupportLevel } from '../solver';
+import { bestKey, bestWeapon, matchup, type Fighter, type Foe, type Matchup, type SupportLevel } from '../solver';
 import { classWeaponKinds, type StockItem } from '../supply';
 import type { MapPlay, SimGroup, SimMap, SimUnit } from './map-play';
 import type { Rng } from './random';
@@ -251,11 +251,34 @@ export function endpointKit(input: {
 }): KitPiece[] {
   const forging = input.forge ?? true;
   const pieces: KitPiece[] = [];
-  const score = (l: (typeof input.leads)[number], weapons: readonly Weapon[]) =>
-    input.foes.reduce((n, foe) => {
-      const b = weapons.length ? bestWeapon(l.fighter, weapons, l.back, l.support, foe, []) : undefined;
-      return n + (b ? ((b.result.oneRounds || b.result.oneRoundsWithDualStrikes ? 1 : 0) + (b.result.survives ? 1 : 0)) * (foe.boss ? 1 : foe.count) : 0);
+  const won = (m: Matchup, foe: Foe) => ((m.oneRounds || m.oneRoundsWithDualStrikes ? 1 : 0) + (m.survives ? 1 : 0)) * (foe.boss ? 1 : foe.count);
+  // Each lead's best matchup against each foe with what it owns, worked out once: a weapon added to them is one more
+  // matchup a foe (`bestWeapon` keeps the first of equals, so the new one wins only by more).
+  const owned = new Map<(typeof input.leads)[number], (Matchup | undefined)[]>();
+  const ownedBest = (l: (typeof input.leads)[number]) => {
+    let row = owned.get(l);
+    if (!row) owned.set(l, (row = input.foes.map((foe) => (l.weapons.length ? bestWeapon(l.fighter, l.weapons, l.back, l.support, foe, [])?.result : undefined))));
+    return row;
+  };
+  const score = (l: (typeof input.leads)[number], weapons: readonly Weapon[]) => {
+    const row = ownedBest(l);
+    // What it owns, or with one more weapon (the last): only the added one is matched up again.
+    const extra = weapons.length > l.weapons.length ? weapons[weapons.length - 1] : undefined;
+    const swapped = weapons.length === l.weapons.length && weapons.some((w, i) => w !== l.weapons[i]);
+    if (swapped)
+      return input.foes.reduce((n, foe) => {
+        const b = weapons.length ? bestWeapon(l.fighter, weapons, l.back, l.support, foe, []) : undefined;
+        return n + (b ? won(b.result, foe) : 0);
+      }, 0);
+    return input.foes.reduce((n, foe, k) => {
+      let m = row[k];
+      if (extra) {
+        const r = matchup({ ...l.fighter, weapon: extra }, l.back, l.support, foe, [], true);
+        if (!m || bestKey(r) > bestKey(m)) m = r;
+      }
+      return n + (m ? won(m, foe) : 0);
     }, 0);
+  };
   const sold = input.stock.flatMap((s) => {
     const item = itemByName(s.item);
     return item && s.cost !== null && WEAPON_KINDS.has(item.kind) ? [{ item, cost: s.cost }] : [];

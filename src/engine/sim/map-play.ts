@@ -1224,7 +1224,13 @@ class MapState {
 
   /** Whether an actor has an attack now within `EXPOSURE_RISK`, exposure to enemy phase included. */
   private hasSafeAttack(a: Actor, ctx: PolicyContext): boolean {
+    // Its enemy-phase survival where it stands, before anyone is in reach: an attack only lowers its HP, so when that's
+    // already short of safe, only an attack felling a foe of the group that sets it can be safe (the rest aren't tried).
+    const now = this.reachable(a) ? this.survivalOf(a, undefined, this.hp[a.unit]!, ctx, -1) : 1;
+    const worst = this.survWorst;
+    const short = now < 1 - EXPOSURE_RISK;
     for (const f of ctx.worn) {
+      if (short && f.g !== worst) continue;
       const r = this.attackRisk(a, undefined, false, f, ctx, true);
       if (r && r.risk <= EXPOSURE_RISK) return true;
     }
