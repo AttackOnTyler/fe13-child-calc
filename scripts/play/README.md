@@ -27,7 +27,7 @@ Buttons (Azahar profile 1 in `qt-config.ini`): a b x y, up down left right (D-pa
 Ground truth after each map, from the Chapter save the game writes at the save prompt (see "Build the Chapter-save snapshot reader", #230):
 
 ```bash
-npx vite-node scripts/play/save/cli.ts 1          # slot 1..3 in game = Chapter0..2 on disk: pass 0, 1 or 2
+npx vite-node scripts/play/save/cli.ts 0          # the game's slots 1-3 are Chapter0-2 on disk, so pass 0, 1 or 2
 npx vite-node scripts/play/save/cli.ts 0 --json   # everything, for diffing against the app
 ```
 
