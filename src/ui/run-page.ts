@@ -3,7 +3,7 @@
  * holds a snapshot: every unit's class, level, EXP, stats, skills, inventory and supports, plus the convoy and gold.
  * A new entry copies the one before; editing a past entry never reaches later ones, which are flagged instead.
  */
-import type { Engine, HeldItem, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitSnapshot } from '../engine';
+import type { Engine, HeldItem, MapOrderStep, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitSnapshot } from '../engine';
 import { SUPPORT_LEVELS, addEntry, chromWedding, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, withUnit } from '../engine';
 import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
 import { h } from './dom';
@@ -70,6 +70,40 @@ function nextMapSection(ctx: RunContext): HTMLElement {
     { ...guide('next-map'), class: 'banner next-map' },
     h('b', {}, 'Next map'),
     ...(offers.length ? [...story.map((o, i) => row(o, i === 0)), ...(rest.length ? [h('details', {}, h('summary', { class: 'small' }, `Also open (${rest.length})`), ...rest.map((o) => row(o, false)))] : [])] : [h('span', { class: 'muted' }, 'Nothing left to play on this route.')]),
+  );
+}
+
+const ROUTE_NAMES = { 'main-story': 'Main story', 'full-route': 'Full route' } as const;
+
+/**
+ * The map order still to play (#179), as the Run view writes it: a title naming the route and its endpoint, and one
+ * row per map, marking the child paralogues the plan places, Infinite Regalia as optional, and the endpoint.
+ */
+export function mapOrderReadout(engine: Engine, run: Run): { readonly title: string; readonly rows: readonly string[] } {
+  const order = engine.mapOrder(run);
+  const name = (s: MapOrderStep, short = false) => {
+    const m = engine.maps().find((x) => x.id === s.map)!;
+    const base = short || m.kind === 'xenologue' ? m.label : `${m.label}: ${m.title}`;
+    return s.secret ? `${base} (secret route)` : base;
+  };
+  const row = (s: MapOrderStep) =>
+    [name(s), s.movable ? '(the plan places it)' : '', s.optional ? '(optional)' : '', s.key === order.endpoint.key ? '(endpoint)' : ''].filter(Boolean).join(' ');
+  return {
+    title: `Map order: ${ROUTE_NAMES[order.route]}, to ${name(order.endpoint, true)}, deploying ${order.endpoint.deploy}`,
+    rows: order.steps.map(row),
+  };
+}
+
+function mapOrderSection(ctx: RunContext): HTMLElement {
+  const { title, rows } = mapOrderReadout(ctx.engine, ctx.run);
+  return h(
+    'details',
+    { class: 'banner map-order' },
+    h('summary', {}, h('b', {}, title), h('span', { class: 'muted small' }, ` · ${rows.length} maps to go`)),
+    rows.length
+      ? h('ol', { class: 'small' }, ...rows.map((r) => h('li', {}, r)))
+      : h('span', { class: 'muted' }, 'The endpoint is recorded: nothing left on the map order.'),
+    h('span', { class: 'muted small' }, 'Child paralogues sit where the route puts them for now: the plan chooses whether and where to play each.'),
   );
 }
 
@@ -259,6 +293,7 @@ function chapterLog(ctx: RunContext): HTMLElement {
       ),
     ),
     nextMapSection(ctx),
+    mapOrderSection(ctx),
     h(
       'div',
       { ...guide('log-add'), class: 'banner' },

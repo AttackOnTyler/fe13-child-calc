@@ -831,7 +831,7 @@ export const CHAPTERS_20_END: readonly ChapterData[] = [
     kind: "story",
     order: 2700,
     label: "Endgame",
-    title: "Grima <!--",
+    title: "Grima",
     location: "Grima",
     conditions: {"normal": {"victory": "Defeat Grima", "defeat": "Chrom or Robin dies", "deploy": "1–16", "enemies": "25+∞ (Reinforcements (infinite))"}, "hard": {"victory": "Defeat Grima", "defeat": "Chrom or Robin dies", "deploy": "1–16", "enemies": "32+∞ (Reinforcements (infinite))"}, "lunatic": {"victory": "Defeat Grima", "defeat": "Chrom or Robin dies", "deploy": "1–16", "enemies": "32+∞ (Reinforcements (infinite))"}},
     recruits: [],
