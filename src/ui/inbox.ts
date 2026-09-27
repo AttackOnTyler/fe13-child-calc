@@ -13,17 +13,20 @@
  * 7. the wishlist in one collapsed line;
  * 8. Lock Robin and start, last: it locks only Robin, and the Run view carries on below.
  *
- * After the Lock (#206) the same inbox is titled "Before <map>: what needs you" (`afterLockReadout`): the headline,
+ * After the Lock (#206) the same inbox is titled "Before <map>: what needs you" (`afterLockReadout`): a loss item on top
+ * while a death, missed recruit or off-plan marriage is open (#208: the re-solve for the army that's left, with the
+ * chance before and after, never applied until accepted), then the headline,
  * units at risk (each with the one-click change that restores it), units behind (each with its re-solve proposal),
  * the re-solve's proposals (required once the adopted plan can no longer be met), this map's actions and checks (#209),
  * anything else and your edits; Next map below counts its open items as a nudge (`inboxNudge`), never a gate. What
- * changed (`whatChangedReadout`) sits above it after each recorded map until "got it".
+ * changed (`whatChangedReadout`) sits above it after each recorded map until "got it", with What it cost (#208).
  *
  * `inboxReadout` and `afterLockReadout` are what the page draws, from the solve's progress and the costs the worker has
  * read (tested); `inboxView` draws them and wires the worker's `edits` slot.
  */
-import type { EditCost, Engine, Milestone, MilestoneMoves, MilestonePoint, MovedProposal, NewEdit, PinCost, Plan, PlanBreak, PlanPin, PlanProposal, PlanRobin, Reading, RosterUnit, Run, CloseCall } from '../engine';
-import { EDIT_COST_BUDGET, FLAWLESS_SEED, STEP_BUDGET, adoptedOf, behindFixes, pinKey, proposalId, robinLock, rosterUnits, unitName, whatChanged, withDismissedChange, withDismissedProposal, withEdit, withRobinLock, withoutEdit } from '../engine';
+import type { CostRow, EditCost, Engine, LossItem, Milestone, MilestoneMoves, MilestonePoint, MovedProposal, NewEdit, PinCost, Plan, PlanBreak, PlanPin, PlanProposal, PlanRobin, Reading, RosterUnit, Run, RunLoss, CloseCall } from '../engine';
+import { EDIT_COST_BUDGET, FLAWLESS_SEED, STEP_BUDGET, adoptedOf, behindFixes, pinKey, proposalId, robinLock, rosterUnits, unitName, whatChanged, withDismissedChange, withDismissedProposal, withEdit, withLossesSettled, withRobinLock, withoutEdit } from '../engine';
+import { SKILLS } from '../game-data/skills';
 import { STAT_LABELS } from '../game-data/stats';
 import { chanceText, differenceText } from './chance';
 import { h } from './dom';
@@ -221,6 +224,25 @@ export type FixRow = InboxRow & {
 };
 
 export type AfterLockItem =
+  | {
+      /**
+       * A loss (#208): what happened and what it broke, the flawless chance before the loss and after the re-solve, what
+       * the re-solve changes; accepted (its plan adopted), or settled as it is ("Keep my plan"; "Got it" when the
+       * re-solve changes nothing).
+       */
+      readonly kind: 'loss';
+      readonly title: string;
+      readonly lines: readonly string[];
+      readonly chance: string;
+      readonly changes: readonly string[];
+      /** The plan to adopt: the re-solve's best from the proposal once the worker has it, else the proposal. */
+      readonly plan: Plan;
+      /** The words the edit is made with ("Re-solve after Frederick died on Chapter 24"). */
+      readonly label: string;
+      readonly keys: readonly string[];
+      readonly same: boolean;
+      readonly note: string;
+    }
   | { readonly kind: 'headline' }
   | { readonly kind: 'at-risk'; readonly title: string; readonly rows: readonly (InboxRow & { readonly fix: FixRow | undefined })[] }
   | { readonly kind: 'behind'; readonly title: string; readonly rows: readonly (InboxRow & { readonly fixes: readonly FixRow[]; readonly note: string })[] }
@@ -352,6 +374,60 @@ function breakText(b: PlanBreak, name: (u: RosterUnit | 'maiden') => string): st
   }
 }
 
+/** A loss in words: "Frederick died on Chapter 24", "Kjelle was missed on Paralogue 8", "Vaike married Sully on …, off the plan". */
+export function lossText(engine: Engine, l: RunLoss, name: (u: RosterUnit | 'maiden') => string): string {
+  const map = engine.maps().find((m) => m.id === l.map)?.label ?? l.map;
+  switch (l.kind) {
+    case 'died':
+      return `${name(l.unit)} died on ${map}`;
+    case 'missed':
+      return `${name(l.unit)} was missed on ${map}`;
+    case 'married':
+      return `${name(l.couple![0])} married ${name(l.couple![1])} on ${map}, off the plan`;
+  }
+}
+
+/** A list in words: "a, b and c", at most `max` then "and N more". */
+function listWords(xs: readonly string[], max = 6): string {
+  const shown = xs.length > max ? [...xs.slice(0, max - 1), `${xs.length - max + 1} more`] : xs;
+  return shown.length < 2 ? shown.join('') : `${shown.slice(0, -1).join(', ')} and ${shown[shown.length - 1]}`;
+}
+
+const skillName = (id: string | null) => (id ? ((SKILLS as Readonly<Record<string, { readonly name: string } | undefined>>)[id]?.name ?? id) : 'its bottom skill');
+
+/** The loss item (#208) as the inbox writes it (see `AfterLockItem`'s 'loss'). */
+function lossItem(engine: Engine, loss: LossItem, adopted: Plan, state: InboxState, name: (u: RosterUnit | 'maiden') => string): Extract<AfterLockItem, { kind: 'loss' }> {
+  const what = loss.losses.map((l) => lossText(engine, l, name));
+  const broke = loss.broke.map((m) => milestoneWords(m, name));
+  const refined = state.progress?.loss;
+  const after = refined ? `${withMargin(refined)} with the re-solve` : 'working out the re-solve’s chance…';
+  const before = loss.before ? `${withMargin(loss.before)} before the loss` : 'not worked out before the loss';
+  const changes = [
+    ...loss.steppingIn.map((x) => `${name(x.unit)} steps in for ${name(x.for)} (the reserve covering ${name(x.for)})`),
+    ...loss.marriages.removed.map(([a, b]) => `${name(a)} and ${name(b)} no longer marry`),
+    ...loss.marriages.added.map(([a, b]) => `${name(a)} marries ${name(b)}`),
+    ...(loss.units.added.length ? [`Into the wishlist: ${listWords(loss.units.added.map(name))}`] : []),
+    ...(loss.units.removed.length ? [`Out of the wishlist: ${listWords(loss.units.removed.map(name))}`] : []),
+    ...loss.passes.map((p) => `${name(p.child)} inherits ${skillName(p.to)} from ${name(p.parent)} (was ${skillName(p.from)})`),
+  ];
+  const plan = refined?.plan ?? loss.plan;
+  const same = loss.same && (!refined || JSON.stringify(refined.plan) === JSON.stringify(adopted));
+  return {
+    kind: 'loss',
+    title: loss.losses.length === 1 ? `${capital(what[0]!)}: a re-solve for the army that’s left` : `${loss.losses.length} losses: a re-solve for the army that’s left`,
+    lines: [...(loss.losses.length > 1 ? what.map(capital) : []), broke.length ? `It broke ${listWords(broke)}` : 'It broke none of the plan’s milestones'],
+    chance: `Flawless chance: ${before} → ${after} (no further deaths from here)`,
+    changes: same ? [] : changes.length ? changes : ['The roadmap re-solved around it'],
+    plan,
+    label: `Re-solve after ${listWords(what)}`,
+    keys: loss.losses.map((l) => l.key),
+    same,
+    note: same
+      ? 'Your plan already works without it: nothing to change.'
+      : `Nothing changes until you accept it; until then, Prepare says your plan predates the loss.${refined && refined.plan !== loss.plan ? ' The re-solve improved on the first proposal.' : ''}`,
+  };
+}
+
 /**
  * The inbox after the Lock (#206; spec #175, The inbox, Run view and Wishlist tab), titled "Before <map>: what needs
  * you", item by item in the order it's drawn: the headline; the units at risk, each with its milestone, chance and the
@@ -368,13 +444,21 @@ export function afterLockReadout(engine: Engine, run: Run, state: InboxState): A
   const labels = mapLabels(engine, run);
   const next = engine.mapOrder(run).steps[0];
   const title = next ? `Before ${labels.get(next.key)}: what needs you` : 'The run: what needs you';
-  const items: AfterLockItem[] = [{ kind: 'headline' }];
+  const items: AfterLockItem[] = [];
+  const loss = plan ? memo(run, plan, 'loss', () => engine.lossItem(run, plan)) : undefined;
+  if (loss && plan) items.push(lossItem(engine, loss, plan, state, name));
+  items.push({ kind: 'headline' });
   const ms = plan ? milestonesOf(engine, run, plan) : [];
   const readings = progress?.readings?.readings ?? [];
   const dismissed = new Set(run.dismissedProposals ?? []);
   const proposals = (progress?.proposals ?? []).filter((p) => !dismissed.has(proposalId(p)));
   const moved: MovedProposal[] = plan ? proposals.map((p) => ({ proposal: p, moves: movesOf(engine, run, plan, p.plan) })) : [];
-  const breaks = plan ? memo(run, plan, 'breaks', () => engine.planBreaks(run, plan)) : [];
+  // A loss the loss item covers isn't repeated as a reason the re-solve is required (#208).
+  const covered = (b: PlanBreak) =>
+    !!loss &&
+    ((b.kind === 'lost' && loss.losses.some((l) => l.kind !== 'married' && l.unit === b.unit)) ||
+      (b.kind === 'married' && loss.losses.some((l) => !!l.couple && l.couple.includes(b.couple[0]) && l.couple.includes(b.couple[1]))));
+  const breaks = plan ? memo(run, plan, 'breaks', () => engine.planBreaks(run, plan)).filter((b) => !covered(b)) : [];
   const required = breaks.length > 0;
   const proposalRow = (p: PlanProposal, how = ''): FixRow => ({
     key: proposalId(p),
@@ -445,7 +529,7 @@ export function afterLockReadout(engine: Engine, run: Run, state: InboxState): A
   }
 
   items.push(anythingElseItem(state), yourEditsItem(run, state));
-  const open = atRisk.length + behind.length + proposals.length;
+  const open = (loss ? 1 : 0) + atRisk.length + behind.length + proposals.length;
   return { title, items, open, nudge: open ? `${open} item${open === 1 ? '' : 's'} above still need${open === 1 ? 's' : ''} you (you can play anyway)` : undefined };
 }
 
@@ -457,7 +541,48 @@ const withMargin = (c: { readonly chance: number; readonly margin: number }) => 
 
 const READING_WORDS = { 'on-track': 'on track', 'at-risk': 'at risk', behind: 'behind' } as const;
 
-export type WhatChangedReadout = { readonly entry: string; readonly title: string; readonly chance: string; readonly exp: readonly string[]; readonly readings: readonly string[]; readonly improvements: string };
+export type WhatChangedReadout = {
+  readonly entry: string;
+  readonly title: string;
+  readonly chance: string;
+  readonly exp: readonly string[];
+  readonly readings: readonly string[];
+  readonly improvements: string;
+  /**
+   * What it cost (#208), in flawless points: each row's words, and for a missed milestone the unit whose behind re-solve
+   * it links to; `costNote` while it's worked out, or when there's nothing to price.
+   */
+  readonly cost: readonly { readonly text: string; readonly behind?: RosterUnit }[];
+  readonly costNote: string;
+};
+
+/** A What it cost row in words (#208): what happened, then its points and ±. */
+export function costRowText(r: CostRow, name: (u: RosterUnit | 'maiden') => string): string {
+  const pts = `${differenceText(r.points, r.margin)} points`;
+  const lv = (x: number) => x.toFixed(1);
+  switch (r.kind) {
+    case 'died':
+    case 'missed':
+    case 'married': {
+      const head = r.kind === 'died' ? `${name(r.unit!)} died` : r.kind === 'missed' ? `Missed ${name(r.unit!)}` : `Married off-plan: ${name(r.couple![0])} and ${name(r.couple![1])}`;
+      const broke = (r.broke ?? []).map((m) => milestoneWords(m, name));
+      return `${head}: ${pts}, after the re-solve${broke.length ? ` · broke ${listWords(broke)}` : ''}`;
+    }
+    case 'milestone':
+      return `Missed milestone: ${milestoneWords(r.milestone!, name)}: ${pts}`;
+    case 'fell':
+      return r.level
+        ? `${name(r.unit!)} fell: the rest of the map missed (level ${lv(r.level.recorded)} against ${lv(r.level.forecast)} forecast): ${pts}`
+        : `${name(r.unit!)} fell (no forecast for it on this map to price it against)`;
+    case 'level':
+      return `${name(r.unit!)} ${r.points >= 0 ? 'ahead of' : 'behind'} the forecast (level ${lv(r.level!.recorded)} against ${lv(r.level!.forecast)}): ${pts}`;
+    case 'over-plan': {
+      const kit = r.kit ?? [];
+      const shrinks = kit.length ? `the endpoint kit loses ${listWords(kit.map((k) => `${k.item} for ${k.name}`))}` : 'the endpoint kit keeps every piece';
+      return `Over-plan spending: ${Math.round(r.excess ?? 0).toLocaleString('en-US')}G more than the plan: ${shrinks}: ${pts}`;
+    }
+  }
+}
 
 /**
  * What changed (#206), as the card above the inbox writes it after a recorded map: the flawless chance before (kept when
@@ -470,7 +595,7 @@ export function whatChangedReadout(engine: Engine, run: Run, progress: SolveProg
   const e = run.entries.find((x) => x.id === w.entry)!;
   const label = e.map === 'other' ? (e.label ?? 'the map logged') : (engine.maps().find((m) => m.id === w.map)?.label ?? w.map);
   const gender = run.roster.run.gender;
-  const name = (u: RosterUnit) => unitName(u, gender);
+  const name = (u: RosterUnit | 'maiden') => unitName(u, gender);
   const lv = (x: number) => x.toFixed(1);
   const now = w.after ? `${withMargin(w.after)} now` : 'working it out…';
   const chance = w.before
@@ -485,7 +610,15 @@ export function whatChangedReadout(engine: Engine, run: Run, progress: SolveProg
   const dismissed = new Set(run.dismissedProposals ?? []);
   const found = (progress?.proposals ?? []).filter((p) => !dismissed.has(proposalId(p))).length;
   const improvements = !progress ? 'Re-solving from your plan…' : found ? `The re-solve found ${found} improvement${found === 1 ? '' : 's'}: in the inbox below.` : progress.done ? 'The re-solve found no improvement on your plan.' : 'Re-solving from your plan…';
-  return { entry: w.entry, title: `What changed on ${label}`, chance, exp, readings, improvements };
+  // What it cost (#208): priced after the readings, on the same runs each.
+  const priced = progress?.cost?.value;
+  const cost = (priced && priced.entry === w.entry ? priced.rows : []).map((r) => ({
+    text: costRowText(r, name),
+    ...(r.kind === 'milestone' && progress?.readings?.readings.some((x) => x.unit === r.unit && x.reading === 'behind') ? { behind: r.unit! } : {}),
+  }));
+  if (priced && priced.entry === w.entry && priced.small) cost.push({ text: `${priced.small.count} smaller row${priced.small.count === 1 ? '' : 's'} (under 0.1 points each): ${signed(priced.small.points)} points together` });
+  const costNote = !progress?.cost ? 'What it cost: pricing each event on the same runs…' : cost.length ? `In flawless points on ${priced!.runs} paired runs each (negative: what it cost).` : 'What it cost: nothing on this map moved the flawless chance.';
+  return { entry: w.entry, title: `What changed on ${label}`, chance, exp, readings, improvements, cost, costNote };
 }
 
 // ---- the page ----
@@ -647,8 +780,9 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
           : null,
     );
 
-  /** After the Lock: at risk, behind, the re-solve's proposals, this map's actions and checks. */
+  /** After the Lock: the loss item, at risk, behind, the re-solve's proposals, this map's actions and checks. */
   const needs = (): HTMLElement => {
+    const loss = item('loss');
     const risk = item('at-risk');
     const behind = item('behind');
     const resolve = item('resolve');
@@ -659,6 +793,25 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
     return h(
       'div',
       { class: 'inbox-decisions' },
+      loss
+        ? h(
+            'div',
+            { class: 'banner loss required' },
+            h('b', {}, loss.title),
+            ...loss.lines.map((x) => h('div', { class: 'small' }, x)),
+            h('div', { class: 'small' }, loss.chance),
+            loss.changes.length ? h('ul', { class: 'small' }, ...loss.changes.map((x) => h('li', {}, x))) : null,
+            h(
+              'div',
+              { class: 'row small' },
+              loss.same
+                ? h('button', { class: 'mini', title: 'Your plan already works without it', onclick: () => set(withLossesSettled(run, loss.keys)) }, 'Got it')
+                : h('button', { class: 'mini', title: 'Adopt the re-solve for the army that’s left (undo it in Your edits)', onclick: () => set(withLossesSettled(withEdit(run, { label: loss.label, plan: loss.plan, accepted: true }), loss.keys)) }, 'Accept the re-solve'),
+              loss.same ? null : h('button', { class: 'mini ghost', title: 'Keep your plan as it is: the inbox still says what it can no longer meet', onclick: () => set(withLossesSettled(run, loss.keys)) }, 'Keep my plan'),
+            ),
+            h('span', { class: 'muted small' }, loss.note),
+          )
+        : null,
       resolve
         ? h(
             'div',
@@ -685,7 +838,7 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
             'div',
             { class: 'banner behind' },
             h('b', {}, behind.title),
-            ...behind.rows.map((r) => h('div', { class: 'inbox-unit' }, h('div', { class: 'small' }, r.text), ...r.fixes.map((f) => fixRow(f)), r.note ? h('div', { class: 'muted small' }, r.note) : null)),
+            ...behind.rows.map((r) => h('div', { class: 'inbox-unit', id: `inbox-${r.key.replace(':', '-')}` }, h('div', { class: 'small' }, r.text), ...r.fixes.map((f) => fixRow(f)), r.note ? h('div', { class: 'muted small' }, r.note) : null)),
           )
         : null,
       list(actions, 'map-actions'),
@@ -706,6 +859,15 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
       block('EXP against the forecast', w.exp),
       block('Readings that moved', w.readings),
       h('div', { class: 'small' }, w.improvements),
+      w.cost.length
+        ? h(
+            'div',
+            { class: 'what-it-cost' },
+            h('b', { class: 'small' }, 'What it cost'),
+            h('ul', { class: 'small' }, ...w.cost.map((r) => h('li', {}, r.text, r.behind ? h('a', { href: `#inbox-behind-${r.behind}`, class: 'small', title: 'Its behind re-solve, in the inbox below', onclick: (e: Event) => (e.preventDefault(), document.getElementById(`inbox-behind-${r.behind}`)?.scrollIntoView({ behavior: 'smooth' })) }, ' → its re-solve') : null))),
+          )
+        : null,
+      h('span', { class: 'muted small' }, w.costNote),
       h('button', { class: 'mini', title: 'Dismiss this card', onclick: () => set(withDismissedChange(run, w.entry)) }, 'Got it'),
     );
   };

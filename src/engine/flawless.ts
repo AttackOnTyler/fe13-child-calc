@@ -36,10 +36,11 @@ import type { DeploymentRole } from '../curated/deployment';
 import { assumed, isAssumed, type Assumptions } from './assumptions';
 import { deployCount, deployRoleOf, forcedOn } from './deploy';
 import { COUNT_CAP, tierBonus } from './exp';
+import { classGrowths } from './classes';
 import { internalLevels } from './internal-level';
 import { remainingMapOrder, type MapOrder } from './map-order';
 import { unitName, withRun, type Couple, type Difficulty, type RosterUnit } from './roster';
-import { EMPTY_SNAPSHOT, latestEntry, morganStart, recruitSnapshot, unitNamed, type Run, type Snapshot, type UnitSnapshot } from './run';
+import { EMPTY_SNAPSHOT, isLost, latestEntry, morganStart, recruitSnapshot, unitNamed, type Run, type Snapshot, type UnitSnapshot } from './run';
 import { fixedPass } from './child-skills';
 import { entryAfterShopping } from './shopping';
 import { CHROM_FALLBACK_PARTNER, CHROM_WEDDING_CANDIDATES, CHROM_WEDDING_MAP } from '../game-data/supports';
@@ -49,7 +50,7 @@ import { classIdByName, openStock, sealAvailability, sealsHeld } from './supply'
 import { simMapById } from './sim/sim-map';
 import type { SimMap, SimUnit } from './sim/map-play';
 import { simulateCeiling, type Ceiling } from './sim/ceiling';
-import { priorityByMap, simulateRuns, type ArmyUnit, type ChildRecruit, type RunSim, type RunSimInput, type RunSimMap, type RunSimSideGoal } from './sim/run-sim';
+import { priorityByMap, simulateRuns, type ArmyUnit, type ChildRecruit, type LostParent, type RunSim, type RunSimInput, type RunSimMap, type RunSimSideGoal } from './sim/run-sim';
 import { sideGoalChoices } from './side-goals';
 import { renownAhead, rewardsValue, type RenownAhead } from './renown';
 import { hasPreparations, itemSources, simItems, simUses, type PlanSource } from './item-plan';
@@ -161,6 +162,20 @@ function sideOf(run: Run, snap: Snapshot, u: RosterUnit, assumptions: Assumption
   };
 }
 
+/**
+ * A recorded unit's total growths (personal plus its class's) on the run's latest entry, or undefined when it isn't
+ * there or its class is unknown: What it cost (#208) moves a unit to another level at its average growths.
+ */
+export function unitGrowths(run: Run, u: RosterUnit, assumptions: Assumptions): Growths | undefined {
+  const last = latestEntry(run);
+  const s = last?.snapshot.units[u];
+  const classId = s && classIdByName(s.class.trim());
+  if (!last || !classId) return undefined;
+  const own = sideOf(run, last.snapshot, u, assumptions).growths;
+  const cls = classGrowths(classId, genderOf(run, u), assumptions);
+  return Object.fromEntries(STATS.map((x) => [x, own[x] + cls[x]])) as Growths;
+}
+
 /** The run with the plan's Robin where its facts leave Robin open (#198). */
 export function withPlanRobin(run: Run, plan: Plan): Run {
   const facts = run.roster.run;
@@ -212,7 +227,7 @@ export function flawlessInput(
   const last = latestEntry(run);
   const snap = last ? entryAfterShopping(last) : EMPTY_SNAPSHOT;
   const role = roleOf ?? ((u: RosterUnit) => deployRoleOf(u, run.roster, new Map()));
-  const alive = (u: RosterUnit) => run.roster.states[u] !== 'dead' && snap.states[u] !== 'dead';
+  const alive = (u: RosterUnit) => !isLost(run, snap, u);
   const levels = internalLevels(run, assumptions['class-change-internal-level']);
   const notSimulated: NotSimulated[] = [];
   const unknownHistory: RosterUnit[] = [];
@@ -271,6 +286,16 @@ export function flawlessInput(
     if (chromCandidates.includes(fixed)) out.add('chrom');
     return [...out];
   };
+  /**
+   * A parent who died after marrying (#208): under `child-after-parent-death` its child still comes, from its stats,
+   * class and skills as they were before the loss (its last entry's).
+   */
+  const lostParent = (u: RosterUnit): LostParent | undefined => {
+    const s = snap.units[u];
+    const classId = s && classIdByName(s.class.trim());
+    if (!assumptions['child-after-parent-death'] || !recorded.has(u) || snap.states[u] !== 'dead' || !s?.stats || !classId) return undefined;
+    return { stats: s.stats, classId, gender: genderOf(run, u), skills: s.skills };
+  };
   const chromsChild = (u: RosterUnit) => u === 'lucina' || (u in CHILD_UNITS && spouseOf.get(CHILD_UNITS[u as ChildId].fixedParent) === 'chrom');
   const simulated = new Set<RosterUnit>();
 
@@ -278,7 +303,8 @@ export function flawlessInput(
   const childRecruit = (u: ChildId, s: UnitSnapshot, spouse: RosterUnit): ChildRecruit | undefined => {
     const child = CHILD_UNITS[u];
     const fixed: RosterUnit = child.fixedParent;
-    if (!spouse || !simulated.has(fixed) || (spouse !== 'maiden' && !simulated.has(spouse))) return undefined;
+    const lost = [lostParent(fixed), spouse === 'maiden' ? undefined : lostParent(spouse)] as const;
+    if (!spouse || (!simulated.has(fixed) && !lost[0]) || (spouse !== 'maiden' && !simulated.has(spouse) && !lost[1])) return undefined;
     const startClass = fixed === 'robin' ? morganStart(u, spouse, assumptions) : undefined;
     if (startClass === null) return undefined;
     const f = fighterOf(child.name, { ...s, stats: s.stats ?? Object.fromEntries(STATS.map((x) => [x, 0])) as Record<(typeof STATS)[number], number> })!;
@@ -297,6 +323,7 @@ export function flawlessInput(
       weapons: f.weapons,
       ...(f.items.length ? { items: f.items } : {}),
       role: role(u),
+      ...(lost[0] || lost[1] ? { lost } : {}),
     };
   };
 

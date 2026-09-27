@@ -77,7 +77,8 @@ import {
   type DeployCandidate,
 } from '../engine';
 import { chanceText } from './chance';
-import { mapChecks } from './inbox';
+import { lossText, mapChecks } from './inbox';
+import { adoptedOf, openLosses } from '../engine';
 import { goldRange, goldText, milestoneShort, pinText, solveState } from './run-page';
 import { CHILD_UNITS } from '../game-data/children';
 import { ROBIN_GROWTHS } from '../game-data/robin';
@@ -778,6 +779,24 @@ function seals(ctx: PrepContext, d: Deployment, byUnit: ReadonlyMap<RosterUnit, 
   );
 }
 
+/**
+ * The loss banner (#208): while a loss is open (a death, a missed recruit or a marriage off the plan whose loss item
+ * isn’t accepted yet), the plan this page reads predates it. Undefined with none open.
+ */
+export function lossBannerText(engine: Engine, run: Run): string | undefined {
+  const losses = openLosses(run, adoptedOf(run));
+  if (!losses.length) return undefined;
+  const name = (u: RosterUnit | 'maiden') => unitName(u, run.roster.run.gender);
+  const what = losses.map((l) => lossText(engine, l, name));
+  return `Your plan predates the loss (${what.join('; ')}): accept its re-solve in the Run view’s inbox to plan for the army that’s left.`;
+}
+
+function lossBanner(ctx: PrepContext): HTMLElement | null {
+  const text = lossBannerText(ctx.engine, ctx.run);
+  return text ? h('div', { class: 'banner loss required' }, h('b', {}, 'The plan predates the loss'), h('div', { class: 'small' }, text)) : null;
+}
+
+
 /** The one-map span pins that set a unit's place here: pairing it, alone, or out. */
 function setHere(ctx: PrepContext, key: string, unit: RosterUnit, position: SpanPosition | undefined, partner?: RosterUnit): void {
   const mine = (u: RosterUnit) => (ctx.run.pins ?? []).filter((p): p is SpanPin => p.kind === 'span' && p.unit === u && p.from === key && p.to === key);
@@ -1093,6 +1112,7 @@ export function prepPage(ctx: PrepContext): HTMLElement[] {
         h('h2', {}, `Prepare: ${m.label}${m.kind === 'story' ? `: ${m.title}` : ''}`),
         h('div', { class: 'muted small' }, `${difficulty === 'lunatic-plus' ? 'Lunatic+' : difficulty} · the adopted plan’s lineup, played with your latest stats · no movement planning`),
       ),
+      lossBanner(ctx),
       slot,
     ),
   ];

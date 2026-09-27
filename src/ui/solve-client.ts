@@ -6,7 +6,7 @@
  * edit never stops the search.
  * Where there's no Worker (tests), `startSolve` returns undefined and the page works the chance out itself.
  */
-import type { Assumptions, DeploymentRole, EditCost, PinCost, Plan, PlanPin, Readings, ReservesCursor, ReservesStep, RobinCursor, RobinStep, RosterUnit, Run, SolveCursor, SolveStep, UnitEdit, WorthCursor, WorthStep } from '../engine';
+import type { Assumptions, DeploymentRole, EditCost, PinCost, Plan, PlanPin, Readings, ReservesCursor, ReservesStep, RobinCursor, RobinStep, RosterUnit, Run, SolveCursor, SolveStep, UnitEdit, WhatItCost, WorthCursor, WorthStep } from '../engine';
 
 /** A unit's edit as the worker posts it (#203): its plan is built and costed in the worker. */
 export type UnitEditView = Pick<UnitEdit, 'kind' | 'key' | 'label' | 'pins'>;
@@ -30,6 +30,10 @@ export type SolveRequest =
       /** The time budget: `SOLVE_SECONDS.full` or `.resolve`. */
       readonly seconds: number;
       readonly cursor?: SolveCursor;
+      /** A loss is open (#208): once the search is done, re-solve from the loss item's proposal and post its chance. */
+      readonly loss?: boolean;
+      /** After the readings, price What it cost for the latest recorded map (#208). */
+      readonly cost?: boolean;
     })
   | (Common & {
       readonly kind: 'cost';
@@ -104,14 +108,17 @@ export type SolveRequest =
     });
 
 /**
- * A reply; `done` marks the request's last. A solve's steps say when the search is over (`searched`); with pins, the
- * pin cost (#200) follows, worked out while the worker is idle; then the best plan's readings (#197), as they firm up
- * (undefined once the endpoint is recorded).
+ * A reply; `done` marks the request's last. A solve's steps say when the search is over (`searched`); with an open
+ * loss, the loss item's re-solve (#208) follows; with pins, the pin cost (#200), worked out while the worker is idle;
+ * then the best plan's readings (#197), as they firm up (undefined once the endpoint is recorded); then, when asked,
+ * What it cost (#208).
  */
 export type SolveReply =
   | { readonly id: number; readonly kind: 'step'; readonly step: SolveStep; readonly searched: boolean; readonly done: boolean }
   | { readonly id: number; readonly kind: 'pin-cost'; readonly cost: PinCost; readonly done: boolean }
   | { readonly id: number; readonly kind: 'readings'; readonly readings: Readings | undefined; readonly done: boolean }
+  | { readonly id: number; readonly kind: 'loss'; readonly plan: Plan; readonly chance: number; readonly margin: number; readonly done: boolean }
+  | { readonly id: number; readonly kind: 'what-it-cost'; readonly cost: WhatItCost | undefined; readonly done: boolean }
   | { readonly id: number; readonly kind: 'cost'; readonly cost: EditCost; readonly done: boolean }
   | { readonly id: number; readonly kind: 'idle'; readonly worth: WorthStep; readonly reserves: ReservesStep | undefined; readonly done: boolean }
   | { readonly id: number; readonly kind: 'robin'; readonly step: RobinStep; readonly done: boolean }

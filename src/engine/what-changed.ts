@@ -9,7 +9,8 @@
  * - **readings that moved**: each unit whose reading (on track, at risk, behind) differs from the one before the map;
  * - the improvements the re-solve after the map found (the page lists the search's proposals).
  *
- * It's dismissed with "got it" (`Run.dismissedChanges`, by entry id). What it cost (#210) adds its rows later.
+ * It's dismissed with "got it" (`Run.dismissedChanges`, by entry id). What it cost (#208) prices each event on the map
+ * (`whatItCost`, what-it-cost.ts).
  */
 import type { FlawlessChance } from './flawless';
 import { remainingMapOrder } from './map-order';
@@ -27,11 +28,16 @@ export function forecastBefore(run: Run, chance: FlawlessChance, readings?: Read
   if (!first) return undefined;
   const map = remainingMapOrder(run).steps.find((s) => s.key === first.key)?.map ?? first.key;
   const exp = chance.exp.find((m) => m.key === first.key)?.units.map((u) => ({ unit: u.unit, exp: u.exp, level: { ...u.level } })) ?? [];
+  // The plan's spending at the armory stop after the map (#208), before the map after it: each purchase by its share.
+  const stop = chance.maps[1] && chance.shopping.find((s) => s.key === chance.maps[1]!.key);
+  const spend = stop ? stop.lines.reduce((a, l) => a + l.cost * l.share, 0) : 0;
   return {
     chance: chance.chance,
     margin: chance.margin,
     key: first.key,
     map,
+    ...(first.noDeath !== undefined ? { noDeath: first.noDeath } : {}),
+    spend,
     exp,
     readings: readings?.readings.map((r) => ({ unit: r.unit, reading: r.reading, ...(r.pending ? { pending: true as const } : {}) })) ?? [],
   };

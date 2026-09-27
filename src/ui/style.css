@@ -589,5 +589,9 @@ button.gd-deeper-head:hover { background: var(--hover); }
 .inbox .banner.required { border-color: var(--neg); }
 .inbox .chip.warn { color: var(--neg); border-color: var(--neg); margin-right: 4px; }
 .inbox .inbox-unit { margin: 4px 0; }
+/* Losses (#208): the loss item on top of the inbox, What it cost on What changed, Prepare's banner. */
+.banner.loss { border-color: var(--neg); }
+.banner.loss ul { margin: 2px 0 4px; }
+.inbox .what-it-cost ul { margin: 2px 0 4px; }
 .next-map .nudge { display: block; color: var(--warn); margin: 2px 0 4px; }
 .rail-item .num.warn { color: var(--warn); }

@@ -142,7 +142,16 @@ export type ChildRecruit = {
   readonly weapons: readonly Weapon[];
   readonly items?: readonly SimItem[];
   readonly role: DeploymentRole;
+  /**
+   * A parent who died after marrying (#208, `child-after-parent-death`): its stats, class and skills from before the
+   * loss, read in its place (it isn't in the army), fixed parent first. Its pass is frozen: its fixed pass, else its
+   * bottom skill.
+   */
+  readonly lost?: readonly [LostParent | undefined, LostParent | undefined];
 };
+
+/** A parent lost after marrying, as it stood at its death (#208). */
+export type LostParent = { readonly stats: Readonly<Record<Stat, number>>; readonly classId: ClassId; readonly gender: Gender; readonly skills: readonly string[] };
 
 /** One map of the map order, as a run plays it. */
 export type RunSimMap = {
@@ -860,22 +869,25 @@ function entered(state: RunState, step: RunSimMap): boolean {
 
 /**
  * A child as it joins (#187): join stats from its parents' stats and classes as they stand on entry (stored stats; the
- * projection's are fractional, which the formula's floor absorbs), skills from their equipped skills. Undefined when a
- * parent isn't in the run's army (lost, or never simulated) or is in a class with no published bases.
+ * projection's are fractional, which the formula's floor absorbs), skills from their equipped skills; a parent lost
+ * after marrying as it stood at its death (#208). Undefined when a parent isn't in the run's army (never simulated) or
+ * is in a class with no published bases.
  */
 function childOf(state: RunState, c: ChildRecruit, assumptions: Assumptions): Live | undefined {
   // A parent passes its fixed skill; else the plan's, once it has learned it (and, the plan has it, equipped it last).
-  const side = (u: RosterUnit | 'maiden', fixed: SkillId | undefined, planned: SkillId | undefined): { join: JoinParent; skills: SkillParent } | undefined => {
+  const side = (u: RosterUnit | 'maiden', fixed: SkillId | undefined, planned: SkillId | undefined, lost: LostParent | undefined): { join: JoinParent; skills: SkillParent } | undefined => {
     if (u === 'maiden') return { join: 'maiden', skills: 'maiden' };
     const p = state.army.get(u);
+    // A parent lost after marrying (#208): as it stood at its death.
+    if (!p && lost) return classBaseStats(lost.classId, lost.gender) ? { join: { stats: lost.stats, class: lost.classId, gender: lost.gender }, skills: { skills: lost.skills, ...(fixed ? { fixed } : {}) } } : undefined;
     if (!p || !classBaseStats(p.classId, p.base.gender)) return undefined;
     const pass = fixed ?? (planned && p.learned.has(planned) ? planned : undefined);
     // Its boosters drunk before entry feed the child, under `booster-to-child` (#193).
     const stats = assumptions['booster-to-child'] === 'feeds' ? p.stats : (Object.fromEntries(STATS.map((s) => [s, p.stats[s] - (p.drunk[s] ?? 0)])) as Record<Stat, number>);
     return { join: { stats, class: p.classId, gender: p.base.gender }, skills: { skills: p.base.skills, ...(pass ? { fixed: pass } : {}) } };
   };
-  const a = side(c.parents[0], c.fixed?.[0], c.passes?.[0]);
-  const b = side(c.parents[1], c.fixed?.[1], c.passes?.[1]);
+  const a = side(c.parents[0], c.fixed?.[0], c.passes?.[0], c.lost?.[0]);
+  const b = side(c.parents[1], c.fixed?.[1], c.passes?.[1], c.lost?.[1]);
   if (!a || !b) return undefined;
   const join = childJoinStats({ child: c.id, parents: [a.join, b.join], ...(c.startClass ? { startClass: c.startClass } : {}), modifiers: c.modifiers }, assumptions);
   const { skills } = childSkills({ child: c.id, parents: [a.skills, b.skills], startClass: join.class, level: join.level }, assumptions);
