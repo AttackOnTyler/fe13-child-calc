@@ -2505,8 +2505,8 @@ function renderParts(parts: readonly Part[]): void {
                 const roles = engine.roles(roster, planSettings());
                 return (u: RosterUnit) => deployRoleOf(u, roster, roles);
               })(),
-              // The seed plan (#198), as the Run view's flawless chance takes it: the shopping list reads the same runs.
-              plan: (roleOf) => engine.seedPlan(run, { pins: [...marriagePins(roster), ...(run.pins ?? [])], roleOf }),
+              // The adopted plan (#204; the seed until one is adopted), as the Run view's flawless chance takes it: the shopping list reads the same runs.
+              plan: (roleOf) => engine.adoptedPlan(run, { pins: [...marriagePins(roster), ...(run.pins ?? [])], roleOf }),
               // A unit dropped here is a span pin over this map only (#200): the flawless chance and the solve keep it out.
               excluded: droppedHere(run, preparing),
               setExcluded: (u, out) => {
