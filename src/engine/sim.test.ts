@@ -556,3 +556,24 @@ describe('the EXP priority (#195)', () => {
     expect(fights[0]!.dualStrike).toBeLessThan(1);
   });
 });
+
+describe('a careful player’s exposure, in reach already (realism pass)', () => {
+  const dancer: Fighter = { name: 'Olivia', className: 'Dancer', stats: stats(20, 5, 0, 5, 10, 5, 3, 1), skills: [], weapon: undefined };
+  // Unarmed and 10 HP: one strike fells it, and it never strikes back.
+  const post: Foe = { ...brute, name: 'Post', weapon: undefined, stats: stats(10, 0, 0, 0, 0, 60, 0, 0) };
+  // 15 HP, Def 10: the hero's first strike leaves it at 5, it counters for 10 (always: Hawkeye), the follow-up fells it.
+  const pricker: Foe = { ...brute, name: 'Pricker', stats: stats(15, 3, 0, 0, 0, 60, 10, 0), skills: ['Hawkeye'] };
+  // 40 HP, Def 10: hits the hero for 12, always. A hero at full HP lives through it; one the Pricker's counter hurt doesn't.
+  const biter: Foe = { ...brute, name: 'Biter', stats: stats(40, 5, 0, 0, 0, 60, 10, 0), skills: ['Hawkeye'] };
+  const map = rout([group(post), group(pricker), group(biter)]);
+
+  it('weighs a Dance’s second attack against the enemy phase at the HP it leaves', () => {
+    const play = engine.playMap({ map, lineup: [solo(hero), { lead: unit(dancer), support: null }] }, 1);
+    const first = play.log[0]!;
+    // The hero fells the Post in safety; a second attack (on the Pricker, or the Biter) would leave it in the Biter's
+    // reach at 10 HP or less, so the Dancer doesn't send it.
+    expect(first.fights.filter((f) => f.phase === 'player').map((f) => f.foe)).toEqual(['Post']);
+    expect(first.acts.filter((a) => a.kind === 'dance')).toEqual([]);
+    expect(first.fights.filter((f) => f.phase === 'enemy').every((f) => f.survive === 1)).toBe(true);
+  });
+});
