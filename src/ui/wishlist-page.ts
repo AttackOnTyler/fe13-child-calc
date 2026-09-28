@@ -338,7 +338,7 @@ function unitCell(ctx: WishlistContext, u: UnitRowView): HTMLElement {
       h('button', { class: 'linkish', title: on ? 'Close its edits' : 'Every edit that touches it, with its cost', 'aria-expanded': on ? 'true' : 'false', onclick: () => ctx.setOpen(on ? undefined : u.unit) }, h('b', {}, u.name)),
       u.cls ? h('span', { class: 'muted small' }, ` ${u.cls}`) : null,
       ' ',
-      h('span', { class: 'small wl-worth', title: 'Unit worth: the flawless chance the plan loses without it, over every lineup it plays in (a parent’s includes its children); utility is the part from its staff, Dance, Rally or Rescue actions' }, ...whyText(u.worth, u.worthMarks ?? [])),
+      h('span', { class: 'small wl-worth', title: 'Unit worth: the flawless chance the plan loses without it, over every lineup it plays in (a parent’s includes its children); utility is the part from its sustain (a heal, a potion, Rescue), Dance or Rally actions' }, ...whyText(u.worth, u.worthMarks ?? [])),
       u.reading
         ? u.reading.why
           ? h('button', { type: 'button', class: `chip wl-reading why-chip ${u.reading.kind}`, title: u.reading.title, 'data-why': u.reading.why }, u.reading.text)
