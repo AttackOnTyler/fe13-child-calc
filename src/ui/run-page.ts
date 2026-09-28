@@ -80,11 +80,15 @@ export function runView(ctx: RunContext): HTMLElement[] {
  * The run with a map's entry added (#118), keeping the headline as it stands before the map on it (#206: What changed
  * reads it against the headline worked out after, so the forecast isn't lost once the run moves on).
  */
-function withMapRecorded(ctx: RunContext, map: string, label?: string): Run {
+export function withMapRecorded(ctx: Pick<RunContext, 'engine' | 'run' | 'now' | 'assumptions' | 'pins'>, map: string, label?: string): Run {
   const s = solveState(ctx.run);
   const before = s?.chance && forecastBefore(ctx.run, s.chance, s.readings);
-  // The plan the map is played by is held from here (#208): a loss recorded on it is read against it.
-  const next = addEntry(s ? withPlanHeld(ctx.run, s.plan) : ctx.run, map, ctx.now(), label, ctx.assumptions);
+  // The plan the map is played by is held from here (#208): a loss recorded on it is read against it, never against a
+  // plan seeded after the loss. Recorded before the solve had a plan: the plan the player would get on the run as it
+  // stood (the seed, worked out once here, on the click).
+  const pins = ctx.pins?.();
+  const held = adoptedOf(ctx.run) ? undefined : (s?.plan ?? ctx.engine.adoptedPlan(ctx.run, pins ? { pins } : {}));
+  const next = addEntry(held ? withPlanHeld(ctx.run, held) : ctx.run, map, ctx.now(), label, ctx.assumptions);
   const id = latestEntry(next)!.id;
   const kept = before ? withEntryForecast(next, id, before) : next;
   // The checks the map offered (#209), as the plan stood before it: Record results' Checks step lists only these.
@@ -93,7 +97,7 @@ function withMapRecorded(ctx: RunContext, map: string, label?: string): Run {
 }
 
 /** The free checks a map offers on the plan before it's recorded (#209), with the stakes worked out so far. */
-function offeredChecks(ctx: RunContext, plan: Plan, chance: FlawlessChance | undefined, map: string): { readonly rule: string; readonly text: string }[] {
+function offeredChecks(ctx: Pick<RunContext, 'engine' | 'run'>, plan: Plan, chance: FlawlessChance | undefined, map: string): { readonly rule: string; readonly text: string }[] {
   const key = ctx.engine.mapOrder(ctx.run).steps.find((x) => x.map === map)?.key;
   if (!key) return [];
   const rules = currentRules();
