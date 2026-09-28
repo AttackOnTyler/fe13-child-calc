@@ -10,7 +10,7 @@ import type { DeployCandidate } from '../deploy';
 import { capturedMap, sameTile, type Tile } from './captured';
 import { boardFromMap, classMov, enemyById, playerById, withEnemy, withPieces, withPlayer, type Board, type PlayerPiece } from './board';
 import { wake, type EnemyAction } from './enemy-phase';
-import { applyAction, type AttackOutcome, type PlannedAction } from './solve';
+import { applyAction, switched, type AttackOutcome, type PlannedAction } from './solve';
 
 export type PositionEvent =
   | { readonly kind: 'act'; readonly action: PlannedAction; readonly outcome?: AttackOutcome }
@@ -26,10 +26,14 @@ export function replay(start: Board, events: readonly PositionEvent[]): { readon
   let acted: string[] = [];
   for (const e of events) {
     switch (e.kind) {
-      case 'act':
+      case 'act': {
+        // The pair as it acts (after a switch): its back has acted too, even when the action drops it (a Separate).
+        const before = e.action.switched ? switched(b, e.action.unit) : b;
+        const back = playerById(before, e.action.unit)?.back;
         b = applyAction(b, e.action, e.outcome);
-        acted = [...acted, e.action.unit, ...(playerById(b, e.action.unit)?.back ? [playerById(b, e.action.unit)!.back!] : [])];
+        acted = [...acted, e.action.unit, ...(back ? [back] : [])];
         break;
+      }
       case 'enemy': {
         b = wake(b).board;
         for (const a of e.actions) {

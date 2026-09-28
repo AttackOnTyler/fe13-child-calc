@@ -12,7 +12,7 @@ import { CLASS_BASES } from '../../game-data/class-bases';
 import { classIdByName } from '../supply';
 import { rangeOf } from '../sim/exchange';
 import { foesOf, matchup, statValue, type Fighter, type Foe, type Matchup, type SupportLevel } from '../solver';
-import { NEIGHBOURS, capturedMap, isOutdoors, keyTile, manhattan, moveCost, moveRow, sameTile, tileBonus, tileKey, type CapturedMap, type PlacementAi, type Tile } from './captured';
+import { NEIGHBOURS, capturedMap, isOutdoors, keyTile, manhattan, moveCost, moveRow, onMap, sameTile, tileBonus, tileKey, type CapturedMap, type PlacementAi, type Tile } from './captured';
 
 export type Weapon = NonNullable<Fighter['weapon']>;
 
@@ -140,7 +140,7 @@ export function threatTiles(b: Board, p: Piece): Set<number> {
     for (let dx = -r[1]; dx <= r[1]; dx++)
       for (let dy = -r[1]; dy <= r[1]; dy++) {
         const d = Math.abs(dx) + Math.abs(dy);
-        if (d >= r[0] && d <= r[1] && x + dx >= 0 && y + dy >= 0 && x + dx < b.map.width && y + dy < b.map.height) out.add(tileKey([x + dx, y + dy]));
+        if (d >= r[0] && d <= r[1] && onMap(b.map, [x + dx, y + dy])) out.add(tileKey([x + dx, y + dy]));
       }
   }
   return out;

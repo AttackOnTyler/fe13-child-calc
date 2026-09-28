@@ -73,6 +73,15 @@ export function terrainAt(map: CapturedMap, [x, y]: Tile): TerrainType | undefin
   return BY_CHAR.get(map.rows[y]![x]!);
 }
 
+/**
+ * Whether a tile is on the playable map (#271). Every captured map's outermost ring is off it: no placement ever ends
+ * there (units only walk in from it), the cursor stops short of it, and the terrain file has no bounds field of its own,
+ * so the ring is the game's rule, not a map's.
+ */
+export function onMap(map: CapturedMap, [x, y]: Tile): boolean {
+  return x >= 1 && y >= 1 && x < map.width - 1 && y < map.height - 1;
+}
+
 /** The Def and Avoid a tile gives the unit on it. */
 export function tileBonus(map: CapturedMap, t: Tile): { readonly def: number; readonly avo: number } {
   const c = terrainAt(map, t);
@@ -85,8 +94,9 @@ export function moveRow(className: string): number {
   return CLASS_MOVE_ROW[className.replace(/ \([MF]\)$/, '')] ?? 0;
 }
 
-/** The movement cost of entering a tile for a movement row; null when it can't. */
+/** The movement cost of entering a tile for a movement row; null when it can't (off the playable map too). */
 export function moveCost(map: CapturedMap, t: Tile, row: number): number | null {
+  if (!onMap(map, t)) return null;
   const c = terrainAt(map, t);
   if (!c) return null;
   return MOVE_COSTS[row]?.[c.category] ?? null;
