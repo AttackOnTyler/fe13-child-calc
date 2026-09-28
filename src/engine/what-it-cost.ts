@@ -27,7 +27,7 @@ import type { Run, RunEntry, Snapshot, UnitSnapshot } from './run';
 import type { RunSim } from './sim/run-sim';
 import { paired } from './solve/paired';
 import type { Plan } from './solve/plan';
-import { SUPPORT_LEVELS } from './run';
+import { SUPPORT_LEVELS, mapProgress } from './run';
 
 /** Rows smaller than this either way (0.1 flawless points) are rolled up. */
 export const COST_ROLL_UP = 0.001;
@@ -191,7 +191,8 @@ export function whatItCost(run: Run, plan: Plan, deps: CostDeps): WhatItCost | u
     if (!u || lost.has(x.unit)) continue;
     const recorded = u.level + u.exp / 100;
     const outside = recorded < x.level.low - 0.05 || recorded > x.level.high + 0.05;
-    if (!fell.has(x.unit) && !outside) continue;
+    // A level copied forward unchanged wasn't updated: no result to price.
+    if (!fell.has(x.unit) && (!outside || mapProgress(run, i, x.unit)?.kind === 'unchanged')) continue;
     if (Math.abs(recorded - x.level.median) < 0.05) continue;
     const cf = withLatest(run, (s) => withUnitSnap(s, x.unit, atLevel(u, x.level.median, deps.growths(run, x.unit))));
     const p = price(deps.sim(cf, recovery));

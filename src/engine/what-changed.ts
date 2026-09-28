@@ -5,7 +5,8 @@
  * - the **flawless chance before and after**: the headline as it stood when the map was recorded (kept on the entry,
  *   `RunEntry.forecast`, since the run moves on once it's recorded) against the headline worked out since;
  * - **EXP against the forecast**: each unit the forecast fielded on the map, the EXP it earned (from the entries before
- *   and after; unknown across a class change, whose level resets) and its level against the forecast's spread;
+ *   and after, or from its join on the map; unknown across a class change, whose level resets) and its level against the
+ *   forecast's spread (a level and EXP copied forward unchanged read as not updated, not as a result);
  * - **readings that moved**: each unit whose reading (on track, at risk, behind) differs from the one before the map;
  * - the improvements the re-solve after the map found (the page lists the search's proposals).
  *
@@ -17,7 +18,7 @@ import type { FlawlessChance } from './flawless';
 import { remainingMapOrder } from './map-order';
 import type { ReadingKind, Readings } from './readings';
 import type { RosterUnit } from './roster';
-import type { EntryForecast, Run } from './run';
+import { mapProgress, type EntryForecast, type Run } from './run';
 
 /**
  * The forecast to keep on the entry a map's record makes (see the module comment), from the headline as it stands on
@@ -60,8 +61,18 @@ export function withDismissedChange(run: Run, id: string): Run {
 /** One unit's EXP on the map against the forecast. */
 export type ExpAgainstForecast = {
   readonly unit: RosterUnit;
-  /** EXP earned on the map, from the entries before and after; undefined across a class change or with no entry before. */
+  /**
+   * EXP earned on the map, from the entry before (from its join, for a unit that joined on it); undefined when it can't
+   * be read (`progress`).
+   */
   readonly earned: number | undefined;
+  /**
+   * How the EXP reads (`mapProgress`): earned; not comparable across a class change; `unchanged`, the level and EXP as
+   * they were (not updated, so not scored against the forecast); no entry before to read from.
+   */
+  readonly progress: 'earned' | 'class-change' | 'unchanged' | 'no-entry';
+  /** It joined on the map (its EXP counts from the join). */
+  readonly joined: boolean;
   /** The forecast's mean EXP on the map. */
   readonly forecast: number;
   /** Its level at the map's end, EXP as the fraction (Lv 5, 40 EXP → 5.4), and the forecast's spread. */
@@ -97,16 +108,16 @@ export function whatChanged(run: Run, now: { readonly chance?: { readonly chance
   const e = run.entries[i];
   if (!e) return undefined;
   const f = e.forecast;
-  const prev = run.entries[i - 1]?.snapshot.units;
   const exp = (f && f.map === e.map ? f.exp : []).flatMap((x): ExpAgainstForecast[] => {
     const u = e.snapshot.units[x.unit];
     if (!u) return [];
-    const was = prev?.[x.unit];
-    const earned = was && was.class === u.class && u.level >= was.level ? (u.level - was.level) * 100 + u.exp - was.exp : undefined;
+    const p = mapProgress(run, i, x.unit) ?? { kind: 'no-entry' };
+    const earned = p.kind === 'earned' ? p.earned : undefined;
+    const joined = p.kind !== 'no-entry' && p.joined;
     const level = u.level + u.exp / 100;
     // Within half a tenth of a level (5 EXP) of the spread reads inside: the card writes levels to a tenth.
     const against = level < x.level.low - 0.05 ? 'below' : level > x.level.high + 0.05 ? 'above' : 'inside';
-    return [{ unit: x.unit, earned, forecast: x.exp, level, spread: x.level, against, percentile: forecastPercentile(level, x.level) }];
+    return [{ unit: x.unit, earned, progress: p.kind, joined, forecast: x.exp, level, spread: x.level, against, percentile: forecastPercentile(level, x.level) }];
   });
   const before = new Map((f?.readings ?? []).map((r) => [r.unit, r]));
   const readings = (now.readings?.readings ?? []).flatMap((r) => {

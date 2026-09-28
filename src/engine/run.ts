@@ -444,6 +444,38 @@ function newRecruits(run: Run, snap: Snapshot, map: string): [RosterUnit, MapRec
   });
 }
 
+/**
+ * A unit's progress over entry `i`'s map (#196, #206), for reading it against the forecast:
+ * - `earned`: the EXP from the entry before (or, for a unit that joined on the map, from its join level and EXP);
+ * - `class-change`: its class changed or its level went down (the level resets): EXP isn't comparable;
+ * - `unchanged`: its level and EXP are as they were (copied forward: most likely not updated), so there's no result;
+ * - `no-entry`: no entry before, nor a join on the map, to read from.
+ * Undefined when the unit isn't on the entry.
+ */
+export type MapProgress =
+  | { readonly kind: 'earned'; readonly earned: number; readonly joined: boolean }
+  | { readonly kind: 'class-change' | 'unchanged'; readonly joined: boolean }
+  | { readonly kind: 'no-entry' };
+
+export function mapProgress(run: Run, i: number, unit: RosterUnit, assumptions: Assumptions = DEFAULT_ASSUMPTIONS): MapProgress | undefined {
+  const e = run.entries[i];
+  const u = e?.snapshot.units[unit];
+  if (!e || !u) return undefined;
+  const before = run.entries[i - 1];
+  if (!before) return { kind: 'no-entry' };
+  const prev = entryAfterShopping(before);
+  let was = prev.units[unit];
+  const joined = !was;
+  if (!was) {
+    const r = newRecruits(run, prev, e.map).find(([x]) => x === unit)?.[1];
+    if (!r || mapOnly(r)) return { kind: 'no-entry' };
+    was = recruitSnapshot(unit, run, r, prev, assumptions);
+  }
+  if (was.class !== u.class || u.level < was.level) return { kind: 'class-change', joined };
+  const earned = (u.level - was.level) * 100 + u.exp - was.exp;
+  return earned === 0 ? { kind: 'unchanged', joined } : { kind: 'earned', earned, joined };
+}
+
 /** A unit lost for good (#208): dead or missed, on the run facts or in the snapshot. */
 export const isLost = (run: Run, snap: Snapshot, u: RosterUnit): boolean => [run.roster.states[u], snap.states[u]].some((s) => s === 'dead' || s === 'missed');
 
