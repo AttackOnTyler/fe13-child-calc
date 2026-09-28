@@ -213,6 +213,14 @@ describe('a unit’s worth: worth → lineup spans → maps (#210)', () => {
     walk('worth:lonqu', { ...context, worth, without: { lonqu: without } });
     expect(engine.explain('worth:chrom', { ...context, worth })).toBeUndefined();
   });
+
+  it('says what re-solve the plan without it had, and its budget: not a full one', () => {
+    const resolve = { budget: 16, evaluations: 14, kept: ['Lissa leads Frederick'] };
+    const worth = [{ unit: 'lonqu' as const, forced: false, worth: 0.1, margin: 0.03, utility: 0, utilityMargin: 0, runs: 4, children: [], settled: true, resolve }];
+    expect(engine.explain('worth:lonqu', { ...context, worth })!.math).toContain(
+      'The plan without Hero is then re-solved by a bounded local search, not in full: 14 simulated runs of a 16-run budget, keeping Lissa leads Frederick. A full search could win more back, so this worth may read a little high.',
+    );
+  });
 });
 
 describe('a milestone’s chance: milestone → EXP per map → foe groups (#210)', () => {
