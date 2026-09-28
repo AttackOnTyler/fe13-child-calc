@@ -9,6 +9,8 @@ import {
   recordMissed,
   runFromRoster,
   withEntryForecast,
+  withPlanHeld,
+  withRobinLock,
   withRun,
   type FlawlessChance,
   type Run,
@@ -109,5 +111,28 @@ describe('What it cost on What changed (#208)', () => {
     expect(w.costNote).toBe('In flawless points on 8 paired runs each (negative: what it cost).');
     // Until the worker prices it.
     expect(whatChangedReadout(engine, dead, progress)!).toMatchObject({ cost: [], costNote: 'What it cost: pricing each event on the same runs…' });
+  });
+});
+
+describe('a loss early in a fresh run (#208, runthrough)', () => {
+  // Lunatic, Robin locked from the seed; Premonition recorded (holding the plan), then Lissa dies on the Prologue.
+  const open = runFromRoster(withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'lunatic', mode: 'classic' }));
+  const locked = withRobinLock(open, engine.seedPlan(open).robin);
+  const held = engine.seedPlan(locked);
+  const played = addEntry(withPlanHeld(addEntry(locked, 'premonition', 1), held), 'prologue', 2);
+  const lissa = recordFallen(played, latestEntry(played)!.id, 'lissa', 3);
+  // The search after the loss starts from the seed for the run as recorded, which already plans around it.
+  const after = engine.seedPlan(lissa);
+  const zero = { chance: 0, margin: 0, runs: 24, maps: [] } as unknown as FlawlessChance;
+  const searching: SolveProgress = { best: after, start: after, chance: zero, proposals: [], closeCalls: [], pruned: [], done: true, converged: true };
+
+  it('reads the loss against the plan held before it: what it broke, and the re-solve to accept', () => {
+    expect(held.wishlist.marriages).toContainEqual(['gregor', 'lissa']);
+    expect(after.wishlist.marriages.flat()).not.toContain('lissa');
+    const l = itemOf(lissa, 'loss', { progress: searching })!;
+    expect(l.lines[0]).toMatch(/^It broke .*Lissa/);
+    expect(l.same).toBe(false);
+    expect(l.changes).toContain('Gregor and Lissa no longer marry');
+    expect(l.note).not.toMatch(/nothing to change/);
   });
 });

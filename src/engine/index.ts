@@ -206,7 +206,7 @@ export { effectiveCaps, type Ceiling, type CeilingUnit } from './sim/ceiling';
 export type { LineupPlan } from './sim/run-sim';
 export { isMarriagePin, isRuleOut, mapSpanPin } from './solve/plan';
 export { pinKey, withPin, withoutPins, type LineupRule } from './solve/pins';
-export { adoptedOf, proposalId, withDismissedProposal, withEdit, withoutEdit, type NewEdit } from './solve/adopted';
+export { adoptedOf, proposalId, withDismissedProposal, withEdit, withPlanHeld, withoutEdit, type NewEdit } from './solve/adopted';
 export { behindFixes, sameWishlist, type MilestoneMoves, type MovedProposal, type PlanBreak } from './solve/resolve';
 export { forecastBefore, whatChanged, withDismissedChange, withEntryForecast, type ExpAgainstForecast, type WhatChanged } from './what-changed';
 export { falls, openLosses, runLosses, withLossesSettled, type FallLog, type FallRow, type LossItem, type LossKind, type RunLoss } from './losses';
@@ -2217,7 +2217,8 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
         marriages: d.marriages,
         units: d.units,
         passes,
-        same: sameWishlist(plan, proposal) && JSON.stringify(plan.roadmap) === JSON.stringify(proposal.roadmap),
+        // A loss that broke a milestone always asks for the re-solve, even when it finds nothing better.
+        same: !broke.length && sameWishlist(plan, proposal) && JSON.stringify(plan.roadmap) === JSON.stringify(proposal.roadmap),
       };
     },
     whatItCost: (given, plan, options = {}) => {

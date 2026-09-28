@@ -13,7 +13,7 @@ import { entryAfterShopping, goldAfterShopping, removeShopLine, shopPrice, withS
 import { withRenown, withSideGoalPin, withSideGoalSecured, type SideGoalDecision, type SideGoalId } from '../engine';
 import { runItemPins, withItemPin, withItemsUsed } from '../engine';
 import { robinLock, withRobinLock, withoutPins } from '../engine';
-import { adoptedOf, dismissMigrationNote, withEdit, withPin } from '../engine';
+import { adoptedOf, dismissMigrationNote, withEdit, withPin, withPlanHeld } from '../engine';
 import { CHILD_UNITS } from '../game-data/children';
 import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
 import { h } from './dom';
@@ -83,7 +83,8 @@ export function runView(ctx: RunContext): HTMLElement[] {
 function withMapRecorded(ctx: RunContext, map: string, label?: string): Run {
   const s = solveState(ctx.run);
   const before = s?.chance && forecastBefore(ctx.run, s.chance, s.readings);
-  const next = addEntry(ctx.run, map, ctx.now(), label, ctx.assumptions);
+  // The plan the map is played by is held from here (#208): a loss recorded on it is read against it.
+  const next = addEntry(s ? withPlanHeld(ctx.run, s.plan) : ctx.run, map, ctx.now(), label, ctx.assumptions);
   const id = latestEntry(next)!.id;
   const kept = before ? withEntryForecast(next, id, before) : next;
   // The checks the map offered (#209), as the plan stood before it: Record results' Checks step lists only these.

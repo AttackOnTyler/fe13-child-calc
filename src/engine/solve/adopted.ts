@@ -35,6 +35,16 @@ export function adoptedOf(run: Run): Plan | undefined {
   return (f.gender && f.gender !== r.gender) || (f.asset && f.asset !== r.asset) || (f.flaw && f.flaw !== r.flaw) ? undefined : plan;
 }
 
+/**
+ * The run with the plan it's played by held (#208): recording a map adopts the plan the player held (the seed, when
+ * nothing was adopted), so a loss recorded on it is read against the plan as it stood before it. Without this the held
+ * plan is the seed of the run as recorded, which already plans around the loss (the loss item then reads "it broke
+ * nothing"). An adopted plan that still fits the run facts is kept.
+ */
+export function withPlanHeld(run: Run, plan: Plan): Run {
+  return adoptedOf(run) ? run : { ...run, adopted: plan };
+}
+
 /** An edit as it's made: its words, the pins it sets, the plan it adopts, and its cost if read. */
 export type NewEdit = Omit<RunEdit, 'before' | 'pins'> & { readonly pins?: readonly PlanPin[]; readonly plan?: Plan };
 
