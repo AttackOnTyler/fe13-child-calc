@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chanceText, chanceWithMargin, differenceText, killText, marginText, pointsText, riskText, signedPoints, stressText } from './chance';
+import { chanceText, chanceWithMargin, differenceText, killText, marginText, noDeathText, pointsText, riskText, signedPoints, stressText } from './chance';
 
 describe('chance wording (#181; spec #175’s Why panel wording)', () => {
   it('reads a chance in percent, one decimal', () => {
@@ -16,6 +16,12 @@ describe('chance wording (#181; spec #175’s Why panel wording)', () => {
   it('adds how often a run is flawless at 10% or less', () => {
     expect(chanceText(0.004)).toBe('0.4% (flawless about 1 run in 250)');
     expect(chanceText(0.1)).toBe('10.0% (flawless about 1 run in 10)');
+  });
+
+  it('reads one map’s no-death chance as no deaths, not flawless (the whole plan’s word)', () => {
+    expect(noDeathText(0.035)).toBe('3.5% (no deaths about 1 run in 29)');
+    expect(noDeathText(0.996)).toBe('99.6% (loses a unit about 1 run in 250)');
+    expect(noDeathText(0.5)).toBe('50.0%');
   });
 
   it('caps at over 99.9% and under 0.1%, and keeps a certain 100% or 0%', () => {

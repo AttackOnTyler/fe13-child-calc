@@ -75,7 +75,7 @@ import {
   withoutPins,
   type DeployCandidate,
 } from '../engine';
-import { chanceText, chanceWithMargin, differenceText, riskText, signedPoints } from './chance';
+import { chanceText, chanceWithMargin, differenceText, noDeathText, riskText, signedPoints } from './chance';
 import { lossText, mapChecks } from './inbox';
 import { adoptedOf, openLosses } from '../engine';
 import { goldRange, goldText, milestoneShort, pinText, solveState } from './run-page';
@@ -124,7 +124,7 @@ export function noDeathReadout(engine: Engine, map: string, difficulty: Difficul
   const runs = drawn ? LPLUS_RUNS : 1;
   const chance = engine.mapNoDeath(input, PREP_SEED, runs);
   const play = engine.playMap(input, PREP_SEED);
-  return { text: `No-death chance: ${chanceText(chance)}`, detail: playDetail(engine, input.map, play, runs) };
+  return { text: `No-death chance: ${noDeathText(chance)}`, detail: playDetail(engine, input.map, play, runs) };
 }
 
 /** How a play ended and what it rests on, in words. */
@@ -631,7 +631,7 @@ export function prepReadout(engine: Engine, run: Run, map: string, input: PrepIn
   const turns = at?.turns ?? play.turns;
   const todo = actions.filter((a) => a.step !== 'map').length;
   const head = {
-    noDeath: `No-death chance on this map: ${chanceText(noDeath)}`,
+    noDeath: `No-death chance on this map: ${noDeathText(noDeath)}`,
     flawless: `The plan’s flawless chance: ${chanceWithMargin(forecast)}`,
     turns: `about ${Math.round(turns)} turn${Math.round(turns) === 1 ? '' : 's'}`,
     deploy: `deploy ${lineup.deployed.length} of ${max}${noPrep ? ' (forced)' : ''}`,

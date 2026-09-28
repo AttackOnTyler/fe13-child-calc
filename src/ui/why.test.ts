@@ -32,6 +32,8 @@ describe('the panel’s value (#210): chance wording as the spec has it', () => 
     expect(valueText({ value: 0.996, format: 'chance' })).toBe('99.6% (loses a unit about 1 run in 250)');
     expect(valueText({ value: 0.004, format: 'chance' })).toBe('0.4% (flawless about 1 run in 250)');
     expect(valueText({ value: 0.99995, format: 'chance' })).toBe('over 99.9%');
+    // A map's own chance is its no-death chance.
+    expect(valueText({ id: 'map:chapter-3', value: 0.035, format: 'chance' })).toBe('3.5% (no deaths about 1 run in 29)');
   });
 
   it('adds 1 run in N to every fight’s kill chance', () => {
