@@ -75,6 +75,12 @@ export type SimFoeGroup = {
   readonly target?: boolean;
   /** Leaves the map on its own at the start of this turn, unfelled (Death's Embrace's Algol, #184). */
   readonly leaves?: number;
+  /**
+   * When it begins moving on its own (the chapter data's AI notes; the second realism pass): the turn it does, Infinity
+   * when only a unit coming to it sets it off (it holds, attacking nobody, until a front attacks it). Absent: from the
+   * start. A foe that doesn't move yet is no threat on enemy phase: a careful player draws such foes out one at a time.
+   */
+  readonly moves?: number;
 };
 
 /**
@@ -323,7 +329,7 @@ export const MAX_TURNS = 50;
  * risk and the enemy phase after it. Riskier engagements wait, unless nothing safer moves the map on that turn.
  */
 export const EXPOSURE_RISK = 0.01;
-/** The most foes that come at one wall on an enemy phase: the four tiles next to it (see ). */
+/** The most foes that come at one wall on an enemy phase: the four tiles next to it (see `drawToWalls`). */
 export const WALL_REACH = 4;
 const LUNATIC_PLUS_DRAWS = 2;
 const BLIND_SPOTS: readonly BlindSpotId[] = ['one-worst-attacker', 'held-back-out-of-reach', 'equal-share-of-actions', 'likely-result', 'bosses-hold', 'skills-in-combat'];
@@ -332,8 +338,8 @@ const TOP_UP = 0.01;
 /** Choices this close count as equal (a stance change needs a real difference). */
 const EPS = 1e-9;
 
-/** A foe on the field: its group, HP, and engagements so far (`n`). */
-type FoeInstance = { readonly g: number; hp: number; n?: number };
+/** A foe on the field: its group, HP, engagements so far (`n`), and whether it moves yet (see `SimFoeGroup.moves`). */
+type FoeInstance = { readonly g: number; hp: number; n?: number; awake?: boolean; bound?: number };
 
 /**
  * What a front can do with its action, valued on one scale: the chance of felling a foe, less the chance of a death it
@@ -603,6 +609,8 @@ class MapState {
    * worked out against them (by actor, Rally, HP and foe group gone), kept until the threats change.
    */
   private readonly left: number[] = [];
+  /** Foes on the field by group that move already (see `SimFoeGroup.moves`): the ones that can attack on enemy phase. */
+  private readonly awakeLeft: number[] = [];
   /**
    * This turn: each foe group's attacks already spoken for by the fronts in reach, as those fronts' survival against it
    * (each foe attacks once, the pairings a front is least likely to survive first), and the arrivals at enemy phase by
@@ -790,6 +798,7 @@ class MapState {
     this.spawned.push(0);
     this.felled.push(0);
     this.left.push(0);
+    this.awakeLeft.push(0);
     this.claimed.push([]);
     this.claimers.push([]);
     const i = this.groups.length - 1;
@@ -815,9 +824,11 @@ class MapState {
   private spawn(g: number, count: number) {
     for (let i = 0; i < count; i++) {
       const at = this.instanceGroup(g);
-      this.foes.push({ g: at, hp: this.groups[at]!.foe.stats.hp });
+      const awake = this.turn >= (this.groups[at]!.moves ?? 1);
+      this.foes.push({ g: at, hp: this.groups[at]!.foe.stats.hp, awake });
       this.spawned[at]!++;
       this.left[at]!++;
+      if (awake) this.awakeLeft[at]!++;
     }
     this.foeVersion++;
     if (count > 0) this.progress = true;
@@ -859,6 +870,10 @@ class MapState {
 
   /** The start of a turn: last turn's Rally and Rescues wear off. HP carries over: only actions buy it back (#182). */
   startTurn() {
+    for (const f of this.foes) {
+      delete f.bound;
+      if (!f.awake && this.turn >= (this.groups[f.g]!.moves ?? 1)) this.wake(f);
+    }
     this.bossHit = false;
     this.recovered = false;
     this.phaseSurvival.clear();
@@ -882,9 +897,31 @@ class MapState {
   }
 
   /** Takes every foe of group `g` off the field, unfelled: it left, or joined the army. */
+  /** Whether foe `f`, alive, can attack front `gi` this enemy phase: not one bound to another front's provocation. */
+  private canAttack(f: FoeInstance, gi: number): boolean {
+    return f.hp > 0 && (f.bound === undefined || f.bound === this.front[gi]!.id);
+  }
+
+  /** A foe that didn't move yet does from now on: its turn came (see `SimFoeGroup.moves`). */
+  private wake(f: FoeInstance) {
+    f.awake = true;
+    this.awakeLeft[f.g]!++;
+    this.foeVersion++;
+  }
+
+  /**
+   * A foe that didn't move yet, attacked, moves from now on; this enemy phase it attacks only the front that set it
+   * off (it stood in that front's reach, not the others'). The rest of its group waits.
+   */
+  private provoke(f: FoeInstance, by: number) {
+    this.wake(f);
+    f.bound = by;
+  }
+
   private removeGroup(g: number) {
     for (let i = this.foes.length - 1; i >= 0; i--) if (this.foes[i]!.g === g) this.foes.splice(i, 1);
     this.left[g] = 0;
+    this.awakeLeft[g] = 0;
     this.foeVersion++;
     this.progress = true;
   }
@@ -1061,9 +1098,11 @@ class MapState {
     }
     const kill = f.hp <= 0;
     if (phase === 'player' && this.groups[f.g]!.target) this.bossHit = true;
+    if (!f.awake) this.provoke(f, a.id);
     if (kill) {
       this.foes.splice(this.foes.indexOf(f), 1);
       this.left[f.g]!--;
+      if (f.awake) this.awakeLeft[f.g]!--;
     }
     // A front in reach already that fights again (a Dance) faces the enemy phase at its new HP: its claim moves.
     if (phase === 'player') {
@@ -1114,6 +1153,7 @@ class MapState {
     let worst: { g: number; s: number } | undefined;
     this.refreshThreats();
     for (const f of this.threatList) {
+      if (f.bound !== undefined && f.bound !== a.id) continue;
       const s = this.exchangeOf(gi, f, 'enemy').survive;
       if (this.free(f.g, s, -1, a.id) && (!worst || s < worst.s)) worst = { g: f.g, s };
     }
@@ -1151,7 +1191,7 @@ class MapState {
     const by = this.claimers[g]!;
     // A front already in reach doesn't stand in its own way: the foe it spoke for is still the one it faces.
     for (let k = 0; k < claims.length; k++) if (claims[k]! <= s && by[k] !== self) before++;
-    return before < this.left[g]! + (this.incomingCount.get(g) ?? 0);
+    return before < this.awakeLeft[g]! + (this.incomingCount.get(g) ?? 0);
   }
 
   /**
@@ -1184,7 +1224,7 @@ class MapState {
     // A group that's weaker than before (hurt, fewer left, gone) only moves the survivals it set; one that's new or
     // stronger can move any.
     const was = this.threatState;
-    const now = new Map(list.map((f) => [f.g, { hp: f.hp, left: this.left[f.g]! }] as const));
+    const now = new Map(list.map((f) => [f.g, { hp: f.hp, left: this.awakeLeft[f.g]! }] as const));
     this.threatState = now;
     let full = false;
     const weaker: number[] = [];
@@ -1228,7 +1268,7 @@ class MapState {
   chooseStances() {
     const joining = this.joining('enemy-phase').map(([g, n]) => [this.groupIndex(g), n] as const);
     this.foeVersion++;
-    this.incoming = joining.map(([g]) => ({ g, hp: this.groups[g]!.foe.stats.hp }));
+    this.incoming = joining.map(([g]) => ({ g, hp: this.groups[g]!.foe.stats.hp, awake: true }));
     this.incomingCount = new Map();
     for (const [g, n] of joining) this.incomingCount.set(g, (this.incomingCount.get(g) ?? 0) + n);
     const ctx = this.context(new Set(), new Map());
@@ -1238,6 +1278,13 @@ class MapState {
     this.npcFronts = new Set();
     this.npcUnits = new Set();
     const talkers = this.dueTalkers();
+    const healers: [number, number][] = [];
+    for (const q of this.pairs) {
+      if (this.turn < q.from || (!q.joined && this.turn < q.npcUntil)) continue;
+      for (const u of q.back === undefined ? [q.lead] : [q.lead, q.back]) {
+        for (const s of this.kits[u]!.staves) if (s.effect.kind !== 'rescue' && this.uses[u]![s.item]! > 0) healers.push([u, s.reach * Math.min(s.effect.amount, 999)]);
+      }
+    }
     for (const p of this.pairs) {
       // Not on the field yet (a mid-map arrival before its turn, a foe recruit before it joins): no action, out of reach.
       if (this.turn < p.from) continue;
@@ -1252,6 +1299,9 @@ class MapState {
         continue;
       }
       const was = p.stance;
+      // The most a healer of the army's (another pair's unit) can restore to this pair's front this turn, expected.
+      let heal = 0;
+      for (const [u, h] of healers) if (u !== p.lead && u !== p.back) heal = Math.max(heal, h);
       const units = [p.lead, p.back!] as const;
       // The safe work each way: apart, each unit with a safe attack alone (or, unarmed, a staff, Dance or Rally to use);
       // together, one action if either front has a safe attack. A unit apart with nothing safe to do holds back.
@@ -1286,10 +1336,17 @@ class MapState {
         }
         this.front.push(p.apart![0]!, p.apart![1]!);
       } else {
+        // Its engagement's risk: 0 with safe work, else its least risky attack or waiting in reach (the second realism
+        // pass: the front was picked by the waiting alone, and a Great Knight fronted into a Hammer).
+        // A hurt unit in front can be healed before it engages (a staff targets a pair's front): its risk at that HP.
         const risk = (k: 0 | 1) => {
           const a = p.together![k]!;
           if (!this.unitArmed(a.unit)) return Infinity;
-          return hasSafe(a) ? 0 : 1 - this.survivalOf(a, undefined, this.hp[a.unit]!, ctx, -1);
+          if (hasSafe(a)) return 0;
+          const hp = Math.min(this.units[a.unit]!.fighter.stats.hp, this.hp[a.unit]! + heal);
+          let r = 1 - this.survivalOf(a, undefined, hp, ctx, -1);
+          for (const f of ctx.worn) r = Math.min(r, this.attackRisk(a, undefined, false, f, ctx, false, hp)?.risk ?? 1);
+          return r;
         };
         const cur: 0 | 1 = was.kind === 'together' ? was.front : 0;
         const other: 0 | 1 = cur === 0 ? 1 : 0;
@@ -1362,6 +1419,17 @@ class MapState {
    * can't strike, the boss isn't open, or it more likely dies than not. With `bound`, a risk over `EXPOSURE_RISK` may
    * be a low estimate (`exact` false): enough to tell it's not safe.
    */
+  /**
+   * An attack on a foe that doesn't move yet sets it off, and its group with it (see `SimFoeGroup.moves`, `provoke`):
+   * they attack on enemy phase. The front's survival of the worst of those attacks at the HP the exchange leaves: the
+   * foe itself if it stands, a fresh one of its group if any is left (1 when none, or the foe already moves).
+   */
+  private woken(a: Actor, bonus: RallyBonus | undefined, f: FoeInstance, ex: Exchange): number {
+    const foe = this.groups[f.g]!.foe;
+    if (f.awake || !foe.weapon || foe.boss || !this.reachable(a)) return 1;
+    return ex.foeHp > 0 ? this.exchangeFor(a, bonus, { g: f.g, hp: ex.foeHp }, 'enemy', ex.leadHp).survive : 1;
+  }
+
   private attackRisk(a: Actor, bonus: RallyBonus | undefined, exposed: boolean, f: FoeInstance, ctx: PolicyContext, bound = false, hp = this.hp[a.unit]!): { ex: Exchange; risk: number; exact: boolean } | null {
     if (this.groups[f.g]!.target && !ctx.open) return null;
     const ex = this.exchangeFor(a, bonus, f, 'player', hp);
@@ -1369,7 +1437,7 @@ class MapState {
     if (exposed) return { ex, risk: 1 - ex.survive, exact: true };
     if (bound && 1 - ex.survive > EXPOSURE_RISK) return { ex, risk: 1 - ex.survive, exact: false };
     const floor = bound ? (1 - EXPOSURE_RISK) / ex.survive : 0;
-    const after = this.survivalOf(a, bonus, ex.leadHp, ctx, ex.foeHp <= 0 ? f.g : -1, floor);
+    const after = Math.min(this.survivalOf(a, bonus, ex.leadHp, ctx, ex.foeHp <= 0 ? f.g : -1, floor), this.woken(a, bonus, f, ex));
     return { ex, risk: 1 - ex.survive * after, exact: after >= floor };
   }
 
@@ -1529,7 +1597,7 @@ class MapState {
       const front = this.front[a.group]!;
       const bonus = this.bonus[a.group];
       const now = this.safe.has(a.group) ? 1 : this.survivalOf(front, bonus, this.hp[front.unit]!, ctx, -1);
-      const after = this.safe.has(a.group) ? 1 : this.survivalOf(front, bonus, ex.leadHp, ctx, ex.foeHp <= 0 ? a.foe.g : -1);
+      const after = this.safe.has(a.group) ? 1 : Math.min(this.survivalOf(front, bonus, ex.leadHp, ctx, ex.foeHp <= 0 ? a.foe.g : -1), this.woken(front, bonus, a.foe, ex));
       a.risk = now > 0 ? Math.max(0, 1 - (ex.survive * after) / now) : 1;
       a.exact = true;
     } else if (bound && 1 - ex.survive > EXPOSURE_RISK) {
@@ -1537,7 +1605,7 @@ class MapState {
       a.exact = false;
     } else {
       const floor = bound ? (1 - EXPOSURE_RISK) / ex.survive : 0;
-      const after = this.survivalOf(this.front[a.group]!, this.bonus[a.group], ex.leadHp, ctx, ex.foeHp <= 0 ? a.foe.g : -1, floor);
+      const after = Math.min(this.survivalOf(this.front[a.group]!, this.bonus[a.group], ex.leadHp, ctx, ex.foeHp <= 0 ? a.foe.g : -1, floor), this.woken(this.front[a.group]!, this.bonus[a.group], a.foe, ex));
       a.risk = 1 - ex.survive * after;
       a.exact = after >= floor;
     }
@@ -1807,20 +1875,27 @@ class MapState {
    */
   private threats(): FoeInstance[] {
     const by = new Map<number, FoeInstance>();
+    const out: FoeInstance[] = [];
     for (const list of [this.foes, this.incoming]) {
       for (const f of list) {
         const foe = this.groups[f.g]!.foe;
-        if (!foe.weapon || foe.boss) continue;
+        if (!foe.weapon || foe.boss || !f.awake) continue;
+        // A foe set off by an attack this turn threatens only its provoker (see provoke): listed on its own.
+        if (f.bound !== undefined) {
+          out.push(f);
+          continue;
+        }
         const s = by.get(f.g);
         if (!s || f.hp > s.hp) by.set(f.g, f);
       }
     }
+    by.forEach((f) => out.push(f));
     // The hardest hitters first: a survival check with a floor meets its worst early.
     const power = (f: FoeInstance) => {
       const foe = this.groups[f.g]!.foe;
       return Math.max(foe.stats.str, foe.stats.mag) + (foe.weapon?.mt ?? 0) + (foe.weapon?.crit ?? 0) / 4;
     };
-    return [...by.values()].sort((a, b) => power(b) - power(a));
+    return out.sort((a, b) => power(b) - power(a));
   }
 
   /**
@@ -1853,6 +1928,7 @@ class MapState {
     s = 1;
     let worst = -1;
     for (const f of ctx.threats) {
+      if (f.bound !== undefined && f.bound !== a.id) continue;
       const x = this.exchangeFor(a, bonus, f, 'enemy', hp).survive;
       if (x < s && this.free(f.g, x, without, a.id)) {
         s = x;
@@ -2087,7 +2163,7 @@ class MapState {
     this.incomingCount = new Map();
     const attackers = this.alive().filter((f) => {
       const foe = this.groups[f.g]!.foe;
-      return !!foe.weapon && !foe.boss;
+      return !!foe.weapon && !foe.boss && f.awake;
     });
     if (!attackers.length) return;
     // An army that moved nothing this turn can't keep away: the foes close in on every front.
@@ -2102,7 +2178,7 @@ class MapState {
     for (let round = 0; round < rounds; round++) {
       const options = fronts.flatMap((gi) =>
         [...byGroup.entries()].flatMap(([g, list]) => {
-          const f = list.find((x) => x.hp > 0);
+          const f = list.find((x) => this.canAttack(x, gi));
           return f ? [{ gi, g, s: this.exchangeOf(gi, f, 'enemy').survive }] : [];
         }),
       );
@@ -2111,7 +2187,7 @@ class MapState {
       for (const o of options) {
         if (hit.has(o.gi)) continue;
         const list = byGroup.get(o.g)!;
-        const f = list.find((x) => x.hp > 0);
+        const f = list.find((x) => this.canAttack(x, o.gi));
         if (!f) continue;
         list.splice(list.indexOf(f), 1);
         hit.add(o.gi);
@@ -2171,12 +2247,15 @@ class MapState {
       while (w.hits.length < WALL_REACH) {
         let best: { f: FoeInstance; ex: Exchange } | undefined;
         for (const list of byGroup.values()) {
-          const f = list.find((x) => x.hp > 0);
+          const f = list.find((x) => this.canAttack(x, gi));
           if (!f) continue;
           const ex = this.exchangeOf(gi, f, 'enemy');
           if (!best || ex.survive < best.ex.survive) best = { f, ex };
         }
         if (!best || !best.ex.leadStrikes || best.ex.foeHp >= best.f.hp) break;
+        // A trade in the wall's favour: its counter takes a larger share of the foe's HP than the attack takes of its own.
+        const hpNow = this.hp[this.front[gi]!.unit]!;
+        if ((best.f.hp - best.ex.foeHp) / best.f.hp < (hpNow - best.ex.leadHp) / this.maxHp(gi)) break;
         const next = this.hpAfter(gi, best.f, dist);
         const after = total(next);
         if (after < 1 - EXPOSURE_RISK) break;
@@ -2336,6 +2415,7 @@ export function playMap(input: MapPlayInput, seed: number): MapPlay {
   if (s.walled) spots.push('walls-draw-foes');
   if (s.traded) spots.push('potions-traded');
   if (Object.keys(s.skills).length) spots.push('lunatic-plus-draws');
+  if (s.groups.some((g) => g.moves !== undefined && g.moves > 1)) spots.push('foes-wait');
   if (s.npcAny) spots.push('npc-kills');
   if (s.npcUnarmed) spots.push('npc-screened');
   if (s.talked) spots.push('talk-reaches');

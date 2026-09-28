@@ -618,7 +618,8 @@ export type BlindSpotId =
   | 'skills-in-combat'
   | 'walls-draw-foes'
   | 'potions-traded'
-  | 'lunatic-plus-draws';
+  | 'lunatic-plus-draws'
+  | 'foes-wait';
 
 /** The run simulation's own blind spots (#186): how it walks the army from one map to the next. */
 export type RunBlindSpotId =
@@ -668,6 +669,17 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
       'map offers such ground, or whether the foes come at all: fewer attackers mean fewer counter kills and longer maps.',
     lean: 'high',
     touches: ['map', 'fight'],
+  },
+  {
+    id: 'foes-wait',
+    label: 'Foes that wait, wait until drawn out',
+    why:
+      'A foe the chapter data says holds its ground (FEW’s AI notes: until a turn, until provoked, only attacking units in its range, behind ' +
+      'a door) attacks nobody until its turn comes or a unit attacks it; attacked, only that foe moves, and that enemy phase it attacks only ' +
+      'its attacker. A careful player draws such foes out one at a time. In play a unit can stray into a waiting foe’s range, and FEW’s ' +
+      'linked triggers (a group moving once a neighbour is provoked) set off more at once. Foes with no note move from the start.',
+    lean: 'high',
+    touches: ['map'],
   },
   {
     id: 'lunatic-plus-draws',
