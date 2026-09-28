@@ -1124,6 +1124,8 @@ export type RobinReadout = {
   readonly lock?: string;
   /** Every solved Robin at 0% (#242): they're ranked by how far runs get, and whether more solves could change the pick. */
   readonly atZero?: string;
+  /** Every solved Robin at 100% (#242): they're ranked by fewer expected turns. */
+  readonly atFull?: string;
   /** The no-Robin view, when toggled on. */
   readonly noRobin?: string;
   /** The numbers in its lines (#210): each solved Robin's cost (by its key), the lock's, the no-Robin view's. */
@@ -1175,7 +1177,8 @@ export function robinReadout(engine: Engine, run: Run, step: RobinStep | undefin
     const spouse = s.plan.wishlist.marriages.find((c) => c.includes('robin'))?.find((u) => u !== 'robin') ?? null;
     const cost = s.cost ? ` · ${robinCostText(s.cost)} against ${against} · ${parts.length ? parts.join('; ') : 'the same wishlist'}` : s.key === step.reference ? ` · ${locked ? 'locked' : 'the best'}` : '';
     // At 0% (#242), how far its runs get: what ranks the Robins there.
-    const far = step.atZero && s.cleared !== undefined ? `, runs clear ${s.cleared.toFixed(1)} maps` : '';
+    // At 100%, its runs' turns: what ranks them there.
+    const far = step.atZero && s.cleared !== undefined ? `, runs clear ${s.cleared.toFixed(1)} maps` : step.atFull && s.turns !== undefined ? `, runs take ${s.turns.toFixed(1)} turns` : '';
     return { key: s.key, robin: r, plan: s.plan, text: `${married(r, spouse)}: ${chanceWithMargin(s)}${far}${cost}${PICKS[s.pick](r)}`, lock: !locked };
   });
   const rest = step.options
@@ -1230,6 +1233,7 @@ export function robinReadout(engine: Engine, run: Run, step: RobinStep | undefin
     rest,
     ...(lock ? { lock } : {}),
     ...(step.atZero ? { atZero: atZeroText(step.atZero) } : {}),
+    ...(step.atFull ? { atFull: 'Every Robin solved reads 100%, so they’re ranked by fewer expected turns, as the search breaks its ties.' } : {}),
     ...(noRobinText ? { noRobin: noRobinText } : {}),
   };
 }
@@ -1341,6 +1345,7 @@ function robinSection(ctx: RunContext, inInbox = false): HTMLElement | null {
       ),
       r.lock ? h('p', { class: 'small' }, h('b', {}, ...whyText(r.lock, r.marks?.lock ?? []))) : null,
       r.atZero ? h('p', { class: 'small' }, r.atZero) : null,
+      r.atFull ? h('p', { class: 'small' }, r.atFull) : null,
       r.solved.length
         ? h(
             'ul',

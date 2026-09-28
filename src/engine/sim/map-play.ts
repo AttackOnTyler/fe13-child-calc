@@ -333,7 +333,7 @@ export const EXPOSURE_RISK = 0.01;
 /** The most foes that come at one wall on an enemy phase: the four tiles next to it (see `drawToWalls`). */
 export const WALL_REACH = 4;
 const LUNATIC_PLUS_DRAWS = 2;
-const BLIND_SPOTS: readonly BlindSpotId[] = ['one-worst-attacker', 'held-back-out-of-reach', 'equal-share-of-actions', 'likely-result', 'bosses-hold', 'skills-in-combat', 'weapon-ranks'];
+const BLIND_SPOTS: readonly BlindSpotId[] = ['one-worst-attacker', 'held-back-out-of-reach', 'equal-share-of-actions', 'likely-result', 'bosses-hold', 'skills-in-combat', 'weapon-ranks', 'no-approach'];
 /** A heal's small worth beyond the danger it lifts: HP topped up now is HP in hand for the turns to come. */
 const TOP_UP = 0.01;
 /** Choices this close count as equal (a stance change needs a real difference). */

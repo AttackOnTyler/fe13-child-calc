@@ -47,6 +47,12 @@ export function verdictOf(p: Paired): Verdict {
  */
 export const allLost = (...plans: readonly (readonly number[])[]): boolean => plans.every((xs) => xs.length > 0 && xs.every((x) => x === 0));
 
+/**
+ * Every run of every plan given reads 100% (#242): the flawless chance can't tell them apart either, so they're compared
+ * on fewer expected turns, the search's own tie (`RunSim.turnSamples`).
+ */
+export const allWon = (...plans: readonly (readonly number[])[]): boolean => plans.every((xs) => xs.length > 0 && xs.every((x) => x === 1));
+
 /** A plan's chance on its samples, with its own error (±, 95%). */
 export function scoreOf(samples: readonly number[]): { readonly chance: number; readonly margin: number } {
   const n = samples.length;

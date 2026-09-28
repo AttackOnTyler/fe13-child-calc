@@ -99,3 +99,38 @@ describe('the Robin alternatives at 0% (#242)', () => {
     expect(s.atZero).toEqual({ unsolved: 2, couldGetThrough: 1 });
   });
 });
+
+describe('the Robin alternatives at 100% (#242)', () => {
+  // Every run of every Robin gets through: the flawless chance can't rank them, so fewer turns does (the search's tie).
+  const robins: PlanRobin[] = (['mag', 'skl', 'spd'] as const).map((asset) => ({ gender: 'M', asset, flaw: 'hp' }));
+  const turns: Record<string, number> = Object.fromEntries(robins.map((r, i) => [robinKey(r), [40, 50, 30][i]!]));
+  const ones = (n: number) => Array.from({ length: n }, () => 1);
+  const step = (): RobinStep => {
+    const deps = {
+      options: robins,
+      locked: undefined,
+      genders: ['M'] as const,
+      genderBest: () => robins[0]!,
+      screen: (r: PlanRobin) => ({ plan: planOf('seed', r), ceiling: 1 }),
+      solve: (r: PlanRobin) => ({ best: planOf(robinKey(r), r), converged: true, evaluations: 1, cursor: { evaluations: 1 } }) as unknown as SolveStep,
+      samples: (_r: PlanRobin, _p: Plan, _first: number, count: number) => ones(count),
+      play: (r: PlanRobin, _p: Plan, first: number, count: number) => {
+        const x = runs(20, turns[robinKey(r)]!)(first, count);
+        return { samples: ones(count), cleared: x.cleared, turns: x.turns };
+      },
+      noRobin: (_r: PlanRobin, p: Plan) => p,
+    };
+    let s = robinStep({ run: {} as never, seed: 1, budget: 1000, compare: 6 }, deps);
+    for (let i = 0; i < 20 && !s.converged; i++) s = robinStep({ run: {} as never, seed: 1, budget: 1000, compare: 6, cursor: s.cursor }, deps);
+    return s;
+  };
+
+  it('ranks the solved Robins by fewer expected turns, and says so', () => {
+    const s = step();
+    expect(s.solved.map((x) => x.robin.asset)).toEqual(['spd', 'mag', 'skl']);
+    expect(s.reference).toBe(robinKey(robins[2]!));
+    expect(s.solved[0]!.turns).toBeCloseTo(30.1, 6);
+    expect(s.atFull).toBe(true);
+    expect(s.atZero).toBeUndefined();
+  });
+});
