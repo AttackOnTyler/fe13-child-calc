@@ -108,7 +108,19 @@ export type Roadmap = {
    * reads the default from the milestones (`defaultPriorities`).
    */
   readonly priorities?: readonly PlanPriority[];
+  /**
+   * The optional maps the plan plays (spec #175 story 31: Infinite Regalia on the Full route, kept only if its rewards
+   * earn its risk), by key. An optional map not listed is skipped: `order` still lists it, the runs pass it by. Absent
+   * or empty: every optional map skipped (the seed's rule; the search's `optional` edit keeps one when it pays).
+   */
+  readonly optional?: readonly string[];
 };
+
+/**
+ * The roadmap's map-level choices a rebuilt plan keeps as they were (a marriage or Robin edit, a unit's worth): the
+ * optional maps it plays.
+ */
+export const keptChoices = (plan: Plan): Pick<Roadmap, 'optional'> => ({ ...(plan.roadmap.optional ? { optional: plan.roadmap.optional } : {}) });
 
 /** Robin as the plan has it: the run facts, with whatever they leave open chosen by the plan. */
 export type PlanRobin = { readonly gender: Gender; readonly asset: Stat; readonly flaw: Stat };

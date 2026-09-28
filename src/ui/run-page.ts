@@ -164,6 +164,8 @@ export type RoadmapReadout = {
   readonly rows: readonly string[];
   readonly readings: readonly string[];
   readonly note: string;
+  /** The plan's map-level choices (spec #175 story 31): each optional map on the order, played or skipped. */
+  readonly choices: readonly string[];
   /** The numbers in its rows and readings, for the Why panel (#210): each milestone's chance. */
   readonly marks?: { readonly rows: readonly (readonly WhyMark[])[]; readonly readings: readonly (readonly WhyMark[])[] };
 };
@@ -232,8 +234,14 @@ export function roadmapReadout(engine: Engine, run: Run, plan: Plan, readings?: 
     const c = chances.get(m.id);
     return readings && c !== undefined ? [[chanceText(c), `milestone:${m.id}`]] : [];
   });
+  const kept = new Set(plan.roadmap.optional ?? []);
+  const choices = engine
+    .mapOrder(run)
+    .steps.filter((s) => s.optional)
+    .map((s) => `${labels?.get(s.key) ?? engine.maps().find((m) => m.id === s.map)?.label ?? s.key} (optional): ${kept.has(s.key) ? 'played: the plan keeps it for its rewards' : 'skipped: played only when its rewards earn its risk'}`);
   return {
     title,
+    choices,
     rows: ms.map(withChance),
     readings: readings?.readings.map((r) => readingRow(r, ms, gender, labels)) ?? [],
     note,
@@ -930,6 +938,7 @@ export function flawlessSection(ctx: HeadlineContext, inInbox = false): HTMLElem
             h('summary', {}, h('b', {}, r.roadmap.title)),
             r.roadmap.readings.length ? h('ul', { class: 'small readings' }, ...r.roadmap.readings.map((x, i) => h('li', {}, ...marked(x, r.roadmap!.marks?.readings[i])))) : null,
             r.roadmap.note ? h('p', { class: 'muted small' }, r.roadmap.note) : null,
+            ...r.roadmap.choices.map((x) => h('p', { class: 'small' }, x)),
             h('ol', { class: 'small' }, ...r.roadmap.rows.map((x, i) => h('li', {}, ...marked(x, r.roadmap!.marks?.rows[i])))),
           )
         : null,

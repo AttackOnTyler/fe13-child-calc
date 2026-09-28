@@ -15,6 +15,9 @@
  * weapons' uses, after its recorded shopping (#192: gold at the map's end less buys and forges, plus sales); each map carries what the open armories sell in its preparations (`openStock` over the maps cleared
  * by then), its sure income (`sureIncome`) and its sure free seals.
  *
+ * Optional maps (spec #175 story 31): Infinite Regalia is played only when the plan keeps it (`roadmap.optional`);
+ * without a plan, never.
+ *
  * Side goals and renown (#191): each map's side goals are chased or skipped by the run's pins (`Run.sideGoals`), else
  * the default rule (`chaseByDefault`); renown's rewards (`renownAhead`) join the sure income and seals of the map that
  * crosses them, and those reached but not claimed are held from the start.
@@ -38,7 +41,7 @@ import { deployCount, forcedOn } from './deploy';
 import { COUNT_CAP, tierBonus } from './exp';
 import { classGrowths } from './classes';
 import { internalLevels } from './internal-level';
-import { remainingMapOrder, type MapOrder } from './map-order';
+import { remainingMapOrder, type MapOrder, type MapOrderStep } from './map-order';
 import { unitName, withRun, type Couple, type Difficulty, type RosterUnit } from './roster';
 import { EMPTY_SNAPSHOT, isLost, latestEntry, morganStart, recruitSnapshot, unitNamed, type Run, type Snapshot, type UnitSnapshot } from './run';
 import { expFactors } from './corrections';
@@ -198,6 +201,16 @@ function plannedOrder(order: MapOrder, plan: Plan | undefined): MapOrder {
 }
 
 /**
+ * The map order without the optional maps the plan skips (spec #175 story 31): an optional map (Infinite Regalia) is
+ * played only when the plan keeps it (`roadmap.optional`); without a plan, none is.
+ */
+function withoutSkipped(order: MapOrder, plan: Plan | undefined): MapOrder {
+  const kept = new Set(plan?.roadmap.optional ?? []);
+  const played = (s: MapOrderStep) => !s.optional || kept.has(s.key);
+  return order.steps.every(played) ? order : { ...order, steps: order.steps.filter(played) };
+}
+
+/**
  * The simulation's input for a run: the army, the maps still to play and the seals held. Units the simulation can't
  * play are listed in `notSimulated`; units whose seal history is unknown in `unknownHistory`. With a plan (#198), its
  * Robin, marriages, map order, lineups and passed skills.
@@ -222,7 +235,7 @@ export function flawlessInput(
   const marriages = plan ? (plan.wishlist.marriages as readonly Couple[]) : givenMarriages;
   const difficulty: Difficulty = run.roster.run.difficulty ?? 'normal';
   const table: ChapterDifficulty = difficulty === 'lunatic-plus' ? 'lunatic' : difficulty;
-  const order = plannedOrder(remainingMapOrder(run), plan);
+  const order = withoutSkipped(plannedOrder(remainingMapOrder(run), plan), plan);
   // The runs start from the latest entry after its shopping (#192): its gold, items and seals as they left the armory.
   const last = latestEntry(run);
   const snap = last ? entryAfterShopping(last) : EMPTY_SNAPSHOT;

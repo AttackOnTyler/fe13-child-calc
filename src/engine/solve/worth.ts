@@ -37,7 +37,7 @@ import type { Run } from '../run';
 import { withPlanRobin } from '../flawless';
 import type { ArmyUnit, ChildRecruit, LineupPlan, RunSimInput, RunSimMap } from '../sim/run-sim';
 import { paired } from './paired';
-import { isRuleOut, type Plan, type PlanLineup, type PlanPin, type WishlistReserve } from './plan';
+import { isRuleOut, keptChoices, type Plan, type PlanLineup, type PlanPin, type WishlistReserve } from './plan';
 import { coupleKey, placedForSupports, planFor, seedPlan, type SeedContext, type SeedOptions } from './seed';
 import { SEARCH_RUNS } from './step';
 
@@ -402,7 +402,7 @@ export function planWithout(
   const merged: Plan = {
     ...next,
     wishlist: { ...next.wishlist, children, reserves: [] },
-    roadmap: { order, lineups, seals, items: plan.roadmap.items.filter((i) => !gone.has(i.unit)) },
+    roadmap: { order, lineups, seals, items: plan.roadmap.items.filter((i) => !gone.has(i.unit)), ...keptChoices(plan) },
   };
   return placedForSupports(without, ctx.assumptions, merged);
 }
