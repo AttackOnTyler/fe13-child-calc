@@ -633,7 +633,8 @@ export type Engine = {
    * An edit's cost (#199): the edited plan's gain over the adopted plan on the same runs, with its paired error (±, 95%),
    * within a budget of evaluations: `EDIT_COST_BUDGET.provisional` for the first reading (about 1 s), `.settled` to
    * settle it (clear either way, or a close call at the run cap). `pins` are the pins the edited plan plays under (a
-   * keep edit's). An edit the simulation can't see (a build skill, today) is a close call on no runs.
+   * keep edit's). An edit the simulation can't see (nothing it reads changes) is a close call on no runs; a build skill
+   * edit is costed on the runs, which equip each build skill once learned.
    */
   editCost(input: EditCostInput): EditCost;
   /**
@@ -1246,7 +1247,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
   const planBuilt = (run: Run, plan: Plan): ReturnType<typeof flawlessInput> => {
     let held = planInputs.get(run);
     if (!held) planInputs.set(run, (held = { byPlan: new Map() }));
-    // What the simulation reads of a plan (its builds don't count): plans alike there share an input and its projection.
+    // What the simulation reads of a plan: plans alike there share an input and its projection.
     const k = simKeyOf(plan);
     let built = held.byPlan.get(k);
     if (built) {
@@ -1909,7 +1910,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
           ceiling: (plan) => simulateCeiling(planInput(run, plan), input.seed, lunaticPlus ? CEILING_DRAWS : 1, assumptions)?.chance,
           // A pinned couple's non-starter is the player's to lift: only the others count against a plan.
           nonStarters: (plan) => nonStarters(run, assumptions, plan).filter((c) => !pinnedKeys.has(coupleKey(c))),
-          // What the simulation reads of a plan: its Robin, marriages, children's passes and its roadmap (not the builds).
+          // What the simulation reads of a plan: its Robin, marriages, children's passes, builds and roadmap.
           simKey: simKeyOf,
         },
         input.display ?? FLAWLESS_RUNS,
@@ -1936,9 +1937,8 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     editCost: (input) => {
       const samplesOn = (r: Run) => (plan: Plan, first: number, count: number) => simulateRuns(planInput(r, plan), input.seed, count, assumptions, first).samples;
       const played = input.pins?.length ? pinnedRun(input.run, input.pins) : input.run;
-      // What the simulation reads of a plan (as the search's `simKey`): an edit it can't see costs nothing, on no runs.
-      const seen = (plan: Plan) => JSON.stringify([plan.robin, plan.wishlist.marriages, plan.wishlist.children, plan.roadmap]);
-      if (played === input.run && seen(input.plan) === seen(input.edited)) return { gain: 0, margin: 0, runs: 0, verdict: 'close', settled: true };
+      // What the simulation reads of a plan (the search's `simKey`, builds included): an edit it can't see costs nothing, on no runs.
+      if (played === input.run && simKeyOf(input.plan) === simKeyOf(input.edited)) return { gain: 0, margin: 0, runs: 0, verdict: 'close', settled: true };
       return editCost(input, samplesOn(input.run), samplesOn(played));
     },
     unitEdits: (given, plan, unit, options = {}) => {
