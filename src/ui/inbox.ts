@@ -32,7 +32,7 @@ import { chanceText, chanceWithMargin, differenceText, signedPoints } from './ch
 import { h } from './dom';
 import { guide } from './guide';
 import { startSolve, type UnitEditView } from './solve-client';
-import { milestoneShort, pinText, type RunContext, type SolveProgress } from './run-page';
+import { closeCallsShown, milestoneShort, pinText, type RunContext, type SolveProgress } from './run-page';
 import { setComparison, whyNumber, whyText, type WhyMark } from './why';
 import { currentRules } from './checked-rules';
 import { askChecks, checkRow, checksProgress, lineupOf, onChecksProgress, setupRows } from './checks-view';
@@ -146,7 +146,8 @@ export function inboxReadout(run: Run, state: InboxState): Inbox {
       title: 'The search found better',
       rows: proposals.map((p) => ({ key: proposalId(p), text: `${p.edits.join('; ')}: ${differenceText(p.gain, p.margin, p.close, p.turns)}`, marks: [[differenceText(p.gain, p.margin, p.close, p.turns), `edit:proposal:${proposalId(p)}`]], proposal: p })),
     });
-  const calls = progress?.closeCalls ?? [];
+  // A close call with both plans at 0% carries no information: left out until a run gets through.
+  const calls = progress ? closeCallsShown(progress) : [];
   if (calls.length)
     items.push({
       kind: 'close-calls',
@@ -257,6 +258,8 @@ export type AfterLockItem =
   | { readonly kind: 'behind'; readonly title: string; readonly rows: readonly (InboxRow & { readonly fixes: readonly FixRow[]; readonly note: string })[] }
   | { readonly kind: 'resolve'; readonly title: string; readonly required: boolean; readonly reasons: readonly string[]; readonly rows: readonly FixRow[]; readonly note: string; readonly fresh: boolean }
   | { readonly kind: 'actions'; readonly title: string; readonly rows: readonly InboxRow[] }
+  /** The units whose milestones no run reaches with nobody lost, in one line (a 0% headline). */
+  | { readonly kind: 'unread'; readonly text: string }
   | { readonly kind: 'checks'; readonly title: string; readonly rows: readonly InboxRow[] }
   /** Checks worth setting up (#209): a rule with stakes over about 1 point that no map left sets up, each with the edit that does. */
   | { readonly kind: 'setup-checks'; readonly title: string; readonly rows: readonly FixRow[] }
@@ -490,7 +493,11 @@ export function afterLockReadout(engine: Engine, run: Run, state: InboxState): A
     return !r.worst ? 'no milestones left' : `${m ? milestoneShort(m, r.unit, gender) : r.worst.id} ${r.worst.reached ? chanceText(r.worst.chance) : '(no run reaches it with nobody lost)'}`;
   };
 
-  const atRisk = readings.filter((r) => r.reading === 'at-risk');
+  // A milestone no run reaches with nobody lost can't be read yet: those units are summed up in one line, not listed as
+  // at risk or behind (a behind unit for another reason, a non-starter or a deadline passed, is listed as ever).
+  const unread = (r: Reading) => !!r.worst && !r.worst.reached && (r.reading === 'at-risk' || r.why === 'no-change');
+  const unreadable = readings.filter((r) => r.reading !== 'on-track' && unread(r));
+  const atRisk = readings.filter((r) => r.reading === 'at-risk' && !unread(r));
   if (atRisk.length)
     items.push({
       kind: 'at-risk',
@@ -509,7 +516,7 @@ export function afterLockReadout(engine: Engine, run: Run, state: InboxState): A
       }),
     });
 
-  const behind = readings.filter((r) => r.reading === 'behind');
+  const behind = readings.filter((r) => r.reading === 'behind' && !unread(r));
   if (behind.length && plan)
     items.push({
       kind: 'behind',
@@ -522,6 +529,17 @@ export function afterLockReadout(engine: Engine, run: Run, state: InboxState): A
         return { key: `behind:${r.unit}`, text: `${name(r.unit)}: ${worstOf(r)} · ${why}`, marks: worstMarks(r), fixes, note };
       }),
     });
+
+  if (unreadable.length) {
+    const maps = progress?.chance.maps ?? [];
+    const first = maps.findIndex((m) => m.noDeath === undefined);
+    const past = first > 0 ? maps[first - 1]!.label : maps.find((m) => m.noDeath !== undefined && m.noDeath < 1)?.label;
+    const n = new Set(unreadable.map((r) => r.worst!.id)).size;
+    items.push({
+      kind: 'unread',
+      text: `${n} milestone${n === 1 ? '' : 's'} (${listWords(unreadable.map((r) => name(r.unit)))}) can’t be read until a run gets past ${past ?? 'the maps where the runs die'}: no run reaches ${n === 1 ? 'it' : 'them'} with nobody lost.`,
+    });
+  }
 
   const after = [...run.entries].reverse().find((e) => e.map !== 'other');
   const afterLabel = after && engine.maps().find((m) => m.id === after.map)?.label;
@@ -841,6 +859,7 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
     const loss = item('loss');
     const risk = item('at-risk');
     const behind = item('behind');
+    const unread = item('unread');
     const resolve = item('resolve');
     const actions = item('actions');
     const checks = item('checks');
@@ -898,6 +917,7 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
             ...behind.rows.map((r) => h('div', { class: 'inbox-unit', id: `inbox-${r.key.replace(':', '-')}` }, h('div', { class: 'small' }, ...whyText(r.text, r.marks ?? [])), ...r.fixes.map((f) => fixRow(f)), r.note ? h('div', { class: 'muted small' }, r.note) : null)),
           )
         : null,
+      unread ? h('div', { class: 'banner unread muted small' }, unread.text) : null,
       list(actions, 'map-actions'),
       list(checks, 'map-checks'),
       setup

@@ -22,10 +22,11 @@ import {
   type PlanProposal,
   type Reading,
   type Readings,
+  type RosterUnit,
   type Run,
 } from '../engine';
 import { afterLockReadout, beforeTheLock, whatChangedReadout, type AfterLockItem, type InboxState } from './inbox';
-import type { SolveProgress } from './run-page';
+import { noRunGetsThrough, type SolveProgress } from './run-page';
 
 /**
  * The Run view's inbox after the Lock and What changed (#206), as the page draws them from the solve's progress: the
@@ -115,6 +116,26 @@ describe('the inbox after the Lock (#206)', () => {
     expect(r.rows.every((x) => x.required)).toBe(true);
     // No proposal and the search done: a fresh plan is offered.
     expect(item(dead, 'resolve', { progress: { ...progress, proposals: [] } })).toMatchObject({ rows: [], fresh: true });
+  });
+
+  it('when no run gets through, leads with where the runs die and sums up the milestones it can’t read in one line', () => {
+    const maps = [
+      { key: next!.key, label: label(next!.map), reach: 1, noDeath: 0.035 },
+      { key: endpoint!.key, label: label(endpoint!.map), reach: 0 },
+    ];
+    const zero = { ...chance, chance: 0, margin: 0, maps } as unknown as FlawlessChance;
+    const dies = noRunGetsThrough(zero)!;
+    expect(dies.text).toBe(`No run gets through with nobody lost. Where the runs die: ${label(next!.map)} (3.5% (no deaths about 1 run in 29)). No run reaches ${label(endpoint!.map)} with nobody lost.`);
+    expect(dies.marks).toEqual([['3.5% (no deaths about 1 run in 29)', `map:${next!.key}`]]);
+    expect(noRunGetsThrough(chance)).toBeUndefined();
+    // Readings no run reaches with nobody lost: one line, not an item each; a reading it can read stays listed.
+    const unreached = (unit: RosterUnit, id: string, r: Partial<Reading>) => reading({ unit, reading: 'at-risk', pending: true, worst: { id, chance: 0, reached: false }, ...r });
+    const blind: Readings = { ...readings, readings: [behind, unreached('lissa', lissaMs.id, {}), unreached('sully', 'support:lonqu+sully', {}), unreached('vaike', 'x', { reading: 'behind', why: 'no-change' })] };
+    const r = afterLockReadout(engine, late, state({ progress: { ...progress, chance: zero, proposals: [], readings: blind } }));
+    expect(r.items.find((i) => i.kind === 'at-risk')).toBeUndefined();
+    expect((r.items.find((i) => i.kind === 'behind') as Extract<AfterLockItem, { kind: 'behind' }>).rows.map((x) => x.key)).toEqual(['behind:chrom']);
+    expect(r.items.find((i) => i.kind === 'unread')).toEqual({ kind: 'unread', text: `3 milestones (Lissa, Sully and Vaike) can’t be read until a run gets past ${label(next!.map)}: no run reaches them with nobody lost.` });
+    expect(r.nudge).toBe('1 item above still needs you (you can play anyway)');
   });
 
   it('reads open items as a nudge on Next map, never a gate', () => {

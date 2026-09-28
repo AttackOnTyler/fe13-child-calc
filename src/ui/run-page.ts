@@ -403,6 +403,35 @@ export type WhyComparison = { readonly key: string; readonly comparison: Compari
  * weapons, the blind spots), each map's no-death chance for the runs that reach it with nobody lost, and the plan's
  * roadmap (#194). Worked out here, on the page; with the solve's Web Worker the headline is `solvedReadout`'s.
  */
+/**
+ * The search's close calls worth showing: a close call with both plans at 0% on every run (no difference, no error,
+ * under a 0% headline) and no difference in turns it would show carries no information, so it's left out until a run
+ * gets through. One that saves turns still reads (ties go to fewer expected turns).
+ */
+export function closeCallsShown(progress: Pick<SolveProgress, 'closeCalls' | 'chance'>): readonly CloseCall[] {
+  const blank = progress.chance.chance === 0;
+  return progress.closeCalls.filter((c) => !(blank && c.gain === 0 && c.margin === 0 && Math.round(Math.abs(c.turns ?? 0) * 10) === 0));
+}
+
+/** Where the runs die, most first: at most this many maps named when no run gets through. */
+const DEATH_MAPS = 3;
+
+/**
+ * When no run gets through (a 0% headline), the line the inbox leads with: where the runs die (the maps with the lowest
+ * no-death chance, the Why panel's "where the points go" by map), and the first map no run reaches with nobody lost.
+ */
+export function noRunGetsThrough(r: Pick<FlawlessChance, 'chance' | 'maps'>): { readonly text: string; readonly marks: WhyMark[] } | undefined {
+  if (r.chance > 0 || !r.maps.length) return undefined;
+  const worst = r.maps
+    .filter((m): m is typeof m & { noDeath: number } => m.noDeath !== undefined && m.noDeath < 1)
+    .sort((a, b) => a.noDeath - b.noDeath)
+    .slice(0, DEATH_MAPS);
+  const unreached = r.maps.find((m) => m.noDeath === undefined);
+  const where = worst.map((m) => `${m.label} (${noDeathText(m.noDeath)})`);
+  const text = `No run gets through with nobody lost.${where.length ? ` Where the runs die: ${listOf(where)}.` : ''}${unreached ? ` No run reaches ${unreached.label} with nobody lost.` : ''}`;
+  return { text, marks: worst.map((m): WhyMark => [noDeathText(m.noDeath), `map:${m.key}`]) };
+}
+
 export function flawlessReadout(engine: Engine, run: Run, options: FlawlessReadoutOptions = {}): FlawlessReadout {
   const { pins, ...sim } = options;
   const plan = engine.adoptedPlan(run, { ...(pins ? { pins } : {}) });
@@ -469,11 +498,13 @@ function readoutOf(
     children.length ? `Children who don’t join the simulated army (their fixed parent isn’t married in the log or the plan, or a parent isn’t simulated): ${names(children)}.` : '',
     `Rests on: ${spots.map((b) => `${b.label[0]!.toLowerCase()}${b.label.slice(1)} (${LEAN[b.lean]})`).join(', ')}.`,
   ].filter(Boolean);
-  const improvements = progress
-    ? [...progress.proposals.map((p) => `Improvement: ${p.edits.join('; ')}: ${differenceText(p.gain, p.margin, p.close, p.turns)}`), ...progress.closeCalls.map((c) => `${c.label}: ${differenceText(c.gain, c.margin, true, c.turns)}`)]
-    : [];
-  const notes = progress
-    ? [
+  const calls = progress ? closeCallsShown(progress) : [];
+  const improvements = progress ? [...progress.proposals.map((p) => `Improvement: ${p.edits.join('; ')}: ${differenceText(p.gain, p.margin, p.close, p.turns)}`), ...calls.map((c) => `${c.label}: ${differenceText(c.gain, c.margin, true, c.turns)}`)] : [];
+  const dies = noRunGetsThrough(r);
+  const notes = [
+    ...(dies ? [dies.text] : []),
+    ...(progress
+      ? [
         ...progress.pruned.map((c) => `Not tried: ${c.label} (its ceiling ${chanceText(c.ceiling)} is below the best found, ${chanceText(c.best)})`),
         ...(progress.pinCost?.pins.length
           ? [
@@ -481,14 +512,15 @@ function readoutOf(
             ]
           : []),
       ]
-    : [];
+      : []),
+  ];
   const status = progress ? (progress.done ? (progress.converged ? ' · searched' : '') : ' · searching…') : '';
   // The numbers, for the Why panel (#210), and the differences it explains: each against the plan the search started from.
   const start = progress?.start ?? progress?.best;
   const comparisons: WhyComparison[] = progress
     ? [
         ...progress.proposals.map((p) => ({ key: `proposal:${proposalId(p)}`, comparison: { kind: 'proposal' as const, label: p.edits.join('; '), gain: p.gain, margin: p.margin, runs: p.runs, ...(p.close ? { close: true } : {}), ...(p.turns !== undefined ? { turns: p.turns } : {}) }, ...(start ? { plans: { other: p.plan, base: start } } : {}) })),
-        ...progress.closeCalls.map((c) => ({ key: `close:${c.key}`, comparison: { kind: 'close-call' as const, label: c.label, gain: c.gain, margin: c.margin, runs: c.runs, close: true, ...(c.turns !== undefined ? { turns: c.turns } : {}) }, ...(start ? { plans: { other: c.plan, base: start } } : {}) })),
+        ...calls.map((c) => ({ key: `close:${c.key}`, comparison: { kind: 'close-call' as const, label: c.label, gain: c.gain, margin: c.margin, runs: c.runs, close: true, ...(c.turns !== undefined ? { turns: c.turns } : {}) }, ...(start ? { plans: { other: c.plan, base: start } } : {}) })),
         ...(progress.pinCost?.pins.length
           ? [{ key: 'pin-cost', comparison: { kind: 'pin-cost' as const, label: 'Your pins’ cost', gain: progress.pinCost.cost, margin: progress.pinCost.margin, runs: progress.pinCost.runs, close: progress.pinCost.verdict === 'close' || progress.pinCost.verdict === 'unclear' } }]
           : []),
@@ -502,13 +534,13 @@ function readoutOf(
       ...r.sideGoals.filter((g) => g.key === m.key && g.chase && g.secured !== undefined).map((g): WhyMark => [`secured ${chanceText(g.secured!)}`, `side-goal:${g.id}`]),
     ]),
     found: [] as (readonly WhyMark[])[],
-    notes: notes.map((n): WhyMark[] => (progress?.pinCost && n.startsWith('Your ') ? [[differenceText(progress.pinCost.cost, progress.pinCost.margin, progress.pinCost.verdict === 'close' || progress.pinCost.verdict === 'unclear'), 'edit:pin-cost']] : [])),
+    notes: notes.map((n): WhyMark[] => (dies && n === dies.text ? dies.marks : progress?.pinCost && n.startsWith('Your ') ? [[differenceText(progress.pinCost.cost, progress.pinCost.margin, progress.pinCost.verdict === 'close' || progress.pinCost.verdict === 'unclear'), 'edit:pin-cost']] : [])),
     comparisons,
   };
   if (progress)
     why.found = [
       ...progress.proposals.map((p): WhyMark[] => [[differenceText(p.gain, p.margin, p.close, p.turns), `edit:proposal:${proposalId(p)}`]]),
-      ...progress.closeCalls.map((c): WhyMark[] => [[differenceText(c.gain, c.margin, true, c.turns), `edit:close:${c.key}`]]),
+      ...calls.map((c): WhyMark[] => [[differenceText(c.gain, c.margin, true, c.turns), `edit:close:${c.key}`]]),
       ...why.notes,
     ];
   return {
