@@ -124,4 +124,8 @@ describe('fixing an enemy attack (#274)', () => {
     expect(r.targetHp).toBe(Math.max(0, 28 - m.worstHit * 3 - (m.doubled ? m.worstHit : 0)));
     expect(fightAs(b, barb.id, 'frederick', from, 'killed', 'missed').targetHp).toBe(0);
   });
+
+  it('a unit killed by the first strike lands no counter', () => {
+    expect(fightAs(b, barb.id, 'frederick', from, 'killed', 'hit')).toEqual({ targetHp: 0, enemyHp: barb.hp });
+  });
 });
