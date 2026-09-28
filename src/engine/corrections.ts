@@ -17,7 +17,7 @@
 import { tierOfClass } from './exp';
 import { falls } from './losses';
 import type { RosterUnit } from './roster';
-import { CORRECTION_RANGE, type CalibrationRow, type EntryForecast, type Run } from './run';
+import { CORRECTION_RANGE, mapProgress, type CalibrationRow, type EntryForecast, type Run } from './run';
 import { levelCap } from './sim/run-sim';
 
 /** One unit's learned correction, and the evidence behind it: the maps it was learned from, EXP earned and forecast (uncorrected). */
@@ -35,7 +35,8 @@ type Result = { readonly entry: string; readonly unit: RosterUnit; readonly row:
 /**
  * Every recorded result the log can read against a forecast: each entry whose forecast was for the map it records, each
  * unit the forecast fielded there that's on the entry. A unit that fell or died on the map is left out (its EXP stopped
- * there; the fall log counts it). `earned` is undefined across a class change or with no entry before.
+ * there; the fall log counts it), and so is one whose level and EXP weren't updated (`mapProgress`). `earned` counts
+ * from the join for a unit that joined on the map, and is undefined across a class change or with no entry before.
  */
 function results(run: Run): Result[] {
   return run.entries.flatMap((e, i): Result[] => {
@@ -47,9 +48,10 @@ function results(run: Run): Result[] {
     return f.exp.flatMap((row): Result[] => {
       const u = e.snapshot.units[row.unit];
       if (!u || out.has(row.unit)) return [];
-      const was = prev?.units[row.unit];
-      const earned = was && was.class === u.class && u.level >= was.level ? (u.level - was.level) * 100 + u.exp - was.exp : undefined;
-      return [{ entry: e.id, unit: row.unit, row, level: u.level + u.exp / 100, earned }];
+      // A level and EXP copied forward unchanged were most likely not updated: no result to learn from.
+      const p = mapProgress(run, i, row.unit);
+      if (!p || p.kind === 'unchanged') return [];
+      return [{ entry: e.id, unit: row.unit, row, level: u.level + u.exp / 100, earned: p.kind === 'earned' ? p.earned : undefined }];
     });
   });
 }

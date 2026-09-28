@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   EMPTY_ROSTER,
   addEntry,
+  calibrationLog,
   createEngine,
   editEntry,
   forecastBefore,
@@ -154,5 +155,24 @@ describe('What changed (#206)', () => {
 
   it('is dismissed with “got it”', () => {
     expect(whatChangedReadout(engine, withDismissedChange(played, id), progress)).toBeUndefined();
+  });
+
+  it('reads units that joined on the map from their join, and says so when a level wasn’t updated', () => {
+    // The Prologue, recorded with everything copied: Chrom and Frederick join on it at their join levels.
+    const open = addEntry(runFromRoster(facts), 'premonition', 1);
+    const prologue = { ...chance, maps: [{ key: 'prologue', label: 'Prologue' }], exp: [{ key: 'prologue', label: 'Prologue', runs: 8, groups: [], units: [{ unit: 'chrom', name: 'Chrom', priority: 'normal', exp: 150, level: { low: 2.5, median: 2.5, high: 2.5 }, kills: {} }, { unit: 'frederick', name: 'Frederick', priority: 'normal', exp: 20, level: { low: 1.2, median: 1.2, high: 1.2 }, kills: {} }] }] } as unknown as FlawlessChance;
+    const rec = addEntry(open, 'prologue', 2);
+    const eid = latestEntry(rec)!.id;
+    const kept = withEntryForecast(rec, eid, forecastBefore(open, prologue)!);
+    const joinedAt = latestEntry(rec)!.snapshot.units.chrom!;
+    const copied = whatChangedReadout(engine, kept, undefined)!.exp;
+    expect(copied[0]).toBe(`Chrom (joined on this map): level ${joinedAt.level.toFixed(1)} as it joined, not updated: record its level and EXP to compare it with the 150 EXP forecast`);
+    expect(copied.join(' ')).not.toMatch(/class change/);
+    // Chrom's level recorded: its EXP counts from the join.
+    const lv = editEntry(kept, eid, (s) => ({ ...s, units: { ...s.units, chrom: { ...joinedAt, level: joinedAt.level + 1, exp: 50 } } }), 3);
+    expect(whatChangedReadout(engine, lv, undefined)!.exp[0]).toMatch(new RegExp(`^Chrom \\(joined on this map\\): ${150 - joinedAt.exp} EXP against 150 forecast; level ${(joinedAt.level + 1.5).toFixed(1)}`));
+    // The copied-forward rows aren't learned from.
+    expect(calibrationLog(kept)).toEqual([]);
+    expect(calibrationLog(lv).map((r) => r.unit)).toEqual(['chrom']);
   });
 });

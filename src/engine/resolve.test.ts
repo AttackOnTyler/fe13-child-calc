@@ -134,7 +134,7 @@ describe('What changed (#206)', () => {
     expect(w.before).toEqual({ chance: 0.42, margin: 0.05 });
     expect(w.after).toEqual({ chance: 0.3, margin: 0.04 });
     const level = was.level + 1 + (was.exp + 30) / 100;
-    expect(w.exp).toEqual([{ unit: 'chrom', earned: 130, forecast: 120, level, spread: { low: 15.2, median: 16.1, high: 16.9 }, against: level < 15.2 ? 'below' : level > 16.9 ? 'above' : 'inside', percentile: forecastPercentile(level, { low: 15.2, median: 16.1, high: 16.9 }) }]);
+    expect(w.exp).toEqual([{ unit: 'chrom', earned: 130, progress: 'earned', joined: false, forecast: 120, level, spread: { low: 15.2, median: 16.1, high: 16.9 }, against: level < 15.2 ? 'below' : level > 16.9 ? 'above' : 'inside', percentile: forecastPercentile(level, { low: 15.2, median: 16.1, high: 16.9 }) }]);
     expect(w.readings).toEqual([{ unit: 'chrom', before: 'on-track', after: 'behind', wasPending: false, pending: false }]);
     expect(w.dismissed).toBe(false);
     expect(whatChanged(withDismissedChange(played, id))!.dismissed).toBe(true);

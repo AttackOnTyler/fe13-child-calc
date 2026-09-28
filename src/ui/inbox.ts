@@ -629,10 +629,14 @@ export function whatChangedReadout(engine: Engine, run: Run, progress: SolveProg
     ? `Flawless chance: ${chanceWithMargin(w.before)} before → ${now}${w.after ? ` (${signedPoints(w.after.chance - w.before.chance)} points)` : ''}`
     : `Flawless chance: ${now} (not worked out before the map was recorded)`;
   // A unit with no EXP forecast or earned (a Back that never struck, a unit left idle) has nothing to compare.
-  const exp = w.exp.filter((x) => x.forecast >= 0.5 || x.earned).map(
-    (x) =>
-      `${name(x.unit)}: ${x.earned === undefined ? 'EXP not comparable (a class change)' : `${x.earned} EXP`} against ${Math.round(x.forecast)} forecast; level ${lv(x.level)}, ${x.against === 'inside' ? 'inside' : x.against === 'below' ? 'below' : 'above'} the forecast’s ${lv(x.spread.low)}–${lv(x.spread.high)} (p${Math.round(x.percentile * 100)})`,
-  );
+  const exp = w.exp.filter((x) => x.forecast >= 0.5 || x.earned).map((x) => {
+    const joined = x.joined ? ' (joined on this map)' : '';
+    // Copied forward unchanged: not scored against the forecast (nor learned from).
+    if (x.progress === 'unchanged')
+      return `${name(x.unit)}${joined}: level ${lv(x.level)} as ${x.joined ? 'it joined' : 'before the map'}, not updated: record its level and EXP to compare it with the ${Math.round(x.forecast)} EXP forecast`;
+    const earned = x.progress === 'earned' ? `${x.earned} EXP` : x.progress === 'class-change' ? 'EXP not comparable (a class change)' : 'EXP not comparable (no entry before)';
+    return `${name(x.unit)}${joined}: ${earned} against ${Math.round(x.forecast)} forecast; level ${lv(x.level)}, ${x.against === 'inside' ? 'inside' : x.against === 'below' ? 'below' : 'above'} the forecast’s ${lv(x.spread.low)}–${lv(x.spread.high)} (p${Math.round(x.percentile * 100)})`;
+  });
   const readings = w.readings.map((r) => `${name(r.unit)}: ${READING_WORDS[r.before]}${r.wasPending ? '?' : ''} → ${READING_WORDS[r.after]}${r.pending ? '?' : ''}`);
   const dismissed = new Set(run.dismissedProposals ?? []);
   const found = (progress?.proposals ?? []).filter((p) => !dismissed.has(proposalId(p))).length;
