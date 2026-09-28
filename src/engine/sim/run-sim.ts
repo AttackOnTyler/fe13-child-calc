@@ -509,6 +509,8 @@ export type RunSim = {
   readonly runs: number;
   /** Each run's flawless chance, in run order, for paired comparisons on the same runs. */
   readonly samples: readonly number[];
+  /** Each run's turns, over the maps it played until it lost a unit, in run order (ties go to fewer expected turns). */
+  readonly turnSamples: readonly number[];
   readonly maps: readonly RunSimMapResult[];
   /**
    * Expected stats entering the endpoint (the last map), for the units in the army there, over the runs that reach it
@@ -1839,6 +1841,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
   const lineups: (Deployment | undefined)[] = input.maps.map(() => undefined);
   const interner = newInterner();
   const samples: number[] = [];
+  const turnSamples: number[] = [];
   const reach = input.maps.map(() => 0);
   const noDeath = input.maps.map(() => 0);
   const turns = input.maps.map(() => 0);
@@ -1892,6 +1895,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
     const hits = createRng(runSeed(rs, WEAR_STREAM));
     const state = newState(input);
     let flawless = 1;
+    let played = 0;
     for (let i = 0; i <= last; i++) {
       // A run that has lost a unit adds nothing more to the chance, the maps' chances or the endpoint's stats.
       if (flawless < LOST) break;
@@ -1927,6 +1931,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
       reach[i]! += flawless;
       noDeath[i]! += flawless * cleared;
       turns[i]! += flawless * play.turns;
+      played += play.turns;
       if (stalled) stalls[i]! += flawless;
       flawless *= cleared;
       for (const b of play.blindSpots) spots.add(b);
@@ -1937,6 +1942,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
       for (const g of step.sideGoals ?? []) if (secured(g, play)) goals.set(`${i}|${g.id}`, (goals.get(`${i}|${g.id}`) ?? 0) + 1);
     }
     samples.push(flawless < LOST ? 0 : flawless);
+    turnSamples.push(played);
   }
   const chance = samples.reduce((a, b) => a + b, 0) / n;
   const variance = n > 1 ? samples.reduce((a, b) => a + (b - chance) ** 2, 0) / (n - 1) : 0;
@@ -1949,6 +1955,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
     margin: 1.96 * Math.sqrt(variance / n),
     runs: n,
     samples,
+    turnSamples,
     blindSpots: [...spots, ...RUN_BLIND_SPOTS],
     maps: input.maps.map((m, i) => ({
       key: m.key,

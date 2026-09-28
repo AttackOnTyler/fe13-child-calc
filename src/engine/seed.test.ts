@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, addEntry, createEngine, editEntry, latestEntry, rescoreSeed, runFromRoster, withRun, withSpouse, type Plan, type RosterUnit } from './index';
+import { EMPTY_ROSTER, addEntry, createEngine, editEntry, latestEntry, TIE_TURNS, rescoreSeed, runFromRoster, withRun, withSpouse, type Plan, type RosterUnit } from './index';
 import { SKILLS } from '../game-data/skills';
 
 /**
@@ -208,7 +208,11 @@ describe('the stepping call (#198, #199)', () => {
     for (const c of s.closeCalls) {
       expect(c.runs).toBe(small.cap);
       expect(Math.abs(c.gain)).toBeLessThanOrEqual((2 * c.margin) / 1.96 + 1e-12);
+      // Ties go to fewer expected turns: a close call left is never measurably faster than the best plan.
+      expect(c.turns).toBeGreaterThan(-TIE_TURNS);
     }
+    // One that is was taken instead, as a proposal inside the noise.
+    for (const p of s.proposals.filter((x) => x.close)) expect(p.turns).toBeLessThanOrEqual(-TIE_TURNS);
     for (const p of [s.best, ...s.closeCalls.map((c) => c.plan), ...s.proposals.map((p) => p.plan)]) expect(spouseIn(p, 'vaike')).toBe('sully');
     // Nothing offered has a non-starter (#194).
     for (const p of [...s.closeCalls.map((c) => c.plan), ...s.proposals.map((p) => p.plan)])

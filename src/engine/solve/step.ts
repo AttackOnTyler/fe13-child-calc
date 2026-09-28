@@ -18,6 +18,11 @@
  * call, read "no measurable difference (−0.2 ±0.3)". A kept edit makes a new best plan and a proposal; a round with no
  * kept edit ends the search (converged).
  *
+ * **Ties go to fewer expected turns** (spec #175, The objective): an edit still unclear at the cap whose runs play at
+ * least `TIE_TURNS` fewer turns on average than the best plan's (the same runs) is kept as if better: a new best plan,
+ * offered as a proposal marked `close` (no measurable difference, with its turns). A close call carries its turns
+ * difference too. Without the runs' turns (`SearchDeps.play`), ties stay close calls.
+ *
  * **Noise:** the search's runs pick the plan, so its chance on them is inflated by the selection; the chance the step
  * shows (`chance`) is the best plan's re-scored on fresh runs (a seed derived from `seed`, never the search's), over
  * `display` runs, each time the best plan changes.
@@ -69,6 +74,9 @@ export const STEP_BUDGET = 4;
  * at the search's cap (32 runs each).
  */
 export const EDIT_COST_BUDGET = { provisional: 4, settled: 2 * SEARCH_RUNS.cap } as const;
+
+/** The fewest expected turns an edit inside the noise must save to take the tie (spec: ties go to fewer expected turns). */
+export const TIE_TURNS = 0.5;
 
 /** The seed of the re-score's fresh runs for a search's seed: never the search's own. */
 export const rescoreSeed = (seed: number): number => (seed ^ 0x5eed) >>> 0;
@@ -158,6 +166,8 @@ export type SearchDeps = {
   readonly edits: (plan: Plan, hints: EditHints) => Iterable<Edit>;
   /** Runs `first` to `first + count - 1` of a plan on the search's seed: each run's flawless chance. */
   readonly samples: (plan: Plan, first: number, count: number) => readonly number[];
+  /** The same runs with each run's turns, in place of `samples` when given: ties go to fewer expected turns. */
+  readonly play?: (plan: Plan, first: number, count: number) => { readonly samples: readonly number[]; readonly turns: readonly number[] };
   /** A plan's flawless chance on `runs` fresh runs from `seed`. */
   readonly rescore: (plan: Plan, seed: number, runs: number) => FlawlessChance;
   /** A plan's ceiling (undefined when there's none). */
@@ -217,6 +227,8 @@ export function solveStep(input: SolveStepInput, deps: SearchDeps, display: numb
   const fresh = rescoreSeed(input.seed);
 
   const stuckOf = (plan: Plan) => deps.nonStarters?.(plan) ?? [];
+  /** A plan's runs, with their turns when the engine gives them. */
+  const runsOf = (plan: Plan, first: number, count: number): { samples: readonly number[]; turns?: readonly number[] } => deps.play?.(plan, first, count) ?? { samples: deps.samples(plan, first, count) };
   const simKey = deps.simKey ?? keyOf;
   // The best plan's non-starters: an edit with more is never taken, one with fewer is taken first.
   s.stuck ??= stuckOf(s.best).map((c) => [...c]);
@@ -250,7 +262,9 @@ export function solveStep(input: SolveStepInput, deps: SearchDeps, display: numb
     const need = s.trial?.target ?? start;
     if (s.bestSamples.length < need) {
       const k = Math.min(left, need - s.bestSamples.length);
-      s.bestSamples.push(...deps.samples(s.best, s.bestSamples.length, k));
+      const r = runsOf(s.best, s.bestSamples.length, k);
+      s.bestSamples.push(...r.samples);
+      if (r.turns) (s.bestTurns ??= []).push(...r.turns);
       spent += k;
       continue;
     }
@@ -296,7 +310,9 @@ export function solveStep(input: SolveStepInput, deps: SearchDeps, display: numb
     const t = s.trial;
     if (t.samples.length < t.target) {
       const k = Math.min(left, t.target - t.samples.length);
-      t.samples.push(...deps.samples(t.plan, t.samples.length, k));
+      const r = runsOf(t.plan, t.samples.length, k);
+      t.samples.push(...r.samples);
+      if (r.turns) (t.turns ??= []).push(...r.turns);
       spent += k;
       continue;
     }
@@ -310,22 +326,30 @@ export function solveStep(input: SolveStepInput, deps: SearchDeps, display: numb
     }
     s.tried.push(t.key);
     s.trial = null;
-    if (v === 'better') {
-      if (!s.startSamples) s.startSamples = s.bestSamples;
+    // Ties go to fewer expected turns: an edit inside the noise that plays measurably faster is taken.
+    const dt = turnsDiff(s.bestTurns, t.turns, t.target);
+    const tie = v === 'unclear' && !t.stuck?.length && dt !== undefined && dt <= -TIE_TURNS;
+    if (v === 'better' || tie) {
+      if (!s.startSamples) {
+        s.startSamples = s.bestSamples;
+        s.startTurns = s.bestTurns ?? null;
+      }
       s.best = t.plan;
       s.bestSamples = t.samples;
+      s.bestTurns = t.turns;
       s.stuck = t.stuck ?? [];
       s.kept.push(t.label);
       const vs = paired(s.startSamples, s.bestSamples);
+      const vt = turnsDiff(s.startTurns ?? undefined, s.bestTurns, vs.runs);
       // Never a proposal with a non-starter: the plan it fixes on the way is kept, not offered.
       if (!s.stuck.length) {
-        s.proposals.push({ plan: t.plan, label: t.label, edits: [...s.kept], gain: vs.gain, margin: vs.margin, runs: vs.runs });
+        s.proposals.push({ plan: t.plan, label: t.label, edits: [...s.kept], gain: vs.gain, margin: vs.margin, runs: vs.runs, ...(verdictOf(vs) !== 'better' ? { close: true as const } : {}), ...(vt !== undefined ? { turns: vt } : {}) });
         s.proposals.sort((a, b) => b.gain - a.gain);
       }
       s.improved = true;
       s.scored = false;
     } else if (v === 'unclear' && !t.stuck?.length) {
-      s.closeCalls = [...s.closeCalls.filter((c) => c.key !== t.key), { key: t.key, plan: t.plan, label: t.label, gain: p.gain, margin: p.margin, runs: p.runs }];
+      s.closeCalls = [...s.closeCalls.filter((c) => c.key !== t.key), { key: t.key, plan: t.plan, label: t.label, gain: p.gain, margin: p.margin, runs: p.runs, ...(dt !== undefined ? { turns: dt } : {}) }];
     }
   }
   return {
@@ -338,6 +362,14 @@ export function solveStep(input: SolveStepInput, deps: SearchDeps, display: numb
     evaluations: spent,
     cursor: { evaluations: spentBefore + spent, search: s },
   };
+}
+
+/** The second runs' mean turns less the first's, over their first `n` runs; undefined without both. */
+function turnsDiff(a: readonly number[] | undefined, b: readonly number[] | undefined, n: number): number | undefined {
+  if (!a || !b || a.length < n || b.length < n || n < 1) return undefined;
+  let d = 0;
+  for (let i = 0; i < n; i++) d += b[i]! - a[i]!;
+  return d / n;
 }
 
 export type EditCostInput = {

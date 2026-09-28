@@ -97,6 +97,8 @@ export type Comparison = {
   readonly margin: number;
   readonly runs?: number;
   readonly close?: boolean;
+  /** The other plan's expected turns less this one's on the same runs (ties go to fewer expected turns). */
+  readonly turns?: number;
   readonly settled?: boolean;
   /** Its per-map rows can be worked out: the page holds the other plan. */
   readonly drill?: boolean;
@@ -612,6 +614,9 @@ function editExplanation(c: Resolved, key: string): Explanation | undefined {
         ? `Both plans are played on the same ${k.runs ? plural(k.runs, 'run') : 'runs'} (the same rolls), so the difference is sharper than either chance: ±${pts(k.margin)} (95%).`
         : `Two separate estimates, each with its own error: ±${pts(k.margin)} together (95%).`,
       ...(k.close ? ['A change is kept only when it gains more than twice that; this one stays inside it: no measurable difference.'] : []),
+      ...(k.turns !== undefined && Math.abs(k.turns) >= 0.05
+        ? [`Its runs play ${Math.round(Math.abs(k.turns) * 10) / 10} ${k.turns < 0 ? 'fewer' : 'more'} turns on average, on the same runs${k.close && k.kind === 'proposal' && k.turns < 0 ? ': ties go to fewer expected turns, so the search took it' : ''}.`]
+        : []),
       ...(k.settled === false ? ['Provisional: read on fewer runs; it settles as the runs double.'] : []),
       ...(k.other
         ? [`By map: each map’s share of the risk in each plan’s own ${plural(k.other.runs, 'run')}, yours less the other’s, so a gain reads positive. They add up to the two chances’ difference on those runs, not to the paired cost.`]

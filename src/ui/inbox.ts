@@ -144,14 +144,14 @@ export function inboxReadout(run: Run, state: InboxState): Inbox {
     items.push({
       kind: 'proposals',
       title: 'The search found better',
-      rows: proposals.map((p) => ({ key: proposalId(p), text: `${p.edits.join('; ')}: ${differenceText(p.gain, p.margin)}`, marks: [[differenceText(p.gain, p.margin), `edit:proposal:${proposalId(p)}`]], proposal: p })),
+      rows: proposals.map((p) => ({ key: proposalId(p), text: `${p.edits.join('; ')}: ${differenceText(p.gain, p.margin, p.close, p.turns)}`, marks: [[differenceText(p.gain, p.margin, p.close, p.turns), `edit:proposal:${proposalId(p)}`]], proposal: p })),
     });
   const calls = progress?.closeCalls ?? [];
   if (calls.length)
     items.push({
       kind: 'close-calls',
       title: 'Close calls: no measurable difference; pick whichever you like',
-      rows: calls.map((c) => ({ key: c.key, text: `${c.label}: ${differenceText(c.gain, c.margin, true)}`, marks: [[differenceText(c.gain, c.margin, true), `edit:close:${c.key}`]], call: c })),
+      rows: calls.map((c) => ({ key: c.key, text: `${c.label}: ${differenceText(c.gain, c.margin, true, c.turns)}`, marks: [[differenceText(c.gain, c.margin, true, c.turns), `edit:close:${c.key}`]], call: c })),
     });
 
   items.push(anythingElseItem(state), yourEditsItem(run, state));
@@ -479,8 +479,8 @@ export function afterLockReadout(engine: Engine, run: Run, state: InboxState): A
   const required = breaks.length > 0;
   const proposalRow = (p: PlanProposal, how = ''): FixRow => ({
     key: proposalId(p),
-    text: `${how}${p.edits.join('; ')}: ${differenceText(p.gain, p.margin)}`,
-    marks: [[differenceText(p.gain, p.margin), `edit:proposal:${proposalId(p)}`]],
+    text: `${how}${p.edits.join('; ')}: ${differenceText(p.gain, p.margin, p.close, p.turns)}`,
+    marks: [[differenceText(p.gain, p.margin, p.close, p.turns), `edit:proposal:${proposalId(p)}`]],
     proposal: p,
     ...(required ? { required: true } : {}),
   });
