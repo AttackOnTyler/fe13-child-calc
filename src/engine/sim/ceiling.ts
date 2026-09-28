@@ -23,7 +23,7 @@ import { SKILLS, type SkillId } from '../../game-data/skills';
 import type { Assumptions, BlindSpotId, RunBlindSpotId } from '../assumptions';
 import { classBaseStats } from '../child-join';
 import { childSkills, type SkillParent } from '../child-skills';
-import { classMaxStats, className, promotionsOf } from '../classes';
+import { className, effectiveCaps as classCaps, promotionsOf } from '../classes';
 import { suggestDeployment, type DeployCandidate, type Deployment } from '../deploy';
 import type { RosterUnit } from '../roster';
 import type { Foe } from '../solver';
@@ -57,11 +57,9 @@ export type Ceiling = {
   readonly blindSpots: readonly (BlindSpotId | RunBlindSpotId)[];
 };
 
-/** Effective caps: the class's max stats plus the unit's modifiers, plus 10 (not HP) with Limit Breaker. */
+/** Effective caps (`classes.ts`'s): the class's max stats plus the unit's modifiers, plus 10 (not HP) with Limit Breaker. */
 export function effectiveCaps(classId: ClassId, gender: Gender, modifiers: Modifiers, skills: readonly string[]): Record<Stat, number> {
-  const max = classMaxStats(classId, gender);
-  const lb = skills.includes('Limit Breaker') ? 10 : 0;
-  return Object.fromEntries(STATS.map((s) => [s, s === 'hp' ? max.hp : max[s] + modifiers[s] + lb])) as Record<Stat, number>;
+  return { ...classCaps(classId, gender, modifiers, skills.includes('Limit Breaker')) };
 }
 
 /** The class a unit ends in: a base class's promotion raising its class bases most (first listed on a tie), else its own. */
