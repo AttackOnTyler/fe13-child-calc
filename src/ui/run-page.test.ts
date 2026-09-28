@@ -193,6 +193,21 @@ describe('the roadmap readout (#194)', () => {
   });
 });
 
+describe('optional maps on the roadmap (#175 story 31)', () => {
+  const engine = createEngine();
+  const fresh = runFromRoster(withRun(EMPTY_ROSTER, { route: 'full-route', difficulty: 'normal', gender: 'M', asset: 'mag', flaw: 'hp' }));
+  const all = engine.mapOrder(fresh).steps.map((s) => s.map);
+  const late = all.slice(0, all.indexOf('infinite-regalia')).reduce((r, m, i) => addEntry(r, m, i + 1), fresh);
+
+  it('says whether the plan plays Infinite Regalia', () => {
+    const plan = engine.seedPlan(late);
+    expect(roadmapReadout(engine, late, plan).choices).toEqual(['Infinite Regalia (optional): skipped: played only when its rewards earn its risk']);
+    const kept = { ...plan, roadmap: { ...plan.roadmap, optional: ['infinite-regalia'] } };
+    expect(roadmapReadout(engine, late, kept).choices).toEqual(['Infinite Regalia (optional): played: the plan keeps it for its rewards']);
+    expect(roadmapReadout(engine, runFromRoster(withRun(EMPTY_ROSTER, { route: 'main-story' })), plan).choices).toEqual([]);
+  });
+});
+
 describe('readings on the roadmap (#197)', () => {
   const engine = createEngine();
   const fresh = runFromRoster(withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal', gender: 'M', asset: 'mag', flaw: 'hp' }));

@@ -21,7 +21,9 @@
  *   wishlist's. The map order is the route's template. Its class changes (#194, `plannedSeals`) take every unit to its
  *   wishlist class (a unit off the wishlist to its best promotion) by the endpoint.
  *   Its item plan (#193, `seedItems`) places each held item where it wins the wishlist the most at the endpoint,
- *   item pins kept.
+ *   item pins kept. It skips every optional map (Infinite Regalia; spec story 31): a map played is a risk the seed can
+ *   count but whose rewards it can't weigh without playing, so the search's `optional` edit plays one only when its
+ *   rewards earn its risk on the runs.
  *
  * Deterministic: the same run and pins give the same seed. Cheap: no map is played (a Full route seed takes about
  * 0.15 s, 0.2 s with Robin open, plus about 0.25 s for the builds the first time); the flawless chance is its
@@ -526,7 +528,8 @@ function keptAtEndpoint(army: ReturnType<typeof ceilingArmy>, rules: readonly Li
  */
 export function withPriorities(run: Run, ctx: SeedContext, options: SeedOptions, plan: Plan): Plan {
   const { roadmap } = plan;
-  const bare: Plan = { ...plan, roadmap: { order: roadmap.order, lineups: roadmap.lineups, seals: roadmap.seals, items: roadmap.items } };
+  const { priorities: _, ...rest } = roadmap;
+  const bare: Plan = { ...plan, roadmap: rest };
   const priorities = defaultPriorities(milestones(run, bare, ctx.assumptions), flawlessInput(run, ctx.assumptions, undefined, bare).input);
   return priorities.length ? { ...bare, roadmap: { ...bare.roadmap, priorities } } : bare;
 }

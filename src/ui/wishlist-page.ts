@@ -210,6 +210,7 @@ const KIND_TITLES: Readonly<Record<UnitEditView['kind'], string>> = {
   pair: 'Endpoint pairs',
   priority: 'EXP priority',
   place: 'Paralogue places',
+  optional: 'Optional maps',
   seal: 'Seals',
   item: 'Items',
   'side-goal': 'Side goals',

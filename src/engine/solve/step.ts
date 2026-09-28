@@ -11,7 +11,7 @@
  * its milestones and ceiling (below) counts as one evaluation.
  *
  * **The local search** tries single edits on the flawless chance, in the spec's order each round (`EDIT_KINDS`): the
- * marriages and Robin; the endpoint class, one build skill and the passed skills; the lineups, pairs, paralogue places,
+ * marriages and Robin; the endpoint class, one build skill and the passed skills; the lineups, pairs, paralogue places, optional maps,
  * seals, item uses and side goals. Each edit is compared with the best plan on the same runs (the same seed: common
  * random numbers), starting at `runs` runs: it's kept when its gain is more than twice the paired standard error,
  * dropped when its loss is, and otherwise the runs double, up to `cap`. An edit still unclear at the cap is a close
@@ -74,7 +74,7 @@ export const EDIT_COST_BUDGET = { provisional: 4, settled: 2 * SEARCH_RUNS.cap }
 export const rescoreSeed = (seed: number): number => (seed ^ 0x5eed) >>> 0;
 
 /** The kinds of edit, in the order the search tries them each round (spec #175, The joint solve). */
-export const EDIT_KINDS = ['marriage', 'robin', 'class', 'build', 'pass', 'lineup', 'pair', 'priority', 'place', 'seal', 'item', 'side-goal'] as const;
+export const EDIT_KINDS = ['marriage', 'robin', 'class', 'build', 'pass', 'lineup', 'pair', 'priority', 'place', 'optional', 'seal', 'item', 'side-goal'] as const;
 export type EditKind = (typeof EDIT_KINDS)[number];
 
 /** A single edit of a plan: what it changes (`key`, unique within a plan), how it reads, and the edited plan. */

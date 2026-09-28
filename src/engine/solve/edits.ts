@@ -21,6 +21,8 @@
  *   there) or turned the other way; a wishlist unit or a parent with no span is raised to high from the map it joins
  *   to a quarter, half or three quarters of the way (never the endpoint: a span over the whole run is everyone's).
  * - **Paralogue places:** a child paralogue (a movable step) moves one map earlier or later, never past the endpoint.
+ * - **Optional maps (spec story 31):** an optional map (Infinite Regalia) the plan skips is played, or one it plays is
+ *   skipped (`roadmap.optional`): kept only when its rewards earn its risk.
  * - **Seals:** a planned class change is needed by an earlier map (a quarter, half or three quarters of the way), or
  *   by the endpoint.
  * - **Item uses (#193):** a booster or tonic goes to another wishlist unit on its map, or its unit takes it one step
@@ -54,7 +56,7 @@ import { sealReaches } from '../sim/class-changes';
 import { mapsToS } from '../milestones';
 import { pairThresholds, pointsOfRank } from '../sim/support-growth';
 import { latestEntry, type Run } from '../run';
-import { isMarriagePin, isRuleOut, mapSpanPin, type Plan, type PlanItem, type PlanLineup, type PlanPin, type PlanPriority, type PlanRobin, type WishlistChild } from './plan';
+import { isMarriagePin, isRuleOut, keptChoices, mapSpanPin, type Plan, type PlanItem, type PlanLineup, type PlanPin, type PlanPriority, type PlanRobin, type WishlistChild } from './plan';
 import { UNAVAILABLE, genderOf, pairingsOf, placedForSupports, planFor, robinRef, type SeedContext, type SeedOptions } from './seed';
 import type { Edit, EditHints } from './step';
 import { brokenPins, lineupRules, rulesBroken } from './pins';
@@ -83,7 +85,7 @@ export function rebuilt(run: Run, ctx: SeedContext, options: SeedOptions, prev: 
   // The class changes the plan had for units still in it stay as they were (a seal edit's timing, a class edit).
   const seals = next.roadmap.seals.map((x) => prev.roadmap.seals.find((y) => y.unit === x.unit && y.seal === x.seal) ?? x);
   // The EXP priorities stay as they were (spans by map key): the priority edits move them.
-  return { ...next, wishlist: { ...next.wishlist, children }, roadmap: { ...next.roadmap, order, lineups, seals, ...(prev.roadmap.priorities ? { priorities: prev.roadmap.priorities } : {}) } };
+  return { ...next, wishlist: { ...next.wishlist, children }, roadmap: { ...next.roadmap, order, lineups, seals, ...(prev.roadmap.priorities ? { priorities: prev.roadmap.priorities } : {}), ...keptChoices(prev) } };
 }
 
 /**
@@ -357,8 +359,12 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
       }
   }
 
+  // The maps the plan plays: its order less the optional maps it skips (spec #175 story 31).
+  const keptOptional = new Set(plan.roadmap.optional ?? []);
+  const skipped = new Set(order.steps.filter((s) => s.optional && !keptOptional.has(s.key)).map((s) => s.key));
+  const keys = plan.roadmap.order.filter((k) => !skipped.has(k));
+
   // EXP priorities (#195): a span dropped or turned; a unit with none raised from its join map.
-  const keys = plan.roadmap.order;
   const spans = plan.roadmap.priorities ?? [];
   const withSpans = (next: readonly PlanPriority[]): Plan => ({ ...plan, roadmap: { ...plan.roadmap, priorities: next } });
   const spanText = (p: PlanPriority) => (p.from === p.to ? `on ${mapLabel(p.from)}` : `from ${mapLabel(p.from)} to ${mapLabel(p.to)}`);
@@ -388,9 +394,10 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
     if (!movable.has(k)) continue;
     for (const j of [i - 1, i + 1]) {
       if (j < 0 || j >= keys.length - 1) continue;
-      const next = [...keys];
-      next.splice(i, 1);
-      next.splice(j, 0, k);
+      // Before or after its neighbour on the whole order (a skipped optional map keeps its place).
+      const next = plan.roadmap.order.filter((x) => x !== k);
+      const at = next.indexOf(keys[j]!);
+      next.splice(j < i ? at : at + 1, 0, k);
       yield {
         kind: 'place',
         key: `place:${next.join(',')}`,
@@ -399,6 +406,20 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
         units: childrenAt(k),
       };
     }
+  }
+
+  // Optional maps (spec #175 story 31): one the plan skips is played, one it plays is skipped.
+  for (const s of order.steps) {
+    if (!s.optional) continue;
+    const play = !keptOptional.has(s.key);
+    const optional = play ? [...keptOptional, s.key] : [...keptOptional].filter((k) => k !== s.key);
+    yield {
+      kind: 'optional',
+      key: `optional:${s.key}:${play ? 'play' : 'skip'}`,
+      label: `${play ? 'Play' : 'Skip'} ${mapLabel(s.key)} (optional)`,
+      make: () => ({ ...plan, roadmap: { ...plan.roadmap, optional } }),
+      units: [],
+    };
   }
 
   // Seals: a class change needed by an earlier map, or by the endpoint.

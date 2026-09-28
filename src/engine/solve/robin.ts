@@ -32,7 +32,7 @@ import type { ClassId } from '../../game-data/classes';
 import { withRun, type RosterUnit, type RunFacts } from '../roster';
 import type { Run } from '../run';
 import { paired, scoreOf, verdictOf } from './paired';
-import type { Plan, PlanRobin, RobinFact, RobinLockPin, SolveCursor } from './plan';
+import { keptChoices, type Plan, type PlanRobin, type RobinFact, type RobinLockPin, type SolveCursor } from './plan';
 import { planFor, type SeedContext, type SeedOptions } from './seed';
 import { withPin } from './pins';
 import type { SolveStep } from './step';
@@ -386,6 +386,6 @@ export function withoutRobinMarriage(run: Run, ctx: SeedContext, options: SeedOp
   const order = [...plan.roadmap.order].sort().join() === [...next.roadmap.order].sort().join() ? plan.roadmap.order : next.roadmap.order;
   const at = new Map(order.map((k, i) => [k, i]));
   lineups.sort((a, b) => (at.get(a.key) ?? 0) - (at.get(b.key) ?? 0));
-  return { ...next, roadmap: { ...next.roadmap, order, lineups } };
+  return { ...next, roadmap: { ...next.roadmap, order, lineups, ...keptChoices(plan) } };
 }
 

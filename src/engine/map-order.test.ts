@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, addEntry, createEngine, runFromRoster, withRun, type MapOrderStep, type Route } from './index';
+import { EMPTY_ROSTER, addEntry, createEngine, runFromRoster, withRun, type MapOrderStep, type Plan, type Route } from './index';
 
 const engine = createEngine();
 const facts = (route: Route | null) => withRun(EMPTY_ROSTER, { gender: 'M', asset: 'mag', flaw: 'str', difficulty: 'lunatic', route });
@@ -80,5 +80,24 @@ describe('the map order (#179)', () => {
     const done = addEntry(once, 'apotheosis', 99);
     expect(engine.mapOrder(done).steps).toEqual([]);
     expect(engine.mapOrder(done).endpoint.key).toBe('apotheosis-secret');
+  });
+});
+
+describe('Infinite Regalia, an optional map (#175 story 31)', () => {
+  const all = engine.mapOrder(played('full-route')).steps.map((s) => s.map);
+  const late = played('full-route', ...all.slice(0, all.indexOf('infinite-regalia')));
+  const plays = (plan: Plan) => engine.flawlessChance(late, { plan, runs: 1 }).maps.map((m) => m.key);
+
+  it('is skipped unless the plan keeps it: the seed skips it, and the search can keep it or skip it again', () => {
+    const seed = engine.seedPlan(late);
+    expect(keys(engine.mapOrder(late).steps)).toEqual(['infinite-regalia', 'apotheosis', 'apotheosis-secret']);
+    expect(plays(seed)).toEqual(['apotheosis', 'apotheosis-secret']);
+    const keep = engine.editChoices(late, seed).find((e) => e.kind === 'optional')!;
+    expect(keep.label).toBe('Play Infinite Regalia (optional)');
+    const kept = keep.make();
+    expect(plays(kept)).toEqual(['infinite-regalia', 'apotheosis', 'apotheosis-secret']);
+    const skip = engine.editChoices(late, kept).find((e) => e.kind === 'optional')!;
+    expect(skip.label).toBe('Skip Infinite Regalia (optional)');
+    expect(plays(skip.make())).toEqual(['apotheosis', 'apotheosis-secret']);
   });
 });
