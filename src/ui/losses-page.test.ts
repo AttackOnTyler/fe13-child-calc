@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_ASSUMPTIONS,
   EMPTY_ROSTER,
   addEntry,
   createEngine,
@@ -18,7 +19,7 @@ import {
 } from '../engine';
 import { afterLockReadout, whatChangedReadout, type AfterLockItem, type InboxState } from './inbox';
 import { lossBannerText } from './prep-page';
-import { lossesRecorded, type SolveProgress } from './run-page';
+import { lossesRecorded, withMapRecorded, type SolveProgress } from './run-page';
 
 /**
  * Losses on the Run view and Prepare (#208), as the pages write them: the loss item on top of the inbox, What it cost
@@ -134,5 +135,17 @@ describe('a loss early in a fresh run (#208, runthrough)', () => {
     expect(l.same).toBe(false);
     expect(l.changes).toContain('Gregor and Lissa no longer marry');
     expect(l.note).not.toMatch(/nothing to change/);
+  });
+
+  it('holds the plan when a map is recorded before the solve had one, so the loss still reads against it', () => {
+    // Premonition and the Prologue recorded at once after the Lock, no solve progress on the page yet.
+    const ctx = (r: Run) => ({ engine, run: r, now: () => 1, assumptions: DEFAULT_ASSUMPTIONS });
+    const premonition = withMapRecorded(ctx(locked), 'premonition');
+    expect(premonition.adopted?.wishlist.marriages).toContainEqual(['gregor', 'lissa']);
+    const prologue = withMapRecorded(ctx(premonition), 'prologue');
+    const dead = recordFallen(prologue, latestEntry(prologue)!.id, 'lissa', 3);
+    const l = itemOf(dead, 'loss', { progress: searching })!;
+    expect(l.lines[0]).toMatch(/^It broke .*Lissa/);
+    expect(l.changes).toContain('Gregor and Lissa no longer marry');
   });
 });
