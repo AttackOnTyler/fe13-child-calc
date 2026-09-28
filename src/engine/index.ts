@@ -54,7 +54,7 @@ import { simMapById, type SimMapOptions } from './sim/sim-map';
 import { runSeed } from './sim/random';
 import { planLineups, simulateRuns, withStress, type RunSim, type RunSimInput } from './sim/run-sim';
 import { mapUpkeep, type MapUpkeep } from './sim/upkeep';
-import { FLAWLESS_RUNS, FLAWLESS_SEED, flawlessCeiling, flawlessChance, flawlessInput, runItemSources, sureIncome, unitGrowths, type FlawlessChance, type FlawlessOptions } from './flawless';
+import { FLAWLESS_RUNS, FLAWLESS_SEED, flawlessCeiling, flawlessChance, flawlessInput, runItemSources, sureIncome, unitGrowths, withPlanRobin, type FlawlessChance, type FlawlessOptions } from './flawless';
 import { openLosses, type LossItem } from './losses';
 import { lossPlan, steppingIn } from './solve/loss';
 import { whatItCost, type WhatItCost } from './what-it-cost';
@@ -70,7 +70,7 @@ import { milestoneMoves, planBreaks, sameWishlist, suggestedEdit, type Milestone
 import type { SuggestedPin } from './exp-forecast';
 import { brokenPins, livePins, pinKey, runPins, withPin, withoutPins } from './solve/pins';
 import { ROBIN_EXTRA, ROBIN_SOLVE, withRobinLock, robinKey, robinLock, robinOptions, robinStep, wishlistDifference, withoutRobinMarriage, type RobinCost, type RobinCursor, type RobinInput, type RobinOption, type RobinPick, type RobinStep, type SolvedRobin, type WishlistDifference } from './solve/robin';
-import { FORCED_UNITS, childrenOf, coveredLineup, hasUtility, planWithout, reservesStep, withoutUnits, worthStep, type ReservesInput, type ReservesStep, type WorthInput, type WorthStep, type WorthVariant } from './solve/worth';
+import { FORCED_UNITS, WORTH_RESOLVE, childrenOf, coveredLineup, hasUtility, planWithout, reservesStep, runWithout, withoutUnits, worthStep, type WorthResolve, type ReservesInput, type ReservesStep, type WorthInput, type WorthStep, type WorthVariant } from './solve/worth';
 import type { Plan, PlanLineup, PlanPin, PlanPriority, PlanRobin } from './solve/plan';
 import { checksStep, editChoicesStep, lossStep, pinCostStep, readingsStep, unitEditsStep, type ChecksStep, type ChecksStepInput, type EditChoicesStepInput, type EditsStep, type LossStep, type LossStepInput, type PinCostStep, type PinCostStepInput, type ReadingsStep, type ReadingsStepInput, type UnitEditsStepInput } from './background';
 import { beforeMapItems, itemPlanOf, type BeforeMapItem, type ItemPlan, type ItemUsed } from './item-plan';
@@ -224,7 +224,7 @@ export type { ClassMilestone, Milestone, MilestonePoint, RecruitMilestone, SealS
 export { QUIET_POINTS, blindSpotsTouching, milestoneWords, riskSplit, type Comparison, type ExplainContext, type Explanation, type ExplanationFormat, type ExplanationKind, type ExplanationRow } from './explain';
 export { EDIT_COST_BUDGET, EDIT_KINDS, SEARCH_RUNS, rescoreSeed, SOLVE_SECONDS, STEP_BUDGET, TIE_TURNS, type EditCost, type EditCostInput, type EditKind, type PinCost, type PinCostInput, type SolveStep, type SolveStepInput, type UnitEdit } from './solve/step';
 export type { ChecksCursor, ChecksStep, ChecksStepInput, EditChoicesStepInput, EditListing, EditsCursor, EditsStep, LossCursor, LossStep, LossStepInput, PinCostStep, PinCostStepInput, ReadingsCursor, ReadingsStep, ReadingsStepInput, SearchCursor, UnitEditsStepInput } from './background';
-export { FORCED_UNITS, LIKELY_LOSSES, type LikelyLoss, type ReserveReading, type ReservesCursor, type ReservesInput, type ReservesStep, type UnitWorth, type WorthCursor, type WorthInput, type WorthStep } from './solve/worth';
+export { FORCED_UNITS, LIKELY_LOSSES, WORTH_RESOLVE, type WorthResolve, type LikelyLoss, type ReserveReading, type ReservesCursor, type ReservesInput, type ReservesStep, type UnitWorth, type WorthCursor, type WorthInput, type WorthStep } from './solve/worth';
 export { BLIND_SPOTS, STRESS_TESTS, type BlindSpot, type BlindSpotId, type BlindSpotTouch, type RunBlindSpotId, type StressTest } from './assumptions';
 export { bestWeapon, classTypes, dangerFlags, foeKey, foeOf, foesOf, matchup, pairUpBonus, statValue, type DangerFlag, type Fighter, type Foe, type Matchup } from './solver';
 export {
@@ -662,15 +662,17 @@ export type Engine = {
   editChoices(run: Run, plan: Plan, options?: SeedOptions & { readonly riskiest?: readonly string[]; readonly seed?: number }): readonly UnitEdit[];
   /**
    * Each unit's worth and utility on a plan (#202), within a budget of evaluations: the flawless chance lost without it
-   * (removed from every lineup where it's optional, its children with it, its spouse re-matched, the wishlist rebuilt
-   * and the roadmap re-solved greedily where it was named), and the part lost when it fights but takes no sustain (staff, potion), Dance
+   * (removed from every lineup where it's optional, its children with it, its spouse re-matched, the wishlist rebuilt,
+   * the roadmap re-solved greedily where it was named, then improved by a bounded local search: `WORTH_RESOLVE`, each
+   * unit's `resolve`), and the part lost when it fights but takes no sustain (staff, potion), Dance
    * or Rally action, both on the plan's own runs (paired, ±95%). Chrom and Robin read forced. Every unit in any of the
    * plan's lineups has one. Pass the returned cursor to the next step until converged (runs double to `cap`).
    */
   unitWorth(input: WorthInput): WorthStep;
   /**
    * The plan a unit's worth is read against (#202): without the unit and the children it takes with it, its spouse
-   * re-matched, the wishlist rebuilt and the roadmap re-solved greedily where it was named (for the worth's drill-down).
+   * re-matched, the wishlist rebuilt and the roadmap re-solved greedily where it was named: the start of the worth's
+   * bounded re-solve (`WORTH_RESOLVE`), before its search.
    */
   worthPlan(run: Run, plan: Plan, unit: RosterUnit, options?: { readonly pins?: readonly PlanPin[] }): Plan;
   /** The same over a hand-built army and maps: a unit is removed with the children it parents (tests). */
@@ -1275,12 +1277,12 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
    * projection across steps): the plan, the plan without a unit (and the children it takes), the unit idle, and a
    * reserve stepping into a lost unit's slot. Kept per run, the oldest going first.
    */
-  const worthHeld = new WeakMap<Run, { inputs: Map<string, RunSimInput>; plans: Map<string, Plan> }>();
-  const worthVariants = (run: Run, plan: Plan, pins: readonly PlanPin[] | undefined) => {
+  const worthHeld = new WeakMap<Run, { inputs: Map<string, RunSimInput>; plans: Map<string, Plan>; resolved: Map<string, { plan: Plan; resolve: WorthResolve }>; runs: Map<string, Run> }>();
+  const worthVariants = (run: Run, plan: Plan, pins: readonly PlanPin[] | undefined, seed: number = FLAWLESS_SEED) => {
     let held = worthHeld.get(run);
-    if (!held) worthHeld.set(run, (held = { inputs: new Map(), plans: new Map() }));
-    const { inputs, plans } = held;
-    const planKey = JSON.stringify([plan, pins ?? []]);
+    if (!held) worthHeld.set(run, (held = { inputs: new Map(), plans: new Map(), resolved: new Map(), runs: new Map() }));
+    const { inputs, plans, resolved, runs } = held;
+    const planKey = JSON.stringify([plan, pins ?? [], seed]);
     const keep = <T,>(m: Map<string, T>, k: string, make: () => T): T => {
       let x = m.get(`${planKey}|${k}`);
       if (x !== undefined) m.delete(`${planKey}|${k}`);
@@ -1298,10 +1300,20 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     const goneOf = (u: RosterUnit) => new Set<RosterUnit>([u, ...childrenOf(plan, u, recruited)]);
     const options = { ...(pins ? { pins } : {}) };
     const without = (u: RosterUnit) => keep(plans, `without:${u}`, () => planWithout(run, seedContext(run), options, plan, goneOf(u), recorded));
+    /**
+     * The plan without a unit, re-solved by a bounded local search (`WORTH_RESOLVE`): the search's own stepping call
+     * from the greedy re-solve, over the run with the unit (and the children it takes) gone.
+     */
+    const resolve = (u: RosterUnit) =>
+      keep(resolved, `resolved:${u}`, () => {
+        const lost = keep(runs, `run:${u}`, () => runWithout(withPlanRobin(run, plan), goneOf(u)));
+        const s = engine.solveStep({ run: lost, plan: without(u), ...(pins ? { pins } : {}), budget: WORTH_RESOLVE.budget, seed, runs: WORTH_RESOLVE.runs, cap: WORTH_RESOLVE.runs, display: WORTH_RESOLVE.display });
+        return { plan: s.best, resolve: { budget: WORTH_RESOLVE.budget, evaluations: s.evaluations, kept: s.cursor.search?.kept ?? [] } };
+      });
     const inputOf = (v: WorthVariant): RunSimInput => {
       if (v.kind === 'plan') return base;
       if (v.kind === 'idle') return keep(inputs, `idle:${v.unit}`, () => ({ ...base, idle: [v.unit] }));
-      if (v.kind === 'without') return keep(inputs, `without:${v.unit}`, () => withoutUnits(inputFor(without(v.unit)), goneOf(v.unit)));
+      if (v.kind === 'without') return keep(inputs, `without:${v.unit}`, () => withoutUnits(inputFor(resolve(v.unit).plan), goneOf(v.unit)));
       return keep(inputs, `cover:${v.loss}:${v.reserve ?? '-'}`, () => {
         const p = without(v.loss);
         const l = coveredLineup(plan, v.loss, goneOf(v.loss), v.reserve);
@@ -1317,7 +1329,9 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       const c = base.maps.flatMap((m) => m.children ?? []).find((x) => x.id === u);
       return hasUtility({ classId: c?.startClass ?? (u in CHILD_UNITS ? CHILD_UNITS[u as ChildId].defaultClassSet[0]! : 'villager'), skills: [], ...(c?.items ? { items: c.items } : {}) }, classes);
     };
-    return { base, recruited, goneOf, inputOf, utility, without };
+    /** Building a variant (`WorthDeps.build`): a plan without a unit spends its re-solve. */
+    const build = (v: WorthVariant) => (v.kind === 'without' ? { evaluations: 1 + resolve(v.unit).resolve.evaluations, resolve: resolve(v.unit).resolve } : { evaluations: 1 });
+    return { base, recruited, goneOf, inputOf, utility, without, build };
   };
   /** Every map's lineup on a plan's roadmap: its own where it names one, else the greedy lineup its projection picks. */
   const lineupsOf = (run: Run, plan: Plan, seed: number): PlanLineup[] => {
@@ -2030,8 +2044,9 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     },
     unitWorth: (input) => {
       const { run, plan, seed, pins } = input;
-      const v = worthVariants(run, plan, pins);
+      const v = worthVariants(run, plan, pins, seed);
       return worthStep(input, {
+        build: v.build,
         subjects: () => {
           // Every unit in any of the plan's lineups, and its wishlist: those the plan fields (not a map's own setup).
           const units = new Set<RosterUnit>(plan.wishlist.units.map((w) => w.unit));
@@ -2145,7 +2160,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       });
     },
     worthChance: (run, plan, unit, options = {}) => {
-      const v = worthVariants(run, plan, options.pins);
+      const v = worthVariants(run, plan, options.pins, options.seed ?? FLAWLESS_SEED);
       return simulateRuns(v.inputOf(options.idle ? { kind: 'idle', unit } : { kind: 'without', unit }), options.seed ?? FLAWLESS_SEED, options.runs ?? FLAWLESS_RUNS, assumptions);
     },
     suggestedEdit: (run, plan, pin) =>

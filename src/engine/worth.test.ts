@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, STATS, addEntry, createEngine, itemByName, runFromRoster, withRun, type ArmyUnit, type ChildRecruit, type Foe, type Plan, type RosterUnit, type RunSimInput, type RunSimMap, type SimFoeGroup, type SimMap, type Stat } from './index';
+import { EMPTY_ROSTER, STATS, WORTH_RESOLVE, addEntry, createEngine, itemByName, runFromRoster, withRun, type ArmyUnit, type ChildRecruit, type Foe, type Plan, type RosterUnit, type RunSimInput, type RunSimMap, type SimFoeGroup, type SimMap, type Stat } from './index';
 
 /**
  * Unit worth, utility and reserves (#202): hand-built armies and maps where the answer can be worked by hand,
@@ -158,6 +158,19 @@ describe('worth and reserves of a recorded run’s plan, through the facade (#20
     // Read on the plan's runs: a unit read so far has a worth on as many runs as the plan's.
     for (const u of s.units.filter((x) => x.worth !== undefined)) expect(u.runs).toBe(2);
     expect(JSON.parse(JSON.stringify(s.cursor))).toEqual(s.cursor);
+  });
+
+  it('re-solves the plan without the unit by a bounded local search, and says what it spent (spec: the roadmap re-solved)', () => {
+    const s = engine.unitWorth({ ...small, budget: 3 + 1 + WORTH_RESOLVE.budget + 2 });
+    expect(s.evaluations).toBeLessThanOrEqual(3 + 1 + WORTH_RESOLVE.budget + 2);
+    const read = s.units.filter((u) => u.worth !== undefined);
+    expect(read.length).toBeGreaterThan(0);
+    for (const u of read) {
+      expect(u.resolve).toBeDefined();
+      expect(u.resolve!.budget).toBe(WORTH_RESOLVE.budget);
+      expect(u.resolve!.evaluations).toBeGreaterThan(0);
+      expect(u.resolve!.evaluations).toBeLessThanOrEqual(WORTH_RESOLVE.budget);
+    }
   });
 
   it('chooses reserves among units off the wishlist against its likely losses, setting no EXP aside', () => {

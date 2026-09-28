@@ -7,10 +7,12 @@
  *   forces is re-chosen: its children the plan still has to recruit go with it (so a parent's worth includes its
  *   children), its spouse marries again (the seed's match for the spouse, every other couple kept), and the wishlist is
  *   rebuilt for that army (its slot refilled at caps, children's passes kept where the parents are the same). The
- *   roadmap is re-solved greedily: each map whose named lineup had a removed unit goes back to the greedy lineup (the
- *   seed's), the endpoint's is the rebuilt wishlist's; its order, seals and item uses otherwise stay. A bounded local
- *   search of the new plan isn't run (a stated simplification: worth reads a little high by what the search would win
- *   back). Chrom and Robin read "forced": no plan has them removed.
+ *   roadmap is first re-solved greedily: each map whose named lineup had a removed unit goes back to the greedy lineup
+ *   (the seed's), the endpoint's is the rebuilt wishlist's; its order, seals and item uses otherwise stay. Then the
+ *   search's own stepping call (`solveStep`) improves that plan for `WORTH_RESOLVE.budget` evaluations (a couple of
+ *   edits on a few runs), over the run with the unit gone: a bounded re-solve, not the spec's full one, so worth still
+ *   reads a little high by what a full search would win back (each unit's `resolve` says what it spent and kept).
+ *   Chrom and Robin read "forced": no plan has them removed.
  * - **Utility:** the part of worth lost when the unit still fights but takes none of its sustain (a staff's heal,
  *   Fortify or Rescue, a potion), Dance or Rally actions (`RunSimInput.idle`); a unit with none of those in its kit or
  *   its classes has none.
@@ -46,6 +48,16 @@ import { potionHeal } from '../sim/sustain';
 /** Units that read "forced" (spec #175, Unit worth): the game fields them on nearly every map. */
 export const FORCED_UNITS: readonly RosterUnit[] = ['chrom', 'robin'];
 
+/**
+ * The bounded re-solve of a plan without a unit (spec #175, Unit worth: "the roadmap re-solved in full"): the search's
+ * stepping call for `budget` evaluations, edits compared on `runs` runs (no doubling), its best re-scored on `display`
+ * fresh runs. About two single edits: the most a worth over every unit affords in the Web Worker's idle time.
+ */
+export const WORTH_RESOLVE = { budget: 16, runs: 4, display: 2 } as const;
+
+/** What a worth's re-solve spent: its budget, the evaluations it used, and the edits it kept. */
+export type WorthResolve = { readonly budget: number; readonly evaluations: number; readonly kept: readonly string[] };
+
 /** The likely losses reserves are ranked against: the wishlist units the runs lose most often, this many at most. */
 export const LIKELY_LOSSES = 3;
 
@@ -76,9 +88,11 @@ export type UnitWorth = {
   readonly children: readonly RosterUnit[];
   /** Read at the run cap. */
   readonly settled: boolean;
+  /** How the plan without it was re-solved (the bounded search), once read. */
+  readonly resolve?: WorthResolve;
 };
 
-type Row = { readonly key: string; readonly variant: WorthVariant; samples: number[]; built: boolean };
+type Row = { readonly key: string; readonly variant: WorthVariant; samples: number[]; built: boolean; resolve?: WorthResolve };
 
 /** Rows of variants filled pass by pass: the plan's runs first (unless there are none to read), then each row's, doubling to the cap. */
 type Passes = { base: number[] | null; rows: Row[]; target: number };
@@ -118,6 +132,11 @@ export type WorthStep = {
 export type WorthDeps = {
   readonly subjects: () => readonly WorthSubject[];
   readonly samples: (variant: WorthVariant, first: number, count: number) => readonly number[];
+  /**
+   * Builds a variant, returning the evaluations it spent (a plan without a unit: its re-solve's, `WORTH_RESOLVE`) and
+   * the re-solve's account; 1 evaluation, no re-solve, by default.
+   */
+  readonly build?: (variant: WorthVariant) => { readonly evaluations: number; readonly resolve?: WorthResolve };
 };
 
 const variantKey = (v: WorthVariant): string =>
@@ -128,7 +147,7 @@ const variantKey = (v: WorthVariant): string =>
  * first counts one), then the next pass at twice the runs, up to the cap. Returns the evaluations spent and whether
  * every row is at the cap.
  */
-function fill(p: Passes, budget: number, cap: number, samples: WorthDeps['samples']): { spent: number; done: boolean } {
+function fill(p: Passes, budget: number, cap: number, samples: WorthDeps['samples'], build?: WorthDeps['build']): { spent: number; done: boolean } {
   let spent = 0;
   for (;;) {
     if (spent >= budget) return { spent, done: false };
@@ -142,8 +161,12 @@ function fill(p: Passes, budget: number, cap: number, samples: WorthDeps['sample
     const r = p.rows.find((x) => x.samples.length < p.target);
     if (r) {
       if (!r.built) {
+        // A re-solve is one piece: it waits for the next step unless it's this step's first.
+        if (build && r.variant.kind === 'without' && spent > 0 && left < 1 + WORTH_RESOLVE.budget) return { spent, done: false };
+        const b = build?.(r.variant);
         r.built = true;
-        spent += 1;
+        if (b?.resolve) r.resolve = b.resolve;
+        spent += b?.evaluations ?? 1;
         continue;
       }
       const k = Math.min(left, p.target - r.samples.length);
@@ -186,17 +209,19 @@ export function worthStep(input: Pick<WorthInput, 'budget' | 'runs' | 'cap' | 'c
       ),
     };
   if (passes && !converged) {
-    const f = fill(passes, budget - spent, cap, deps.samples);
+    const f = fill(passes, budget - spent, cap, deps.samples, deps.build);
     spent += f.spent;
     converged = f.done;
   }
+  const resolveOf = (u: RosterUnit) => passes?.rows.find((r) => r.variant.kind === 'without' && r.variant.unit === u)?.resolve;
   const rowOf = (kind: 'without' | 'idle', u: RosterUnit) => passes?.rows.find((r) => r.variant.kind === kind && r.variant.unit === u)?.samples;
   const units: UnitWorth[] = (subjects ?? []).map((s) => {
     if (s.forced) return { unit: s.unit, forced: true, worth: undefined, margin: undefined, utility: undefined, utilityMargin: undefined, runs: 0, children: s.children, settled: true };
     const w = lost(passes!.base!, rowOf('without', s.unit));
     const u = s.utility ? lost(passes!.base!, rowOf('idle', s.unit)) : w && { value: 0, margin: 0, runs: w.runs };
     const runs = Math.min(w?.runs ?? 0, u?.runs ?? Infinity);
-    return { unit: s.unit, forced: false, worth: w?.value, margin: w?.margin, utility: u?.value, utilityMargin: u?.margin, runs, children: s.children, settled: runs >= cap };
+    const resolve = resolveOf(s.unit);
+    return { unit: s.unit, forced: false, worth: w?.value, margin: w?.margin, utility: u?.value, utilityMargin: u?.margin, runs, children: s.children, settled: runs >= cap, ...(resolve ? { resolve } : {}) };
   });
   units.sort((a, b) => Number(a.forced) - Number(b.forced) || (b.worth ?? -Infinity) - (a.worth ?? -Infinity) || a.unit.localeCompare(b.unit));
   return {
@@ -363,7 +388,7 @@ export function childrenOf(plan: Plan, unit: RosterUnit, recruited: ReadonlySet<
 }
 
 /** The run with some units gone (dead): the seed and the wishlist rebuild never field them. */
-const runWithout = (run: Run, gone: ReadonlySet<RosterUnit>): Run => ({ ...run, roster: [...gone].reduce((r, u) => withState(r, u, 'dead'), run.roster) });
+export const runWithout = (run: Run, gone: ReadonlySet<RosterUnit>): Run => ({ ...run, roster: [...gone].reduce((r, u) => withState(r, u, 'dead'), run.roster) });
 
 /**
  * The plan without a unit and the children it takes with it (see the module comment): the spouse re-matched (unless

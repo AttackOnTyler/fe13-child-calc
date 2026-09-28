@@ -726,7 +726,10 @@ function worthExplanation(c: Resolved, unit: RosterUnit): Explanation | undefine
     ...(w.margin !== undefined ? { margin: w.margin } : {}),
     lead: `The flawless chance the plan loses without ${name}, over every lineup ${name} plays in${kids.length ? `, ${listOf(kids)} included (a parent’s worth includes its children)` : ''}.`,
     math: [
-      `${name} is removed from every lineup where it’s optional${kids.length ? `, with ${listOf(kids)}` : ''}, its place in the wishlist refilled, its spouse re-matched and the roadmap re-solved where it was named; both plans are played on the same ${plural(w.runs, 'run')}${w.margin !== undefined ? ` (±${pts(w.margin)}, 95%)` : ''}.`,
+      `${name} is removed from every lineup where it’s optional${kids.length ? `, with ${listOf(kids)}` : ''}, its place in the wishlist refilled, its spouse re-matched and each lineup it was named in put back to the greedy one; both plans are played on the same ${plural(w.runs, 'run')}${w.margin !== undefined ? ` (±${pts(w.margin)}, 95%)` : ''}.`,
+      w.resolve
+        ? `The plan without ${name} is then re-solved by a bounded local search, not in full: ${plural(w.resolve.evaluations, 'simulated run')} of a ${w.resolve.budget}-run budget, ${w.resolve.kept.length ? `keeping ${listOf([...w.resolve.kept])}` : 'no edit kept'}. A full search could win more back, so this worth may read a little high.`
+        : 'The plan without it is re-solved by a bounded local search (a couple of edits) before its runs are read; until then this worth isn’t settled.',
       ...(w.utility !== undefined && w.utility > 0 ? [`Its utility, ${pts(w.utility)} points, is the part lost when it still fights but takes none of its sustain (a heal, a potion, Rescue), Dance or Rally actions.`] : []),
       ...(w.settled ? [] : ['Provisional: its runs double until it settles.']),
       other
