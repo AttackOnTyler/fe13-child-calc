@@ -72,7 +72,7 @@ import { SEAL_LEVEL, classChangeGains, plannedSeals, sealReaches } from './class
 import { childJoinStats, classBaseStats, type JoinParent } from '../child-join';
 import { childParalogueGates, isChildParalogue } from '../child-paralogues';
 import { childSkills, type SkillParent } from '../child-skills';
-import { classGrowths, classMaxStats, className } from '../classes';
+import { classGrowths, className, effectiveCaps } from '../classes';
 import { leadsByDefault, suggestDeployment, type DeployCandidate, type Deployment, type Pair } from '../deploy';
 import { COUNT_CAP, combatExp, danceExp, mapExpFoe, secondSealCount, staffExp, tierBonus, type ExpFoe } from '../exp';
 import type { Difficulty, RosterUnit } from '../roster';
@@ -631,12 +631,8 @@ function totalGrowth(u: Live, assumptions: Assumptions, s: Stat): number {
 }
 
 /** Effective caps: the class's max stats plus the unit's modifiers, plus 10 (not HP) with Limit Breaker equipped. */
-function capsOf(u: Live): Record<Stat, number> {
-  const max = classMaxStats(u.classId, u.base.gender);
-  const lb = u.skills.includes('Limit Breaker') ? 10 : 0;
-  const out = {} as Record<Stat, number>;
-  for (const s of STATS) out[s] = s === 'hp' ? max.hp : max[s] + u.base.modifiers[s] + lb;
-  return out;
+function capsOf(u: Live): Readonly<Record<Stat, number>> {
+  return effectiveCaps(u.classId, u.base.gender, u.base.modifiers, u.skills.includes('Limit Breaker'));
 }
 
 /** Weapons' ids for the interner's keys (a weapon object is shared across runs). */
