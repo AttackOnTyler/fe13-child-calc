@@ -511,6 +511,11 @@ export type RunSim = {
   readonly samples: readonly number[];
   /** Each run's turns, over the maps it played until it lost a unit, in run order (ties go to fewer expected turns). */
   readonly turnSamples: readonly number[];
+  /**
+   * How far each run gets (#242), in run order: the maps it clears with nobody lost, as the sum of its chance of getting
+   * past each map (a map it doesn't play counts as passed). It still separates plans when the flawless chance reads 0%.
+   */
+  readonly clearedSamples: readonly number[];
   readonly maps: readonly RunSimMapResult[];
   /**
    * Expected stats entering the endpoint (the last map), for the units in the army there, over the runs that reach it
@@ -1842,6 +1847,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
   const interner = newInterner();
   const samples: number[] = [];
   const turnSamples: number[] = [];
+  const clearedSamples: number[] = [];
   const reach = input.maps.map(() => 0);
   const noDeath = input.maps.map(() => 0);
   const turns = input.maps.map(() => 0);
@@ -1896,6 +1902,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
     const state = newState(input);
     let flawless = 1;
     let played = 0;
+    let far = 0;
     for (let i = 0; i <= last; i++) {
       // A run that has lost a unit adds nothing more to the chance, the maps' chances or the endpoint's stats.
       if (flawless < LOST) break;
@@ -1913,6 +1920,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
       // A child paralogue whose gates don't hold in this run isn't played.
       if (!extra) {
         check(state, i, 'end');
+        far += flawless;
         continue;
       }
       entering[i]!++;
@@ -1934,6 +1942,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
       played += play.turns;
       if (stalled) stalls[i]! += flawless;
       flawless *= cleared;
+      far += flawless;
       for (const b of play.blindSpots) spots.add(b);
       const earned = afterMap(state, step, i, play, rng, input.difficulty, assumptions, mapUpkeep(step.map, play, lineup, hits, assumptions['tome-miss-use']));
       tallyExp((expTallies[i] ??= { runs: 0, groups: play.groups, units: new Map() }), state, play, earned);
@@ -1943,6 +1952,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
     }
     samples.push(flawless < LOST ? 0 : flawless);
     turnSamples.push(played);
+    clearedSamples.push(far);
   }
   const chance = samples.reduce((a, b) => a + b, 0) / n;
   const variance = n > 1 ? samples.reduce((a, b) => a + (b - chance) ** 2, 0) / (n - 1) : 0;
@@ -1956,6 +1966,7 @@ export function simulateRuns(input: RunSimInput, seed: number, runs: number, ass
     runs: n,
     samples,
     turnSamples,
+    clearedSamples,
     blindSpots: [...spots, ...RUN_BLIND_SPOTS],
     maps: input.maps.map((m, i) => ({
       key: m.key,

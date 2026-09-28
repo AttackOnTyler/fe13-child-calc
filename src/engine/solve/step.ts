@@ -23,6 +23,11 @@
  * offered as a proposal marked `close` (no measurable difference, with its turns). A close call carries its turns
  * difference too. Without the runs' turns (`SearchDeps.play`), ties stay close calls.
  *
+ * **At 0%, how far runs get (#242):** when every run of both plans is lost somewhere (0% ±0: no difference, no error),
+ * the flawless chance can't rank them, and fewer turns would favour the plan whose runs die sooner. There the tie goes to
+ * the plan whose runs clear measurably more maps with nobody lost (`HowFar`, by the same paired rule), never to turns;
+ * a proposal or close call carries how much further. Without the runs' maps cleared, ties stay close calls.
+ *
  * **Noise:** the search's runs pick the plan, so its chance on them is inflated by the selection; the chance the step
  * shows (`chance`) is the best plan's re-scored on fresh runs (a seed derived from `seed`, never the search's), over
  * `display` runs, each time the best plan changes.
@@ -50,7 +55,7 @@
 import type { FlawlessChance } from '../flawless';
 import type { RosterUnit } from '../roster';
 import type { Run } from '../run';
-import { paired, scoreOf, verdictOf } from './paired';
+import { allLost, paired, scoreOf, verdictOf, type Paired } from './paired';
 import type { CloseCall, Plan, PlanPin, PlanProposal, PrunedComp, SearchState, SolveCursor } from './plan';
 
 /**
@@ -167,7 +172,7 @@ export type SearchDeps = {
   /** Runs `first` to `first + count - 1` of a plan on the search's seed: each run's flawless chance. */
   readonly samples: (plan: Plan, first: number, count: number) => readonly number[];
   /** The same runs with each run's turns, in place of `samples` when given: ties go to fewer expected turns. */
-  readonly play?: (plan: Plan, first: number, count: number) => { readonly samples: readonly number[]; readonly turns: readonly number[] };
+  readonly play?: (plan: Plan, first: number, count: number) => { readonly samples: readonly number[]; readonly turns: readonly number[]; readonly cleared?: readonly number[] };
   /** A plan's flawless chance on `runs` fresh runs from `seed`. */
   readonly rescore: (plan: Plan, seed: number, runs: number) => FlawlessChance;
   /** A plan's ceiling (undefined when there's none). */
@@ -228,7 +233,7 @@ export function solveStep(input: SolveStepInput, deps: SearchDeps, display: numb
 
   const stuckOf = (plan: Plan) => deps.nonStarters?.(plan) ?? [];
   /** A plan's runs, with their turns when the engine gives them. */
-  const runsOf = (plan: Plan, first: number, count: number): { samples: readonly number[]; turns?: readonly number[] } => deps.play?.(plan, first, count) ?? { samples: deps.samples(plan, first, count) };
+  const runsOf = (plan: Plan, first: number, count: number): { samples: readonly number[]; turns?: readonly number[]; cleared?: readonly number[] } => deps.play?.(plan, first, count) ?? { samples: deps.samples(plan, first, count) };
   const simKey = deps.simKey ?? keyOf;
   // The best plan's non-starters: an edit with more is never taken, one with fewer is taken first.
   s.stuck ??= stuckOf(s.best).map((c) => [...c]);
@@ -265,6 +270,7 @@ export function solveStep(input: SolveStepInput, deps: SearchDeps, display: numb
       const r = runsOf(s.best, s.bestSamples.length, k);
       s.bestSamples.push(...r.samples);
       if (r.turns) (s.bestTurns ??= []).push(...r.turns);
+      if (r.cleared) (s.bestCleared ??= []).push(...r.cleared);
       spent += k;
       continue;
     }
@@ -313,6 +319,7 @@ export function solveStep(input: SolveStepInput, deps: SearchDeps, display: numb
       const r = runsOf(t.plan, t.samples.length, k);
       t.samples.push(...r.samples);
       if (r.turns) (t.turns ??= []).push(...r.turns);
+      if (r.cleared) (t.cleared ??= []).push(...r.cleared);
       spent += k;
       continue;
     }
@@ -326,30 +333,36 @@ export function solveStep(input: SolveStepInput, deps: SearchDeps, display: numb
     }
     s.tried.push(t.key);
     s.trial = null;
-    // Ties go to fewer expected turns: an edit inside the noise that plays measurably faster is taken.
-    const dt = turnsDiff(s.bestTurns, t.turns, t.target);
-    const tie = v === 'unclear' && !t.stuck?.length && dt !== undefined && dt <= -TIE_TURNS;
+    // Ties go to fewer expected turns: an edit inside the noise that plays measurably faster is taken. At 0% (#242) they
+    // go to the runs that get measurably further instead: there fewer turns means dying sooner.
+    const lost = allLost(s.bestSamples.slice(0, t.target), t.samples);
+    const far = lost ? howFar(s.bestCleared, t.cleared, t.target) : undefined;
+    const dt = lost ? undefined : turnsDiff(s.bestTurns, t.turns, t.target);
+    const tie = v === 'unclear' && !t.stuck?.length && (far ? verdictOf(far) === 'better' : dt !== undefined && dt <= -TIE_TURNS);
     if (v === 'better' || tie) {
       if (!s.startSamples) {
         s.startSamples = s.bestSamples;
         s.startTurns = s.bestTurns ?? null;
+        s.startCleared = s.bestCleared ?? null;
       }
       s.best = t.plan;
       s.bestSamples = t.samples;
       s.bestTurns = t.turns;
+      s.bestCleared = t.cleared;
       s.stuck = t.stuck ?? [];
       s.kept.push(t.label);
       const vs = paired(s.startSamples, s.bestSamples);
-      const vt = turnsDiff(s.startTurns ?? undefined, s.bestTurns, vs.runs);
+      const vf = allLost(s.startSamples.slice(0, vs.runs), s.bestSamples.slice(0, vs.runs)) ? howFar(s.startCleared ?? undefined, s.bestCleared, vs.runs) : undefined;
+      const vt = vf ? undefined : turnsDiff(s.startTurns ?? undefined, s.bestTurns, vs.runs);
       // Never a proposal with a non-starter: the plan it fixes on the way is kept, not offered.
       if (!s.stuck.length) {
-        s.proposals.push({ plan: t.plan, label: t.label, edits: [...s.kept], gain: vs.gain, margin: vs.margin, runs: vs.runs, ...(verdictOf(vs) !== 'better' ? { close: true as const } : {}), ...(vt !== undefined ? { turns: vt } : {}) });
+        s.proposals.push({ plan: t.plan, label: t.label, edits: [...s.kept], gain: vs.gain, margin: vs.margin, runs: vs.runs, ...(verdictOf(vs) !== 'better' ? { close: true as const } : {}), ...(vt !== undefined ? { turns: vt } : {}), ...(vf ? { cleared: { gain: vf.gain, margin: vf.margin } } : {}) });
         s.proposals.sort((a, b) => b.gain - a.gain);
       }
       s.improved = true;
       s.scored = false;
     } else if (v === 'unclear' && !t.stuck?.length) {
-      s.closeCalls = [...s.closeCalls.filter((c) => c.key !== t.key), { key: t.key, plan: t.plan, label: t.label, gain: p.gain, margin: p.margin, runs: p.runs, ...(dt !== undefined ? { turns: dt } : {}) }];
+      s.closeCalls = [...s.closeCalls.filter((c) => c.key !== t.key), { key: t.key, plan: t.plan, label: t.label, gain: p.gain, margin: p.margin, runs: p.runs, ...(dt !== undefined ? { turns: dt } : {}), ...(far ? { cleared: { gain: far.gain, margin: far.margin } } : {}) }];
     }
   }
   return {
@@ -362,6 +375,12 @@ export function solveStep(input: SolveStepInput, deps: SearchDeps, display: numb
     evaluations: spent,
     cursor: { evaluations: spentBefore + spent, search: s },
   };
+}
+
+/** How much further the second plan's runs get than the first's (#242), paired over their first `n` runs; undefined without both. */
+function howFar(a: readonly number[] | undefined, b: readonly number[] | undefined, n: number): Paired | undefined {
+  if (!a || !b || a.length < n || b.length < n || n < 1) return undefined;
+  return paired(a.slice(0, n), b.slice(0, n));
 }
 
 /** The second runs' mean turns less the first's, over their first `n` runs; undefined without both. */

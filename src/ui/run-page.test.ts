@@ -488,6 +488,29 @@ describe('the Robin alternatives on the Run view (#201)', () => {
     expect(r.lock).toBeUndefined();
   });
 
+  it('at 0%, ranks by how far runs get, says so, and says whether more solves could change the pick (#242)', () => {
+    const zero: RobinStep = {
+      ...step,
+      solved: [
+        { ...step.solved[0]!, chance: 0, margin: 0, cleared: 6.1 },
+        { ...step.solved[1]!, chance: 0, margin: 0, cleared: 3.1, cost: { gain: 0, margin: 0, runs: 16, verdict: 'close', cleared: { gain: -3, margin: 0.5, verdict: 'worse' } } },
+      ],
+      atZero: { unsolved: 2, couldGetThrough: 1 },
+    };
+    const r = robinReadout(engine, run, zero, false);
+    expect(r.solved.map((x) => x.text)).toEqual([
+      "Female, +Spd −Lck, marrying Lon'qu: 0% ±0.0, runs clear 6.1 maps · the best (the best Female Robin)",
+      "Male, +Str −Lck, marrying Sumia: 0% ±0.0, runs clear 3.1 maps · no measurable difference (0.0 ±0.0); at 0%, ranked by how far runs get: −3.0 ±0.5 maps cleared against the best · marries Robin × Sumia (not Robin × Lon'qu); fields Sumia (not Lon'qu); Frederick as Paladin (not Great Knight) (the best Male Robin)",
+    ]);
+    expect(r.atZero).toBe(
+      'Every Robin solved reads 0%, so they’re ranked by how far runs get: the maps cleared with nobody lost. 1 of the 2 not solved has a ceiling above 0% (or none read yet): solving it could find a Robin that gets a run through. Solving the other 1 could only change the ranking on how far runs get, which no ceiling bounds.',
+    );
+    expect(robinReadout(engine, run, { ...zero, atZero: { unsolved: 3, couldGetThrough: 0 } }, false).atZero).toBe(
+      'Every Robin solved reads 0%, so they’re ranked by how far runs get: the maps cleared with nobody lost. None of the 3 not solved has a ceiling above 0%: more solves can’t find a Robin that gets a run through, only change the ranking on how far runs get, which no ceiling bounds.',
+    );
+    expect(robinReadout(engine, run, step, false).atZero).toBeUndefined();
+  });
+
   it('keeps the no-Robin view as a toggle', () => {
     expect(robinReadout(engine, run, step, true).noRobin).toBe('No-Robin view: working it out…');
     const noRobin = { plan: best, chance: 0.65, margin: 0.02, cost: { gain: -0.05, margin: 0.01, runs: 16, verdict: 'worse' as const }, spouse: 'lonqu' as const };

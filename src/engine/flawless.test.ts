@@ -148,6 +148,14 @@ expect(r.maps.map((x) => x.key)).toEqual(['a', 'b']);    for (const x of r.maps)
     expect(r.maps[1]!.reach).toBeCloseTo(m.noDeath, 12);
   });
 
+  it('counts how far each run gets: its chance of getting past each map, summed (#242)', () => {
+    const r = sim([hero({ level: 20 })], [step(rout('a', [brute])), step(rout('b', [brute]))], 4);
+    expect(r.clearedSamples).toHaveLength(4);
+    for (const c of r.clearedSamples) expect(c).toBeCloseTo(m.noDeath + m.noDeath ** 2, 12);
+    // A run that gets through clears every map.
+    expect(sim([hero({ level: 20 })], [step(rout('a', [dummy(5, 2)])), step(rout('b', [dummy(5, 2)]))], 2).clearedSamples).toEqual([2, 2]);
+  });
+
   // HP grows at 30% over ten levels: at 22 HP or less the Brute's hit kills, from 23 on it doesn't.
   const risky = (runs: number, seed = 7) => sim([hero({ level: 1, growths: totals({ hp: 30 }) })], [step(rout('a', [dummy(50, 10)])), step(rout('b', [brute]))], runs, seed);
 

@@ -1937,10 +1937,10 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
           seed: () => seedFor(run, options),
           edits: (plan, hints) => planEdits(run, ctx, options, plan, hints, (p) => lineupsOf(run, p, input.seed)),
           samples: (plan, first, count) => simulateRuns(planInput(run, plan), input.seed, count, assumptions, first).samples,
-          // The same runs with their turns: ties go to fewer expected turns.
+          // The same runs with their turns (ties go to fewer expected turns) and, at 0%, how far they get (#242).
           play: (plan, first, count) => {
             const sim = simulateRuns(planInput(run, plan), input.seed, count, assumptions, first);
-            return { samples: sim.samples, turns: sim.turnSamples };
+            return { samples: sim.samples, turns: sim.turnSamples, cleared: sim.clearedSamples };
           },
           rescore: (plan, seed, runs) => planChance(run, { plan, seed, runs }),
           // Lunatic+ plays the ceiling over a few skill draws; otherwise one play is the ceiling.
@@ -2274,6 +2274,11 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
             ...(cursor ? { cursor } : {}),
           }),
         samples: (robin, plan, first, count) => simulateRuns(planInput(forRobin(robin), plan), seed, count, assumptions, first).samples,
+        // At 0% the Robins are ranked by how far runs get (#242).
+        play: (robin, plan, first, count) => {
+          const sim = simulateRuns(planInput(forRobin(robin), plan), seed, count, assumptions, first);
+          return { samples: sim.samples, cleared: sim.clearedSamples };
+        },
         noRobin: (robin, plan) => {
           const r = forRobin(robin);
           return withoutRobinMarriage(r, seedContext(r), optionsOf(r), plan);

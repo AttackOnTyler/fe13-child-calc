@@ -218,11 +218,18 @@ describe('the stepping call (#198, #199)', () => {
     for (const c of s.closeCalls) {
       expect(c.runs).toBe(small.cap);
       expect(Math.abs(c.gain)).toBeLessThanOrEqual((2 * c.margin) / 1.96 + 1e-12);
-      // Ties go to fewer expected turns: a close call left is never measurably faster than the best plan.
-      expect(c.turns).toBeGreaterThan(-TIE_TURNS);
+      // Ties go to fewer expected turns: a close call left is never measurably faster than the best plan. At 0% (#242)
+      // they go to runs that get further instead: one left never gets measurably further, and turns aren't read.
+      if (c.cleared) {
+        expect(c.turns).toBeUndefined();
+        expect(c.cleared.gain).toBeLessThanOrEqual((2 * c.cleared.margin) / 1.96 + 1e-12);
+      } else expect(c.turns).toBeGreaterThan(-TIE_TURNS);
     }
     // One that is was taken instead, as a proposal inside the noise.
-    for (const p of s.proposals.filter((x) => x.close)) expect(p.turns).toBeLessThanOrEqual(-TIE_TURNS);
+    for (const p of s.proposals.filter((x) => x.close)) {
+      if (p.cleared) expect(p.cleared.gain).toBeGreaterThan(0);
+      else expect(p.turns).toBeLessThanOrEqual(-TIE_TURNS);
+    }
     for (const p of [s.best, ...s.closeCalls.map((c) => c.plan), ...s.proposals.map((p) => p.plan)]) expect(spouseIn(p, 'vaike')).toBe('sully');
     // Nothing offered has a non-starter (#194).
     for (const p of [...s.closeCalls.map((c) => c.plan), ...s.proposals.map((p) => p.plan)])

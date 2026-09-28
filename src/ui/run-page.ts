@@ -3,7 +3,7 @@
  * holds a snapshot: every unit's class, level, EXP, stats, skills, inventory and supports, plus the convoy and gold.
  * A new entry copies the one before; editing a past entry never reaches later ones, which are flagged instead.
  */
-import type { Assumptions, Ceiling, ChildId, CloseCall, Gender, Reading, Readings, SuggestedPin, Engine, FlawlessChance, FlawlessOptions, GoldSpread, HeldItem, ItemPin, ItemPlanRow, ItemUsed, MapOrderStep, Milestone, MilestonePoint, PinCost, Plan, PlanPin, PlanProposal, PlanRobin, PrunedComp, RobinCursor, RobinStep, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
+import type { Assumptions, Ceiling, ChildId, CloseCall, Gender, Reading, Readings, SuggestedPin, Engine, FlawlessChance, FlawlessOptions, GoldSpread, HeldItem, ItemPin, ItemPlanRow, ItemUsed, MapOrderStep, Milestone, MilestonePoint, PinCost, Plan, PlanPin, PlanProposal, PlanRobin, PrunedComp, RobinCost, RobinCursor, RobinStep, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
 import { chanceText, chanceWithMargin, differenceText, noDeathText, stressText } from './chance';
 import { startSolve } from './solve-client';
 import { SOLVE_SECONDS, STEP_BUDGET, rescoreSeed, rosterUnits, type RunSim, type StressCase } from '../engine';
@@ -414,11 +414,12 @@ export type WhyComparison = { readonly key: string; readonly comparison: Compari
 /**
  * The search's close calls worth showing: a close call with both plans at 0% on every run (no difference, no error,
  * under a 0% headline) and no difference in turns it would show carries no information, so it's left out until a run
- * gets through. One that saves turns still reads (ties go to fewer expected turns).
+ * gets through. One that saves turns, or whose runs get further or less far (#242), still reads.
  */
 export function closeCallsShown(progress: Pick<SolveProgress, 'closeCalls' | 'chance'>): readonly CloseCall[] {
   const blank = progress.chance.chance === 0;
-  return progress.closeCalls.filter((c) => !(blank && c.gain === 0 && c.margin === 0 && Math.round(Math.abs(c.turns ?? 0) * 10) === 0));
+  const tenths = (x: number | undefined) => Math.round(Math.abs(x ?? 0) * 10);
+  return progress.closeCalls.filter((c) => !(blank && c.gain === 0 && c.margin === 0 && tenths(c.turns) === 0 && tenths(c.cleared?.gain) === 0));
 }
 
 /** Where the runs die, most first: at most this many maps named when no run gets through. */
@@ -427,8 +428,9 @@ const DEATH_MAPS = 3;
 /**
  * When no run gets through (a 0% headline), the line the inbox leads with: where the runs die (the maps with the lowest
  * no-death chance, the Why panel's "where the points go" by map), and the first map no run reaches with nobody lost.
+ * With the runs' maps cleared, how far they get on average: what ranks the plans at 0% (#242).
  */
-export function noRunGetsThrough(r: Pick<FlawlessChance, 'chance' | 'maps'>): { readonly text: string; readonly marks: WhyMark[] } | undefined {
+export function noRunGetsThrough(r: Pick<FlawlessChance, 'chance' | 'maps'> & Partial<Pick<FlawlessChance, 'clearedSamples'>>): { readonly text: string; readonly marks: WhyMark[] } | undefined {
   if (r.chance > 0 || !r.maps.length) return undefined;
   const worst = r.maps
     .filter((m): m is typeof m & { noDeath: number } => m.noDeath !== undefined && m.noDeath < 1)
@@ -436,7 +438,9 @@ export function noRunGetsThrough(r: Pick<FlawlessChance, 'chance' | 'maps'>): { 
     .slice(0, DEATH_MAPS);
   const unreached = r.maps.find((m) => m.noDeath === undefined);
   const where = worst.map((m) => `${m.label} (${noDeathText(m.noDeath)})`);
-  const text = `No run gets through with nobody lost.${where.length ? ` Where the runs die: ${listOf(where)}.` : ''}${unreached ? ` No run reaches ${unreached.label} with nobody lost.` : ''}`;
+  const cleared = r.clearedSamples?.length ? r.clearedSamples.reduce((a, b) => a + b, 0) / r.clearedSamples.length : undefined;
+  const far = cleared === undefined ? '' : ` Runs clear ${cleared.toFixed(1)} of ${r.maps.length} maps with nobody lost, on average: at 0%, plans are ranked by how far runs get.`;
+  const text = `No run gets through with nobody lost.${where.length ? ` Where the runs die: ${listOf(where)}.` : ''}${unreached ? ` No run reaches ${unreached.label} with nobody lost.` : ''}${far}`;
   return { text, marks: worst.map((m): WhyMark => [noDeathText(m.noDeath), `map:${m.key}`]) };
 }
 
@@ -507,7 +511,7 @@ function readoutOf(
     `Rests on: ${spots.map((b) => `${b.label[0]!.toLowerCase()}${b.label.slice(1)} (${LEAN[b.lean]})`).join(', ')}.`,
   ].filter(Boolean);
   const calls = progress ? closeCallsShown(progress) : [];
-  const improvements = progress ? [...progress.proposals.map((p) => `Improvement: ${p.edits.join('; ')}: ${differenceText(p.gain, p.margin, p.close, p.turns)}`), ...calls.map((c) => `${c.label}: ${differenceText(c.gain, c.margin, true, c.turns)}`)] : [];
+  const improvements = progress ? [...progress.proposals.map((p) => `Improvement: ${p.edits.join('; ')}: ${differenceText(p.gain, p.margin, p.close, p.turns, p.cleared)}`), ...calls.map((c) => `${c.label}: ${differenceText(c.gain, c.margin, true, c.turns, c.cleared)}`)] : [];
   const dies = noRunGetsThrough(r);
   const notes = [
     ...(progress
@@ -546,8 +550,8 @@ function readoutOf(
   };
   if (progress)
     why.found = [
-      ...progress.proposals.map((p): WhyMark[] => [[differenceText(p.gain, p.margin, p.close, p.turns), `edit:proposal:${proposalId(p)}`]]),
-      ...calls.map((c): WhyMark[] => [[differenceText(c.gain, c.margin, true, c.turns), `edit:close:${c.key}`]]),
+      ...progress.proposals.map((p): WhyMark[] => [[differenceText(p.gain, p.margin, p.close, p.turns, p.cleared), `edit:proposal:${proposalId(p)}`]]),
+      ...calls.map((c): WhyMark[] => [[differenceText(c.gain, c.margin, true, c.turns, c.cleared), `edit:close:${c.key}`]]),
       ...why.notes,
     ];
   return {
@@ -1118,11 +1122,32 @@ export type RobinReadout = {
   readonly rest: readonly { readonly key: string; readonly text: string; readonly solve: boolean }[];
   /** Once locked: what the lock cost. */
   readonly lock?: string;
+  /** Every solved Robin at 0% (#242): they're ranked by how far runs get, and whether more solves could change the pick. */
+  readonly atZero?: string;
   /** The no-Robin view, when toggled on. */
   readonly noRobin?: string;
   /** The numbers in its lines (#210): each solved Robin's cost (by its key), the lock's, the no-Robin view's. */
   readonly marks?: { readonly solved: Readonly<Record<string, readonly WhyMark[]>>; readonly lock: readonly WhyMark[]; readonly noRobin: readonly WhyMark[]; readonly comparisons: readonly WhyComparison[] };
 };
+
+/** A solved Robin's cost against the reference, with how far runs get when both are at 0% (#242). */
+const robinCostText = (c: RobinCost): string => differenceText(c.gain, c.margin, c.verdict === 'close', undefined, c.cleared);
+
+/**
+ * With every solved Robin at 0% (#242): what ranks them, and whether solving more could change the pick. Only an
+ * unsolved Robin whose ceiling is above 0% could get a run through; how far an unsolved Robin's runs get has no bound.
+ */
+function atZeroText(z: NonNullable<RobinStep['atZero']>): string {
+  const lead = 'Every Robin solved reads 0%, so they’re ranked by how far runs get: the maps cleared with nobody lost.';
+  const { unsolved, couldGetThrough: could } = z;
+  if (!unsolved) return lead;
+  const bound = 'which no ceiling bounds';
+  if (!could) return `${lead} None of the ${unsolved} not solved has a ceiling above 0%: more solves can’t find a Robin that gets a run through, only change the ranking on how far runs get, ${bound}.`;
+  const one = could === 1;
+  const up = `${could === unsolved ? `All ${unsolved}` : `${could} of the ${unsolved}`} not solved ${one ? 'has' : 'have'} a ceiling above 0% (or none read yet): solving ${one ? 'it' : 'them'} could find a Robin that gets a run through.`;
+  const rest = unsolved - could;
+  return `${lead} ${up}${rest ? ` Solving the other ${rest} could only change the ranking on how far runs get, ${bound}.` : ''}`;
+}
 
 const PICKS = { gender: (r: PlanRobin) => ` (the best ${r.gender === 'M' ? 'Male' : 'Female'} Robin)`, ceiling: () => ' (its ceiling could beat the best)', requested: () => ' (asked)', locked: () => '' } as const;
 
@@ -1148,8 +1173,10 @@ export function robinReadout(engine: Engine, run: Run, step: RobinStep | undefin
       ...d.classes.map((c) => `${who(c.unit, r)} as ${engine.className(c.to, r.gender)} (not ${engine.className(c.from, r.gender)})`),
     ].filter(Boolean);
     const spouse = s.plan.wishlist.marriages.find((c) => c.includes('robin'))?.find((u) => u !== 'robin') ?? null;
-    const cost = s.cost ? ` · ${differenceText(s.cost.gain, s.cost.margin, s.cost.verdict === 'close')} against ${against} · ${parts.length ? parts.join('; ') : 'the same wishlist'}` : s.key === step.reference ? ` · ${locked ? 'locked' : 'the best'}` : '';
-    return { key: s.key, robin: r, plan: s.plan, text: `${married(r, spouse)}: ${chanceWithMargin(s)}${cost}${PICKS[s.pick](r)}`, lock: !locked };
+    const cost = s.cost ? ` · ${robinCostText(s.cost)} against ${against} · ${parts.length ? parts.join('; ') : 'the same wishlist'}` : s.key === step.reference ? ` · ${locked ? 'locked' : 'the best'}` : '';
+    // At 0% (#242), how far its runs get: what ranks the Robins there.
+    const far = step.atZero && s.cleared !== undefined ? `, runs clear ${s.cleared.toFixed(1)} maps` : '';
+    return { key: s.key, robin: r, plan: s.plan, text: `${married(r, spouse)}: ${chanceWithMargin(s)}${far}${cost}${PICKS[s.pick](r)}`, lock: !locked };
   });
   const rest = step.options
     .filter((o) => o.status !== 'solved')
@@ -1167,7 +1194,7 @@ export function robinReadout(engine: Engine, run: Run, step: RobinStep | undefin
     if (!s.cost) continue;
     const close = s.cost.verdict === 'close';
     comparisons.push({ key: `robin:${s.key}`, comparison: { kind: 'robin', label: `Robin: ${robinName(s.robin)}`, gain: s.cost.gain, margin: s.cost.margin, runs: s.cost.runs, close }, ...(refPlan ? { plans: { other: s.plan, base: refPlan } } : {}) });
-    solvedMarks[s.key] = [[differenceText(s.cost.gain, s.cost.margin, close), `edit:robin:${s.key}`]];
+    solvedMarks[s.key] = [[robinCostText(s.cost), `edit:robin:${s.key}`]];
   }
   const lc = locked ? step.lockCost : undefined;
   if (lc) comparisons.push({ key: 'robin-lock', comparison: { kind: 'robin', label: 'What this lock cost', gain: lc.gain, margin: lc.margin, runs: lc.runs } });
@@ -1202,6 +1229,7 @@ export function robinReadout(engine: Engine, run: Run, step: RobinStep | undefin
     solved,
     rest,
     ...(lock ? { lock } : {}),
+    ...(step.atZero ? { atZero: atZeroText(step.atZero) } : {}),
     ...(noRobinText ? { noRobin: noRobinText } : {}),
   };
 }
@@ -1312,6 +1340,7 @@ function robinSection(ctx: RunContext, inInbox = false): HTMLElement | null {
         locked ? h('button', { class: 'mini ghost', title: 'Unlock Robin: every option is solved again', onclick: () => ctx.setRun(withoutPins(run, [locked])) }, 'Unlock') : null,
       ),
       r.lock ? h('p', { class: 'small' }, h('b', {}, ...whyText(r.lock, r.marks?.lock ?? []))) : null,
+      r.atZero ? h('p', { class: 'small' }, r.atZero) : null,
       r.solved.length
         ? h(
             'ul',

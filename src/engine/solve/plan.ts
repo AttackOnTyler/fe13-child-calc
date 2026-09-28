@@ -212,6 +212,13 @@ export function mapSpanPin(unit: RosterUnit, position: SpanPosition, key: string
   return { kind: 'span', unit, position, ...(partner ? { partner } : {}), from: key, to: key };
 }
 
+/**
+ * How far one plan's runs get against another's (#242): the maps cleared with nobody lost, the second plan's less the
+ * first's on the same runs, and its paired error (±, 95%). Read only when both plans are at 0% on every run: there the
+ * flawless chance can't rank them, and this does.
+ */
+export type HowFar = { readonly gain: number; readonly margin: number };
+
 /** An improvement the search found (#199): the plan with the edit, what it changes, and its gain in flawless chance. */
 export type PlanProposal = {
   readonly plan: Plan;
@@ -227,11 +234,13 @@ export type PlanProposal = {
   readonly runs: number;
   /**
    * Its gain is inside the noise (no measurable difference over the adopted plan): kept because it plays in fewer
-   * expected turns (spec: ties go to fewer expected turns).
+   * expected turns (spec: ties go to fewer expected turns), or at 0% because its runs get further (#242).
    */
   readonly close?: true;
   /** Its expected turns less the adopted plan's, on the same runs (negative: fewer); absent when not read. */
   readonly turns?: number;
+  /** At 0% (#242): how much further its runs get than the adopted plan's; absent otherwise. */
+  readonly cleared?: HowFar;
 };
 
 /**
@@ -247,6 +256,8 @@ export type CloseCall = {
   readonly runs: number;
   /** Its expected turns less the best plan's, on the same runs (negative: fewer); absent when not read. */
   readonly turns?: number;
+  /** At 0% (#242): how much further its runs get than the best plan's (negative: less far); absent otherwise. */
+  readonly cleared?: HowFar;
 };
 
 /** A set of marriages (or a Robin) the search didn't evaluate: its ceiling is below the best found (#199). */
@@ -261,6 +272,8 @@ export type SearchTrial = {
   readonly samples: number[];
   /** Each of those runs' turns (ties go to fewer expected turns). */
   turns?: number[];
+  /** Each of those runs' maps cleared with nobody lost (#242). */
+  cleared?: number[];
   /** The runs it's compared on this time. */
   target: number;
   /** Its non-starter couples (#194). */
@@ -276,9 +289,12 @@ export type SearchState = {
   bestSamples: number[];
   /** Those runs' turns. */
   bestTurns?: number[];
+  /** Those runs' maps cleared with nobody lost (#242). */
+  bestCleared?: number[];
   /** The start's runs, kept once the best plan moves off it (proposals' gains are over the start). */
   startSamples: number[] | null;
   startTurns?: number[] | null;
+  startCleared?: number[] | null;
   /** Labels of the edits kept, in order. */
   kept: string[];
   proposals: PlanProposal[];

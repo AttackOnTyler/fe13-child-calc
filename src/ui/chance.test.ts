@@ -55,6 +55,11 @@ describe('difference wording (#199)', () => {
     expect(differenceText(0, 0, true, 0.02)).toBe('no measurable difference (0.0 ±0.0)');
     expect(differenceText(0, 0, true, -1)).toBe('no measurable difference (0.0 ±0.0); 1 fewer turn');
   });
+
+  it('at 0%, adds how far runs get, labelled as what ranks them (#242)', () => {
+    expect(differenceText(0, 0, true, undefined, { gain: 2, margin: 0.41 })).toBe('no measurable difference (0.0 ±0.0); at 0%, ranked by how far runs get: +2.0 ±0.4 maps cleared');
+    expect(differenceText(0, 0, true, undefined, { gain: -1, margin: 0 })).toBe('no measurable difference (0.0 ±0.0); at 0%, ranked by how far runs get: −1.0 ±0.0 maps cleared');
+  });
 });
 
 describe('a fight’s kill chance (#210)', () => {

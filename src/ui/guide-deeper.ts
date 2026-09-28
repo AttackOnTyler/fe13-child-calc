@@ -94,7 +94,7 @@ export const DEEPER: readonly DeeperEntry[] = [
     id: 'robin-choice',
     question: 'Which Robin should my run use?',
     answer: [
-      'The Run view’s inbox opens on the Robin card: Compare Robins works out, in the background, the best plan with each Robin, and shows each one’s flawless chance against your plan’s.',
+      'The Run view’s inbox opens on the Robin card: Compare Robins works out, in the background, the best plan with each Robin, and shows each one’s flawless chance against your plan’s. When every Robin solved reads 0%, they’re ranked by how far runs get (the maps cleared with nobody lost), and the card says whether solving more could change the pick: only a Robin whose ceiling is above 0% could get a run through.',
       `Choose takes a Robin’s whole wishlist as your plan. ${lock} Robin and start writes that Robin into ${runFacts} and locks only Robin: the rest of the wishlist stays editable and re-solves after every map. Unlock reopens it.`,
       `Before you choose, ${lock} Robin and start takes the Robin the search ranks best, with its wishlist (the card marks it “the Lock takes this”); once you’ve chosen another, it keeps yours and names the search’s best beside it.`,
       'The no-Robin option solves the best plan with Robin no one’s parent (no Morgan): how much Robin’s marriage is worth.',
@@ -107,13 +107,13 @@ export const DEEPER: readonly DeeperEntry[] = [
     question: 'What needs me before the run starts?',
     answer: [
       'The Run view’s inbox, “Before the run: what needs you”, is one list in order. First the flawless chance with its ± and the ceiling, then the Robin card.',
-      'The search’s improvements, as proposals: Accept adopts the plan, Dismiss hides it. Close calls have no measurable difference: Take it if you like it better.',
+      'The search’s improvements, as proposals: Accept adopts the plan, Dismiss hides it. Close calls have no measurable difference: Take it if you like it better. When no run gets through (0%), plans are ranked by how far runs get instead, and each proposal and close call says how many more maps its runs clear.',
       '“Anything else you want different?” searches every edit, keeping a unit in or out among them, each with its cost in flawless points: Pin it makes it a pin every plan keeps, Make it changes your plan.',
       'Your edits lists what you pinned and made, with the pins’ combined cost and an Undo each. Then the wishlist in one line, and Lock Robin and start last.',
     ],
     jump: { to: 'log', target: 'inbox' },
     terms: [
-      { term: 'flawless chance', def: 'The chance your plan reaches and clears its endpoint with no unit dying, from the next map on. Every plan is ranked by it.' },
+      { term: 'flawless chance', def: 'The chance your plan reaches and clears its endpoint with no unit dying, from the next map on. Every plan is ranked by it; plans all at 0% by how far runs get.' },
       { term: 'ceiling', def: 'The endpoint’s flawless chance with every wishlist unit at its effective caps: no plan for that army can beat it.' },
       { term: 'edit', def: 'One change to a plan: a marriage, Robin, a class, a build skill, a passed skill, a lineup, a pair, an EXP priority, a paralogue’s place or a seal.' },
       { term: 'pin', def: 'A hard constraint every plan keeps: a marriage, a span, keep-in or keep-out, a carrier, a side goal, the Robin Lock. Its cost is what it takes off the flawless chance.' },

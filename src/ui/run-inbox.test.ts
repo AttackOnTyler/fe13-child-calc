@@ -128,6 +128,9 @@ describe('the inbox after the Lock (#206)', () => {
     expect(dies.text).toBe(`No run gets through with nobody lost. Where the runs die: ${label(next!.map)} (3.5% (no deaths about 1 run in 29)). No run reaches ${label(endpoint!.map)} with nobody lost.`);
     expect(dies.marks).toEqual([['3.5% (no deaths about 1 run in 29)', `map:${next!.key}`]]);
     expect(noRunGetsThrough(chance)).toBeUndefined();
+    // How far runs get, with the runs read (#242): what ranks the plans at 0%.
+    const far = noRunGetsThrough({ ...zero, clearedSamples: [1.2, 1.4] })!;
+    expect(far.text).toMatch(/ Runs clear 1\.3 of 2 maps with nobody lost, on average: at 0%, plans are ranked by how far runs get\.$/);
     // Readings no run reaches with nobody lost: one line, not an item each; a reading it can read stays listed.
     const unreached = (unit: RosterUnit, id: string, r: Partial<Reading>) => reading({ unit, reading: 'at-risk', pending: true, worst: { id, chance: 0, reached: false }, ...r });
     const blind: Readings = { ...readings, readings: [behind, unreached('lissa', lissaMs.id, {}), unreached('sully', 'support:lonqu+sully', {}), unreached('vaike', 'x', { reading: 'behind', why: 'no-change' })] };
