@@ -41,6 +41,12 @@ export function verdictOf(p: Paired): Verdict {
   return 'unclear';
 }
 
+/**
+ * Every run of every plan given reads 0% (#242): the flawless chance can't tell them apart (no difference, no error), so
+ * they're compared on how far their runs get instead (`RunSim.clearedSamples`).
+ */
+export const allLost = (...plans: readonly (readonly number[])[]): boolean => plans.every((xs) => xs.length > 0 && xs.every((x) => x === 0));
+
 /** A plan's chance on its samples, with its own error (±, 95%). */
 export function scoreOf(samples: readonly number[]): { readonly chance: number; readonly margin: number } {
   const n = samples.length;

@@ -297,6 +297,10 @@ _Avoid_: Notifications, to-do list, dashboard
 An alternative the flawless chance can't tell from the proposal: within twice the paired error. Read as "no measurable difference"; the player picks on taste.
 _Avoid_: Tie, toss-up
 
+**How far runs get**:
+The maps a plan's runs clear with nobody lost, on average: each run's chance of getting past each map, summed, from the same simulation as the flawless chance. What ranks plans and Robins when every run of each reads 0% (there fewer turns would mean dying sooner, so turns never break those ties), labelled "at 0%, ranked by how far runs get". Unsolved Robins have no bound on it; only their ceiling says whether one could get a run through.
+_Avoid_: Progress, survival length
+
 **What changed**:
 The card above the inbox after a map is recorded: the flawless chance before and after, EXP against the forecast, readings that moved, and the improvements the re-solve found, then its What it cost list. Dismissed with "got it".
 _Avoid_: Diff, changelog

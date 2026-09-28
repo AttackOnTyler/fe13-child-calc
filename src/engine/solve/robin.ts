@@ -15,6 +15,10 @@
  * - **The cost:** each solved Robin's whole-wishlist chance less the reference's, on the same runs (the same seed, run
  *   by run: paired, ±95%), and how its wishlist differs from the reference's (marriages, units fielded at the endpoint,
  *   endpoint classes). The reference is the best Robin solved; once Robin is locked, the locked one.
+ * - **At 0% (#242):** when every solved Robin's runs are all lost (0% ±0 each), the flawless chance can't rank them: the
+ *   best is the one whose runs get furthest (maps cleared with nobody lost), and each cost carries how far against it.
+ *   The step says how many unsolved Robins have a ceiling above 0% (`atZero`): only those could get a run through; the
+ *   rest could change the ranking only on how far runs get, which no screening bounds.
  * - **The Lock** (`withRobinLock`) writes the Robin into the run facts and pins it (a `robin-lock` pin, naming the facts it
  *   filled). From then on only the locked Robin is solved (the seed and the search read the facts); the alternatives
  *   are read on the run with the lock lifted (its facts opened again), none solved unless asked, and those solved before
@@ -31,8 +35,8 @@ import { STATS, type Gender } from '../../game-data/stats';
 import type { ClassId } from '../../game-data/classes';
 import { withRun, type RosterUnit, type RunFacts } from '../roster';
 import type { Run } from '../run';
-import { paired, scoreOf, verdictOf } from './paired';
-import { keptChoices, type Plan, type PlanRobin, type RobinFact, type RobinLockPin, type SolveCursor } from './plan';
+import { allLost, paired, scoreOf, verdictOf, type Verdict } from './paired';
+import { keptChoices, type HowFar, type Plan, type PlanRobin, type RobinFact, type RobinLockPin, type SolveCursor } from './plan';
 import { planFor, type SeedContext, type SeedOptions } from './seed';
 import { withPin } from './pins';
 import type { SolveStep } from './step';
@@ -103,7 +107,14 @@ export function wishlistDifference(from: Plan, to: Plan): WishlistDifference {
 export type RobinPick = 'gender' | 'ceiling' | 'requested' | 'locked';
 
 /** A cost against the reference, on the same runs: the gain (negative: it loses), its paired error (±, 95%) and verdict. */
-export type RobinCost = { readonly gain: number; readonly margin: number; readonly runs: number; readonly verdict: 'better' | 'worse' | 'close' };
+export type RobinCost = {
+  readonly gain: number;
+  readonly margin: number;
+  readonly runs: number;
+  readonly verdict: 'better' | 'worse' | 'close';
+  /** With both at 0% on every run (#242): how much further its runs get, and that verdict. */
+  readonly cleared?: HowFar & { readonly verdict: 'better' | 'worse' | 'close' };
+};
 
 /** One Robin option: its screening (seed's spouse for Robin, ceiling), and where its solve stands. */
 export type RobinOption = {
@@ -127,6 +138,8 @@ export type SolvedRobin = {
   readonly chance: number;
   readonly margin: number;
   readonly runs: number;
+  /** The maps its runs clear with nobody lost, on average (#242); absent when not read. */
+  readonly cleared?: number;
   /** Its search converged within its budget. */
   readonly converged: boolean;
   /** Against the reference; undefined for the reference itself. */
@@ -134,7 +147,7 @@ export type SolvedRobin = {
   readonly differences: WishlistDifference;
 };
 
-type Solve = { pick: RobinPick; cursor?: SolveCursor; spent: number; plan?: Plan; searched: boolean; converged: boolean; samples: number[] };
+type Solve = { pick: RobinPick; cursor?: SolveCursor; spent: number; plan?: Plan; searched: boolean; converged: boolean; samples: number[]; cleared?: number[] };
 
 /** Where the Robin alternatives stand (plain JSON): pass it back unchanged, across the Lock too. */
 export type RobinCursor = {
@@ -177,6 +190,11 @@ export type RobinStep = {
   readonly locked: PlanRobin | undefined;
   /** Once locked: the most a solved alternative gains over the locked Robin (the best of them), when one does. */
   readonly lockCost: (RobinCost & { readonly key: string }) | undefined;
+  /**
+   * Every solved Robin at 0% (#242): they're ranked by how far runs get. Of the options not solved, how many have a
+   * ceiling above 0% (or none read yet): only those could get a run through.
+   */
+  readonly atZero?: { readonly unsolved: number; readonly couldGetThrough: number };
   /** The no-Robin view, when asked for and worked out. */
   readonly noRobin: { readonly plan: Plan; readonly chance: number; readonly margin: number; readonly cost: RobinCost; readonly spouse: RosterUnit | null } | undefined;
   readonly converged: boolean;
@@ -198,17 +216,25 @@ export type RobinDeps = {
   readonly solve: (r: PlanRobin, cursor: SolveCursor | undefined, budget: number) => SolveStep;
   /** Runs `first`… of a plan for an option, on the seed. */
   readonly samples: (r: PlanRobin, plan: Plan, first: number, count: number) => readonly number[];
+  /** The same runs with how far each gets (#242), in place of `samples` when given. */
+  readonly play?: (r: PlanRobin, plan: Plan, first: number, count: number) => { readonly samples: readonly number[]; readonly cleared: readonly number[] };
   /** A plan with Robin no one's parent. */
   readonly noRobin: (r: PlanRobin, plan: Plan) => Plan;
 };
 
 const spouseOf = (plan: Plan): RosterUnit | null => plan.wishlist.marriages.find((c) => c.includes('robin'))?.find((u) => u !== 'robin') ?? null;
 
-const costOf = (ref: readonly number[], x: readonly number[]): RobinCost => {
+const closeOf = (v: Verdict) => (v === 'unclear' ? 'close' : v);
+
+/** A cost on the same runs; with both at 0% on every run and how far each run gets (#242), how much further too. */
+const costOf = (ref: readonly number[], x: readonly number[], refCleared?: readonly number[], xCleared?: readonly number[]): RobinCost => {
   const p = paired(ref, x);
-  const v = verdictOf(p);
-  return { gain: p.gain, margin: p.margin, runs: p.runs, verdict: v === 'unclear' ? 'close' : v };
+  const n = p.runs;
+  const far = allLost(ref.slice(0, n), x.slice(0, n)) && refCleared && xCleared && refCleared.length >= n && xCleared.length >= n ? paired(refCleared.slice(0, n), xCleared.slice(0, n)) : undefined;
+  return { gain: p.gain, margin: p.margin, runs: p.runs, verdict: closeOf(verdictOf(p)), ...(far ? { cleared: { gain: far.gain, margin: far.margin, verdict: closeOf(verdictOf(far)) } } : {}) };
 };
+
+const meanOf = (xs: readonly number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
 export function robinStep(input: RobinInput, deps: RobinDeps): RobinStep {
   const budget = Math.max(0, Math.floor(input.budget));
@@ -231,16 +257,26 @@ export function robinStep(input: RobinInput, deps: RobinDeps): RobinStep {
   const robinOf = (k: string) => byKey.get(k) ?? deps.locked!;
   /** The reference's samples: the locked Robin's, else the best solved's. */
   const done = (k: string) => !!solves[k]?.searched && solves[k]!.samples.length >= compare;
+  /** How far a solve's runs get on average (#242), when read. */
+  const clearedOf = (k: string) => {
+    const xs = solves[k]!.cleared;
+    return xs && xs.length >= compare ? meanOf(xs.slice(0, compare)) : undefined;
+  };
+  /** Ahead on the flawless chance; both at 0%, ahead on how far runs get (#242). */
+  const ahead = (a: { readonly chance: number; readonly cleared?: number | undefined }, b: { readonly chance: number; readonly cleared?: number | undefined }) =>
+    a.chance !== b.chance ? a.chance - b.chance : a.chance === 0 ? (a.cleared ?? 0) - (b.cleared ?? 0) : 0;
   const reference = (): string | undefined => {
     if (lockKey) return done(lockKey) ? lockKey : undefined;
-    let best: { k: string; chance: number } | undefined;
+    let best: { k: string; chance: number; cleared: number | undefined } | undefined;
     for (const k of Object.keys(solves)) {
       if (!done(k) || !byKey.has(k)) continue;
-      const chance = scoreOf(solves[k]!.samples.slice(0, compare)).chance;
-      if (!best || chance > best.chance) best = { k, chance };
+      const x = { k, chance: scoreOf(solves[k]!.samples.slice(0, compare)).chance, cleared: clearedOf(k) };
+      if (!best || ahead(x, best) > 0) best = x;
     }
     return best?.k;
   };
+  /** Runs of a plan for an option, with how far each gets when the engine gives it. */
+  const runsOf = (r: PlanRobin, plan: Plan, first: number, count: number): { samples: readonly number[]; cleared?: readonly number[] } => deps.play?.(r, plan, first, count) ?? { samples: deps.samples(r, plan, first, count) };
   const queued = () => [...requested.map((key) => ({ key, pick: 'requested' as const })), ...(c.queue ?? [])];
 
   while (spent < budget) {
@@ -263,7 +299,10 @@ export function robinStep(input: RobinInput, deps: RobinDeps): RobinStep {
         if (st.converged || s.spent >= search) {
           // The search's own runs of its best plan are the first compared runs (the same seed).
           const kept = st.cursor.search;
-          s.samples = kept && JSON.stringify(kept.best) === JSON.stringify(st.best) ? kept.bestSamples.slice(0, compare) : [];
+          // With how far runs get read (#242), only when the search read it on every run it kept.
+          const reuse = kept && JSON.stringify(kept.best) === JSON.stringify(st.best) && (!deps.play || kept.bestCleared?.length === kept.bestSamples.length);
+          s.samples = reuse ? kept.bestSamples.slice(0, compare) : [];
+          if (deps.play) s.cleared = reuse ? kept.bestCleared!.slice(0, compare) : [];
           s.searched = true;
           s.converged = st.converged;
           delete s.cursor;
@@ -271,7 +310,9 @@ export function robinStep(input: RobinInput, deps: RobinDeps): RobinStep {
         continue;
       }
       const k = Math.min(left, compare - s.samples.length);
-      s.samples.push(...deps.samples(r, s.plan!, s.samples.length, k));
+      const x = runsOf(r, s.plan!, s.samples.length, k);
+      s.samples.push(...x.samples);
+      if (x.cleared) (s.cleared ??= []).push(...x.cleared);
       spent += k;
       continue;
     }
@@ -317,6 +358,7 @@ export function robinStep(input: RobinInput, deps: RobinDeps): RobinStep {
 
   const ref = reference();
   const refSamples = ref ? solves[ref]!.samples.slice(0, compare) : undefined;
+  const refCleared = ref ? solves[ref]!.cleared : undefined;
   const refPlan = ref ? solves[ref]!.plan : undefined;
   const picks = new Map(queued().map((q) => [q.key, q.pick]));
   const head = queued().find((q) => !done(q.key))?.key;
@@ -339,6 +381,7 @@ export function robinStep(input: RobinInput, deps: RobinDeps): RobinStep {
     .map(([k, s]) => {
       const samples = s.samples.slice(0, compare);
       const score = scoreOf(samples);
+      const cleared = clearedOf(k);
       return {
         key: k,
         robin: robinOf(k),
@@ -347,12 +390,19 @@ export function robinStep(input: RobinInput, deps: RobinDeps): RobinStep {
         chance: score.chance,
         margin: score.margin,
         runs: samples.length,
+        ...(cleared !== undefined ? { cleared } : {}),
         converged: s.converged,
-        cost: k === ref || !refSamples ? undefined : costOf(refSamples, samples),
+        cost: k === ref || !refSamples ? undefined : costOf(refSamples, samples, refCleared, s.cleared),
         differences: refPlan ? wishlistDifference(refPlan, s.plan!) : wishlistDifference(s.plan!, s.plan!),
       };
     })
-    .sort((a, b) => Number(b.key === ref) - Number(a.key === ref) || b.chance - a.chance || a.key.localeCompare(b.key));
+    .sort((a, b) => Number(b.key === ref) - Number(a.key === ref) || ahead(b, a) || a.key.localeCompare(b.key));
+  // Every solved Robin at 0% (#242): only an unsolved one with a ceiling above 0% (or none read) could get a run through.
+  const unsolved = deps.options.filter((r) => !done(robinKey(r)));
+  const atZero =
+    ref && solved.every((s) => allLost(solves[s.key]!.samples.slice(0, compare)))
+      ? { unsolved: unsolved.length, couldGetThrough: unsolved.filter((r) => (screened[robinKey(r)]?.ceiling ?? Infinity) > 0).length }
+      : undefined;
   const gains = lockKey ? solved.filter((s) => s.key !== lockKey && s.cost?.verdict === 'better').sort((a, b) => b.cost!.gain - a.cost!.gain) : [];
   const lockCost = gains[0] ? { ...gains[0].cost!, key: gains[0].key } : undefined;
   const nr = c.noRobin && c.noRobin.key === ref && refSamples && c.noRobin.samples.length >= compare ? c.noRobin : undefined;
@@ -364,6 +414,7 @@ export function robinStep(input: RobinInput, deps: RobinDeps): RobinStep {
     reference: ref,
     locked: deps.locked,
     lockCost,
+    ...(atZero ? { atZero } : {}),
     noRobin,
     converged,
     evaluations: spent,
