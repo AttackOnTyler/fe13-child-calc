@@ -21,6 +21,7 @@ import {
   type ArmyUnit,
   type Fighter,
   type Foe,
+  type Plan,
   type Run,
   type RunSimMap,
   type RunSimSideGoal,
@@ -159,6 +160,36 @@ describe('side goals in the simulated runs (#191)', () => {
     const late = engine.simulateRuns({ army, maps: [oneMap(goal(true, 5, 2))], difficulty: 'normal', gold: 1000 }, 1, 2);
     expect(late.sideGoals[0]).toMatchObject({ chase: true, secured: 0 });
     expect(late.maps[0]!.gold?.median).toBe(1000);
+  });
+});
+
+describe('side goals the solve chooses (#175 story 48)', () => {
+  const fresh = runFromRoster(withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal', gender: 'M', asset: 'mag', flaw: 'hp' }));
+  const all = engine.mapOrder(fresh).steps.map((s) => s.map);
+  const run = all.slice(0, all.indexOf('chapter-18')).filter((m) => !/^paralogue-([5-9]|1[0-6])$/.test(m)).reduce((r, m, i) => addEntry(r, m, i + 1), fresh);
+  const id: SideGoalId = 'chapter-18-chests';
+  const chased = (r: Run, plan: Plan) => engine.flawlessChance(r, { plan, runs: 1 }).sideGoals.find((g) => g.id === id)!.chase;
+
+  it('stores the seed’s decision on the plan, and edits it: the runs play the plan’s decision', () => {
+    const seed = engine.seedPlan(run);
+    const decision = seed.roadmap.sideGoals?.[id];
+    expect(decision).toBe(engine.sideGoals(run).find((c) => c.goal.id === id)!.decision);
+    const edit = engine.editChoices(run, seed).find((e) => e.kind === 'side-goal' && e.key.startsWith(`side-goal:${id}:`))!;
+    expect(edit.label).toBe(`${decision === 'chase' ? 'Skip' : 'Chase'} Chapter 18: Falling chests`);
+    const flipped = edit.make();
+    expect(flipped.roadmap.sideGoals?.[id]).not.toBe(decision);
+    expect(chased(run, flipped)).toBe(!chased(run, seed));
+    expect(engine.sideGoals(run, flipped).find((c) => c.goal.id === id)).toMatchObject({ decision: flipped.roadmap.sideGoals?.[id], pinned: false });
+  });
+
+  it('keeps the player’s pin over the plan’s decision, and never edits a pinned goal', () => {
+    const seed = engine.seedPlan(run);
+    const decision = seed.roadmap.sideGoals![id]!;
+    const pinned = withSideGoalPin(run, id, decision);
+    const flipped = { ...seed, roadmap: { ...seed.roadmap, sideGoals: { ...seed.roadmap.sideGoals, [id]: decision === 'chase' ? 'skip' : 'chase' } } } as Plan;
+    expect(chased(pinned, flipped)).toBe(decision === 'chase');
+    // The only side goal edit left for it is the player's unpinning choice (played under its pin), not the plan's.
+    for (const e of engine.editChoices(pinned, seed).filter((x) => x.key.startsWith(`side-goal:${id}:`))) expect(e.play.length).toBe(1);
   });
 });
 

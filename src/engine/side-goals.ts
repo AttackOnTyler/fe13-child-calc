@@ -152,13 +152,18 @@ export const sideGoalById = (id: SideGoalId): SideGoal => sideGoals().find((g) =
 /** The default rule: chase a side goal when it costs at most one action a turn until its deadline (each part). */
 export const chaseByDefault = (g: SideGoal): boolean => g.parts.every((p) => p.actions <= p.by);
 
-/** A side goal's decision in the plan: its pin, else the default rule. */
-export type SideGoalChoice = { readonly goal: SideGoal; readonly decision: SideGoalDecision; readonly pinned: boolean };
+/**
+ * A side goal's decision in the plan: its pin, else the plan's decision (#175 story 48, `planned`), else the default
+ * rule.
+ */
+export type SideGoalChoice = { readonly goal: SideGoal; readonly decision: SideGoalDecision; readonly pinned: boolean; readonly planned: boolean };
 
-export function sideGoalChoices(plan: SideGoalPlan | undefined): SideGoalChoice[] {
+/** Each side goal's decision: the player's pins (`Run.sideGoals`) first, then the plan's (`Roadmap.sideGoals`), then the default rule. */
+export function sideGoalChoices(pins: SideGoalPlan | undefined, plan?: SideGoalPlan): SideGoalChoice[] {
   return sideGoals().map((goal) => {
-    const pin = plan?.[goal.id];
-    return { goal, decision: pin ?? (chaseByDefault(goal) ? 'chase' : 'skip'), pinned: pin !== undefined };
+    const pin = pins?.[goal.id];
+    const planned = pin === undefined ? plan?.[goal.id] : undefined;
+    return { goal, decision: pin ?? planned ?? (chaseByDefault(goal) ? 'chase' : 'skip'), pinned: pin !== undefined, planned: planned !== undefined };
   });
 }
 

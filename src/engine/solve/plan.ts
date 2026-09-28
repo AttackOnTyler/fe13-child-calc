@@ -14,7 +14,7 @@ import type { ClassId } from '../../game-data/classes';
 import type { SkillId } from '../../game-data/skills';
 import type { Gender, Stat } from '../../game-data/stats';
 import type { RosterUnit } from '../roster';
-import type { SideGoalDecision, SideGoalId } from '../side-goals';
+import type { SideGoalDecision, SideGoalId, SideGoalPlan } from '../side-goals';
 
 /** Where a unit stands in one map's lineup: Lead (with or without a Back), Back, or Solo (fielded unpaired). */
 export type Position = 'lead' | 'back' | 'solo';
@@ -114,13 +114,22 @@ export type Roadmap = {
    * or empty: every optional map skipped (the seed's rule; the search's `optional` edit keeps one when it pays).
    */
   readonly optional?: readonly string[];
+  /**
+   * The plan's side goal decisions (spec #175 story 48): each goal on the maps ahead chased or skipped. The seed takes
+   * the default rule (`chaseByDefault`); the search's `side-goal` edit turns one. The player's pins (`Run.sideGoals`)
+   * win over them; a goal with none here follows the default rule.
+   */
+  readonly sideGoals?: SideGoalPlan;
 };
 
 /**
  * The roadmap's map-level choices a rebuilt plan keeps as they were (a marriage or Robin edit, a unit's worth): the
- * optional maps it plays.
+ * optional maps it plays and its side goal decisions.
  */
-export const keptChoices = (plan: Plan): Pick<Roadmap, 'optional'> => ({ ...(plan.roadmap.optional ? { optional: plan.roadmap.optional } : {}) });
+export const keptChoices = (plan: Plan): Pick<Roadmap, 'optional' | 'sideGoals'> => ({
+  ...(plan.roadmap.optional ? { optional: plan.roadmap.optional } : {}),
+  ...(plan.roadmap.sideGoals ? { sideGoals: plan.roadmap.sideGoals } : {}),
+});
 
 /** Robin as the plan has it: the run facts, with whatever they leave open chosen by the plan. */
 export type PlanRobin = { readonly gender: Gender; readonly asset: Stat; readonly flaw: Stat };
