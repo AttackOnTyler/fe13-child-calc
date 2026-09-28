@@ -511,6 +511,14 @@ describe('the Robin alternatives on the Run view (#201)', () => {
     expect(robinReadout(engine, run, step, false).atZero).toBeUndefined();
   });
 
+  it('at 100%, ranks by fewer expected turns and says so (#242)', () => {
+    const full: RobinStep = { ...step, solved: [{ ...step.solved[0]!, chance: 1, margin: 0, turns: 412.3 }], atFull: true };
+    const r = robinReadout(engine, run, full, false);
+    expect(r.solved[0]!.text).toMatch(/^Female, \+Spd −Lck, marrying Lon'qu: 100% ±0\.0, runs take 412\.3 turns · the best/);
+    expect(r.atFull).toBe('Every Robin solved reads 100%, so they’re ranked by fewer expected turns, as the search breaks its ties.');
+    expect(robinReadout(engine, run, step, false).atFull).toBeUndefined();
+  });
+
   it('keeps the no-Robin view as a toggle', () => {
     expect(robinReadout(engine, run, step, true).noRobin).toBe('No-Robin view: working it out…');
     const noRobin = { plan: best, chance: 0.65, margin: 0.02, cost: { gain: -0.05, margin: 0.01, runs: 16, verdict: 'worse' as const }, spouse: 'lonqu' as const };

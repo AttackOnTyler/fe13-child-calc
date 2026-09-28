@@ -55,7 +55,7 @@ export const PLAN_A_RUN = {
       where: 'Run › inbox › Robin card',
       title: 'Choose your Robin on the inbox’s Robin card',
       takeaway:
-        `The Run view opens on its inbox, “Before the run: what needs you”. Its Robin card compares Robins by flawless chance, and at 0% by how far runs get (Compare Robins solves them in the background); ` +
+        `The Run view opens on its inbox, “Before the run: what needs you”. Its Robin card compares Robins by flawless chance, at 0% by how far runs get and at 100% by fewer turns (Compare Robins solves them in the background); ` +
         `Choose takes a Robin’s whole wishlist as your plan, and ${lock} Robin and start writes that Robin into ${runFacts}, locking only Robin (before you choose, it takes the search’s best). ` +
         'The rest of the inbox lists what else needs you before the Prologue.',
       tick: 'robinLocked',

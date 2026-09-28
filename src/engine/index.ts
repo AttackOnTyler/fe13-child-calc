@@ -2274,10 +2274,10 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
             ...(cursor ? { cursor } : {}),
           }),
         samples: (robin, plan, first, count) => simulateRuns(planInput(forRobin(robin), plan), seed, count, assumptions, first).samples,
-        // At 0% the Robins are ranked by how far runs get (#242).
+        // At 0% the Robins are ranked by how far runs get, at 100% by fewer turns (#242).
         play: (robin, plan, first, count) => {
           const sim = simulateRuns(planInput(forRobin(robin), plan), seed, count, assumptions, first);
-          return { samples: sim.samples, cleared: sim.clearedSamples };
+          return { samples: sim.samples, cleared: sim.clearedSamples, turns: sim.turnSamples };
         },
         noRobin: (robin, plan) => {
           const r = forRobin(robin);

@@ -19,6 +19,8 @@
  *   best is the one whose runs get furthest (maps cleared with nobody lost), and each cost carries how far against it.
  *   The step says how many unsolved Robins have a ceiling above 0% (`atZero`): only those could get a run through; the
  *   rest could change the ranking only on how far runs get, which no screening bounds.
+ * - **At 100% (#242):** when every solved Robin's runs all get through, they're ranked by fewer expected turns, the
+ *   search's own tie (`atFull`).
  * - **The Lock** (`withRobinLock`) writes the Robin into the run facts and pins it (a `robin-lock` pin, naming the facts it
  *   filled). From then on only the locked Robin is solved (the seed and the search read the facts); the alternatives
  *   are read on the run with the lock lifted (its facts opened again), none solved unless asked, and those solved before
@@ -35,7 +37,7 @@ import { STATS, type Gender } from '../../game-data/stats';
 import type { ClassId } from '../../game-data/classes';
 import { withRun, type RosterUnit, type RunFacts } from '../roster';
 import type { Run } from '../run';
-import { allLost, paired, scoreOf, verdictOf, type Verdict } from './paired';
+import { allLost, allWon, paired, scoreOf, verdictOf, type Verdict } from './paired';
 import { keptChoices, type HowFar, type Plan, type PlanRobin, type RobinFact, type RobinLockPin, type SolveCursor } from './plan';
 import { planFor, type SeedContext, type SeedOptions } from './seed';
 import { withPin } from './pins';
@@ -140,6 +142,8 @@ export type SolvedRobin = {
   readonly runs: number;
   /** The maps its runs clear with nobody lost, on average (#242); absent when not read. */
   readonly cleared?: number;
+  /** Its runs' turns, on average (#242: what ranks the Robins at 100%); absent when not read. */
+  readonly turns?: number;
   /** Its search converged within its budget. */
   readonly converged: boolean;
   /** Against the reference; undefined for the reference itself. */
@@ -147,7 +151,7 @@ export type SolvedRobin = {
   readonly differences: WishlistDifference;
 };
 
-type Solve = { pick: RobinPick; cursor?: SolveCursor; spent: number; plan?: Plan; searched: boolean; converged: boolean; samples: number[]; cleared?: number[] };
+type Solve = { pick: RobinPick; cursor?: SolveCursor; spent: number; plan?: Plan; searched: boolean; converged: boolean; samples: number[]; cleared?: number[]; turns?: number[] };
 
 /** Where the Robin alternatives stand (plain JSON): pass it back unchanged, across the Lock too. */
 export type RobinCursor = {
@@ -195,6 +199,8 @@ export type RobinStep = {
    * ceiling above 0% (or none read yet): only those could get a run through.
    */
   readonly atZero?: { readonly unsolved: number; readonly couldGetThrough: number };
+  /** Every solved Robin at 100% (#242): they're ranked by fewer expected turns. */
+  readonly atFull?: true;
   /** The no-Robin view, when asked for and worked out. */
   readonly noRobin: { readonly plan: Plan; readonly chance: number; readonly margin: number; readonly cost: RobinCost; readonly spouse: RosterUnit | null } | undefined;
   readonly converged: boolean;
@@ -217,7 +223,7 @@ export type RobinDeps = {
   /** Runs `first`… of a plan for an option, on the seed. */
   readonly samples: (r: PlanRobin, plan: Plan, first: number, count: number) => readonly number[];
   /** The same runs with how far each gets (#242), in place of `samples` when given. */
-  readonly play?: (r: PlanRobin, plan: Plan, first: number, count: number) => { readonly samples: readonly number[]; readonly cleared: readonly number[] };
+  readonly play?: (r: PlanRobin, plan: Plan, first: number, count: number) => { readonly samples: readonly number[]; readonly cleared: readonly number[]; readonly turns?: readonly number[] };
   /** A plan with Robin no one's parent. */
   readonly noRobin: (r: PlanRobin, plan: Plan) => Plan;
 };
@@ -262,21 +268,27 @@ export function robinStep(input: RobinInput, deps: RobinDeps): RobinStep {
     const xs = solves[k]!.cleared;
     return xs && xs.length >= compare ? meanOf(xs.slice(0, compare)) : undefined;
   };
-  /** Ahead on the flawless chance; both at 0%, ahead on how far runs get (#242). */
-  const ahead = (a: { readonly chance: number; readonly cleared?: number | undefined }, b: { readonly chance: number; readonly cleared?: number | undefined }) =>
-    a.chance !== b.chance ? a.chance - b.chance : a.chance === 0 ? (a.cleared ?? 0) - (b.cleared ?? 0) : 0;
+  /** Its runs' turns on average (#242), when read. */
+  const turnsOf = (k: string) => {
+    const xs = solves[k]!.turns;
+    return xs && xs.length >= compare ? meanOf(xs.slice(0, compare)) : undefined;
+  };
+  /** Ahead on the flawless chance; both at 0%, ahead on how far runs get; both at 100%, on fewer turns (#242). */
+  type Standing = { readonly chance: number; readonly cleared?: number | undefined; readonly turns?: number | undefined };
+  const ahead = (a: Standing, b: Standing) =>
+    a.chance !== b.chance ? a.chance - b.chance : a.chance === 0 ? (a.cleared ?? 0) - (b.cleared ?? 0) : a.chance === 1 ? (b.turns ?? 0) - (a.turns ?? 0) : 0;
   const reference = (): string | undefined => {
     if (lockKey) return done(lockKey) ? lockKey : undefined;
-    let best: { k: string; chance: number; cleared: number | undefined } | undefined;
+    let best: (Standing & { k: string }) | undefined;
     for (const k of Object.keys(solves)) {
       if (!done(k) || !byKey.has(k)) continue;
-      const x = { k, chance: scoreOf(solves[k]!.samples.slice(0, compare)).chance, cleared: clearedOf(k) };
+      const x = { k, chance: scoreOf(solves[k]!.samples.slice(0, compare)).chance, cleared: clearedOf(k), turns: turnsOf(k) };
       if (!best || ahead(x, best) > 0) best = x;
     }
     return best?.k;
   };
   /** Runs of a plan for an option, with how far each gets when the engine gives it. */
-  const runsOf = (r: PlanRobin, plan: Plan, first: number, count: number): { samples: readonly number[]; cleared?: readonly number[] } => deps.play?.(r, plan, first, count) ?? { samples: deps.samples(r, plan, first, count) };
+  const runsOf = (r: PlanRobin, plan: Plan, first: number, count: number): { samples: readonly number[]; cleared?: readonly number[]; turns?: readonly number[] } => deps.play?.(r, plan, first, count) ?? { samples: deps.samples(r, plan, first, count) };
   const queued = () => [...requested.map((key) => ({ key, pick: 'requested' as const })), ...(c.queue ?? [])];
 
   while (spent < budget) {
@@ -300,9 +312,13 @@ export function robinStep(input: RobinInput, deps: RobinDeps): RobinStep {
           // The search's own runs of its best plan are the first compared runs (the same seed).
           const kept = st.cursor.search;
           // With how far runs get read (#242), only when the search read it on every run it kept.
-          const reuse = kept && JSON.stringify(kept.best) === JSON.stringify(st.best) && (!deps.play || kept.bestCleared?.length === kept.bestSamples.length);
+          const reuse =
+            kept && JSON.stringify(kept.best) === JSON.stringify(st.best) && (!deps.play || (kept.bestCleared?.length === kept.bestSamples.length && kept.bestTurns?.length === kept.bestSamples.length));
           s.samples = reuse ? kept.bestSamples.slice(0, compare) : [];
-          if (deps.play) s.cleared = reuse ? kept.bestCleared!.slice(0, compare) : [];
+          if (deps.play) {
+            s.cleared = reuse ? kept.bestCleared!.slice(0, compare) : [];
+            s.turns = reuse ? kept.bestTurns!.slice(0, compare) : [];
+          }
           s.searched = true;
           s.converged = st.converged;
           delete s.cursor;
@@ -313,6 +329,7 @@ export function robinStep(input: RobinInput, deps: RobinDeps): RobinStep {
       const x = runsOf(r, s.plan!, s.samples.length, k);
       s.samples.push(...x.samples);
       if (x.cleared) (s.cleared ??= []).push(...x.cleared);
+      if (x.turns) (s.turns ??= []).push(...x.turns);
       spent += k;
       continue;
     }
@@ -382,6 +399,7 @@ export function robinStep(input: RobinInput, deps: RobinDeps): RobinStep {
       const samples = s.samples.slice(0, compare);
       const score = scoreOf(samples);
       const cleared = clearedOf(k);
+      const turns = turnsOf(k);
       return {
         key: k,
         robin: robinOf(k),
@@ -391,6 +409,7 @@ export function robinStep(input: RobinInput, deps: RobinDeps): RobinStep {
         margin: score.margin,
         runs: samples.length,
         ...(cleared !== undefined ? { cleared } : {}),
+        ...(turns !== undefined ? { turns } : {}),
         converged: s.converged,
         cost: k === ref || !refSamples ? undefined : costOf(refSamples, samples, refCleared, s.cleared),
         differences: refPlan ? wishlistDifference(refPlan, s.plan!) : wishlistDifference(s.plan!, s.plan!),
@@ -403,6 +422,8 @@ export function robinStep(input: RobinInput, deps: RobinDeps): RobinStep {
     ref && solved.every((s) => allLost(solves[s.key]!.samples.slice(0, compare)))
       ? { unsolved: unsolved.length, couldGetThrough: unsolved.filter((r) => (screened[robinKey(r)]?.ceiling ?? Infinity) > 0).length }
       : undefined;
+  // Every solved Robin at 100% (#242): ranked by fewer turns.
+  const atFull = !!ref && solved.every((s) => allWon(solves[s.key]!.samples.slice(0, compare)));
   const gains = lockKey ? solved.filter((s) => s.key !== lockKey && s.cost?.verdict === 'better').sort((a, b) => b.cost!.gain - a.cost!.gain) : [];
   const lockCost = gains[0] ? { ...gains[0].cost!, key: gains[0].key } : undefined;
   const nr = c.noRobin && c.noRobin.key === ref && refSamples && c.noRobin.samples.length >= compare ? c.noRobin : undefined;
@@ -415,6 +436,7 @@ export function robinStep(input: RobinInput, deps: RobinDeps): RobinStep {
     locked: deps.locked,
     lockCost,
     ...(atZero ? { atZero } : {}),
+    ...(atFull ? { atFull: true as const } : {}),
     noRobin,
     converged,
     evaluations: spent,

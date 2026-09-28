@@ -132,9 +132,6 @@ export function lockOffer(run: Run, progress: SolveProgress | undefined, best?: 
   return { robin: heldPlan(run, progress)?.robin, from: 'default' };
 }
 
-/** The Robin "Lock Robin and start" locks (`lockOffer`). */
-export const robinToLock = (run: Run, progress: SolveProgress | undefined, best?: RobinBest): PlanRobin | undefined => lockOffer(run, progress, best).robin;
-
 /**
  * The run with Robin locked by "Lock Robin and start": the Robin it shows (`lockOffer`; the search's best with its
  * wishlist adopted, as Choose would), else, before the solve has replied, the adopted plan's (the seed's), worked out

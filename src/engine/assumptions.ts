@@ -617,6 +617,7 @@ export type BlindSpotId =
   | 'door-keys'
   | 'skills-in-combat'
   | 'weapon-ranks'
+  | 'no-approach'
   | 'walls-draw-foes'
   | 'potions-traded'
   | 'lunatic-plus-draws'
@@ -735,6 +736,16 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
     label: 'Bosses hold their ground',
     why: 'A boss fights only when attacked, as most do on their throne or gate; one that moves out to attack isn’t counted on enemy phase.',
     lean: 'high',
+    touches: ['map'],
+  },
+  {
+    id: 'no-approach',
+    label: 'Every foe in reach from turn 1',
+    why:
+      'With no map positions, the play fights from its first turn: the turns spent moving into reach, terrain, and how far each unit ' +
+      'moves aren’t played, so a map that opens with an approach takes more turns than it reads (the Premonition reads a rout in 2; ' +
+      'Robin and Chrom first need a turn to close in). Modelling the map itself (its captured terrain and units) retires this.',
+    lean: 'either',
     touches: ['map'],
   },
   {
