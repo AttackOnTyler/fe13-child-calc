@@ -49,6 +49,18 @@ describe('the inbox before the Lock (#204)', () => {
     expect(inboxReadout(run, state({ progress: { ...progress, proposals: [], closeCalls: [] } })).items.map((i) => i.kind)).toEqual(['headline', 'robin', 'anything-else', 'your-edits', 'wishlist', 'lock']);
   });
 
+  it('leaves out close calls with both plans at 0% (no information), and keeps the rest', () => {
+    const zero = { ...chance, chance: 0, margin: 0 } as FlawlessChance;
+    const blank = { key: 'z', plan: better, label: 'Gaius marries Panne', gain: 0, margin: 0, runs: 32 };
+    const calls = [blank, progress.closeCalls[0]!];
+    expect(item(run, 'close-calls', { progress: { ...progress, chance: zero, closeCalls: calls } }).rows.map((r) => r.call.key)).toEqual(['k']);
+    expect(inboxReadout(run, state({ progress: { ...progress, chance: zero, closeCalls: [blank] } })).items.map((i) => i.kind)).not.toContain('close-calls');
+    // One that saves turns still carries information (ties go to fewer expected turns).
+    expect(item(run, 'close-calls', { progress: { ...progress, chance: zero, closeCalls: [{ ...blank, turns: -1.2 }] } }).rows.map((r) => r.text)).toEqual(['Gaius marries Panne: no measurable difference (0.0 ±0.0); 1.2 fewer turns']);
+    // Under a headline above 0%, a 0.0 ±0.0 call still reads.
+    expect(item(run, 'close-calls', { progress: { ...progress, closeCalls: calls } }).rows).toHaveLength(2);
+  });
+
   it('is the run’s until Robin is locked or a map is recorded', () => {
     expect(beforeTheLock(run)).toBe(true);
     expect(beforeTheLock(withRobinLock(run, spd))).toBe(false);
