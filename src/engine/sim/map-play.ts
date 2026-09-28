@@ -16,7 +16,8 @@
  *   `chooseAction` picks the next action by the policy's tiers (`POLICY`) and `apply` plays it. Actions are a union:
  *   #182 added sustain (a heal, Fortify, Rescue, a potion), Dance and Rally (`sustain.ts`); #183 added the bait (a
  *   front waits in reach); the EXP priority (#195, `MapPlayInput.priority`) only reorders the fighting tiers: who lands
- *   kills, a lower unit chipping or waiting for a higher one, never an extra action. Talks
+ *   kills, a lower unit chipping or waiting for a higher one, never an extra action; and a pair as safe either way
+ *   fronts its higher-priority unit. Talks
  *   (#184) come first: a talker spends its action on the turn the solve sends it, and the recruit joins. Then the side
  *   goals chased (#191, `MapPlayInput.chase`): each costs actions by a turn, and the play reports whether it was met.
  * - `allyPhase` (#184): the third party (an NPC the army must keep alive, a recruit before it joins) acts between player
@@ -1350,8 +1351,9 @@ class MapState {
         };
         const cur: 0 | 1 = was.kind === 'together' ? was.front : 0;
         const other: 0 | 1 = cur === 0 ? 1 : 0;
-        // As safe either way, with the same EXP priority: the sturdier unit fronts (the second realism pass), the HP it
-        // keeps through the worst foe's attack, as a careful player puts the wall where the foes come.
+        // As safe either way: the unit with the higher EXP priority fronts (#195: a High-priority Back would earn only a
+        // Back's share, so the priority was wasted); with the same priority, the sturdier unit fronts (the second realism
+        // pass), the HP it keeps through the worst foe's attack, as a careful player puts the wall where the foes come.
         const sturdy = (k: 0 | 1) => {
           const a = p.together![k]!;
           let left = Infinity;
@@ -1363,8 +1365,11 @@ class MapState {
         };
         const rOther = risk(other);
         const rCur = risk(cur);
-        const even = ctx.threats.length > 0 && Math.abs(rOther - rCur) <= EPS && rCur < Infinity && (!this.ranked || this.ranks[units[0]] === this.ranks[units[1]]);
-        const front = talker ?? (rOther < rCur - EPS || (even && sturdy(other) >= sturdy(cur) + 1) ? other : cur);
+        const safeEither = Math.abs(rOther - rCur) <= EPS && rCur < Infinity && rOther < Infinity;
+        const rank = (k: 0 | 1) => (this.ranked ? this.ranks[units[k]]! : 1);
+        const even = safeEither && ctx.threats.length > 0 && rank(0) === rank(1);
+        const promoted = safeEither && rank(other) > rank(cur);
+        const front = talker ?? (rOther < rCur - EPS || promoted || (even && sturdy(other) >= sturdy(cur) + 1) ? other : cur);
         p.stance = { kind: 'together', front };
         if (was.kind === 'apart') change = 'pair-up';
         else if (front !== was.front) change = 'switch';

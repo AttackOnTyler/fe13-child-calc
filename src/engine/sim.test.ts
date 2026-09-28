@@ -388,6 +388,17 @@ describe('stances and exposure (#183)', () => {
     expect(play.log[0]!.stances[0]).toMatchObject({ pair: 'soft', stance: 'together', front: 'tough' });
   });
 
+  it('fronts the unit with the higher EXP priority when either is as safe, so its priority isn’t spent as a Back', () => {
+    // The seed's Robin at High priority as Chrom's Back earned a Back's share on the Lunatic Prologue (13 EXP).
+    const soft: Fighter = { ...hero, name: 'Soft', stats: stats(40, 15, 0, 60, 40, 0, 0, 0) };
+    const tough: Fighter = { ...hero, name: 'Tough', stats: stats(40, 15, 0, 60, 40, 0, 20, 0) };
+    const input = { map: rout([group(biter(3))]), lineup: [pair(tough, soft, null)], bonds: [['tough', 'soft']] as [string, string][] };
+    expect(engine.playMap(input, 1).log[0]!.stances[0]).toMatchObject({ stance: 'together', front: 'tough' });
+    const play = engine.playMap({ ...input, priority: { soft: 'high' } }, 1);
+    expect(play.log[0]!.stances[0]).toMatchObject({ pair: 'tough', stance: 'together', front: 'soft' });
+    expect(play.units['soft']!.kills).not.toEqual({});
+  });
+
   it('pairs up again before a wave that would kill either unit alone: Pair Up costs the mover’s action', () => {
     // Def 10 each: alone a Biter's 30 leaves 20 (dead at 20 HP); paired, +1 Def leaves 19.
     const a: Fighter = { ...hero, name: 'Ann', stats: stats(20, 15, 0, 60, 40, 0, 10, 0) };
