@@ -26,7 +26,7 @@ import {
   type RunSim,
   type UnitWorth,
 } from '../engine';
-import { chanceText, differenceText, killText, pointsText, signedPoints } from './chance';
+import { chanceText, differenceText, killText, noDeathText, pointsText, signedPoints } from './chance';
 import { h } from './dom';
 import { startSolve } from './solve-client';
 
@@ -231,10 +231,11 @@ function ask(ctx: WhyContext, id: string, e: Explanation): void {
 export const LEAN = { high: ['▲ may read high', 'the real chance is probably lower', 'warn'], low: ['▼ may read low', 'the real chance is probably higher', 'ok'], either: ['◆ either way', 'it could go either way', 'dim'] } as const;
 
 /** An explanation's value as the panel reads it (the ± of a difference with it; the headline's in its math). */
-export function valueText(e: Pick<Explanation, 'value' | 'format' | 'margin' | 'close'>): string {
+export function valueText(e: Pick<Explanation, 'value' | 'format' | 'margin' | 'close'> & { readonly id?: string }): string {
   switch (e.format) {
     case 'chance':
-      return chanceText(e.value);
+      // A map's own chance is its no-death chance ("flawless" is the whole plan's word).
+      return e.id?.startsWith('map:') ? noDeathText(e.value) : chanceText(e.value);
     case 'kill':
       return killText(e.value);
     case 'difference':
@@ -249,7 +250,7 @@ export function valueText(e: Pick<Explanation, 'value' | 'format' | 'margin' | '
 }
 
 /** A row's value cell: its words, else its chance. */
-const rowValue = (r: ExplanationRow) => r.value ?? (r.chance === undefined ? '' : r.kill ? killText(r.chance) : chanceText(r.chance));
+const rowValue = (r: ExplanationRow) => r.value ?? (r.chance === undefined ? '' : r.kill ? killText(r.chance) : r.drillTo?.startsWith('map:') ? noDeathText(r.chance) : chanceText(r.chance));
 
 /**
  * An explanation as the panel draws it (#210): breadcrumbs (`crumbs`: each explanation on the path, the last this one),

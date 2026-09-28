@@ -232,7 +232,7 @@ describe('the next map’s no-death chance (#181)', () => {
     expect(r.text).toBe('No-death chance: 100%');
     expect(r.detail).toMatch(/^Played turn by turn with this lineup and your latest stats: a rout in \d+ turns?\./);
     const frail: SimGroup[] = [{ lead: member('chrom', stats(18, 7, 6, 6, 4, 5)), support: null }];
-    expect(noDeathReadout(engine, 'chapter-2', 'lunatic', frail).text).toMatch(/^No-death chance: (\d+\.\d%|under 0\.1%|0%)( \((loses a unit|flawless) about 1 run in [\d,]+\))?$/);
+    expect(noDeathReadout(engine, 'chapter-2', 'lunatic', frail).text).toMatch(/^No-death chance: (\d+\.\d%|under 0\.1%|0%)( \((loses a unit|no deaths) about 1 run in [\d,]+\))?$/);
   });
 
   it('asks for recorded stats when nobody can be fielded', () => {

@@ -32,6 +32,14 @@ export function chanceText(p: number, words: ChanceWords = DEFAULT_WORDS): strin
 }
 
 /**
+ * One map's no-death chance: worded like any chance, but "flawless" is the whole plan's word, so a map's runs that make
+ * it read "no deaths about 1 run in 29".
+ */
+export function noDeathText(p: number): string {
+  return chanceText(p, { miss: DEFAULT_WORDS.miss, make: 'no deaths' });
+}
+
+/**
  * A fight's kill chance (#210; spec #175, The Why panel's wording): percent with "1 run in N" always added ("12.1%
  * (kills someone about 1 run in 8)"), capped like any chance.
  */

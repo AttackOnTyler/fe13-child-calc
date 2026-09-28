@@ -4,7 +4,7 @@
  * A new entry copies the one before; editing a past entry never reaches later ones, which are flagged instead.
  */
 import type { Assumptions, Ceiling, ChildId, CloseCall, Gender, Reading, Readings, SuggestedPin, Engine, FlawlessChance, FlawlessOptions, GoldSpread, HeldItem, ItemPin, ItemPlanRow, ItemUsed, MapOrderStep, Milestone, MilestonePoint, PinCost, Plan, PlanPin, PlanProposal, PlanRobin, PrunedComp, RobinCursor, RobinStep, RosterUnit, Run, RunEntry, Snapshot, SupportLevel, UnitInternalLevel, UnitSnapshot } from '../engine';
-import { chanceText, chanceWithMargin, differenceText, stressText } from './chance';
+import { chanceText, chanceWithMargin, differenceText, noDeathText, stressText } from './chance';
 import { startSolve } from './solve-client';
 import { SOLVE_SECONDS, STEP_BUDGET, rescoreSeed, rosterUnits, type RunSim, type StressCase } from '../engine';
 import { EMPTY_SNAPSHOT, FLAWLESS_SEED, SUPPORT_LEVELS, addEntry, childJoinFrom, chromWedding, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, withUnit } from '../engine';
@@ -497,7 +497,7 @@ function readoutOf(
   const why = {
     text: [[chanceWithMargin(r), 'flawless'], ...(ceiling?.chance !== undefined ? [[chanceText(ceiling.chance), 'ceiling'] as WhyMark] : [])] as WhyMark[],
     rows: r.maps.map((m): WhyMark[] => [
-      ...(m.noDeath !== undefined ? [[chanceText(m.noDeath), `map:${m.key}`] as WhyMark] : []),
+      ...(m.noDeath !== undefined ? [[noDeathText(m.noDeath), `map:${m.key}`] as WhyMark] : []),
       ...(m.noDeath !== undefined && m.gold ? [[goldRange(m.gold), `gold:${m.key}`] as WhyMark] : []),
       ...r.sideGoals.filter((g) => g.key === m.key && g.chase && g.secured !== undefined).map((g): WhyMark => [`secured ${chanceText(g.secured!)}`, `side-goal:${g.id}`]),
     ]),
@@ -523,7 +523,7 @@ function readoutOf(
         .map((g) => `${g.label.slice(g.label.indexOf(': ') + 2)} ${!g.chase ? 'skipped' : g.secured === undefined ? 'chased' : `secured ${chanceText(g.secured)}`}`);
       const rewards = r.renown.stops.find((s) => s.key === m.key)?.rewards ?? [];
       const extra = [...goals, ...(rewards.length ? [`renown: ${listOf(rewards)}`] : [])].map((x) => ` · ${x}`).join('');
-      return `${m.label}: ${m.noDeath === undefined ? 'no run gets here with nobody lost' : `${chanceText(m.noDeath)}${m.gold ? ` · ${goldRange(m.gold)}` : ''}`}${extra}`;
+      return `${m.label}: ${m.noDeath === undefined ? 'no run gets here with nobody lost' : `${noDeathText(m.noDeath)}${m.gold ? ` · ${goldRange(m.gold)}` : ''}`}${extra}`;
     }),
     // The roadmap and its readings are the adopted plan's (#206): the plan the search started from.
     roadmap: roadmapReadout(engine, run, progress?.start ?? plan, readings, new Map(r.maps.map((m) => [m.key, m.label]))),
