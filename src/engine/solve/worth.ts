@@ -11,8 +11,9 @@
  *   seed's), the endpoint's is the rebuilt wishlist's; its order, seals and item uses otherwise stay. A bounded local
  *   search of the new plan isn't run (a stated simplification: worth reads a little high by what the search would win
  *   back). Chrom and Robin read "forced": no plan has them removed.
- * - **Utility:** the part of worth lost when the unit still fights but takes none of its staff (heal, Fortify, Rescue),
- *   Dance or Rally actions (`RunSimInput.idle`); a unit with none of those in its kit or its classes has none.
+ * - **Utility:** the part of worth lost when the unit still fights but takes none of its sustain (a staff's heal,
+ *   Fortify or Rescue, a potion), Dance or Rally actions (`RunSimInput.idle`); a unit with none of those in its kit or
+ *   its classes has none.
  * - **Reserves:** chosen when the worker is idle, after the worth: the **likely losses** are the wishlist units the
  *   plan's runs lose most often (`RunSim.losses`, the few most lost, weighted by how often); for each, the plan without
  *   it is played with its endpoint slot left empty, and again with each candidate (a unit the plan has by the endpoint
@@ -40,6 +41,7 @@ import { paired } from './paired';
 import { isRuleOut, keptChoices, type Plan, type PlanLineup, type PlanPin, type WishlistReserve } from './plan';
 import { coupleKey, placedForSupports, planFor, seedPlan, type SeedContext, type SeedOptions } from './seed';
 import { SEARCH_RUNS } from './step';
+import { potionHeal } from '../sim/sustain';
 
 /** Units that read "forced" (spec #175, Unit worth): the game fields them on nearly every map. */
 export const FORCED_UNITS: readonly RosterUnit[] = ['chrom', 'robin'];
@@ -65,7 +67,7 @@ export type UnitWorth = {
   /** The flawless chance lost without it; undefined while unread (or forced). */
   readonly worth: number | undefined;
   readonly margin: number | undefined;
-  /** The part lost when it fights but takes no staff, Dance or Rally action; 0 with none in its kit. */
+  /** The part lost when it fights but takes no sustain (staff, potion), Dance or Rally action; 0 with none in its kit. */
   readonly utility: number | undefined;
   readonly utilityMargin: number | undefined;
   /** The runs read. */
@@ -345,9 +347,9 @@ export function withoutUnits(input: RunSimInput, gone: ReadonlySet<RosterUnit>):
   };
 }
 
-/** Whether a unit has anything to idle (#202): a staff, a Dance, or a Rally skill it holds or its classes teach. */
+/** Whether a unit has anything to idle (#202): a staff or potion, a Dance, or a Rally skill it holds or its classes teach. */
 export function hasUtility(u: Pick<ArmyUnit, 'classId' | 'skills'> & { readonly items?: ArmyUnit['items'] }, classes: readonly string[] = []): boolean {
-  if (u.items?.some((i) => i.item.kind === 'staff')) return true;
+  if (u.items?.some((i) => i.item.kind === 'staff' || potionHeal(i.item) !== undefined)) return true;
   const all = [u.classId, ...classes];
   if (all.includes('dancer')) return true;
   const rallies = new Set<string>(RALLY_SKILLS.map((id) => SKILLS[id]?.name ?? id));

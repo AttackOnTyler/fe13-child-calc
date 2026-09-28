@@ -168,8 +168,8 @@ export type MapPlayInput = {
    */
   readonly chase?: readonly SimChase[];
   /**
-   * Units that fight but take none of their sustain, Dance, Rally or Rescue actions for others (no staff, no Dance, no
-   * Rally; a potion on itself is its own fighting), by id: a unit's utility (#202) is the flawless chance lost this way.
+   * Units that fight but take none of their sustain, Dance, Rally or Rescue actions (no staff, no potion, no Dance, no
+   * Rally), by id: a unit's utility (#202) is the flawless chance lost this way.
    */
   readonly idle?: readonly string[];
   /**
@@ -733,7 +733,7 @@ class MapState {
     // Under the Rally stress (#211) a Rally reaches nobody: no one rallies.
     const noRally = input.stress === 'no-rally';
     this.kits = this.units.map((u) =>
-      idle.has(u.id) ? { ...kitOf(u, input.spread), staves: [], dances: false, rally: undefined } : noRally ? { ...kitOf(u, input.spread), rally: undefined } : kitOf(u, input.spread),
+      idle.has(u.id) ? { ...kitOf(u, input.spread), staves: [], potions: [], dances: false, rally: undefined } : noRally ? { ...kitOf(u, input.spread), rally: undefined } : kitOf(u, input.spread),
     );
     if (input.priority) {
       for (const u of this.units) this.ranks.push(RANK[input.priority[u.id] ?? 'normal']);

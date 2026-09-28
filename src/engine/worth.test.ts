@@ -45,6 +45,16 @@ describe('the simulation under a unit’s worth (#202)', () => {
     expect(engine.simulateRuns({ ...input, idle: ['lonqu'] }, 1, 1).chance).toBe(full.chance);
   });
 
+  it('counts a potion as sustain: idle, the unit drinks none (spec: a heal, a potion, Rescue)', () => {
+    const drinker = { army: [hero({ items: [{ item: itemByName('Vulnerary')!, uses: 3 }] })], maps: [step(rout('a', [wall]))], difficulty: 'normal' as const };
+    const full = engine.simulateRuns(drinker, 1, 1);
+    const idle = engine.simulateRuns({ ...drinker, idle: ['lonqu'] }, 1, 1);
+    expect(full.chance).toBeGreaterThan(idle.chance);
+    // And a unit holding one has a utility to read.
+    const w = engine.simulateWorth(drinker, { seed: 1, runs: 2, cap: 2, budget: 100 });
+    expect(w.units.find((u) => u.unit === 'lonqu')!.utility).toBeGreaterThan(0);
+  });
+
   it('names the likely losses: the units the runs lose, by how often', () => {
     const r = engine.simulateRuns({ ...input, idle: ['lissa'] }, 1, 4);
     expect(r.losses.map((l) => l.unit)).toEqual(['lonqu']);

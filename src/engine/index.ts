@@ -663,7 +663,7 @@ export type Engine = {
   /**
    * Each unit's worth and utility on a plan (#202), within a budget of evaluations: the flawless chance lost without it
    * (removed from every lineup where it's optional, its children with it, its spouse re-matched, the wishlist rebuilt
-   * and the roadmap re-solved greedily where it was named), and the part lost when it fights but takes no staff, Dance
+   * and the roadmap re-solved greedily where it was named), and the part lost when it fights but takes no sustain (staff, potion), Dance
    * or Rally action, both on the plan's own runs (paired, ±95%). Chrom and Robin read forced. Every unit in any of the
    * plan's lineups has one. Pass the returned cursor to the next step until converged (runs double to `cap`).
    */
@@ -830,7 +830,7 @@ export type Engine = {
   explain(id: string, context: ExplainContext): Explanation | undefined;
   /**
    * A plan's runs without a unit (#210, a worth's drill-down by lineup span; `idle`: with it fighting but taking none of
-   * its staff, Dance or Rally actions), on the seed and runs given: the input its worth reads.
+   * its sustain (staff, potion), Dance or Rally actions), on the seed and runs given: the input its worth reads.
    */
   worthChance(
     run: Run,
