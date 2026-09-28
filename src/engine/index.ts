@@ -107,6 +107,7 @@ import {
   ruleStatuses,
   rulesTouching,
   settleCheck,
+  setsUpOn,
   setupChecks,
   type CheckOutcome,
   type CheckedRules,
@@ -2297,7 +2298,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       const lineups = options.lineups ?? checkLineups(run, plan, options);
       const keys = remainingKeys(run, plan);
       const contexts = keys.map((k) => setupContext(run, plan, k, lineups.find((l) => l.key === k), { ...options, lineups }));
-      return setupChecks(plan, lineups.filter((l) => keys.includes(l.key)), run, options.rules ?? EMPTY_CHECKED_RULES, options.stakes, (rule) => contexts.some((c) => !!rule.setsUp?.(c)));
+      return setupChecks(plan, lineups.filter((l) => keys.includes(l.key)), run, options.rules ?? EMPTY_CHECKED_RULES, options.stakes, (rule) => contexts.some((c) => setsUpOn(rule, c)));
     },
     settleCheck: (rules, rule, observed, evidence, now) => settleCheck(rules, rule, observed, evidence, now),
     correctionChecks: (run, plan, rules) =>

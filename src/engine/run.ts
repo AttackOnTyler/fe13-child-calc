@@ -272,6 +272,13 @@ type MapRecruit = ChapterData['recruits'][number];
 /** A setup used only on its map (Premonition's Chrom and Robin, #131): fielded there, never joining the army. */
 const mapOnly = (r: MapRecruit) => r.stats !== undefined;
 
+/** The units a map fields with a setup used only there: they gain no EXP on it (EXP "–", #243). */
+export const mapOnlyUnits = (map: string): RosterUnit[] =>
+  (MAPS.find((m) => m.id === map)?.recruits ?? []).flatMap((r) => {
+    const unit = mapOnly(r) ? UNIT_BY_NAME.get(r.unit) : undefined;
+    return unit ? [unit] : [];
+  });
+
 /** A stat of a setup used only on one map, as FEW prints it (`38 (35 if flaw, 43 if asset)`), for the run's Robin. */
 function setupStat(text: string, stat: Stat, run: RunFacts): number {
   const m = text.match(/^(\d+)(?: \((\d+) if flaw, (\d+) if asset\))?/);
