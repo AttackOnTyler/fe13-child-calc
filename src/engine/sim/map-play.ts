@@ -1516,14 +1516,15 @@ class MapState {
     const rank = (gi: number) => this.ranks[this.front[gi]!.unit]!;
     const kills: Attack[] = [];
     const chips: Attack[] = [];
-    // Damage on the target boss is the victory itself, whoever deals it (the second realism pass): it goes before
-    // any EXP routing, the most valuable first.
+    // With reinforcements that never stop, damage on the target boss is the victory itself, whoever deals it (the
+    // second realism pass): it goes before any EXP routing, the most valuable first. On other boss maps the stragglers'
+    // kills come first, as before: their EXP is the army's to route.
     let boss: Attack | undefined;
     for (const gi of open) {
       for (const a of this.attacksOf(gi, ctx)) {
         this.exposure(a, ctx, maxRisk < 1);
         if (a.risk > maxRisk) continue;
-        if (this.groups[a.foe.g]!.target) {
+        if (this.endless && this.groups[a.foe.g]!.target) {
           if (!boss || a.value > boss.value) boss = a;
         } else (a.ex.foeHp <= 0 ? kills : chips).push(a);
       }
