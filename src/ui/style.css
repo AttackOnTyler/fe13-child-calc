@@ -595,6 +595,7 @@ button.skill.linkish { padding: 0 6px; font-size: 11px; }
 .pos-board .picked { outline: 2px solid #fff; outline-offset: -2px; }
 .pos-board .ghost { border: 1px dashed #ddd; }
 .pos-board .foe-move { border: 1px dashed #ff6b6b; }
+.pos-board .foe-maybe { border: 1px dotted #ff6b6b; }
 .pos-board .pc { background: #4a7bd0; color: #fff; border-radius: 50%; padding: 0 3px; font-weight: 700; }
 .pos-board .pf { background: #c0392b; color: #fff; border-radius: 3px; padding: 0 3px; }
 .pos-board .pf.asleep { opacity: 0.6; }

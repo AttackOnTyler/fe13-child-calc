@@ -75,4 +75,29 @@ describe('the enemy phase on the Lunatic Prologue (#263)', () => {
     // A rule that never attacks: everyone only walks.
     expect(enemyPhase(b, () => undefined).actions.every((a) => !a.target)).toBe(true);
   });
+
+  // Ground truth from two turn-1 bookmarks (#273): the enemy phase after ending turn 1 with no moves (E0), and with only
+  // Frederick moved to (7,13) (E2), every tile read from the game's own save. The game rolls among equal tiles, so each
+  // one it took is the prediction or one of its alternatives; the prediction is the one nearest our units.
+  const stops = (b: Board) =>
+    new Map(enemyPhase(b).actions.map((a) => [`${b.enemies.find((e) => e.id === a.enemy)!.at}`, [a.to, ...(a.alternatives ?? [])].map(String)]));
+  it('E0: each foe stops on a tile the simulator lists; the Mage and the far Barbarian as predicted', () => {
+    const b = prologueBoard();
+    const s = stops(b);
+    const game: Record<string, string> = { '4,10': '2,13', '10,6': '8,9', '7,9': '6,13', '1,8': '2,12', '9,12': '5,13' };
+    for (const [from, to] of Object.entries(game)) expect(s.get(from)).toContain(to);
+    const ep = enemyPhase(b);
+    expect(ep.actions.find((a) => a.enemy === at(b, 10, 6).id)!.to).toEqual([8, 9]);
+    expect(ep.actions.find((a) => a.enemy === at(b, 1, 8).id)!.to).toEqual([2, 12]);
+    // The Myrmidon's kill on Lissa could come from either side of her.
+    expect(ep.actions.find((a) => a.enemy === at(b, 4, 10).id)).toMatchObject({ target: 'lissa', alternatives: [[2, 13]] });
+  });
+
+  it('E2: with Frederick at (7,13) the Mage stops on (9,10), and the Barbarian attacks him from a listed tile', () => {
+    const b = prologueBoard({ frederick: [7, 13] });
+    const ep = enemyPhase(b);
+    expect(ep.actions.find((a) => a.enemy === at(b, 10, 6).id)).toMatchObject({ to: [9, 10], alternatives: [[10, 11]] });
+    expect(stops(b).get('7,9')).toContain('6,13');
+    expect(ep.actions.find((a) => a.enemy === at(b, 7, 9).id)!.target).toBe('frederick');
+  });
 });

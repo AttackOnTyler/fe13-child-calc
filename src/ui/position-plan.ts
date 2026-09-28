@@ -190,15 +190,17 @@ type UiState = {
   /** "A unit is elsewhere": the unit picked, waiting for its tile. */
   placing?: string;
   /** Fixing the enemy phase: by enemy id, its attack as it went. */
-  fixes: Record<string, { target: string; foe: StrikeTap; unit: StrikeTap; to?: Tile }>;
+  fixes: Record<string, { target: string; foe: StrikeTap; unit: StrikeTap }>;
   fixing: boolean;
+  /** Where a foe really stopped, by enemy id, when the game picked another of its equal tiles (#273). */
+  stops: Record<string, Tile>;
   /** The turn-1 skill taps: the enemy shown. */
   skillAt: number;
   /** An attack's counter as tapped before its outcome. */
   counter: 'forecast' | 'hit' | 'missed';
 };
 const UI = new Map<string, UiState>();
-const stateOf = (map: string): UiState => UI.get(map) ?? (UI.set(map, { view: 0, danger: 'all', fixes: {}, fixing: false, skillAt: 0, counter: 'forecast' }), UI.get(map)!);
+const stateOf = (map: string): UiState => UI.get(map) ?? (UI.set(map, { view: 0, danger: 'all', fixes: {}, fixing: false, stops: {}, skillAt: 0, counter: 'forecast' }), UI.get(map)!);
 
 /** Solved plans by board and pin, the few latest. */
 const PLANS = new Map<string, PositionPlan>();
@@ -247,6 +249,7 @@ function content(ctx: PositionContext, start: Board, redraw: () => void): (HTMLE
     ui.mine = undefined;
     ui.fixing = false;
     ui.fixes = {};
+    ui.stops = {};
     ctx.setRun(withPositionEvents(ctx.run, ctx.map, [...events, ...(Array.isArray(e) ? e : [e])]));
   };
   const k = planKey(ctx.map, events, ui.mine, units);
@@ -381,23 +384,41 @@ function actionItem(b: Board, a: PlannedAction, live?: { push: (e: PositionEvent
 
 const TAPS: readonly StrikeTap[] = ['hit', 'missed', 'crit', 'killed'];
 
-/** The predicted enemy phase: ✓ as predicted, or fix its attacks (target, whose strikes landed, a crit, a kill). */
+/**
+ * The predicted enemy phase: ✓ as predicted, or fix its attacks (target, whose strikes landed, a crit, a kill). A foe
+ * with equal tiles to stop on (#273: the game rolls among them) shows each as a tap, so a correction is a click, not a
+ * count of tiles.
+ */
 function enemyPanel(b: Board, ui: UiState, push: (e: PositionEvent) => void, redraw: () => void): HTMLElement {
   const ep = enemyPhase(b);
   const attacks = ep.actions.filter((a) => a.target);
   const movers = ep.actions.filter((a) => !a.target && (a.to[0] !== a.from[0] || a.to[1] !== a.from[1]));
   const nm = (id: string) => playerById(b, id)?.name ?? enemyById(b, id)?.name ?? id;
+  const stop = (a: EnemyAction): Tile => ui.stops[a.enemy] ?? a.to;
   const fixed = (): EnemyAction[] =>
     ep.actions.map((a) => {
-      const f = ui.fixes[a.enemy];
-      if (!f) return a;
-      if (!f.target) return { enemy: a.enemy, from: a.from, to: f.to ?? a.to };
+      const f = ui.fixing ? ui.fixes[a.enemy] : undefined;
+      if (!f) return ui.stops[a.enemy] ? { ...a, to: stop(a) } : a;
+      if (!f.target) return { enemy: a.enemy, from: a.from, to: stop(a) };
       const e = enemyById(b, a.enemy)!;
       const t = playerById(b, f.target)!;
       // The fight as it went: its strikes and the counter as tapped.
-      const r = fightAs(b, e.id, t.id, f.to ?? a.to, f.foe, f.unit);
-      return { enemy: a.enemy, from: a.from, to: f.to ?? a.to, target: t.id, result: r };
+      const r = fightAs(b, e.id, t.id, stop(a), f.foe, f.unit);
+      return { enemy: a.enemy, from: a.from, to: stop(a), target: t.id, result: r };
     });
+  // The tiles a foe could as well have stopped on: the predicted one first, each a tap.
+  const stops = (a: EnemyAction, label: string) =>
+    a.alternatives?.length
+      ? h(
+          'div',
+          { class: 'chips small' },
+          label,
+          ...[a.to, ...a.alternatives].map((t) => {
+            const on = stop(a)[0] === t[0] && stop(a)[1] === t[1];
+            return h('button', { class: `mini${on ? ' on' : ''}`, onclick: () => ((ui.stops[a.enemy] = t), redraw()) }, `(${t[0]},${t[1]})`);
+          }),
+        )
+      : null;
   return h(
     'div',
     { ...guide('position-enemy'), class: 'pos-enemy' },
@@ -412,6 +433,7 @@ function enemyPanel(b: Board, ui: UiState, push: (e: PositionEvent) => void, red
           'li',
           {},
           `${nm(a.enemy)} → (${a.to[0]},${a.to[1]}) attacks ${nm(a.target!)} from ${a.range}: ${a.result ? `${nm(a.target!)} ${a.result.targetHp} HP, ${nm(a.enemy)} ${a.result.enemyHp || 'falls'}` : ''}`,
+          stops(a, 'Attacked from: '),
           ui.fixing
             ? h(
                 'div',
@@ -443,12 +465,13 @@ function enemyPanel(b: Board, ui: UiState, push: (e: PositionEvent) => void, red
         );
       }),
     ),
-    movers.length ? h('div', { class: 'muted small' }, `Moving only (on the board): ${movers.map((a) => `${nm(a.enemy)} → (${a.to[0]},${a.to[1]})`).join('; ')}`) : null,
+    movers.length ? h('div', { class: 'muted small' }, `Moving only (on the board): ${movers.map((a) => `${nm(a.enemy)} → (${a.to[0]},${a.to[1]})${a.alternatives?.length ? ' or another tile' : ''}`).join('; ')}`) : null,
+    ...movers.filter((a) => a.alternatives?.length).map((a) => stops(a, `${nm(a.enemy)} stopped on: `)),
     attacks.length ? null : h('div', { class: 'muted small' }, 'No enemy attacks.'),
     h(
       'div',
       { class: 'row' },
-      h('button', { class: 'primary', onclick: () => push({ kind: 'enemy', actions: ui.fixing ? fixed() : ep.actions }) }, ui.fixing ? '✓ As fixed' : '✓ As predicted'),
+      h('button', { class: 'primary', onclick: () => push({ kind: 'enemy', actions: fixed() }) }, ui.fixing || Object.keys(ui.stops).length ? '✓ As fixed' : '✓ As predicted'),
       attacks.length ? h('button', { class: 'ghost', onclick: () => ((ui.fixing = !ui.fixing), redraw()) }, ui.fixing ? 'Back' : 'Fix an attack') : null,
       h('span', { class: 'muted small' }, 'A foe that ended elsewhere: “A unit is elsewhere” below.'),
     ),
@@ -569,6 +592,8 @@ function boardView(b: Board, turn: TurnPlan | undefined, ui: UiState, redraw: ()
     if (a.from[0] !== a.to[0] || a.from[1] !== a.to[1]) ghosts.add(tileKey(a.from));
   });
   const foeMoves = new Set((turn?.enemy ?? []).filter((a) => a.to[0] !== a.from[0] || a.to[1] !== a.from[1]).map((a) => tileKey(a.to)));
+  // The equal tiles the game may pick instead (#273).
+  const foeMaybe = new Set((turn?.enemy ?? []).flatMap((a) => (a.alternatives ?? []).map(tileKey)));
   // Trying a pair's back: it moves as the lead after a Switch (#274).
   const trying = ui.trying?.unit ? playerById(b, ui.trying.unit) : undefined;
   const moving = trying?.carriedBy ? switched(b, trying.id) : b;
@@ -604,7 +629,7 @@ function boardView(b: Board, turn: TurnPlan | undefined, ui: UiState, redraw: ()
         off ? 'off' : `t-${TERRAIN_CLASS[t?.category ?? 1] ?? 'plain'}`,
         who && kills.has(k) ? 'd-kill' : threat.has(k) ? 'd-hit' : sleeping.has(k) ? 'd-sleep' : '',
         ghosts.has(k) ? 'ghost' : '',
-        foeMoves.has(k) ? 'foe-move' : '',
+        foeMoves.has(k) ? 'foe-move' : foeMaybe.has(k) ? 'foe-maybe' : '',
         reach?.has(k) ? 'reach' : '',
         ui.trying?.tile && ui.trying.tile[0] === x && ui.trying.tile[1] === y ? 'picked' : '',
       ]
@@ -624,7 +649,7 @@ function boardView(b: Board, turn: TurnPlan | undefined, ui: UiState, redraw: ()
     'div',
     { ...guide('position-board'), class: 'pos-board-wrap' },
     h('div', { class: 'pos-board', style: `grid-template-columns: repeat(${map.width}, var(--cell))` }, ...cells),
-    h('div', { class: 'muted small' }, `${who ? 'Dark red: the gang-up worst case kills ' + who.name + ' there. ' : ''}Red: an awake enemy can strike there; orange: a sleeping group’s reach (standing there wakes it); hatched: the edge, off the playable map. Numbers: this turn’s moves; dashed: where they start; red dash: predicted enemy moves. ${live ? 'Click a unit to try a move.' : ''}`),
+    h('div', { class: 'muted small' }, `${who ? 'Dark red: the gang-up worst case kills ' + who.name + ' there. ' : ''}Red: an awake enemy can strike there; orange: a sleeping group’s reach (standing there wakes it); hatched: the edge, off the playable map. Numbers: this turn’s moves; dashed: where they start; red dash: predicted enemy moves; dotted: a tile the game may pick instead, as near. ${live ? 'Click a unit to try a move.' : ''}`),
   );
 }
 
