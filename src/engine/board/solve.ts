@@ -304,13 +304,12 @@ function options(s: State, u: PlayerPiece, waitTiles: number): PlannedAction[] {
       }
       out.push({ unit: u.id, from: u.at, to, command: { kind: 'attack', target: e.id, weapon: best!.w.item.name }, forecast: best!.f, why: '' });
     }
-    // Staff: heal a hurt lead (or its back) in reach.
+    // Staff: heal a hurt lead in reach. A staff reaches only the unit in front, never a pair's back.
     const staff = u.items.find((i) => itemByName(i.item)?.kind === 'staff' && (i.uses ?? 1) > 0);
     if (staff)
       for (const t of allies) {
-        if (manhattan(t.at, to) !== 1) continue;
-        const who = [t, ...(t.back ? [playerById(b, t.back)!] : [])].find((x) => x.hp < x.fighter.stats.hp);
-        if (who) out.push({ unit: u.id, from: u.at, to, command: { kind: 'heal', target: who.id, staff: staff.item }, why: '' });
+        if (manhattan(t.at, to) !== 1 || t.hp >= t.fighter.stats.hp) continue;
+        out.push({ unit: u.id, from: u.at, to, command: { kind: 'heal', target: t.id, staff: staff.item }, why: '' });
       }
     const trade = tradeFrom(to);
     if (hurt && (usesOf(u, 'Vulnerary') || trade)) out.push({ unit: u.id, from: u.at, to, ...(trade ? { trade } : {}), command: { kind: 'item', item: 'Vulnerary' }, why: '' });
@@ -476,10 +475,9 @@ function boardValue(b: Board): number {
 }
 
 /**
- * The HP each healer can restore next turn, at half worth: its best heal on a hurt lead it can reach (Mov + 1). Only
- * leads count (a healer can't heal its own partner, and whether a staff reaches another pair's back is left out, the
- * cautious reading), so a hurt unit set down beside a healer is worth more than one riding behind (#271: the Prologue
- * outline stalled with Frederick behind Lissa).
+ * The HP each healer can restore next turn, at half worth: its best heal on a hurt lead it can reach (Mov + 1). A
+ * staff reaches only the unit in front, so a hurt unit set down beside a healer is worth more than one riding behind
+ * (#271: the Prologue outline stalled with Frederick behind Lissa).
  */
 function healInReach(b: Board): number {
   const hurt = leads(b).filter((p) => p.hp < p.fighter.stats.hp);
