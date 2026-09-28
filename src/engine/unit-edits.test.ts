@@ -37,7 +37,10 @@ describe('a unit’s edits for the Wishlist tab (#203)', () => {
     const w = plan.wishlist.units.find((x) => x.unit !== 'chrom' && x.unit !== 'robin')!;
     const edits = engine.unitEdits(run, plan, w.unit);
     const build = edits.find((e) => e.kind === 'build')!;
-    expect(engine.editCost({ run, plan, edited: build.make(), seed: 1, budget: 4 })).toEqual({ gain: 0, margin: 0, runs: 0, verdict: 'close', settled: true });
+    // The runs equip builds (the realism pass): a build edit is costed on them; a reserve is read by no run.
+    expect(engine.editCost({ run, plan, edited: build.make(), seed: 1, budget: 4 }).runs).toBe(2);
+    const reserve = { ...plan, wishlist: { ...plan.wishlist, reserves: [{ unit: w.unit, covers: null }] } };
+    expect(engine.editCost({ run, plan, edited: reserve, seed: 1, budget: 4 })).toEqual({ gain: 0, margin: 0, runs: 0, verdict: 'close', settled: true });
     const keep = edits.find((e) => e.kind === 'keep')!;
     const kept = keep.make();
     expect(kept.wishlist.units.some((x) => x.unit === w.unit)).toBe(false);
