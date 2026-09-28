@@ -118,6 +118,15 @@ export function robinToLock(run: Run, progress: SolveProgress | undefined): Plan
   return heldPlan(run, progress)?.robin;
 }
 
+/**
+ * The run with Robin locked by "Lock Robin and start": the Robin it shows (the facts', else the held plan's), else,
+ * before the solve has replied, the adopted plan's (the seed's), worked out on the click. It always locks.
+ */
+export function lockedRun(engine: Engine, run: Run, progress: SolveProgress | undefined, pins?: readonly PlanPin[]): Run {
+  const robin = robinToLock(run, progress) ?? engine.adoptedPlan(run, pins ? { pins } : {}).robin;
+  return withRobinLock(run, robin);
+}
+
 /** Every term of the search (split on spaces) in the edit's words, ignoring case. */
 const matches = (query: string, label: string) => {
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -170,7 +179,7 @@ export function inboxReadout(run: Run, state: InboxState): Inbox {
     robin,
     text: robin
       ? `Lock Robin (${robinName(robin)}) and start the run. This locks only Robin; the rest of the wishlist stays editable and re-solves after every map.`
-      : 'Lock Robin and start: waiting for the plan’s Robin.',
+      : 'Lock Robin and start: the seed plan’s Robin (the search hasn’t replied yet). This locks only Robin; the rest re-solves after every map.',
   });
   return { title: 'Before the run: what needs you', items };
 }
@@ -724,6 +733,9 @@ function redraw(): void {
   for (const p of live.parts) {
     if (!p.el.isConnected) continue;
     const next = p.draw();
+    // Unchanged: kept, so a click landing across a reply isn't lost (a replaced button mid-click never fires; the
+    // runthrough's Lock Robin click did nothing while the solve replied every 250 ms).
+    if (next.isEqualNode(p.el)) continue;
     p.el.replaceWith(next);
     p.el = next;
   }
@@ -1102,7 +1114,7 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
         'div',
         { class: 'banner lock-robin' },
         h('span', {}, l.text),
-        h('button', { disabled: !l.robin, title: 'Write this Robin into the run facts: only Robin is locked, the rest stays editable', onclick: () => l.robin && set(withRobinLock(run, l.robin)) }, 'Lock Robin and start'),
+        h('button', { title: 'Write this Robin into the run facts: only Robin is locked, the rest stays editable', onclick: () => set(lockedRun(ctx.engine, ctx.run, progressOf.get(run), ctx.pins?.())) }, 'Lock Robin and start'),
       ),
     );
   };

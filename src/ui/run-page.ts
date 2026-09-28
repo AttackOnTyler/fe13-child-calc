@@ -7,7 +7,7 @@ import type { Assumptions, Ceiling, ChildId, CloseCall, Gender, Reading, Reading
 import { chanceText, chanceWithMargin, differenceText, noDeathText, stressText } from './chance';
 import { startSolve } from './solve-client';
 import { SOLVE_SECONDS, STEP_BUDGET, rescoreSeed, rosterUnits, type RunSim, type StressCase } from '../engine';
-import { EMPTY_SNAPSHOT, FLAWLESS_SEED, SUPPORT_LEVELS, addEntry, childJoinFrom, chromWedding, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, withUnit } from '../engine';
+import { EMPTY_SNAPSHOT, FLAWLESS_SEED, SUPPORT_LEVELS, addEntry, childJoinFrom, chromWedding, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, waitsForRobin, withUnit } from '../engine';
 import { removeClassChange, tierOfClass, withClassChange, withCountOverride, type Seal } from '../engine';
 import { entryAfterShopping, goldAfterShopping, removeShopLine, shopPrice, withShopLine, type ShopKind, type ShopLine } from '../engine';
 import { withRenown, withSideGoalPin, withSideGoalSecured, type SideGoalDecision, type SideGoalId } from '../engine';
@@ -129,7 +129,9 @@ function nextMapSection(ctx: RunContext): HTMLElement {
       h('b', {}, label(o.map)),
       o.note ? h('span', { class: 'muted small' }, o.note) : null,
       h('button', { ...(first ? guide('prepare') : {}), class: first ? '' : 'mini', title: 'Get ready for this map: your army and the units joining on it', onclick: () => ctx.prepare(o.map) }, 'Prepare'),
-      h('button', { ...(first ? guide('record-results') : {}), class: first ? '' : 'mini', title: 'Played it: record how it went', onclick: () => record(o.map) }, 'Record results'),
+      waitsForRobin(ctx.run, o.map)
+        ? h('span', { class: 'small warn' }, 'Lock Robin first: this map recruits Robin, who needs a gender, asset and flaw.')
+        : h('button', { ...(first ? guide('record-results') : {}), class: first ? '' : 'mini', title: 'Played it: record how it went', onclick: () => record(o.map) }, 'Record results'),
     );
   const story = offers.filter((o) => o.kind === 'story');
   const rest = offers.filter((o) => o.kind !== 'story');
@@ -1224,6 +1226,8 @@ const redraw = () => {
   const v = robinView;
   if (!v?.el.isConnected) return;
   const next = v.draw();
+  // Unchanged: kept, so a click across a reply isn't lost.
+  if (next.isEqualNode(v.el)) return;
   v.el.replaceWith(next);
   v.el = next;
 };
@@ -1658,6 +1662,7 @@ function chapterLog(ctx: RunContext): HTMLElement {
           'button',
           {
             onclick: () => {
+              if (waitsForRobin(ctx.run, pick)) return void alert('Lock Robin first (or set Robin in Run facts): this map recruits Robin.');
               const label = pick === 'other' ? (prompt('What did you play?') ?? 'Other') : undefined;
               const next = withMapRecorded(ctx, pick, label);
               ctx.setRun(next);

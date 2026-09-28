@@ -246,6 +246,7 @@ export {
   prepUnits,
   GAME_OVER_UNITS,
   isLost,
+  waitsForRobin,
   recordFallen,
   recordMarriage,
   recordMissed,

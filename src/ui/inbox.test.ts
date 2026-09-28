@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_ROSTER, addEntry, proposalId, runFromRoster, withDismissedProposal, withEdit, withRobinLock, withRun, withoutEdit, type EditCost, type FlawlessChance, type Plan, type PlanRobin, type RosterUnit, type Run } from '../engine';
-import { SHOWN_MATCHES, beforeTheLock, costText, editPinsKey, inboxReadout, type InboxItem, type InboxState } from './inbox';
+import { EMPTY_ROSTER, addEntry, createEngine, latestEntry, proposalId, waitsForRobin, runFromRoster, withDismissedProposal, withEdit, withRobinLock, withRun, withoutEdit, type EditCost, type FlawlessChance, type Plan, type PlanRobin, type RosterUnit, type Run } from '../engine';
+import { SHOWN_MATCHES, beforeTheLock, costText, editPinsKey, inboxReadout, lockedRun, type InboxItem, type InboxState } from './inbox';
 import type { SolveProgress } from './run-page';
 import type { UnitEditView } from './solve-client';
 
@@ -143,6 +143,23 @@ describe('the inbox before the Lock (#204)', () => {
     expect(locked.pins?.map((p) => p.kind)).toEqual(['robin-lock']);
     // Landing on the Run view: the inbox before the Lock is done.
     expect(beforeTheLock(locked)).toBe(false);
-    expect(item(run, 'lock', { progress: undefined })).toMatchObject({ robin: undefined, text: 'Lock Robin and start: waiting for the plan’s Robin.' });
+    expect(item(run, 'lock', { progress: undefined })).toMatchObject({ robin: undefined, text: 'Lock Robin and start: the seed plan’s Robin (the search hasn’t replied yet). This locks only Robin; the rest re-solves after every map.' });
+  });
+
+  it('locks before the solve has replied: the seed plan’s Robin into the run facts, and the Prologue recruits Robin', () => {
+    const engine = createEngine();
+    const lunatic = runFromRoster(withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'lunatic', mode: 'classic' }));
+    // Unlocked, the Prologue can't be recorded: Robin, recruited there, needs a gender.
+    expect(waitsForRobin(lunatic, 'premonition')).toBe(false);
+    expect(waitsForRobin(lunatic, 'prologue')).toBe(true);
+    const locked = lockedRun(engine, lunatic, undefined);
+    const robin = engine.seedPlan(lunatic).robin;
+    expect(locked.roster.run).toMatchObject(robin);
+    expect(locked.pins).toEqual([expect.objectContaining({ kind: 'robin-lock', robin })]);
+    // With a Robin the page shows, it locks that one.
+    expect(lockedRun(engine, run, progress).roster.run).toMatchObject(spd);
+    const prologue = addEntry(addEntry(locked, 'premonition', 1), 'prologue', 2);
+    expect(waitsForRobin(locked, 'prologue')).toBe(false);
+    expect(Object.keys(latestEntry(prologue)!.snapshot.units)).toContain('robin');
   });
 });
