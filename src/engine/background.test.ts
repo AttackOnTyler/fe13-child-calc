@@ -96,14 +96,13 @@ describe('edit costs, stepped (#203, #204)', () => {
     expect(first.kind === 'edit-cost' && first.cost).toEqual(engine.editCost({ run: late, plan: seed, edited: keep.make(), pins: keep.play, seed: small.seed, budget: 4 }));
   });
 
-  it('costs each edit at each budget in turn, skipping those settled, then lists them again, done', () => {
-    // A build skill costs nothing to read: settled on the first budget. A keep edit isn't, on 2 runs.
+  it('costs each edit at each budget in turn, then lists them again, done', () => {
+    // A build skill edit is costed on the runs (they equip builds), like a keep edit: neither settles on 2 runs.
     const build = edits.find((e) => e.kind === 'build')!;
     const keep = edits.find((e) => e.kind === 'keep')!;
     const input = { run: late, plan: seed, keys: [build.key, keep.key], seed: small.seed, budgets: [4, 4] };
     const steps = drive(engine.editChoicesStep(input), (s) => engine.editChoicesStep({ ...input, cursor: s.cursor }));
-    expect(steps.map((s) => (s.kind === 'edit-cost' ? `${s.key}:${s.cost.settled}` : s.kind))).toEqual(['edits', `${build.key}:true`, `${keep.key}:false`, `${keep.key}:false`, 'edits']);
-    expect(steps.at(-1)!.done).toBe(true);
+    expect(steps.map((s) => (s.kind === 'edit-cost' ? `${s.key}:${s.cost.settled}` : s.kind))).toEqual(['edits', `${build.key}:false`, `${keep.key}:false`, `${build.key}:false`, `${keep.key}:false`, 'edits']);    expect(steps.at(-1)!.done).toBe(true);
   });
 
   it('lists every edit the player can make, done at once when none is asked', () => {
