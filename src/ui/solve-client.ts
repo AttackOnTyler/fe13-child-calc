@@ -137,6 +137,12 @@ export type SolveRequest =
       readonly kind: 'forecast';
       readonly plan?: Plan;
       readonly pins?: readonly PlanPin[];
+      /**
+       * The map being prepared: after the forecast, each checklist action's worth (#175 story 59, `actionWorthStep`),
+       * one `edit-cost` reply a cost (keyed by action id), at each of `budgets` in turn.
+       */
+      readonly map?: string;
+      readonly budgets?: readonly number[];
     })
   | (Common & {
       /**

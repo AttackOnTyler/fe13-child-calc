@@ -11,6 +11,7 @@
  *   edit costed at each budget in turn (every edit provisional first, then each settled), skipping those settled.
  * - **The checks** (`checksStep`): each open rule's stakes (those the model doesn't read first), then the setup checks.
  * - **The readings** (`readingsStep`): the EXP forecast's first pass, then each pending milestone's suggested changes.
+ * - **The checklist's worth** (`actionWorthStep`): each preparation action's removal (`actionEdits`) costed in turn.
  */
 import { SEARCH_RUNS, type EditCost, type PinCost, type UnitEdit } from './solve/step';
 import type { Plan, PlanPin, SolveCursor } from './solve/plan';
@@ -224,6 +225,29 @@ export function editChoicesStep(engine: Engine, input: EditChoicesStepInput): Ed
   const edits = engine.editChoices(input.run, plan, { ...pins, seed: input.seed, ...(input.riskiest ? { riskiest: input.riskiest } : {}) });
   const costing = input.keys.flatMap((k) => edits.filter((e) => e.key === k));
   return editsStep(engine, input, { plan, edits, costing, costs: freshCosts() }, true, true);
+}
+
+export type ActionWorthStepInput = {
+  readonly run: Run;
+  /** The adopted plan the preparation page shows. */
+  readonly plan: Plan;
+  /** The map being prepared (its id). */
+  readonly map: string;
+  readonly seed: number;
+  /** The budgets to cost at, in order (`EDIT_COST_BUDGET.provisional`, then `.settled`). */
+  readonly budgets: readonly number[];
+  readonly cursor?: EditsCursor;
+};
+
+/**
+ * The preparation checklist's worth (#175 story 59) as a stepping call: each action's removal (`actionEdits`) listed
+ * first, then costed at each budget in turn (the edit's gain is minus the action's worth), skipping those settled; the
+ * list again, done.
+ */
+export function actionWorthStep(engine: Engine, input: ActionWorthStepInput): EditsStep {
+  if (input.cursor) return editsStep(engine, input, input.cursor, false, true);
+  const edits = engine.actionEdits(input.run, input.plan, input.map);
+  return editsStep(engine, input, { plan: input.plan, edits, costing: edits, costs: freshCosts() }, true, true);
 }
 
 // ---- the checks --------------------------------------------------------------------------------------------------

@@ -125,6 +125,31 @@ describe('edit costs, stepped (#203, #204)', () => {
   });
 });
 
+describe('the preparation checklist’s worth, stepped (#175 story 59)', () => {
+  const map = engine.mapOrder(late).steps[0]!.map;
+
+  it('lists each action’s removal by the page’s action id: a pair fights apart, a unit sits out', () => {
+    const edits = engine.actionEdits(late, seed, map);
+    const lineup = engine.roadmapLineups(late, seed).find((l) => l.key === engine.mapOrder(late).steps[0]!.key)!;
+    const paired = lineup.pairs.filter((p) => p.back);
+    expect(paired.length).toBeGreaterThan(0);
+    for (const p of paired) expect(edits.find((e) => e.key === `pair:${p.lead}`)!.play).toEqual([{ kind: 'span', unit: p.back, position: 'solo', from: lineup.key, to: lineup.key }]);
+    for (const e of edits.filter((x) => x.key.startsWith('field:'))) expect(e.play[0]).toMatchObject({ kind: 'span', position: 'out' });
+    // Chrom is forced: never "sits out".
+    expect(edits.map((e) => e.key)).not.toContain('field:chrom');
+  });
+
+  it('costs each removal on the runs, the list first and again when done', () => {
+    const input = { run: late, plan: seed, map, seed: small.seed, budgets: [4] };
+    const first = engine.actionWorthStep(input);
+    expect(first.kind).toBe('edits');
+    const pair = first.kind === 'edits' ? first.edits.find((e) => e.key.startsWith('pair:'))! : undefined;
+    const second = engine.actionWorthStep({ ...input, cursor: first.cursor });
+    expect(second).toMatchObject({ kind: 'edit-cost', key: pair!.key });
+    if (second.kind === 'edit-cost') expect(second.cost.runs).toBe(2);
+  });
+});
+
 describe('the checks, stepped (#209)', () => {
   it('reads each open rule’s stakes, those the model doesn’t read first, then the setup checks', () => {
     const input = { run: late, plan: seed, rules: EMPTY_CHECKED_RULES, seed: small.seed, budgets: [4], runs: 1 };

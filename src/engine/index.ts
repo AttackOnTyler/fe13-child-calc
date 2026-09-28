@@ -44,7 +44,7 @@ import type { BuildTemplate } from '../curated/builds';
 import { skillCard } from './skill-card';
 import { unitPage, unitReach, type FrontDoor, type FrontDoorTile, type OpinionBlock, type OpinionMark, type PageSubject, type PageUnitId, type ParentedChild, type PartnerChild, type PartnerRow, type UnitPage } from './unit-page';
 import { SPOTPASS_UNITS } from '../game-data/join';
-import { CHAPTER_DISAGREEMENTS, MAPS, lunaticPlusPoolFor, type ChapterData, type ChapterDifficulty as MapDifficulty, type ChapterDisagreement } from '../game-data/chapters';
+import { CHAPTER_DISAGREEMENTS, MAPS, NO_PREPARATIONS, lunaticPlusPoolFor, type ChapterData, type ChapterDifficulty as MapDifficulty, type ChapterDisagreement } from '../game-data/chapters';
 import { mapWaves, type MapWaves } from './waves';
 import type { RenownReward } from '../game-data/gold';
 import { mapGold, renownGain, renownRewards, type GoldRow } from './gold';
@@ -72,7 +72,7 @@ import { brokenPins, livePins, pinKey, runPins, withPin, withoutPins } from './s
 import { ROBIN_EXTRA, ROBIN_SOLVE, withRobinLock, robinKey, robinLock, robinOptions, robinStep, wishlistDifference, withoutRobinMarriage, type RobinCost, type RobinCursor, type RobinInput, type RobinOption, type RobinPick, type RobinStep, type SolvedRobin, type WishlistDifference } from './solve/robin';
 import { FORCED_UNITS, WORTH_RESOLVE, childrenOf, coveredLineup, hasUtility, planWithout, reservesStep, runWithout, withoutUnits, worthStep, type WorthResolve, type ReservesInput, type ReservesStep, type WorthInput, type WorthStep, type WorthVariant } from './solve/worth';
 import type { Plan, PlanLineup, PlanPin, PlanPriority, PlanRobin } from './solve/plan';
-import { checksStep, editChoicesStep, lossStep, pinCostStep, readingsStep, unitEditsStep, type ChecksStep, type ChecksStepInput, type EditChoicesStepInput, type EditsStep, type LossStep, type LossStepInput, type PinCostStep, type PinCostStepInput, type ReadingsStep, type ReadingsStepInput, type UnitEditsStepInput } from './background';
+import { actionWorthStep, checksStep, editChoicesStep, lossStep, pinCostStep, readingsStep, unitEditsStep, type ActionWorthStepInput, type ChecksStep, type ChecksStepInput, type EditChoicesStepInput, type EditsStep, type LossStep, type LossStepInput, type PinCostStep, type PinCostStepInput, type ReadingsStep, type ReadingsStepInput, type UnitEditsStepInput } from './background';
 import { beforeMapItems, itemPlanOf, type BeforeMapItem, type ItemPlan, type ItemUsed } from './item-plan';
 import { readings, recordedStats, type Readings, type ReadingsOptions, type UnitStats } from './readings';
 import { defaultPriorities, expForecast, suggestChanges, suggestedChanges, type ExpForecast, type ExpForecastOptions, type SuggestedChange } from './exp-forecast';
@@ -89,7 +89,8 @@ import type { Difficulty } from './roster';
 import { combatExp, type CombatOutcome, type ExpFoe } from './exp';
 import { classChangeProposals, internalLevels, type ProposedClassChange, type UnitInternalLevel } from './internal-level';
 import { entryShopping, type EntryShopping } from './shopping';
-import { sideGoalChoices, sideGoalsSecured, type SideGoalChoice, type SideGoalRecord } from './side-goals';
+import { sideGoalChoices, sideGoalsSecured, type SideGoalChoice, type SideGoalId, type SideGoalRecord } from './side-goals';
+import { actionEdits } from './action-worth';
 import { renownAhead, type RenownAhead } from './renown';
 import { FIXED_INHERITANCE } from '../game-data/skills';
 import { remainingMapOrder, routeMapOrder, type MapOrder } from './map-order';
@@ -223,7 +224,7 @@ export type { EndpointCoverage, SeedOptions } from './solve/seed';
 export type { ClassMilestone, Milestone, MilestonePoint, RecruitMilestone, SealSource, SkillMilestone, SupportMilestone, SupportWindow } from './milestones';
 export { QUIET_POINTS, blindSpotsTouching, milestoneWords, riskSplit, type Comparison, type ExplainContext, type Explanation, type ExplanationFormat, type ExplanationKind, type ExplanationRow } from './explain';
 export { EDIT_COST_BUDGET, EDIT_KINDS, SEARCH_RUNS, rescoreSeed, SOLVE_SECONDS, STEP_BUDGET, TIE_TURNS, type EditCost, type EditCostInput, type EditKind, type PinCost, type PinCostInput, type SolveStep, type SolveStepInput, type UnitEdit } from './solve/step';
-export type { ChecksCursor, ChecksStep, ChecksStepInput, EditChoicesStepInput, EditListing, EditsCursor, EditsStep, LossCursor, LossStep, LossStepInput, PinCostStep, PinCostStepInput, ReadingsCursor, ReadingsStep, ReadingsStepInput, SearchCursor, UnitEditsStepInput } from './background';
+export type { ActionWorthStepInput, ChecksCursor, ChecksStep, ChecksStepInput, EditChoicesStepInput, EditListing, EditsCursor, EditsStep, LossCursor, LossStep, LossStepInput, PinCostStep, PinCostStepInput, ReadingsCursor, ReadingsStep, ReadingsStepInput, SearchCursor, UnitEditsStepInput } from './background';
 export { FORCED_UNITS, LIKELY_LOSSES, WORTH_RESOLVE, type WorthResolve, type LikelyLoss, type ReserveReading, type ReservesCursor, type ReservesInput, type ReservesStep, type UnitWorth, type WorthCursor, type WorthInput, type WorthStep } from './solve/worth';
 export { BLIND_SPOTS, STRESS_TESTS, type BlindSpot, type BlindSpotId, type BlindSpotTouch, type RunBlindSpotId, type StressTest } from './assumptions';
 export { bestWeapon, classTypes, dangerFlags, foeKey, foeOf, foesOf, matchup, pairUpBonus, statValue, type DangerFlag, type Fighter, type Foe, type Matchup } from './solver';
@@ -754,6 +755,13 @@ export type Engine = {
    * suggested changes a call, until none are pending or `stop`.
    */
   readingsStep(input: ReadingsStepInput): ReadingsStep;
+  /**
+   * What each preparation checklist action on a map is worth (#175 story 59): its removal from the plan, keyed by the
+   * preparation page's action id (`action-worth.ts`). Plays the map's lineup projection (worker-side).
+   */
+  actionEdits(run: Run, plan: Plan, map: string): readonly UnitEdit[];
+  /** The checklist's worth as a stepping call: the removals listed, then each costed at each budget in turn. */
+  actionWorthStep(input: ActionWorthStepInput): EditsStep;
   /**
    * The item plan of a plan (#193): one row per held item (owned now, or picked up on a map still to play) with its
    * planned use or carrier timeline, the pins that set it, and, given the plan's flawless chance, its arrival chance
@@ -2107,6 +2115,22 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     editChoicesStep: (input) => editChoicesStep(engine, input),
     checksStep: (input) => checksStep(engine, input),
     readingsStep: (input) => readingsStep(engine, input),
+    actionWorthStep: (input) => actionWorthStep(engine, input),
+    actionEdits: (run, plan, map) => {
+      const key = remainingMapOrder(run).steps.find((s) => s.map === map)?.key;
+      const input = planInput(run, plan);
+      const m = input.maps.find((x) => x.key === key);
+      if (!key || !m) return [];
+      return actionEdits(plan, {
+        key,
+        lineup: lineupsOf(run, plan, FLAWLESS_SEED).find((l) => l.key === key),
+        forced: m.forced,
+        noPrep: NO_PREPARATIONS.has(map),
+        before: engine.beforeThisMap(run, plan, map),
+        milestones: milestones(run, plan, assumptions),
+        chased: (m.sideGoals ?? []).filter((g) => g.chase).map((g) => g.id as SideGoalId),
+      });
+    },
     pinCost: (input) => {
       const run = pinnedRun(input.run, input.pins);
       const lift = input.lift ? new Set(input.lift.map(pinKey)) : undefined;
