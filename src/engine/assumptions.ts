@@ -616,6 +616,7 @@ export type BlindSpotId =
   | 'talk-reaches'
   | 'door-keys'
   | 'skills-in-combat'
+  | 'weapon-ranks'
   | 'walls-draw-foes'
   | 'potions-traded'
   | 'lunatic-plus-draws'
@@ -735,6 +736,17 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
     why: 'A boss fights only when attacked, as most do on their throne or gate; one that moves out to attack isn’t counted on enemy phase.',
     lean: 'high',
     touches: ['map'],
+  },
+  {
+    id: 'weapon-ranks',
+    label: 'Weapon ranks read from the weapon',
+    why:
+      'The combat math adds the weapon rank bonus (SF Calculations: a sword +1/+2/+3 Attack at C/B/A; a lance, bow or tome +1 Attack at ' +
+      'C, +1 Attack and +5 Hit at B, +2 Attack and +5 Hit at A; an axe +5/+10 Hit at C/B, +1 Attack and +10 Hit at A), but no weapon ' +
+      'ranks are recorded or grown. A unit’s rank is read as the one its weapon needs, which a unit with more weapon EXP beats; a foe in ' +
+      'an advanced class is read at A, the cautious reading (the Premonition’s Validar fights at A), and any other foe at its weapon’s rank.',
+    lean: 'high',
+    touches: ['map', 'fight'],
   },
   {
     id: 'skills-in-combat',

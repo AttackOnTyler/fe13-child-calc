@@ -9,6 +9,7 @@ import {
   recordFallen,
   recordMissed,
   runFromRoster,
+  unitName,
   withEntryForecast,
   withPlanHeld,
   withRobinLock,
@@ -126,14 +127,17 @@ describe('a loss early in a fresh run (#208, runthrough)', () => {
   const after = engine.seedPlan(lissa);
   const zero = { chance: 0, margin: 0, runs: 24, maps: [] } as unknown as FlawlessChance;
   const searching: SolveProgress = { best: after, start: after, chance: zero, proposals: [], closeCalls: [], pruned: [], done: true, converged: true };
+  // Lissa's marriage in the held plan (the seed picks her husband from the simulation's readings).
+  const marriage = held.wishlist.marriages.find((m) => m.includes('lissa'))!;
+  const husband = unitName(marriage.find((u) => u !== 'lissa')! as never, 'M');
 
   it('reads the loss against the plan held before it: what it broke, and the re-solve to accept', () => {
-    expect(held.wishlist.marriages).toContainEqual(['gregor', 'lissa']);
+    expect(marriage).toBeDefined();
     expect(after.wishlist.marriages.flat()).not.toContain('lissa');
     const l = itemOf(lissa, 'loss', { progress: searching })!;
     expect(l.lines[0]).toMatch(/^It broke .*Lissa/);
     expect(l.same).toBe(false);
-    expect(l.changes).toContain('Gregor and Lissa no longer marry');
+    expect(l.changes).toContain(`${husband} and Lissa no longer marry`);
     expect(l.note).not.toMatch(/nothing to change/);
   });
 
@@ -141,11 +145,11 @@ describe('a loss early in a fresh run (#208, runthrough)', () => {
     // Premonition and the Prologue recorded at once after the Lock, no solve progress on the page yet.
     const ctx = (r: Run) => ({ engine, run: r, now: () => 1, assumptions: DEFAULT_ASSUMPTIONS });
     const premonition = withMapRecorded(ctx(locked), 'premonition');
-    expect(premonition.adopted?.wishlist.marriages).toContainEqual(['gregor', 'lissa']);
+    expect(premonition.adopted?.wishlist.marriages).toContainEqual(marriage);
     const prologue = withMapRecorded(ctx(premonition), 'prologue');
     const dead = recordFallen(prologue, latestEntry(prologue)!.id, 'lissa', 3);
     const l = itemOf(dead, 'loss', { progress: searching })!;
     expect(l.lines[0]).toMatch(/^It broke .*Lissa/);
-    expect(l.changes).toContain('Gregor and Lissa no longer marry');
+    expect(l.changes).toContain(`${husband} and Lissa no longer marry`);
   });
 });

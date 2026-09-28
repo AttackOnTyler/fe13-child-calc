@@ -342,7 +342,7 @@ The engine's combat math for the next map: a lead and back, with a weapon and fo
 _Avoid_: Simulator, AI
 
 **Matchup**:
-One lead and back against one foe: damage, whether one round kills (with and without dual strikes), doubling, the worst round the lead can take and whether it survives, hit and crit both ways.
+One lead and back against one foe: damage, whether one round kills (with and without dual strikes), doubling, the worst round the lead can take and whether it survives, hit and crit both ways. The preparation page scores each pair in the stance its stance plan fights in (together, side by side, or each unit alone), and counts the weapon rank bonus.
 _Avoid_: Forecast (the game's single-attack preview)
 
 **Clear**:

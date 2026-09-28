@@ -72,13 +72,17 @@ describe('what the adopted roadmap can no longer meet (#206)', () => {
 
   it('reads Chrom’s wedding by its own target (a viewed C by Chapter 11), and a lost partner’s support as the loss', () => {
     const open = runFromRoster(withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'lunatic', mode: 'classic' }));
-    const fresh = withRobinLock(open, engine.seedPlan(open).robin);
+    // A female Robin, so Chrom marries in the army (with a male Robin the seed may give him the Maiden).
+    const fresh = withRobinLock(open, { ...engine.seedPlan(open).robin, gender: 'F' });
     const held = engine.adoptedPlan(fresh, { pins: fresh.pins ?? [] });
     const played = addEntry(addEntry(fresh, 'premonition', 1), 'prologue', 2);
     const dead = recordFallen(played, latestEntry(played)!.id, 'lissa', 3);
-    const wedding = engine.milestones(dead, held).find((m) => m.id === 'support:chrom+robin')!;
-    expect(wedding).toMatchObject({ kind: 'support', nonStarter: false, wedding: { needs: 'viewed-c' }, window: { maps: 2 } });
-    // Lissa's death breaks the plan once: her marriage isn't listed again as a support Gregor and Lissa can't reach.
+    // Chrom's wedding, whoever the seed marries him to (the simulation's readings pick her).
+    const wedding = engine.milestones(dead, held).find((m) => m.kind === 'support' && m.pair.includes('chrom') && !!m.wedding)!;
+    expect(wedding).toMatchObject({ kind: 'support', nonStarter: false, wedding: { needs: 'viewed-c' } });
+    // Its window's length is the bride's (when her supports with Chrom can start); it isn't closed.
+    expect(wedding.kind === 'support' && wedding.window.maps).toBeGreaterThan(0);
+    // Lissa's death breaks the plan once: her marriage isn't listed again as a support she and her husband can't reach.
     expect(engine.planBreaks(dead, held)).toEqual([{ kind: 'lost', unit: 'lissa', state: 'dead' }]);
   });
 });
