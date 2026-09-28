@@ -21,7 +21,7 @@
  * pure; the facade adds what simulates.
  */
 import { STAT_BOOSTERS, TONICS, itemByName } from '../game-data/items';
-import { CLASS_SKILLS, RALLY_SKILLS, SKILLS } from '../game-data/skills';
+import { CLASS_SKILLS, RALLY_SKILLS } from '../game-data/skills';
 import { classIdByName } from './supply';
 import { ASSUMPTION_REGISTRY, type AssumptionId } from './assumptions';
 import type { Milestone } from './milestones';
@@ -127,9 +127,6 @@ const fromRegistry = (id: AssumptionId): Pick<OpenRule, 'label' | 'why' | 'assum
 const pairsOf = (l: PlanLineup | undefined) => (l ? l.pairs.filter((p): p is { lead: RosterUnit; back: RosterUnit } => !!p.back) : []);
 const fielded = (l: PlanLineup | undefined): RosterUnit[] => (l ? [...l.pairs.flatMap((p) => [p.lead, ...(p.back ? [p.back] : [])]), ...l.solo] : []);
 const isRallyName = (s: string) => /^Rally /.test(s);
-const skillName = (id: string) => (SKILLS as Readonly<Record<string, { readonly name: string } | undefined>>)[id]?.name ?? id;
-const buildOf = (plan: Plan | undefined, u: RosterUnit) => (plan?.wishlist.units.find((w) => w.unit === u)?.build ?? []).map(skillName);
-const skillsOf = (c: Pick<SetupContext, 'snapshot' | 'plan'>, u: RosterUnit) => [...(c.snapshot.units[u]?.skills ?? []), ...buildOf(c.plan, u)];
 /**
  * Whether a unit can Rally on the map (#251): it holds a Rally skill, or its class teaches one at its level or below.
  * The plan's build doesn't count: a skill it learns later can't be used here.
@@ -142,7 +139,7 @@ const canRally = (c: Pick<SetupContext, 'snapshot'>, u: RosterUnit): boolean => 
   const rallies: readonly string[] = RALLY_SKILLS;
   return !!cls && CLASS_SKILLS[cls].some((x) => rallies.includes(x.skill) && x.level <= unit.level);
 };
-const classChanged =(run: Run, u: RosterUnit) => run.entries.some((e) => (e.classChanges ?? []).some((c) => c.unit === u));
+const classChanged = (run: Run, u: RosterUnit) => run.entries.some((e) => (e.classChanges ?? []).some((c) => c.unit === u));
 const backs = (plan: Plan | undefined, u: RosterUnit) =>
   !!plan && (plan.wishlist.units.some((w) => w.unit === u && w.position === 'back') || plan.roadmap.lineups.some((l) => l.pairs.some((p) => p.back === u)));
 
