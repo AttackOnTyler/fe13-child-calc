@@ -1,0 +1,284 @@
+[
+ {
+  "team": "player",
+  "x": 3,
+  "y": 13,
+  "class": "Lord (M)",
+  "level": 1,
+  "currentHp": 20,
+  "stats": {
+   "hp": 20,
+   "str": 7,
+   "mag": 1,
+   "skl": 8,
+   "spd": 8,
+   "lck": 5,
+   "def": 7,
+   "res": 1
+  },
+  "items": [
+   "Falchion",
+   "Rapier",
+   "Vulnerary"
+  ],
+  "skills": [
+   "Dual Strike+"
+  ],
+  "groupRef": null,
+  "differs": {}
+ },
+ {
+  "team": "player",
+  "x": 1,
+  "y": 13,
+  "class": "Cleric",
+  "level": 1,
+  "currentHp": 17,
+  "stats": {
+   "hp": 17,
+   "str": 1,
+   "mag": 5,
+   "skl": 4,
+   "spd": 4,
+   "lck": 8,
+   "def": 3,
+   "res": 4
+  },
+  "items": [
+   "Heal",
+   "Vulnerary"
+  ],
+  "skills": [
+   "Miracle"
+  ],
+  "groupRef": null,
+  "differs": {}
+ },
+ {
+  "team": "player",
+  "x": 2,
+  "y": 14,
+  "class": "Great Knight (M)",
+  "level": 1,
+  "currentHp": 28,
+  "stats": {
+   "hp": 28,
+   "str": 13,
+   "mag": 2,
+   "skl": 12,
+   "spd": 10,
+   "lck": 6,
+   "def": 14,
+   "res": 3
+  },
+  "items": [
+   "Silver Lance"
+  ],
+  "skills": [
+   "Discipline",
+   "Outdoor Fighter"
+  ],
+  "groupRef": null,
+  "differs": {}
+ },
+ {
+  "team": "player",
+  "x": 4,
+  "y": 14,
+  "class": "Tactician (M)",
+  "level": 1,
+  "currentHp": 19,
+  "stats": {
+   "hp": 19,
+   "str": 8,
+   "mag": 5,
+   "skl": 5,
+   "spd": 6,
+   "lck": 4,
+   "def": 5,
+   "res": 4
+  },
+  "items": [
+   "Thunder",
+   "Bronze Sword"
+  ],
+  "skills": [
+   "Veteran"
+  ],
+  "groupRef": null,
+  "differs": {}
+ },
+ {
+  "team": "enemy",
+  "x": 8,
+  "y": 1,
+  "class": "Barbarian",
+  "level": 3,
+  "currentHp": 34,
+  "stats": null,
+  "items": [
+   "Short Axe"
+  ],
+  "skills": [
+   "Gamble"
+  ],
+  "groupRef": 0,
+  "differs": {}
+ },
+ {
+  "team": "enemy",
+  "x": 7,
+  "y": 3,
+  "class": "Myrmidon (M)",
+  "level": 1,
+  "currentHp": 26,
+  "stats": null,
+  "items": [
+   "Iron Sword"
+  ],
+  "skills": [],
+  "groupRef": 1,
+  "differs": {}
+ },
+ {
+  "team": "enemy",
+  "x": 9,
+  "y": 3,
+  "class": "Myrmidon (M)",
+  "level": 1,
+  "currentHp": 26,
+  "stats": null,
+  "items": [
+   "Iron Sword"
+  ],
+  "skills": [
+   "Avoid +10"
+  ],
+  "groupRef": 1,
+  "differs": {}
+ },
+ {
+  "team": "enemy",
+  "x": 8,
+  "y": 2,
+  "class": "Mage (M)",
+  "level": 1,
+  "currentHp": 23,
+  "stats": null,
+  "items": [
+   "Elthunder"
+  ],
+  "skills": [
+   "Focus"
+  ],
+  "groupRef": 2,
+  "differs": {}
+ },
+ {
+  "team": "enemy",
+  "x": 6,
+  "y": 2,
+  "class": "Barbarian",
+  "level": 1,
+  "currentHp": 30,
+  "stats": null,
+  "items": [
+   "Iron Axe"
+  ],
+  "skills": [],
+  "groupRef": 3,
+  "differs": {}
+ },
+ {
+  "team": "enemy",
+  "x": 10,
+  "y": 2,
+  "class": "Barbarian",
+  "level": 1,
+  "currentHp": 30,
+  "stats": null,
+  "items": [
+   "Iron Axe"
+  ],
+  "skills": [],
+  "groupRef": 3,
+  "differs": {}
+ },
+ {
+  "team": "enemy",
+  "x": 10,
+  "y": 6,
+  "class": "Mage (M)",
+  "level": 1,
+  "currentHp": 23,
+  "stats": null,
+  "items": [
+   "Elwind"
+  ],
+  "skills": [],
+  "groupRef": 2,
+  "differs": {}
+ },
+ {
+  "team": "enemy",
+  "x": 7,
+  "y": 9,
+  "class": "Barbarian",
+  "level": 1,
+  "currentHp": 30,
+  "stats": null,
+  "items": [
+   "Iron Axe"
+  ],
+  "skills": [],
+  "groupRef": 3,
+  "differs": {}
+ },
+ {
+  "team": "enemy",
+  "x": 4,
+  "y": 10,
+  "class": "Myrmidon (M)",
+  "level": 1,
+  "currentHp": 26,
+  "stats": null,
+  "items": [
+   "Iron Sword"
+  ],
+  "skills": [
+   "Avoid +10"
+  ],
+  "groupRef": 1,
+  "differs": {}
+ },
+ {
+  "team": "enemy",
+  "x": 1,
+  "y": 8,
+  "class": "Barbarian",
+  "level": 1,
+  "currentHp": 30,
+  "stats": null,
+  "items": [
+   "Iron Axe"
+  ],
+  "skills": [],
+  "groupRef": 3,
+  "differs": {}
+ },
+ {
+  "team": "enemy",
+  "x": 9,
+  "y": 12,
+  "class": "Myrmidon (M)",
+  "level": 1,
+  "currentHp": 26,
+  "stats": null,
+  "items": [
+   "Iron Sword"
+  ],
+  "skills": [],
+  "groupRef": 1,
+  "differs": {}
+ }
+]
