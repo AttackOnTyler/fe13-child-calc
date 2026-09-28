@@ -134,7 +134,7 @@ describe('the inbox after the Lock (#206)', () => {
     const r = afterLockReadout(engine, late, state({ progress: { ...progress, chance: zero, proposals: [], readings: blind } }));
     expect(r.items.find((i) => i.kind === 'at-risk')).toBeUndefined();
     expect((r.items.find((i) => i.kind === 'behind') as Extract<AfterLockItem, { kind: 'behind' }>).rows.map((x) => x.key)).toEqual(['behind:chrom']);
-    expect(r.items.find((i) => i.kind === 'unread')).toEqual({ kind: 'unread', text: `3 milestones (Lissa, Sully and Vaike) can’t be read until a run gets past ${label(next!.map)}: no run reaches them with nobody lost.` });
+    expect(r.items.find((i) => i.kind === 'unread')).toEqual({ kind: 'unread', text: `3 units’ milestones (Lissa, Sully and Vaike) can’t be read until a run gets past ${label(next!.map)}: no run reaches them with nobody lost.` });
     expect(r.nudge).toBe('1 item above still needs you (you can play anyway)');
   });
 
