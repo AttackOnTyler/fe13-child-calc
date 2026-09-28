@@ -2,7 +2,9 @@
 
 Ticket: "Play the Prologue replay (attempt 2) and fill the scorecard" (#267), map #253. Protocol: "What is the A/B replay protocol and scorecard?" (#259). Attempt 1: [p02-prologue.md](p02-prologue.md). Scorecard: [p02-prologue-scorecard.md](p02-prologue-scorecard.md).
 
-**Result: failed. Lissa died on enemy phase 9**, and no rout came by turn 9. The page's rout estimate slid from T9 to T11 to T14. The death traces to a claim the page made that the game contradicted: after a **Separate**, the page planned for the dropped unit (Chrom) to act, which the game doesn't allow (P02b-F4). Play stopped at that death, since it had already failed the destination. Per the protocol this is an app-model failure, so the next step is **fix, then attempt 3**.
+**Result: failed. Lissa died on enemy phase 9**, and no rout came by turn 9. The page's rout estimate slid from T9 to T11 to T14. The death traces to two claims the game contradicted:
+- **Bounds (P02b-F1/F5):** the app treats the Prologue's unwalkable outer ring (row 0, row 15, column 0, column 16) as ground. So it had Lissa at (0,13), "out of reach", when she really stood at (1,13), inside a Barbarian's reach. The user spotted this after the attempt.
+- **Separate (P02b-F4):** the page planned for the dropped unit (Chrom) to act, which the game doesn't allow. Play stopped at that death, since it had already failed the destination. Per the protocol this is an app-model failure, so the next step is **fix, then attempt 3**.
 
 ## Before playing
 
@@ -73,7 +75,7 @@ Ticket: "Play the Prologue replay (attempt 2) and fill the scorecard" (#267), ma
   - I played the Separate. **The game then ended the player phase:** the dropped unit counts as having acted.
   - The page, re-solving after "✓ done", planned "Chrom → (0,13): Pair Up with Lissa" and showed Lissa safe (P02b-F4).
 - **EP9:** a Barbarian (5 HP) reached Lissa, alone at (0,13), and doubled her: 16 ×2 at 85% (Chrom adjacent as support). **Lissa died.** See [`ep9-lissa-dies.png`](p02-prologue/attempt2/shots/ep9-lissa-dies.png).
-  - A Barbarian at (2,8) or (3,9) has to move 6 to reach a tile next to (0,13), and its Mov is 5, so the page's "out of reach" may also be wrong. See P02b-F5.
+  - Column 0 isn't walkable, so the leftmost tile I could put her on was really (1,13). From (1,13) a Mov-5 Barbarian at (2,8) reaches her. The page's "out of reach" came from the bounds bug (P02b-F5), and it would have failed even without the Separate misstep.
 
 Play stopped here, with 3 foes left (2 Barbarians at 5 HP, and Garrick). The attempt had already failed the destination, and a rerun from the turn-1 state is the next attempt.
 
@@ -81,17 +83,17 @@ Play stopped here, with 3 foes left (2 Barbarians at 5 HP, and Garrick). The att
 
 | # | Kind | Claim → what the game did |
 |---|---|---|
-| P02b-F1 | silence / numbers (grid) | T1 plan sends Lissa to (4,15); row 15 isn't walkable in the game (the cursor stops at row 14). The captured grid has 16 rows, but the playable map seems to be 15. |
+| P02b-F1 | silence / numbers (grid) | The whole outer ring (row 0, row 15, column 0, column 16) is unwalkable in the game, but the captured grid treats it as terrain. T1 sent Lissa to (4,15), which doesn't exist. |
 | P02b-F2 | numbers | Heal on Frederick at 16/28: page → 28 (full), game → 26 (+10). The page's re-solve healed to full; the game gave +10. |
-| P02b-F3 | prediction | Moving-only foes end one tile off the prediction (EP1: Barbarian, Mage; EP8: all three), always closer to our units. Attacks and HP were exact. |
+| P02b-F3 | prediction (unconfirmed) | Moving-only foes read one tile off the prediction (EP1, EP8). But I read those tiles by counting cursor steps, some of them from the edge, so they may be my misreads caused by F1. Re-check after the bounds fix. |
 | P02b-F4 | verdict (rules) | After Separate, the dropped unit has acted. `replay` (`src/engine/board/log.ts:31`) reads `.back` from the board *after* the action, so it never marks the dropped unit as acted, and the re-solve moved it. Lissa, left alone, died without a crit. |
-| P02b-F5 | verdict (reach) | Lissa at (0,13) was "out of reach", yet a Mov-5 Barbarian from (2,8)/(3,9) attacked her. It's either the F3 drift or reach itself; unverified. |
+| P02b-F5 | verdict (reach, from F1) | The page had Lissa at (0,13), "out of reach"; she was really at (1,13), which a Mov-5 Barbarian reaches. The death's second cause, independent of F4. |
 | P02b-U1 | UI | "Fix an attack" offers only hit/missed per side: no crit, no "it died", so a crit kill needs a manual HP set. |
 | P02b-U2 | UI | Try-a-move can't Switch a pair, so a plan's own "Switch, then …" line can't be compared. |
 | P02b-U3 | UI | "Use my version" takes the last tried tile, which is easy to confuse after comparing two. |
 | P02b-U4 | run log | Removing a log entry leaves `settledLosses` / `dismissedChanges` behind (#269). The ✕'s native `confirm()` didn't work for the user in the Browser pane. |
 
-Filed: F4 → #270 · F1 → #271 · F2 → #272 · F3 + F5 → #273 · U1–U3 → #274 · U4 → #269.
+Filed: F4 → #270 · F2 → #272 · F1 + F5 → #271 (widened to the whole ring) · F3 → #273 (re-check after #271) · U1–U3 → #274 · U4 → #269.
 
 What held up:
 - Every player-phase attack forecast matched the game screen exactly: damage, hit, crit and counter, across 7 combats.
