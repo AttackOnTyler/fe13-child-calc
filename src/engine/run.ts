@@ -476,6 +476,16 @@ export function mapProgress(run: Run, i: number, unit: RosterUnit, assumptions: 
   return earned === 0 ? { kind: 'unchanged', joined } : { kind: 'earned', earned, joined };
 }
 
+/**
+ * Whether recording `map` would leave Robin out (#201 runthrough): the map recruits Robin, who waits for Robin's
+ * gender, and the run facts don't have it yet (Robin isn't locked). Record results refuses the map until they do.
+ */
+export function waitsForRobin(run: Run, map: string): boolean {
+  if (run.roster.run.gender) return false;
+  const last = latestEntry(run);
+  return !last?.snapshot.units.robin && (MAPS.find((m) => m.id === map)?.recruits ?? []).some((r) => UNIT_BY_NAME.get(r.unit) === 'robin' && !mapOnly(r));
+}
+
 /** A unit lost for good (#208): dead or missed, on the run facts or in the snapshot. */
 export const isLost = (run: Run, snap: Snapshot, u: RosterUnit): boolean => [run.roster.states[u], snap.states[u]].some((s) => s === 'dead' || s === 'missed');
 
