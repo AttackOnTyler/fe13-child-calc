@@ -5,6 +5,9 @@ import {
   calibrationLog,
   createEngine,
   editEntry,
+  exportRun,
+  importRun,
+  withConfirmed,
   forecastBefore,
   forecastPercentile,
   latestEntry,
@@ -197,8 +200,14 @@ describe('What changed (#206)', () => {
     const kept = withEntryForecast(rec, eid, forecastBefore(open, prologue)!);
     const joinedAt = latestEntry(rec)!.snapshot.units.chrom!;
     const copied = whatChangedReadout(engine, kept, undefined)!.exp;
-    expect(copied[0]).toBe(`Chrom (joined on this map): level ${joinedAt.level.toFixed(1)} as it joined, not updated: record its level and EXP to compare it with the 150 EXP forecast`);
+    expect(copied[0]).toBe(`Chrom (joined on this map): level ${joinedAt.level.toFixed(1)} as it joined, not updated: record its level and EXP to compare it with the 150 EXP forecast, or tick Confirmed in Record results if it really gained nothing`);
     expect(copied.join(' ')).not.toMatch(/class change/);
+    // Confirmed as recorded (#251: Chrom backed all map with no Dual Strike): 0 EXP against the forecast, and learned from.
+    const confirmed = withConfirmed(kept, eid, 'chrom', true, 3);
+    expect(whatChangedReadout(engine, confirmed, undefined)!.exp[0]).toMatch(/^Chrom \(joined on this map\): 0 EXP against 150 forecast/);
+    expect(calibrationLog(confirmed).map((r) => r.unit)).toEqual(['chrom']);
+    expect(importRun(exportRun(confirmed)).entries.at(-1)!.confirmed).toEqual(['chrom']);
+    expect(withConfirmed(confirmed, eid, 'chrom', false, 4).entries.at(-1)!.confirmed).toBeUndefined();
     // Chrom's level recorded: its EXP counts from the join.
     const lv = editEntry(kept, eid, (s) => ({ ...s, units: { ...s.units, chrom: { ...joinedAt, level: joinedAt.level + 1, exp: 50 } } }), 3);
     expect(whatChangedReadout(engine, lv, undefined)!.exp[0]).toMatch(new RegExp(`^Chrom \\(joined on this map\\): ${150 - joinedAt.exp} EXP against 150 forecast; level ${(joinedAt.level + 1.5).toFixed(1)}`));

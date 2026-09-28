@@ -21,7 +21,8 @@
  * pure; the facade adds what simulates.
  */
 import { STAT_BOOSTERS, TONICS, itemByName } from '../game-data/items';
-import { SKILLS } from '../game-data/skills';
+import { CLASS_SKILLS, RALLY_SKILLS, SKILLS } from '../game-data/skills';
+import { classIdByName } from './supply';
 import { ASSUMPTION_REGISTRY, type AssumptionId } from './assumptions';
 import type { Milestone } from './milestones';
 import { unitName, type RosterUnit } from './roster';
@@ -129,7 +130,19 @@ const isRallyName = (s: string) => /^Rally /.test(s);
 const skillName = (id: string) => (SKILLS as Readonly<Record<string, { readonly name: string } | undefined>>)[id]?.name ?? id;
 const buildOf = (plan: Plan | undefined, u: RosterUnit) => (plan?.wishlist.units.find((w) => w.unit === u)?.build ?? []).map(skillName);
 const skillsOf = (c: Pick<SetupContext, 'snapshot' | 'plan'>, u: RosterUnit) => [...(c.snapshot.units[u]?.skills ?? []), ...buildOf(c.plan, u)];
-const classChanged = (run: Run, u: RosterUnit) => run.entries.some((e) => (e.classChanges ?? []).some((c) => c.unit === u));
+/**
+ * Whether a unit can Rally on the map (#251): it holds a Rally skill, or its class teaches one at its level or below.
+ * The plan's build doesn't count: a skill it learns later can't be used here.
+ */
+const canRally = (c: Pick<SetupContext, 'snapshot'>, u: RosterUnit): boolean => {
+  const unit = c.snapshot.units[u];
+  if (!unit) return false;
+  if (unit.skills.some(isRallyName)) return true;
+  const cls = classIdByName(unit.class);
+  const rallies: readonly string[] = RALLY_SKILLS;
+  return !!cls && CLASS_SKILLS[cls].some((x) => rallies.includes(x.skill) && x.level <= unit.level);
+};
+const classChanged =(run: Run, u: RosterUnit) => run.entries.some((e) => (e.classChanges ?? []).some((c) => c.unit === u));
 const backs = (plan: Plan | undefined, u: RosterUnit) =>
   !!plan && (plan.wishlist.units.some((w) => w.unit === u && w.position === 'back') || plan.roadmap.lineups.some((l) => l.pairs.some((p) => p.back === u)));
 
@@ -185,7 +198,7 @@ export const OPEN_RULES: readonly OpenRule[] = [
     ask: { kind: 'number', question: 'EXP from one Rally (0 if no EXP bar appears)', best: [0], other: 'more' },
     exp: (u, run) => (run.entries[run.entries.length - 1]?.snapshot.units[u]?.skills ?? []).some(isRallyName),
     setsUp: (c) => {
-      const u = fielded(c.lineup).find((x) => skillsOf(c, x).some(isRallyName));
+      const u = fielded(c.lineup).find((x) => canRally(c, x));
       return u && `${c.name(u)} can Rally: Rally once and note the EXP it gives (0 if no EXP bar appears).`;
     },
   },

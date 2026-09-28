@@ -692,7 +692,7 @@ export function whatChangedReadout(engine: Engine, run: Run, progress: SolveProg
     const joined = x.joined ? ' (joined on this map)' : '';
     // Copied forward unchanged: not scored against the forecast (nor learned from).
     if (x.progress === 'unchanged')
-      return `${name(x.unit)}${joined}: level ${lv(x.level)} as ${x.joined ? 'it joined' : 'before the map'}, not updated: record its level and EXP to compare it with the ${Math.round(x.forecast)} EXP forecast`;
+      return `${name(x.unit)}${joined}: level ${lv(x.level)} as ${x.joined ? 'it joined' : 'before the map'}, not updated: record its level and EXP to compare it with the ${Math.round(x.forecast)} EXP forecast, or tick Confirmed in Record results if it really gained nothing`;
     const earned = x.progress === 'earned' ? `${x.earned} EXP` : x.progress === 'class-change' ? 'EXP not comparable (a class change)' : 'EXP not comparable (no entry before)';
     return `${name(x.unit)}${joined}: ${earned} against ${Math.round(x.forecast)} forecast; level ${lv(x.level)}, ${x.against === 'inside' ? 'inside' : x.against === 'below' ? 'below' : 'above'} the forecast’s ${lv(x.spread.low)}–${lv(x.spread.high)} (p${Math.round(x.percentile * 100)})`;
   });

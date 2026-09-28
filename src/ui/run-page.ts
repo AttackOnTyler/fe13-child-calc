@@ -7,7 +7,7 @@ import type { Assumptions, Ceiling, ChildId, CloseCall, Gender, Reading, Reading
 import { chanceText, chanceWithMargin, differenceText, noDeathText, stressText } from './chance';
 import { startSolve } from './solve-client';
 import { SOLVE_SECONDS, STEP_BUDGET, rescoreSeed, rosterUnits, type RunSim, type StressCase } from '../engine';
-import { EMPTY_SNAPSHOT, FLAWLESS_SEED, SUPPORT_LEVELS, addEntry, childJoinFrom, chromWedding, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, waitsForRobin, withUnit } from '../engine';
+import { EMPTY_SNAPSHOT, FLAWLESS_SEED, SUPPORT_LEVELS, addEntry, childJoinFrom, chromWedding, editEntry, exportRun, flaggedEntries, heldProblems, importRun, latestEntry, nextMaps, recordFallen, recordMarriage, removeEntry, rosterOf, unitName, waitsForRobin, withConfirmed, withUnit } from '../engine';
 import { removeClassChange, tierOfClass, withClassChange, withCountOverride, type Seal } from '../engine';
 import { entryAfterShopping, goldAfterShopping, removeShopLine, shopPrice, withShopLine, type ShopKind, type ShopLine } from '../engine';
 import { withRenown, withSideGoalPin, withSideGoalSecured, type SideGoalDecision, type SideGoalId } from '../engine';
@@ -1898,6 +1898,11 @@ function unitTable(ctx: RunContext, e: RunEntry, units: readonly RosterUnit[], q
       h('td', {}, input(u.level, (v) => set({ level: Number(v) || 1 }), { class: 'num-in', 'aria-label': `${unit} level` })),
       tierCell(levels.get(unit)?.tier),
       h('td', {}, input(u.exp, (v) => set({ exp: Number(v) || 0 }), { class: 'num-in', 'aria-label': `${unit} EXP` })),
+      h(
+        'td',
+        { title: 'Tick when its level and EXP are as the game shows, even unchanged: a unit that gained nothing then reads as 0 EXP against its forecast, not as “not updated”' },
+        h('input', { type: 'checkbox', checked: !!e.confirmed?.includes(unit), 'aria-label': `${unit} level and EXP confirmed`, onchange: (ev) => ctx.setRun(withConfirmed(ctx.run, e.id, unit, (ev.target as HTMLInputElement).checked, ctx.now())) }),
+      ),
       internalCell(ctx, unit, levels.get(unit)),
       ...(quick
         ? []
@@ -1909,7 +1914,7 @@ function unitTable(ctx: RunContext, e: RunEntry, units: readonly RosterUnit[], q
           ]),
     );
   };
-  const heads = ['Unit', 'Class', 'Lv', 'Tier', 'EXP', 'Internal Lv (count)', ...(quick ? [] : [...STATS.map((x) => STAT_LABELS[x]), 'Skills', 'Inventory (item uses [forge +Mt/+Hit/+Crit])', 'Supports'])];
+  const heads = ['Unit', 'Class', 'Lv', 'Tier', 'EXP', 'Confirmed', 'Internal Lv (count)', ...(quick ? [] : [...STATS.map((x) => STAT_LABELS[x]), 'Skills', 'Inventory (item uses [forge +Mt/+Hit/+Crit])', 'Supports'])];
   return h(
     'div',
     { class: 'scroll-x' },
