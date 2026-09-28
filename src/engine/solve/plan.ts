@@ -225,6 +225,13 @@ export type PlanProposal = {
   readonly margin: number;
   /** The runs compared. */
   readonly runs: number;
+  /**
+   * Its gain is inside the noise (no measurable difference over the adopted plan): kept because it plays in fewer
+   * expected turns (spec: ties go to fewer expected turns).
+   */
+  readonly close?: true;
+  /** Its expected turns less the adopted plan's, on the same runs (negative: fewer); absent when not read. */
+  readonly turns?: number;
 };
 
 /**
@@ -238,6 +245,8 @@ export type CloseCall = {
   readonly gain: number;
   readonly margin: number;
   readonly runs: number;
+  /** Its expected turns less the best plan's, on the same runs (negative: fewer); absent when not read. */
+  readonly turns?: number;
 };
 
 /** A set of marriages (or a Robin) the search didn't evaluate: its ceiling is below the best found (#199). */
@@ -250,6 +259,8 @@ export type SearchTrial = {
   readonly label: string;
   readonly plan: Plan;
   readonly samples: number[];
+  /** Each of those runs' turns (ties go to fewer expected turns). */
+  turns?: number[];
   /** The runs it's compared on this time. */
   target: number;
   /** Its non-starter couples (#194). */
@@ -263,8 +274,11 @@ export type SearchState = {
   best: Plan;
   /** The best plan's runs on the search's seed, in run order. */
   bestSamples: number[];
+  /** Those runs' turns. */
+  bestTurns?: number[];
   /** The start's runs, kept once the best plan moves off it (proposals' gains are over the start). */
   startSamples: number[] | null;
+  startTurns?: number[] | null;
   /** Labels of the edits kept, in order. */
   kept: string[];
   proposals: PlanProposal[];

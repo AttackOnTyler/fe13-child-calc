@@ -80,9 +80,13 @@ export function riskText(p: number): string {
 /**
  * How a paired difference in flawless chance reads (#199; spec #175, The Why panel's wording): an edit's gain and its
  * paired error (±, 95%), in points of chance. A close call (still unclear at the run cap) reads "no measurable
- * difference (−0.2 ±0.3)"; otherwise "+1.2 ±0.3".
+ * difference (−0.2 ±0.3)"; otherwise "+1.2 ±0.3". With `turns` (the other plan's expected turns less this one's), a
+ * difference of a tenth of a turn or more is added: "no measurable difference (−0.2 ±0.3); 2 fewer turns" (spec: ties
+ * go to fewer expected turns).
  */
-export function differenceText(gain: number, margin: number, close = false): string {
+export function differenceText(gain: number, margin: number, close = false, turns?: number): string {
   const pm = marginText(margin);
-  return close ? `no measurable difference (${signedPoints(gain)} ${pm})` : `${signedPoints(gain)} ${pm}`;
+  const text = close ? `no measurable difference (${signedPoints(gain)} ${pm})` : `${signedPoints(gain)} ${pm}`;
+  const t = turns === undefined ? 0 : Math.round(Math.abs(turns) * 10) / 10;
+  return t ? `${text}; ${t} ${turns! < 0 ? 'fewer' : 'more'} turn${t === 1 ? '' : 's'}` : text;
 }

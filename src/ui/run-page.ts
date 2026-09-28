@@ -469,7 +469,7 @@ function readoutOf(
     `Rests on: ${spots.map((b) => `${b.label[0]!.toLowerCase()}${b.label.slice(1)} (${LEAN[b.lean]})`).join(', ')}.`,
   ].filter(Boolean);
   const improvements = progress
-    ? [...progress.proposals.map((p) => `Improvement: ${p.edits.join('; ')}: ${differenceText(p.gain, p.margin)}`), ...progress.closeCalls.map((c) => `${c.label}: ${differenceText(c.gain, c.margin, true)}`)]
+    ? [...progress.proposals.map((p) => `Improvement: ${p.edits.join('; ')}: ${differenceText(p.gain, p.margin, p.close, p.turns)}`), ...progress.closeCalls.map((c) => `${c.label}: ${differenceText(c.gain, c.margin, true, c.turns)}`)]
     : [];
   const notes = progress
     ? [
@@ -486,8 +486,8 @@ function readoutOf(
   const start = progress?.start ?? progress?.best;
   const comparisons: WhyComparison[] = progress
     ? [
-        ...progress.proposals.map((p) => ({ key: `proposal:${proposalId(p)}`, comparison: { kind: 'proposal' as const, label: p.edits.join('; '), gain: p.gain, margin: p.margin, runs: p.runs }, ...(start ? { plans: { other: p.plan, base: start } } : {}) })),
-        ...progress.closeCalls.map((c) => ({ key: `close:${c.key}`, comparison: { kind: 'close-call' as const, label: c.label, gain: c.gain, margin: c.margin, runs: c.runs, close: true }, ...(start ? { plans: { other: c.plan, base: start } } : {}) })),
+        ...progress.proposals.map((p) => ({ key: `proposal:${proposalId(p)}`, comparison: { kind: 'proposal' as const, label: p.edits.join('; '), gain: p.gain, margin: p.margin, runs: p.runs, ...(p.close ? { close: true } : {}), ...(p.turns !== undefined ? { turns: p.turns } : {}) }, ...(start ? { plans: { other: p.plan, base: start } } : {}) })),
+        ...progress.closeCalls.map((c) => ({ key: `close:${c.key}`, comparison: { kind: 'close-call' as const, label: c.label, gain: c.gain, margin: c.margin, runs: c.runs, close: true, ...(c.turns !== undefined ? { turns: c.turns } : {}) }, ...(start ? { plans: { other: c.plan, base: start } } : {}) })),
         ...(progress.pinCost?.pins.length
           ? [{ key: 'pin-cost', comparison: { kind: 'pin-cost' as const, label: 'Your pins’ cost', gain: progress.pinCost.cost, margin: progress.pinCost.margin, runs: progress.pinCost.runs, close: progress.pinCost.verdict === 'close' || progress.pinCost.verdict === 'unclear' } }]
           : []),
@@ -506,8 +506,8 @@ function readoutOf(
   };
   if (progress)
     why.found = [
-      ...progress.proposals.map((p): WhyMark[] => [[differenceText(p.gain, p.margin), `edit:proposal:${proposalId(p)}`]]),
-      ...progress.closeCalls.map((c): WhyMark[] => [[differenceText(c.gain, c.margin, true), `edit:close:${c.key}`]]),
+      ...progress.proposals.map((p): WhyMark[] => [[differenceText(p.gain, p.margin, p.close, p.turns), `edit:proposal:${proposalId(p)}`]]),
+      ...progress.closeCalls.map((c): WhyMark[] => [[differenceText(c.gain, c.margin, true, c.turns), `edit:close:${c.key}`]]),
       ...why.notes,
     ];
   return {

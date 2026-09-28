@@ -222,7 +222,7 @@ export { ON_TRACK, milestoneCheck, type ExpForecast, type ExpForecastOptions, ty
 export type { EndpointCoverage, SeedOptions } from './solve/seed';
 export type { ClassMilestone, Milestone, MilestonePoint, RecruitMilestone, SealSource, SkillMilestone, SupportMilestone, SupportWindow } from './milestones';
 export { QUIET_POINTS, blindSpotsTouching, milestoneWords, riskSplit, type Comparison, type ExplainContext, type Explanation, type ExplanationFormat, type ExplanationKind, type ExplanationRow } from './explain';
-export { EDIT_COST_BUDGET, EDIT_KINDS, SEARCH_RUNS, rescoreSeed, SOLVE_SECONDS, STEP_BUDGET, type EditCost, type EditCostInput, type EditKind, type PinCost, type PinCostInput, type SolveStep, type SolveStepInput, type UnitEdit } from './solve/step';
+export { EDIT_COST_BUDGET, EDIT_KINDS, SEARCH_RUNS, rescoreSeed, SOLVE_SECONDS, STEP_BUDGET, TIE_TURNS, type EditCost, type EditCostInput, type EditKind, type PinCost, type PinCostInput, type SolveStep, type SolveStepInput, type UnitEdit } from './solve/step';
 export type { ChecksCursor, ChecksStep, ChecksStepInput, EditChoicesStepInput, EditListing, EditsCursor, EditsStep, LossCursor, LossStep, LossStepInput, PinCostStep, PinCostStepInput, ReadingsCursor, ReadingsStep, ReadingsStepInput, SearchCursor, UnitEditsStepInput } from './background';
 export { FORCED_UNITS, LIKELY_LOSSES, type LikelyLoss, type ReserveReading, type ReservesCursor, type ReservesInput, type ReservesStep, type UnitWorth, type WorthCursor, type WorthInput, type WorthStep } from './solve/worth';
 export { BLIND_SPOTS, STRESS_TESTS, type BlindSpot, type BlindSpotId, type BlindSpotTouch, type RunBlindSpotId, type StressTest } from './assumptions';
@@ -1907,6 +1907,11 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
           seed: () => seedFor(run, options),
           edits: (plan, hints) => planEdits(run, ctx, options, plan, hints, (p) => lineupsOf(run, p, input.seed)),
           samples: (plan, first, count) => simulateRuns(planInput(run, plan), input.seed, count, assumptions, first).samples,
+          // The same runs with their turns: ties go to fewer expected turns.
+          play: (plan, first, count) => {
+            const sim = simulateRuns(planInput(run, plan), input.seed, count, assumptions, first);
+            return { samples: sim.samples, turns: sim.turnSamples };
+          },
           rescore: (plan, seed, runs) => planChance(run, { plan, seed, runs }),
           // Lunatic+ plays the ceiling over a few skill draws; otherwise one play is the ceiling.
           ceiling: (plan) => simulateCeiling(planInput(run, plan), input.seed, lunaticPlus ? CEILING_DRAWS : 1, assumptions)?.chance,

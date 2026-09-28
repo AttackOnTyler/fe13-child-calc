@@ -42,6 +42,13 @@ describe('difference wording (#199)', () => {
     expect(differenceText(0.012, 0.004)).toBe('+1.2 ±0.4');
     expect(differenceText(-0.05, 0.01)).toBe('−5.0 ±1.0');
   });
+
+  it('adds the expected turns a close call saves or costs (spec: ties go to fewer expected turns)', () => {
+    expect(differenceText(-0.002, 0.003, true, -2)).toBe('no measurable difference (−0.2 ±0.3); 2 fewer turns');
+    expect(differenceText(0.001, 0.003, true, 1.4)).toBe('no measurable difference (+0.1 ±0.3); 1.4 more turns');
+    expect(differenceText(0, 0, true, 0.02)).toBe('no measurable difference (0.0 ±0.0)');
+    expect(differenceText(0, 0, true, -1)).toBe('no measurable difference (0.0 ±0.0); 1 fewer turn');
+  });
 });
 
 describe('a fight’s kill chance (#210)', () => {
