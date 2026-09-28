@@ -161,6 +161,22 @@ describe('checks on a map (#209)', () => {
     expect(engine.setupChecks(run, plan, { stakes: [{ rule: 'attack-stance-supports', gain: 0.5, margin: 0, runs: 0, modelled: false }], lineups: noRobinBack })).toEqual([]);
     expect(key).toBeTruthy();
   });
+
+  it('offers no check that needs EXP gain for a map-only setup, which gains none (#243)', () => {
+    // The Premonition's Lv 20 Chrom and Robin (EXP "–"): no back's EXP, lead's EXP or Veteran check.
+    const exp = OPEN_RULES.filter((r) => r.exp).map((r) => r.id);
+    const premonition: PlanLineup = { key: 'premonition', pairs: [{ lead: 'chrom', back: 'robin' }], solo: [] };
+    const rules = engine.mapChecks(run, seed, 'premonition', { lineup: premonition }).map((c) => c.rule);
+    for (const id of exp) expect(rules).not.toContain(id);
+    // The same pair on a map where they earn EXP sets all three up.
+    const elsewhere = engine.mapChecks(run, seed, withRobinBack.key, { lineup: { ...premonition, key: withRobinBack.key } }).map((c) => c.rule);
+    expect(elsewhere).toEqual(expect.arrayContaining(['back-without-dual-strike', 'back-kill-lead-exp', 'veteran-as-back']));
+    // Nor does a setup check pair Robin as the back there: no edit sets it up.
+    const plan: Plan = { ...seed, roadmap: { ...seed.roadmap, order: ['premonition'], lineups: [{ key: 'premonition', pairs: [{ lead: 'chrom' }], solo: ['robin'] }] } };
+    const [setup] = engine.setupChecks(run, plan, { stakes: [{ rule: 'veteran-as-back', gain: 0.02, margin: 0.002, runs: 24, modelled: true }], lineups: plan.roadmap.lineups });
+    expect(setup).toMatchObject({ rule: 'veteran-as-back' });
+    expect(setup!.edit).toBeUndefined();
+  });
 });
 
 describe('a map’s checks on its entry (#209)', () => {

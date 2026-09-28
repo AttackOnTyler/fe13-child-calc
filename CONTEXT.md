@@ -390,7 +390,7 @@ A unit the map always fields, which the player can't drop: Chrom on nearly every
 _Avoid_: Mandatory unit, lord (alone)
 
 **Map-only setup**:
-A unit fielded on one map with a class, level, stats and items used only there (Premonition's Lv 20 Chrom and Robin). Shown on that map's preparation page; never joins the army, so copy-forward skips it.
+A unit fielded on one map with a class, level, stats and items used only there (Premonition's Lv 20 Chrom and Robin). Shown on that map's preparation page; never joins the army, so copy-forward skips it. It gains no EXP (EXP "–"), so no in-play check that needs EXP gain is offered for it.
 _Avoid_: Guest, temporary unit
 
 **Danger flag**:

@@ -9,6 +9,8 @@
  *   the map's lineup, the plan's seals, items and children, and the army's kit); a **setup check** is offered as a
  *   costed edit when the stakes pass about 1 point and no map left sets it up (`SETUP_STAKES`); low stakes are only
  *   ever free;
+ * - a rule that needs EXP gain (`exp`) reads a map's lineup less its map-only setups, which gain none (the
+ *   Premonition's Lv 20 Chrom and Robin, #243): no check or setup edit leans on them;
  * - Record results takes the **raw observation** (a number, yes or no, or "didn't happen") and `settleCheck` works out
  *   the reading: the best makes a **checked rule**; the other switches the model at once (the answer is the
  *   assumption's value, which the model reads); neither keeps the rule open, marked unexpected, and a second observation
@@ -23,7 +25,7 @@ import { SKILLS } from '../game-data/skills';
 import { ASSUMPTION_REGISTRY, type AssumptionId } from './assumptions';
 import type { Milestone } from './milestones';
 import { unitName, type RosterUnit } from './roster';
-import type { Run, Snapshot } from './run';
+import { mapOnlyUnits, type Run, type Snapshot } from './run';
 import type { Plan, PlanLineup } from './solve/plan';
 import { MAPS } from '../game-data/chapters';
 import { routeMapOrder } from './map-order';
@@ -104,7 +106,10 @@ export type OpenRule = {
   readonly best: RuleReading;
   readonly other: RuleReading;
   readonly ask: CheckAsk;
-  /** Whether it touches EXP: a learned correction beyond range on a unit it touches names it. */
+  /**
+   * Whether it touches EXP: a learned correction beyond range on a unit it touches names it. A rule with one needs EXP
+   * gain, so it never reads a map-only setup (`earning`).
+   */
   readonly exp?: (unit: RosterUnit, run: Run, plan: Plan | undefined) => boolean;
   /** The check on a map whose roadmap sets up the situation, in words; undefined where it doesn't. */
   readonly setsUp?: (c: SetupContext) => string | undefined;
@@ -145,6 +150,26 @@ function paired(l: PlanLineup, lead: RosterUnit, back: RosterUnit): PlanLineup {
 }
 
 const withLineup = (plan: Plan, l: PlanLineup): Plan => ({ ...plan, roadmap: { ...plan.roadmap, lineups: [...plan.roadmap.lineups.filter((x) => x.key !== l.key), l] } });
+
+/**
+ * A lineup less the units that gain no EXP on its map (its map-only setups, #243): a pair loses them, and a partner
+ * left alone leads. Unchanged on a map with none.
+ */
+function earning(l: PlanLineup, map: string): PlanLineup {
+  const none = new Set(mapOnlyUnits(map));
+  if (!none.size) return l;
+  const pairs = l.pairs.flatMap((p) => {
+    const [lead, back] = [p.lead, p.back].filter((u): u is RosterUnit => !!u && !none.has(u));
+    return lead ? [back ? { lead, back } : { lead }] : [];
+  });
+  return { key: l.key, pairs, solo: l.solo.filter((u) => !none.has(u)) };
+}
+
+/** The context a rule reads: a rule that needs EXP gain sees the lineup less the units that gain none there. */
+const contextFor = (rule: OpenRule, c: SetupContext): SetupContext => (rule.exp && c.lineup ? { ...c, lineup: earning(c.lineup, c.map) } : c);
+
+/** Whether the roadmap sets up a rule's situation on a map (a free check there). */
+export const setsUpOn = (rule: OpenRule, c: SetupContext): boolean => !!rule.setsUp?.(contextFor(rule, c));
 
 /**
  * The open rules, in no order (stakes order them): #150's checklist, the tome-miss check, and the registry's other
@@ -512,7 +537,7 @@ export function freeChecks(c: SetupContext, rules: CheckedRules, stakes: readonl
   const s = new Map(stakes.map((x) => [x.rule, x]));
   return checkable(rules)
     .flatMap(({ rule }): MapCheck[] => {
-      const text = rule.setsUp?.(c);
+      const text = rule.setsUp?.(contextFor(rule, c));
       return text ? [{ rule: rule.id, label: rule.label, text, ask: rule.ask, ...(s.has(rule.id) ? { stake: s.get(rule.id)! } : {}) }] : [];
     })
     .sort(byStakes(s));
@@ -528,7 +553,7 @@ export function setupChecks(plan: Plan, lineups: readonly PlanLineup[], run: Run
     .flatMap(({ rule }): SetupCheck[] => {
       const stake = s.get(rule.id);
       if (!stake?.modelled || Math.abs(stake.gain) < SETUP_STAKES || setUpAnywhere(rule)) return [];
-      const edit = rule.setup?.(plan, lineups, run);
+      const edit = rule.setup?.(plan, rule.exp ? lineups.map((l) => earning(l, mapOfKey(run, l.key))) : lineups, run);
       return [{ rule: rule.id, label: rule.label, stake, ...(edit ? { edit } : {}) }];
     })
     .sort(byStakes(s));
@@ -542,10 +567,15 @@ export function rulesTouching(unit: RosterUnit, run: Run, plan: Plan | undefined
   return checkable(rules).flatMap(({ rule }) => (rule.exp?.(unit, run, plan) ? [rule] : []));
 }
 
+const stepOf = (run: Run, key: string) => routeMapOrder(run.roster.run.route ?? 'main-story').find((s) => s.key === key);
+
+/** A map key's map id on the run's route. */
+const mapOfKey = (run: Run, key: string) => stepOf(run, key)?.map ?? key;
+
 /** A map key's label on the run's route: "Chapter 25", "Apotheosis (secret route)". */
 export function keyLabel(run: Run, key: string): string {
-  const step = routeMapOrder(run.roster.run.route ?? 'main-story').find((s) => s.key === key);
-  const label = MAPS.find((m) => m.id === (step?.map ?? key))?.label ?? key;
+  const step = stepOf(run, key);
+  const label = MAPS.find((m) => m.id === mapOfKey(run, key))?.label ?? key;
   return step?.secret ? `${label} (secret route)` : label;
 }
 
