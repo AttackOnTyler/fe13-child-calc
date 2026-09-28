@@ -28,7 +28,11 @@ const taps = { turn: 0, total: 0 };
 const score = { asIs: 0, fixed: 0 };
 const log: string[] = [];
 let focus = 'lis';
-let placing: string | null = null;
+let placing: string | null = null; // "I actually moved it" (a real board fix)
+let fixMode = false;
+let trying: string | null = null; // the unit whose move the player is trying
+let whatIf: { unit: string; to: P } | null = null;
+let basePlan: Plan | null = null; // the solver's own plan, kept while trying a move
 
 // ---- combat (stub) ------------------------------------------------------------------------------------------------
 const inRange = (u: Unit, from: P, to: P) => { const m = dist(from, to); return m >= u.range[0] && m <= u.range[1]; };
@@ -136,10 +140,15 @@ function value(acts: Act[], pos: Record<string, P>, hp: Record<string, number>, 
   const exposed = checks.filter((c) => c.id !== 'fre').reduce((s, c) => s + c.total, 0); // non-walls taking hits
   return { checks, safe: over === 0, v: -over * 1e6 + kills * 1e4 + dmg * 50 + heal * 40 + drawn * 30 - near * 10 - exposed * 60 + margin * 25 };
 }
-function solve(): Plan {
+/** `pin`: a move the player wants to try; that unit only gets actions from that tile, the rest re-solve around it. */
+function solve(pin?: { unit: string; to: P }): Plan {
   const pos0 = S.pos, hp0 = S.hp;
   const fre = byId('fre'), rob = byId('rob'), lis = byId('lis');
-  const order = (u: Unit, pos = pos0, hp = hp0) => (alive(u.id) && hp[u.id] > 0 ? options(u, pos, hp) : [null]);
+  const order = (u: Unit, pos = pos0, hp = hp0) => {
+    if (!(alive(u.id) && hp[u.id] > 0)) return [null];
+    const o = options(u, pos, hp);
+    return pin && pin.unit === u.id ? o.filter((a) => k(a.to) === k(pin.to)) : o;
+  };
   // Frederick's options ranked alone, then the top few searched jointly with Robin and Lissa.
   const fOpts = order(fre).map((a) => { if (!a) return { a, v: 0 }; const r = apply([a], pos0, hp0); return { a, v: value([a], r.pos, r.hp, r.lethal).v }; }).sort((x, y) => y.v - x.v).slice(0, 10);
   let best: { acts: Act[]; v: number; checks: ReturnType<typeof safety>; safe: boolean } | null = null;
@@ -165,18 +174,21 @@ function solve(): Plan {
 type EnemyAct = { id: string; to: P; target?: string; o: 'hit' | 'missed' | 'crit'; c: 'hit' | 'missed'; fixed: boolean; ok: boolean };
 function predict(): EnemyAct[] {
   S.awake = wakes(S.pos, S.hp, S.awake);
-  const pos = { ...S.pos };
+  return predictFrom(S.pos, S.hp, S.awake);
+}
+function predictFrom(pos0: Record<string, P>, hp: Record<string, number>, awake: Set<string>): EnemyAct[] {
+  const pos = { ...pos0 };
   const out: EnemyAct[] = [];
-  for (const e of foes()) {
-    if (!S.awake.has(e.id)) continue;
-    const ids = allies().map((a) => a.id);
-    const occ = new Set([...ids.map((id) => k(pos[id])), ...foes().filter((f) => f.id !== e.id).map((f) => k(pos[f.id]))]);
+  const ids = ALLIES.filter((a) => a.id !== 'chr' && hp[a.id] > 0 && pos[a.id]).map((a) => a.id);
+  for (const e of ENEMIES.filter((x) => hp[x.id] > 0 && pos[x.id])) {
+    if (!awake.has(e.id)) continue;
+    const occ = new Set([...ids.map((id) => k(pos[id])), ...ENEMIES.filter((f) => f.id !== e.id && hp[f.id] > 0 && pos[f.id]).map((f) => k(pos[f.id]))]);
     let best: { to: P; target?: string; v: number } | null = null;
     for (const t of reach(e, pos[e.id], new Set(ids.map((id) => k(pos[id])))).keys()) {
       if (occ.has(t)) continue;
       const to = t.split(',').map(Number) as P;
       for (const id of ids) if (inRange(e, to, pos[id])) {
-        const r = round(e, byId(id), e.skills); const kill = r.dmg * r.hits >= S.hp[id];
+        const r = round(e, byId(id), e.skills); const kill = r.dmg * r.hits >= hp[id];
         const v = (kill ? 1e4 : 0) + r.dmg * r.hits * 10 - dist(to, pos[e.id]);
         if (!best || v > best.v) best = { to, target: id, v };
       }
@@ -189,6 +201,54 @@ function predict(): EnemyAct[] {
   return out;
 }
 
+/** A plan played out: the player phase as forecast, then the predicted enemy phase (every hit landing), on a copy. */
+type Outlook = {
+  safe: boolean; lethal: number; kills: number; counterKills: number; dealt: number; wakes: boolean; drawn: number; exposed: number;
+  checks: ReturnType<typeof safety>; hpAfter: Record<string, number>; deaths: string[]; foesLeft: number; ep: EnemyAct[];
+};
+function outlook(p: Plan): Outlook {
+  const end = apply(p.acts, S.pos, S.hp);
+  const awake = wakes(end.pos, end.hp, S.awake);
+  const ep = predictFrom(end.pos, end.hp, awake);
+  const hp = { ...end.hp }, pos = { ...end.pos };
+  for (const m of ep) { pos[m.id] = m.to; if (m.target && hp[m.target] > 0 && hp[m.id] > 0) fight(hp, m.id, m.target, m.to, pos[m.target]); }
+  const liveFoes = ENEMIES.filter((e) => S.hp[e.id] > 0);
+  const checks = safety(end.pos, end.hp);
+  return {
+    safe: p.safe, lethal: end.lethal, wakes: p.wakes, checks, ep,
+    kills: liveFoes.filter((e) => end.hp[e.id] <= 0).length,
+    counterKills: liveFoes.filter((e) => end.hp[e.id] > 0 && hp[e.id] <= 0).length,
+    dealt: liveFoes.reduce((s, e) => s + (S.hp[e.id] - hp[e.id]), 0),
+    drawn: ep.filter((m) => m.target === 'fre').length,
+    exposed: ep.filter((m) => m.target && m.target !== 'fre').length,
+    hpAfter: Object.fromEntries(ALLIES.filter((a) => a.id !== 'chr' && S.hp[a.id] > 0).map((a) => [a.id, hp[a.id]])),
+    deaths: ALLIES.filter((a) => a.id !== 'chr' && S.hp[a.id] > 0 && hp[a.id] <= 0).map((a) => a.name),
+    foesLeft: liveFoes.filter((e) => hp[e.id] > 0).length,
+  };
+}
+/** Good and bad, the tried move against the solver's plan. */
+function compare(mine: Outlook, theirs: Outlook): { good: string[]; bad: string[]; same: string[] } {
+  const good: string[] = [], bad: string[] = [], same: string[] = [];
+  const cmp = (label: string, a: number, b: number, higherIsBetter: boolean, unit = '') => {
+    if (a === b) return same.push(`${label}: ${a}${unit}`);
+    const better = higherIsBetter ? a > b : a < b;
+    (better ? good : bad).push(`${label}: ${a}${unit} (plan: ${b}${unit})`);
+  };
+  if (mine.safe !== theirs.safe) (mine.safe ? good : bad).push(mine.safe ? 'Keeps the hard line (no death without a crit)' : 'Breaks the hard line: someone can die without a crit');
+  if (mine.lethal) bad.push('An attack whose counter can kill the attacker if it misses');
+  if (mine.deaths.length || theirs.deaths.length) cmp('Predicted deaths', mine.deaths.length, theirs.deaths.length, false);
+  cmp('Kills this phase', mine.kills, theirs.kills, true);
+  cmp('Kills on counters (enemy phase)', mine.counterKills, theirs.counterKills, true);
+  cmp('Foes left after the enemy phase', mine.foesLeft, theirs.foesLeft, false);
+  cmp('Damage dealt', mine.dealt, theirs.dealt, true);
+  cmp('Foes drawn onto Frederick', mine.drawn, theirs.drawn, true);
+  cmp('Attacks on Robin or Lissa', mine.exposed, theirs.exposed, false);
+  for (const id of Object.keys(mine.hpAfter)) cmp(`${byId(id).name}’s HP after the enemy phase`, mine.hpAfter[id], theirs.hpAfter[id], true);
+  for (const c of mine.checks) { const o = theirs.checks.find((x) => x.id === c.id); if (o) cmp(`${byId(c.id).name}’s worst case`, c.total, o.total, false, ` of ${c.hp}`); }
+  if (mine.wakes !== theirs.wakes) (mine.wakes ? bad : good).push(mine.wakes ? 'Wakes the northern group now (the plan doesn’t)' : 'Doesn’t wake the northern group (the plan does)');
+  return { good, bad, same };
+}
+
 // ---- actions --------------------------------------------------------------------------------------------------------
 const outcomes = new Map<number, { o: Outcome; c: 'hit' | 'missed' }>();
 function applyPlayer() {
@@ -198,7 +258,7 @@ function applyPlayer() {
     if (a.cmd === 'Attack' && S.hp[a.target!] > 0) log.push(`T${S.turn} ${fight(S.hp, a.unit, a.target!, a.to, S.pos[a.target!], oc.o, oc.c)}`);
     if (a.cmd === 'Heal') { S.hp[a.target!] = Math.min(byId(a.target!).hp, S.hp[a.target!] + 10); log.push(`T${S.turn} Lissa heals ${byId(a.target!).name} → ${S.hp[a.target!]}`); }
   });
-  outcomes.clear();
+  outcomes.clear(); whatIf = null; basePlan = null; trying = null;
   if (foes().length === 0) { phase = 'won'; return; }
   pred = predict(); phase = 'enemy';
 }
@@ -229,11 +289,13 @@ function board(): string {
   if (alive(focus)) for (const e of foes()) if (S.awake.has(e.id)) { const r = round(e, f, e.skills); for (const t of strikeSet(e, S.pos[e.id], S.pos, ids.filter((x) => x !== focus))) dz.set(t, (dz.get(t) ?? 0) + r.dmg * r.hits); }
   const steps = new Map((phase === 'player' ? plan.acts : []).map((a, i) => [k(a.to), i + 1]));
   const pr = new Map((phase === 'enemy' ? pred : []).map((p) => [k(p.to), p.id]));
+  const canReach = new Set(trying ? options(byId(trying), S.pos, S.hp).map((a) => k(a.to)) : []);
   let cells = '';
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const t = `${x},${y}`; const d = dz.get(t);
+    if (canReach.has(t)) { /* marked below */ }
     const us = [...ALLIES, ...ENEMIES].filter((u) => alive(u.id) && k(S.pos[u.id]) === t && !(u.id === 'chr'));
-    const cls = ['c', `ter-${ROWS[y][x] === '+' ? 'bridge' : ROWS[y][x]}`, walkable(x, y) ? '' : 'off', d ? (d >= f.hp ? 'dz-kill' : 'dz') : '', pr.has(t) ? 'pred' : '', placing && walkable(x, y) ? 'placeable' : ''].join(' ');
+    const cls = ['c', `ter-${ROWS[y][x] === '+' ? 'bridge' : ROWS[y][x]}`, walkable(x, y) ? '' : 'off', d ? (d >= f.hp ? 'dz-kill' : 'dz') : '', pr.has(t) ? 'pred' : '', placing && walkable(x, y) ? 'placeable' : '', canReach.has(t) ? 'reach' : '', whatIf && k(whatIf.to) === t ? 'tried' : ''].join(' ');
     cells += `<div class="${cls}" data-tile="${t}" title="(${t})${d ? ` · worst case on ${f.name}: ${d}` : ''}">${us.map((u) => `<span class="u ${u.side}${u.id === focus ? ' focus' : ''}${S.awake.has(u.id) || u.side === 'ally' ? '' : ' asleep'}" data-unit="${u.id}" title="${esc(u.name)} ${S.hp[u.id]}/${u.hp}">${letter[u.id] ?? u.name[0]}<sub>${S.hp[u.id]}</sub></span>`).join('')}${steps.has(t) ? `<i class="step">${steps.get(t)}</i>` : ''}</div>`;
   }
   return `<div class="board" style="grid-template-columns:repeat(${W},1fr)">${cells}</div>`;
@@ -242,8 +304,20 @@ function verdict(checks: ReturnType<typeof safety>, label: string): string {
   const ok = checks.every((c) => c.total < c.hp);
   return `<div class="verdict ${ok ? 'ok' : 'bad'}"><b>${ok ? '✓ Safe' : '✗ No safe line'}</b> <small>${esc(label)}</small><div class="checks">${checks.map((c) => `<span class="${c.total >= c.hp ? 'kill' : c.total ? 'hit' : ''}" title="${esc(c.by.join(', '))}">${esc(byId(c.id).name)} ${c.by.length ? `${c.total}/${c.hp} from ${c.by.length}` : 'out of reach'}</span>`).join('')}</div></div>`;
 }
+function tryPanel(): string {
+  if (trying) return `<div class="card try"><b>Try a move for ${esc(byId(trying).name)}:</b> click any blue tile. The rest of the turn re-solves around it and you’ll see what it gains and costs. <button data-cancel-try>cancel</button></div>`;
+  if (!whatIf || !basePlan) return `<p class="note">Want to see another option? <b>Click one of your units on the board</b>, then a tile.</p>`;
+  const pinned = plan.acts.find((a) => a.unit === whatIf!.unit);
+  if (!pinned) return `<div class="card try bad">${esc(byId(whatIf.unit).name)} can’t act from (${whatIf.to}). <button data-revert>Back to the solver’s plan</button></div>`;
+  const c = compare(outlook(plan), outlook(basePlan));
+  const li = (xs: string[]) => xs.map((x) => `<li>${esc(x)}</li>`).join('');
+  return `<div class="card try"><b>Your move: ${esc(byId(whatIf.unit).name)} → (${whatIf.to}) ${pinned.cmd}${pinned.target ? ' ' + esc(byId(pinned.target).name) : ''}</b>, the rest re-solved around it. Against the solver’s plan, played through the predicted enemy phase:
+    <div class="cmp"><div><h4 class="okc">Good</h4><ul>${li(c.good) || '<li class="dim">nothing better</li>'}</ul></div><div><h4 class="badc">Bad</h4><ul>${li(c.bad) || '<li class="dim">nothing worse</li>'}</ul></div></div>
+    <details><summary><small>Same either way (${c.same.length})</small></summary><small>${c.same.map(esc).join(' · ')}</small></details>
+    <div class="go"><button class="primary" data-keep>Use my version</button> <button data-revert>Back to the solver’s plan</button> <button data-try-again>Try another tile</button></div></div>`;
+}
 function playerPanel(): string {
-  return `<section class="turn cur ${plan.safe ? '' : 'bad'}"><div class="th"><span class="tn">T${S.turn}</span> <b>Player phase: the solver’s plan</b> <span class="chip ${plan.safe ? 'ok' : 'bad'}">${plan.safe ? 'safe' : 'no safe line'}</span>${plan.wakes ? ' <span class="chip warn">wakes group 1</span>' : ''}</div>
+  return `${tryPanel()}<section class="turn cur ${plan.safe ? '' : 'bad'}"><div class="th"><span class="tn">T${S.turn}</span> <b>Player phase: ${whatIf ? 'your version' : 'the solver’s plan'}</b> <span class="chip ${plan.safe ? 'ok' : 'bad'}">${plan.safe ? 'safe' : 'no safe line'}</span>${plan.wakes ? ' <span class="chip warn">wakes group 1</span>' : ''}</div>
     ${plan.acts.map((a, i) => {
       const oc = outcomes.get(i);
       const fc = a.cmd === 'Attack' ? (() => { const s = strike(byId(a.unit), byId(a.target!)); const c = strike(byId(a.target!), byId(a.unit)); const cc = inRange(byId(a.target!), S.pos[a.target!], a.to); return `${s.dmg}${s.hits > 1 ? '×2' : ''} vs ${S.hp[a.target!]} HP${cc ? ` · counter ${c.dmg}${c.hits > 1 ? '×2' : ''}` : ' · no counter'}`; })() : a.cmd === 'Heal' ? `+10 (${S.hp[a.target!]} → ${Math.min(byId(a.target!).hp, S.hp[a.target!] + 10)})` : '';
@@ -271,7 +345,7 @@ function render() {
   <div class="head"><div class="promise"><span class="big">Turn ${S.turn} · ${phase === 'player' ? 'your phase' : phase === 'enemy' ? 'enemy phase' : phase}</span></div>
     <div>taps this turn <b>${taps.turn}</b> · total <b>${taps.total}</b> · enemy predictions: <b>${score.asIs}</b> as predicted, <b>${score.fixed}</b> fixed · foes left <b>${foes().length}</b> ${[...GROUP1].every((g) => S.awake.has(g) || S.hp[g] <= 0) ? '' : '· north asleep'}</div></div>
   <div class="colsC"><div>${main}
-    <details class="card"><summary>Off-script? Fix the board</summary><small>Click a unit on the board, then a tile to move it there. Or set HP:</small>
+    <details class="card" ${fixMode ? 'open' : ''}><summary>Off-script? Fix the board</summary><label><input type="checkbox" data-fixmode ${fixMode ? 'checked' : ''}/> <b>I actually moved a unit</b>: then click it on the board, then its real tile (this changes the board, unlike trying a move).</label><br/><small>Or set HP:</small>
       <div class="taps">${[...allies(), ...foes()].map((u) => `<label>${esc(u.name)}${u.side === 'enemy' ? ` (${S.pos[u.id]})` : ''} <input data-hp="${u.id}" size="2" value="${S.hp[u.id]}"/></label>`).join('')}</div>${placing ? `<p><b>Placing ${esc(byId(placing).name)}:</b> click its real tile.</p>` : ''}</details>
     <details class="card"><summary>Log</summary><small>${log.map(esc).join('<br/>') || 'nothing yet'}</small></details>
   </div><div class="side">${verdict(checks, phase === 'player' ? 'where the plan leaves everyone' : 'where everyone stands now')}
@@ -279,9 +353,21 @@ function render() {
 }
 function resolve() { plan = solve(); }
 document.addEventListener('click', (ev) => {
-  const el = (ev.target as HTMLElement).closest('[data-o],[data-c],[data-ok],[data-fix],[data-fo],[data-fc],[data-apply-player],[data-apply-enemy],[data-unit],[data-tile]') as HTMLElement | null;
+  const el = (ev.target as HTMLElement).closest('[data-o],[data-c],[data-ok],[data-fix],[data-fo],[data-fc],[data-apply-player],[data-apply-enemy],[data-unit],[data-tile],[data-keep],[data-revert],[data-try-again],[data-cancel-try]') as HTMLElement | null;
   if (!el) return; const d = el.dataset;
-  if (d.o) { const [i, o] = d.o.split('|'); const cur = outcomes.get(+i) ?? { o: 'hit', c: 'hit' }; outcomes.set(+i, { ...cur, o: o as Outcome }); tap(); }
+  const sameUnit = trying && d.unit === trying;
+  if (d.keep !== undefined) { log.push(`T${S.turn}: used my version (${byId(whatIf!.unit).name} → (${whatIf!.to}))`); whatIf = null; basePlan = null; outcomes.clear(); }
+  else if (d.revert !== undefined) { if (basePlan) plan = basePlan; whatIf = null; basePlan = null; trying = null; outcomes.clear(); }
+  else if (d.tryAgain !== undefined) { trying = whatIf!.unit; }
+  else if (d.cancelTry !== undefined) { trying = null; }
+  // Trying a move (player phase, not fixing the board): click an ally, then a blue tile.
+  else if (phase === 'player' && !fixMode && d.unit && byId(d.unit).side === 'ally' && !sameUnit) { trying = d.unit; }
+  else if (phase === 'player' && !fixMode && trying && (d.tile || d.unit)) {
+    const tile = d.tile ?? k(S.pos[d.unit!]);
+    whatIf = { unit: trying, to: tile.split(',').map(Number) as P };
+    basePlan ??= plan; plan = solve(whatIf); trying = null; outcomes.clear(); tap();
+  }
+  else if (d.o) { const [i, o] = d.o.split('|'); const cur = outcomes.get(+i) ?? { o: 'hit', c: 'hit' }; outcomes.set(+i, { ...cur, o: o as Outcome }); tap(); }
   else if (d.c) { const [i, c] = d.c.split('|'); const cur = outcomes.get(+i) ?? { o: 'hit', c: 'hit' }; outcomes.set(+i, { ...cur, c: c as 'hit' | 'missed' }); tap(); }
   else if (d.ok) { pred[+d.ok].ok = true; pred[+d.ok].fixed = false; tap(); }
   else if (d.fix) { pred[+d.fix].fixed = true; pred[+d.fix].ok = false; tap(); }
@@ -289,13 +375,14 @@ document.addEventListener('click', (ev) => {
   else if (d.fc) { const [i, c] = d.fc.split('|'); pred[+i].c = c as 'hit'; tap(); }
   else if (d.applyPlayer !== undefined) applyPlayer();
   else if (d.applyEnemy !== undefined) applyEnemy();
-  else if (d.unit && !placing) { placing = d.unit; ev.stopPropagation(); }
-  else if (d.tile && placing) { S.pos[placing] = d.tile.split(',').map(Number) as P; if (placing === 'fre') S.pos.chr = S.pos.fre; log.push(`moved ${byId(placing).name} to (${d.tile}) by hand`); placing = null; tap(); if (phase === 'player') resolve(); else pred = predict(); }
+  else if (fixMode && d.unit && !placing) { placing = d.unit; ev.stopPropagation(); }
+  else if (fixMode && d.tile && placing) { S.pos[placing] = d.tile.split(',').map(Number) as P; if (placing === 'fre') S.pos.chr = S.pos.fre; log.push(`moved ${byId(placing).name} to (${d.tile}) by hand`); placing = null; tap(); if (phase === 'player') resolve(); else pred = predict(); }
   render();
 });
 document.addEventListener('change', (ev) => {
   const el = ev.target as HTMLInputElement | HTMLSelectElement; const d = el.dataset;
   if (d.focus !== undefined) focus = el.value;
+  if (d.fixmode !== undefined) { fixMode = (el as HTMLInputElement).checked; placing = null; trying = null; }
   if (d.ft) { pred[+d.ft].target = el.value || undefined; tap(); }
   if (d.fp) { pred[+d.fp].to = el.value.split(',').map(Number) as P; tap(); }
   if (d.hp) { S.hp[d.hp] = Math.max(0, Number(el.value) || 0); log.push(`set ${byId(d.hp).name} HP to ${S.hp[d.hp]} by hand`); tap(); if (phase === 'player') resolve(); }
