@@ -53,7 +53,9 @@ export function planBreaks(run: Run, plan: Plan, ms: readonly Milestone[]): Plan
     seen.add(key);
     if (!w.marriages.some((c) => same(c, a, b))) out.push({ kind: 'married', couple: [a, b] });
   }
-  for (const m of ms) if (m.kind === 'support' && m.nonStarter) out.push({ kind: 'non-starter', milestone: m.id, pair: m.pair });
+  // A support with a partner lost is already that loss, not a pair that can't reach its target in time.
+  const lost = (u: RosterUnit) => last.states[u] === 'dead' || last.states[u] === 'missed';
+  for (const m of ms) if (m.kind === 'support' && m.nonStarter && !m.pair.some(lost)) out.push({ kind: 'non-starter', milestone: m.id, pair: m.pair });
   return out;
 }
 

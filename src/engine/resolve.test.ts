@@ -69,6 +69,18 @@ describe('what the adopted roadmap can no longer meet (#206)', () => {
     expect(stuck(played)).toEqual([]);
     expect(engine.planBreaks(played, held)).toEqual([]);
   });
+
+  it('reads Chrom’s wedding by its own target (a viewed C by Chapter 11), and a lost partner’s support as the loss', () => {
+    const open = runFromRoster(withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'lunatic', mode: 'classic' }));
+    const fresh = withRobinLock(open, engine.seedPlan(open).robin);
+    const held = engine.adoptedPlan(fresh, { pins: fresh.pins ?? [] });
+    const played = addEntry(addEntry(fresh, 'premonition', 1), 'prologue', 2);
+    const dead = recordFallen(played, latestEntry(played)!.id, 'lissa', 3);
+    const wedding = engine.milestones(dead, held).find((m) => m.id === 'support:chrom+robin')!;
+    expect(wedding).toMatchObject({ kind: 'support', nonStarter: false, wedding: { needs: 'viewed-c' }, window: { maps: 2 } });
+    // Lissa's death breaks the plan once: her marriage isn't listed again as a support Gregor and Lissa can't reach.
+    expect(engine.planBreaks(dead, held)).toEqual([{ kind: 'lost', unit: 'lissa', state: 'dead' }]);
+  });
 });
 
 describe('a re-solve proposal’s milestones and a behind unit’s fixes (#206)', () => {
