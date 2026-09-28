@@ -190,9 +190,10 @@ export type SolveReply =
 
 /**
  * Where a request runs: the solve and its idle work, a unit's edits beside it, the Why panel's drill-down (#210), the
- * checks' stakes (#209), the stress tests (#211), or the preparation page's forecast.
+ * checks' stakes (#209), the stress tests (#211), the preparation page's forecast, or the Robin alternatives (#201: the
+ * first decision, so they never wait behind the search and its readings).
  */
-export type SolveSlot = 'main' | 'edits' | 'why' | 'checks' | 'stress' | 'prep';
+export type SolveSlot = 'main' | 'edits' | 'why' | 'checks' | 'stress' | 'prep' | 'robin';
 
 /** A request as the page makes it: the client numbers it. */
 export type NewSolveRequest = SolveRequest extends infer R ? (R extends SolveRequest ? Omit<R, 'id'> : never) : never;
