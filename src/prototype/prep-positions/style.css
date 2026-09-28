@@ -62,3 +62,7 @@ header { padding: 8px 16px; border-bottom: 1px solid var(--line); }
 .colsC .side .board { width: 100%; }
 .script .turn.mini { padding: 4px 12px; margin: 6px 0; cursor: pointer; } .script .turn.mini:hover { background: #20242d; }
 .script .turn.cur { border-color: var(--acc); } .script .turn.cur.bad { border-color: var(--bad); } .th { cursor: pointer; }
+.u sub { font-size: 7px; margin-left: 1px; } .u.asleep { opacity: .45; }
+.c.placeable { cursor: crosshair; } .c.placeable:hover { outline: 2px solid var(--acc); }
+.go { margin: 10px 0 4px; } button.primary { background: var(--acc); color: #000; border: 0; padding: 5px 14px; font-weight: 600; }
+.sep { color: var(--dim); font-size: 11px; margin: 0 2px 0 6px; } label { font-size: 12px; margin-right: 8px; }

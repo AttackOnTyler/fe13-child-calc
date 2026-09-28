@@ -7,7 +7,8 @@
     "build": "tsc && vite build",
     "typecheck": "tsc",
     "test": "vitest run",
-    "proto:positions": "vite --open /src/prototype/prep-positions/index.html"
+    "proto:positions": "vite --open /src/prototype/prep-positions/index.html",
+    "proto:live": "vite --open /src/prototype/prep-positions/live.html"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
