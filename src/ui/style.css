@@ -459,6 +459,8 @@ button.skill.linkish { padding: 0 6px; font-size: 11px; }
 .stances { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; }
 .stances span { background: var(--hover); border-radius: 4px; padding: 1px 6px; font-size: 12px; }
 .pair-card .danger { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; border-top: 1px solid var(--line); padding-top: 4px; margin-top: 4px; }
+.pair-card .counters { border-top: 1px solid var(--line); padding-top: 4px; margin-top: 4px; }
+.pair-card .counters > div + div { margin-top: 3px; }
 .pc-foot { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-top: 4px; }
 .pc-foot .linkish, .not-fielded .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; }
 .pc-pins { display: flex; gap: 4px; align-items: center; }

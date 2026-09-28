@@ -195,6 +195,7 @@ export { coverage, deployCount, deployMax, forcedOn, leadsByDefault, suggestDepl
 export { childParalogueGates, isChildParalogue, type ChildParalogueGate, type ParalogueGateState } from './child-paralogues';
 export { type MapWaves, type Wave, type WaveGroup } from './waves';
 export { type ArmySpread, type SimItem } from './sim/sustain';
+export { exchange, type Exchange, type Initiator } from './sim/exchange';
 export { EXPOSURE_RISK, MAX_TURNS, type StressCase, type ExpPriority, type MapPlay, type MapPlayInput, type SimAct, type SimChase, type SimFight, type SimFoeGroup, type SimGroup, type SimMap, type SimStance, type SimTurn, type SimUnit, type SimUnitTally, type SimWave } from './sim/map-play';
 export { simLineup, type SimMapOptions } from './sim/sim-map';
 export { levelCap, type ArmyUnit, type ChildRecruit, type LostParent, type GoldSpread, type RunSim, type RunSimInput, type RunSimMap, type RunSimMapResult, type ShoppingLine, type ShoppingStop, type StatSpread, type UnitForecast, type SupportForecast, type MarriageForecast, type RunSimSideGoal, type SideGoalForecast, type ItemSource, type ItemFind, type SimItemUse, type ItemUseForecast, type MapExp, type UnitExp, type MilestoneCheck, type MilestoneChance } from './sim/run-sim';

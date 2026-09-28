@@ -393,6 +393,7 @@ export const DEEPER: readonly DeeperEntry[] = [
     answer: [
       'Threats, in the preparation page’s column, lists every enemy group the play meets (reinforcements included) with its weapon and skills: the cautious worst case (its worst round against the unit it hurts most) beside the play’s chance that the group kills someone, and who takes it under the EXP priority (kills a run). The two disagree on purpose: the worst case is what can happen, the chance what likely does. Reinforcements are listed with when they arrive.',
       'Each pair card lists the groups that threaten it, with their chance of killing someone on it, and is flagged “worst case kills” when a foe’s worst round can kill a unit on it.',
+      'A card also warns of an attack whose counter can kill (↩ counter): a unit on it attacking a foe it fights in the play, when the foe can live through the attack and its counter kills the attacker at some HP. It says the counter’s damage and hit chance, the HP at which it kills with the death chance there, and the safe order: the partner (or another unit) attacks first, and this unit only finishes the foe. The attacker is taken alone (no Dual Guard), a cautious reading.',
       'Danger flags pick out the rest: a weapon effective against a unit (⚔, like Beast Killers against cavalry), Counter against a melee unit (↩) and a boss that doubles a unit (»).',
       'On Lunatic+, a checklist lists each enemy to inspect when the map starts. Note the random skills you see: the matchups, threats and flags then use them instead of the worst case.',
     ],
@@ -407,14 +408,14 @@ export const DEEPER: readonly DeeperEntry[] = [
     question: 'Who should I deploy, paired with whom?',
     answer: [
       'The preparation page is a pair card for each pair and unit alone in the adopted plan’s lineup for the map (the forced units, and anyone the map fields from its start, always in it). Each card shows the Lead and Back, what each does in the play (fights, backs, heals, dances, talks), its EXP priority and expected EXP with its level at the map’s end, the milestone that EXP feeds with its chance, and an at-risk reading with the one-click pin that restores it.',
-      'The stance plan reads the play’s stances turn by turn: together with one unit in front, side by side in Attack Stance, or apart, and when to Separate, Pair Up or Switch. The EXP priority says who should take which foe groups, never which foe dies on which turn.',
+      'The stance plan reads the play’s stances turn by turn: together with one unit in front, side by side in Attack Stance, or apart, and when to Separate, Pair Up or Switch. The play is one run of the map, and yours can take longer: past its last turn the plan says so (hold the last stance, and check each attack’s counter). The EXP priority says who should take which foe groups, never which foe dies on which turn.',
       'Pick another back (or go alone), swap a pair with ⇅, or drop a unit that isn’t forced with ✕: each is a span pin over this map only, which the flawless chance and the solve keep, and the page plays the map again. Lift it with unpin on the card, or on a dropped unit under the cards.',
       'A card counts its to-dos and links them in the checklist; the actions themselves are written only there.',
     ],
     jump: { to: 'log', target: 'prepare' },
     terms: [
-      { term: 'pair card', def: 'One pair or unit alone in the plan’s lineup for a map: positions, jobs, EXP priority and expected EXP, the milestone it feeds, stances, threats and its to-do count.' },
-      { term: 'stance plan', def: 'A pair’s stances turn by turn, as the play takes them: together (Dual Guard, one action), side by side in Attack Stance (two actions) or apart.' },
+      { term: 'pair card', def: 'One pair or unit alone in the plan’s lineup for a map: positions, jobs, EXP priority and expected EXP, the milestone it feeds, stances, threats, attacks whose counter can kill and its to-do count.' },
+      { term: 'stance plan', def: 'A pair’s stances turn by turn, as the play takes them: together (Dual Guard, one action), side by side in Attack Stance (two actions) or apart; then what to do past the play’s last turn.' },
       { term: 'loadout', def: 'The weapons a unit takes into the map, from its inventory, the convoy and what the item plan hands it, and its other items.' },
     ],
   },

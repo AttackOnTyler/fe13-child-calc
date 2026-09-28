@@ -4,8 +4,9 @@
  *
  * - The main area is a **pair card** per pair and solo unit in the plan's lineup for the map: positions and partner,
  *   each unit's job, EXP priority and expected EXP, the milestone its EXP feeds (with its chance), any at-risk pin, the
- *   **stance plan** (the play's stances turn by turn), the threats to it (each group's chance of killing someone on it)
- *   with a "worst case kills" flag, and a count of its to-dos, linked to the checklist. Units not fielded are listed
+ *   **stance plan** (the play's stances turn by turn, then what to do past the play's last turn), the threats to it
+ *   (each group's chance of killing someone on it) with a "worst case kills" flag, the attacks whose counter can kill
+ *   with the safe order (#240), and a count of its to-dos, linked to the checklist. Units not fielded are listed
  *   below with their reason, arrivals by turn among them.
  * - The side column: the map's no-death chance, its expected turns and deploy count, and the whole run's flawless chance;
  *   one **Before this map** checklist in the game's menu order (pick units and pair up, inventory and trade, use items,
@@ -53,6 +54,7 @@ import {
   bestWeapon,
   dangerFlags,
   deployCount,
+  exchange,
   fighterOf,
   foeKey,
   foesOf,
@@ -194,12 +196,21 @@ export type PairCard = {
   readonly members: readonly CardMember[];
   /** The pair's support milestone, with its window. */
   readonly support?: string;
-  /** Its stances turn by turn: "T1–3" "together, Chrom in front". Empty for a unit alone. */
+  /**
+   * Its stances turn by turn: "T1–3" "together, Chrom in front", then past the play's last turn ("T4+"): hold the last
+   * stance and check each attack's counter (#240). Empty for a unit alone.
+   */
   readonly stances: readonly { readonly turns: string; readonly text: string }[];
   /** The foe groups that threaten it, most dangerous first: each one's chance of killing someone on it. */
   readonly threats: readonly { readonly name: string; readonly chance: string }[];
   /** The worst round of a foe that kills a unit on it: "Barbarian: worst round 21 / 19 HP on Robin". */
   readonly worstKills?: string;
+  /**
+   * Attacks whose counter can kill (#240), the deadliest first: a unit on it attacking a foe it fights in the play that
+   * can live, whose counter kills the attacker at some HP (with its hit chance and the death chance there), and the safe
+   * order ("Robin attacks first; Chrom only finishes it").
+   */
+  readonly counters: readonly string[];
   /** Its to-dos in the checklist, by action id. */
   readonly todo: readonly string[];
   /** A span pin over this map only sets its pair. */
@@ -281,13 +292,16 @@ export function shoppingReadout(engine: Engine, run: Run, options?: FlawlessOpti
   return shoppingOf(engine.flawlessChance(run, options));
 }
 
-/** Turns as the stance plan writes them: "T1–3", "T4", "T6+". */
-const turnsText = (from: number, to: number, last: number) => (from === to ? `T${from}` : to === last && to - from > 1 ? `T${from}+` : `T${from}–${to}`);
+/** Turns as the stance plan writes them: "T1–3", "T4". */
+const turnsText = (from: number, to: number) => (from === to ? `T${from}` : `T${from}–${to}`);
 
 /** Stance segments shown on a card; a longer plan says how many more. */
 const STANCE_SEGMENTS = 6;
 
-/** A pair's stance plan from the play's log: consecutive turns with one stance make one segment. */
+/**
+ * A pair's stance plan from the play's log: consecutive turns with one stance make one segment. The play is one seed's
+ * and a real map can run longer (#240): the plan ends with what to do past its last turn.
+ */
 function stancePlan(play: MapPlay, lead: RosterUnit, name: (u: RosterUnit) => string): { turns: string; text: string }[] {
   const words = (s: SimStance) =>
     s.stance === 'together' ? `together, ${name(s.front as RosterUnit)} in front` : s.stance === 'adjacent' ? s.adjacency !== undefined && s.adjacency < 1 ? `side by side in Attack Stance ${Math.round(s.adjacency * 100)}% of the time, else apart` : 'side by side in Attack Stance' : 'apart';
@@ -301,8 +315,40 @@ function stancePlan(play: MapPlay, lead: RosterUnit, name: (u: RosterUnit) => st
     if (last && last.text.endsWith(text) && last.to === t.turn - 1 && !(s.change && t.turn > 1)) last.to = t.turn;
     else segs.push({ from: t.turn, to: t.turn, text: `${s.change && t.turn > 1 ? CHANGE[s.change] : ''}${text}` });
   }
-  const out = segs.map((s) => ({ turns: turnsText(s.from, s.to, play.turns), text: s.text }));
-  return out.length > STANCE_SEGMENTS ? [...out.slice(0, STANCE_SEGMENTS - 1), { turns: '…', text: `${out.length - STANCE_SEGMENTS + 1} more changes` }] : out;
+  if (!segs.length) return [];
+  const out = segs.map((s) => ({ turns: turnsText(s.from, s.to), text: s.text }));
+  const past = { turns: `T${play.turns + 1}+`, text: `past the play (it ends on turn ${play.turns}): hold the last stance, and check each attack’s counter below before you commit` };
+  return [...(out.length > STANCE_SEGMENTS ? [...out.slice(0, STANCE_SEGMENTS - 1), { turns: '…', text: `${out.length - STANCE_SEGMENTS + 1} more changes` }] : out), past];
+}
+
+/** A counter the card warns of: one that takes this share of the attacker's HP or more a round (#240). */
+const COUNTER_SHARE = 1 / 3;
+/** A death chance the counter check reads as none. */
+const COUNTER_RISK = 0.01;
+/** Counter warnings shown on a card, the deadliest first. */
+const COUNTER_LINES = 3;
+
+/**
+ * An attack whose counter can kill (#240): the attacker alone (no Dual Guard: the cautious reading) against a foe at
+ * full HP. Warned of when the foe lives through the attack and its counter, taking a third of the attacker's HP or more,
+ * kills it at the counter's worst round of HP or less; with the safe order: the partner (or another unit) attacks
+ * first, and this one only finishes the foe with its first hit. Undefined when there's nothing to warn of.
+ */
+function counterRisk(unit: SimGroup['lead'], who: string, foe: Foe, foeName: string, pool: readonly string[], partner: string | undefined): { text: string; risk: number } | undefined {
+  const best = unit.weapons.length ? bestWeapon(unit.fighter, unit.weapons, undefined, null, foe, pool) : undefined;
+  if (!best) return undefined;
+  const m = best.result;
+  const hp = unit.fighter.stats.hp;
+  const at = Math.min(hp, m.worstRound);
+  if (m.worstRound < hp * COUNTER_SHARE || at <= 0) return undefined;
+  const risk = 1 - exchange(m, best.weapon?.item, at, foe.stats.hp, 'player').survive;
+  if (risk < COUNTER_RISK) return undefined;
+  const full = 1 - exchange(m, best.weapon?.item, hp, foe.stats.hp, 'player').survive;
+  const finish = m.damage > 0 ? 1 - exchange(m, best.weapon?.item, at, Math.min(foe.stats.hp, m.damage), 'player').survive : undefined;
+  const other = partner ?? 'another unit';
+  const order = `${at < hp ? 'At that HP' : 'Safe order'}: ${finish === undefined ? `leave it to ${other}` : `${other} attacks first, and ${who} only finishes it (at ${m.damage} HP or less left: ${riskText(finish)} there)`}.`;
+  const kills = at < hp ? `kills ${who} at ${at} HP or less (${riskText(risk)} there${full >= COUNTER_RISK ? `; ${riskText(full)} at full HP` : ''})` : `can kill ${who} at full HP (${riskText(risk)})`;
+  return { text: `${who} attacking ${foeName}: it can live, and its counter (${m.worstHit} damage${m.foeStrikes > 1 ? ` ×${m.foeStrikes}` : ''}, ${m.foeHit}% hit) ${kills}. ${order}`, risk };
 }
 
 /** Each foe group's chance of killing someone in the play: 1 less the product of the survival chances of its fights. */
@@ -580,6 +626,21 @@ export function prepReadout(engine: Engine, run: Run, map: string, input: PrepIn
         }),
       ),
     ];
+    // Attacks whose counter can kill (#240): each unit on the card against each group it fights in the play.
+    const group = groups.find((x) => x.lead.id === units[0]);
+    const fighters = group ? [group.lead, ...(group.back ? [group.back] : [])] : [];
+    const met = new Set(play.log.flatMap((t) => t.fights.filter((f) => set.has(f.lead)).map((f) => f.foe)));
+    const risky = simGroups
+      .filter((x) => met.has(x.key))
+      .flatMap((x) =>
+        fighters.flatMap((u) => {
+          const partner = fighters.find((p) => p !== u && p.weapons.length);
+          const c = counterRisk(u, name(u.id as RosterUnit), x.foe, groupName(x), x.pool ?? [], partner && name(partner.id as RosterUnit));
+          return c ? [c] : [];
+        }),
+      )
+      .sort((a, b) => b.risk - a.risk);
+    const counters = [...new Set(risky.map((c) => c.text))].slice(0, COUNTER_LINES);
     return {
       id,
       title: back ? `${name(lead!)} + ${name(back)}` : name(units[0]!),
@@ -588,6 +649,7 @@ export function prepReadout(engine: Engine, run: Run, map: string, input: PrepIn
       stances: lead && back ? stancePlan(play, lead, name) : [],
       threats: threatsHere.map(([n, p]) => ({ name: n, chance: riskText(p) })),
       ...(deadly.length ? { worstKills: `Worst case kills: ${deadly.join('; ')}` } : {}),
+      counters,
       todo: actions.filter((a) => a.units.some((u) => set.has(u))).map((a) => a.id),
       pinned: units.some((u) => heldHere.has(u)),
     };
@@ -911,6 +973,7 @@ function pairCard(ctx: PrepContext, r: PrepReadout, c: PairCard, choices: readon
           c.worstKills ? h('span', { class: 'chip bad', title: c.worstKills }, 'worst case kills') : null,
         )
       : null,
+    c.counters.length ? h('div', { class: 'counters small' }, ...c.counters.map((t) => h('div', {}, h('span', { class: 'chip warn', title: 'An attack that leaves the foe standing, whose counter can kill' }, '↩ counter'), ` ${t}`))) : null,
     h('div', { class: 'pc-foot' }, c.todo.length ? h('button', { class: 'linkish small', title: 'Show them in the checklist', onclick: jump }, `${c.todo.length} to-do${c.todo.length === 1 ? '' : 's'} →`) : h('span', { class: 'muted small' }, 'nothing to do'), controls),
   );
 }

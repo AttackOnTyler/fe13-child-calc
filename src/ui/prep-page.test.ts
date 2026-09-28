@@ -59,6 +59,30 @@ describe('the preparation page (#207): pair cards beside one checklist', () => {
     expect(r.head.deploy).toBe('deploy 4 of 4 (forced)');
   });
 
+  describe('the Premonition on Lunatic (#240): past the play, and an attack whose counter can kill', () => {
+    const lunatic = runFromRoster(withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'lunatic', gender: 'M', asset: 'mag', flaw: 'hp', mode: 'classic' }));
+    let r: PrepReadout | undefined;
+    const card = () => (r ??= readout(lunatic, 'premonition')).cards.find((c) => c.id === 'card:chrom')!;
+
+    it('says what to do once play runs past the stance plan’s last turn, instead of going quiet', () => {
+      const play = card().stances;
+      expect(play.slice(0, -1).every((s) => /^T\d+(–\d+)?$/.test(s.turns))).toBe(true);
+      expect(play[play.length - 1]).toEqual({ turns: 'T3+', text: 'past the play (it ends on turn 2): hold the last stance, and check each attack’s counter below before you commit' });
+    });
+
+    it('warns when an attack leaves the foe standing and its counter can kill, with the hit chance and the safe order', () => {
+      // Chrom’s Silver Sword leaves Validar standing; Grima’s Truth hits back for 19 at 77%: from 19 HP, Chrom dies
+      // 77% of the time. Robin takes the counter first, and Chrom only finishes (one hit of 16 kills before it answers,
+      // so only a miss lets it: 6% × 77%).
+      expect(card().counters).toContain(
+        'Chrom attacking Validar (Sorcerer): it can live, and its counter (19 damage, 77% hit) kills Chrom at 19 HP or less (77.0% there). At that HP: Robin (M) attacks first, and Chrom only finishes it (at 16 HP or less left: 4.6% there).',
+      );
+      // Each unit on the card is checked, the deadliest first.
+      expect(card().counters).toHaveLength(2);
+      expect(card().counters[0]).toMatch(/^Robin \(M\) attacking Validar \(Sorcerer\): .* At that HP: Chrom attacks first, and Robin \(M\) only finishes it/);
+    });
+  });
+
   it('shows each action’s worth in flawless points once the worker has costed its removal (#175 story 59)', () => {
     const plan = engine.seedPlan(ch3Run);
     const forecast = engine.expForecast(ch3Run, plan, { runs: 1 });
@@ -90,10 +114,15 @@ describe('the preparation page (#207): pair cards beside one checklist', () => {
         expect(['High', 'Normal', 'Low']).toContain(m.priority);
         expect(m.exp).toMatch(/^(≈\d+ EXP · Lv \d+|—)/);
       }
-      // The stance plan, turn by turn, from the play's stances.
-      if (c.members.length === 2) expect(c.stances[0]).toMatchObject({ turns: expect.stringMatching(/^T1/), text: expect.stringMatching(/^(together, .+ in front|side by side|apart)/) });
-      else expect(c.stances).toEqual([]);
+      // The stance plan, turn by turn, from the play's stances, and what to do once the play has ended (#240).
+      if (c.members.length === 2) {
+        expect(c.stances[0]).toMatchObject({ turns: expect.stringMatching(/^T1/), text: expect.stringMatching(/^(together, .+ in front|side by side|apart)/) });
+        expect(c.stances[c.stances.length - 1]).toMatchObject({ turns: expect.stringMatching(/^T\d+\+$/), text: expect.stringMatching(/^past the play/) });
+      } else expect(c.stances).toEqual([]);
       for (const t of c.threats) expect(t.chance).toMatch(/^(under 0\.1%|\d+\.\d%)$/);
+      // Attacks whose counter can kill (#240), a few at most, each with its hit chance and the safe order.
+      expect(c.counters.length).toBeLessThanOrEqual(3);
+      for (const t of c.counters) expect(t).toMatch(/^.+ attacking .+: it can live, and its counter \(\d+ damage( ×\d)?, \d+% hit\) (kills|can kill) .*(At that HP|Safe order): /);
     }
     // A unit whose worst round kills it flags its card.
     for (const t of r.threats.filter((x) => x.worstKills)) {
