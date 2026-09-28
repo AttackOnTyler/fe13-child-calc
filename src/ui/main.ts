@@ -269,10 +269,18 @@ function scoring(p: ScoringPrefs = viewPrefs()): Scoring {
   return found;
 }
 
+/**
+ * The explorer's tabs (#260): the only views the Scoring sidebar and the rail's "Best · …" list change (the child
+ * tables and leaderboard, the Units tab's partner lists and front doors). The Run view, the Prepare page, Record
+ * results, the Wishlist, the Roster and Validation never read them, so they don't show there.
+ */
+const explorerView = () => view === 'table' || view === 'units';
+
 function setPrefs(next: Partial<ScoringPrefs>, parts: Part[] = ['rail', 'main', 'panel']): void {
   prefs = { ...prefs, ...next };
   savePrefs(prefs);
-  renderParts(parts);
+  // Off the explorer, scoring changes nothing in view: nothing re-renders.
+  if (explorerView()) renderParts(parts);
 }
 
 const presetLabel = (p: Preset) => `${p.name}${isModified(p, prefs.edits[p.id]) ? '*' : ''}`;
@@ -553,13 +561,13 @@ function showTable(id: ChildId | 'all'): void {
 }
 
 function rail(): HTMLElement[] {
-  // The rail stays on the global preset, whatever the table in view scores with.
-  const sc = scoring(prefs);
-  const children = engine.children();
+  // The rail stays on the global preset, whatever the table in view scores with; off the explorer it scores nothing.
+  const children = explorerView() ? engine.children() : [];
+  const sc = children.length ? scoring(prefs) : undefined;
   // Each child's best among the pairings that exist in this run (the run facts remove the other Robin and Morgan).
   const bestInRun = new Map(
     children.map((c) => {
-      const scores = engine.groups(c.id, { run: roster.run }).map((g) => sc.get(sc.groupBest(g).best.key).score);
+      const scores = engine.groups(c.id, { run: roster.run }).map((g) => sc!.get(sc!.groupBest(g).best.key).score);
       const defined = scores.filter((s) => s !== undefined);
       return [c.id, { exists: scores.length > 0, score: defined.length ? Math.max(...defined) : undefined }];
     }),
@@ -640,11 +648,16 @@ function rail(): HTMLElement[] {
       h('span', {}, 'Units'),
     ),
 
-    h('div', { class: 'muted small rail-head' }, `Best · ${presetLabel(presetOf(prefs))}`),
-    item('all', LABELS.allChildren, 'Leaderboard of every child’s pairings', top.length ? Math.max(...top) : undefined),
-    ...children
-      .filter((c) => bestInRun.get(c.id)!.exists)
-      .map((c) => item(c.id, c.name, `${c.pairingCount} pairings`, bestInRun.get(c.id)!.score)),
+    // The scores follow the Scoring sidebar, so they show only beside it (#260); elsewhere one way into the explorer.
+    ...(explorerView()
+      ? [
+          h('div', { class: 'muted small rail-head' }, `Best · ${presetLabel(presetOf(prefs))}`),
+          item('all', LABELS.allChildren, 'Leaderboard of every child’s pairings', top.length ? Math.max(...top) : undefined),
+          ...children
+            .filter((c) => bestInRun.get(c.id)!.exists)
+            .map((c) => item(c.id, c.name, `${c.pairingCount} pairings`, bestInRun.get(c.id)!.score)),
+        ]
+      : [item('all', LABELS.allChildren, 'The explorer: every child’s pairings, scored by the Scoring sidebar', undefined)]),
   ];
 }
 
@@ -1835,6 +1848,12 @@ function roleControl(): HTMLElement {
 
 const TIER_LABELS: Record<ClassSummary['tier'], string> = { base: 'Base', advanced: 'Advanced', special: 'Special' };
 
+/** The panel off the explorer (#260): only an open Skill card, if any. */
+function cardOnly(): HTMLElement[] {
+  const inspecting = currentCard();
+  return inspecting ? [skillCardEl(inspecting.card, inspecting.title)] : [];
+}
+
 function panel(): HTMLElement[] {
   const p = currentPreset();
   const { weights, mixed } = effectivePreset(p, prefs);
@@ -2237,7 +2256,8 @@ const guideContext = (): GuideContext => ({
       if (robin) expanded.add(groupId(child, robin));
       shown = inRun.find((c) => c.id === child)!.name;
     }
-    // The Scoring sidebar is on every view: its jump stays put.
+    // The Scoring sidebar is only on the explorer's tabs (#260): off them, its jump opens the leaderboard beside it.
+    else if (jump.to === 'scoring' && !explorerView()) showTable('all');
     renderParts(['rail', 'main', 'panel']);
     return shown;
   },
@@ -2409,11 +2429,16 @@ function renderParts(parts: readonly Part[]): void {
   }
   // The Skill card lives in the panel but follows the drawer: refresh the panel when the card would change.
   if (parts.includes('panel') || cardKey() !== card) {
-    // The Why panel (#210) takes the panel beside the Run view and the Wishlist tab while it's open.
+    // The Why panel (#210) takes the panel beside the Run view and the Wishlist tab while it's open. The Scoring sidebar
+    // shows only on the explorer's tabs (#260); elsewhere the panel holds just an open Skill card, or gives its width back.
     const why = whyShown();
-    replaceRegion('panel', panelEl, why ? whyPanel(whyContext()) : panel());
+    const content = why ? whyPanel(whyContext()) : explorerView() ? panel() : cardOnly();
+    replaceRegion('panel', panelEl, content);
     panelEl.classList.toggle('open', sheetOpen || why);
-    panelEl.closest('.shell')?.classList.toggle('why-open', why);
+    const shell = panelEl.closest('.shell');
+    shell?.classList.toggle('why-open', why);
+    shell?.classList.toggle('no-panel', !content.length);
+    shell?.classList.toggle('no-scoring', !why && !explorerView());
   }
   renderGuide();
 }

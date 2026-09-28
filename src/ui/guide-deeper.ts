@@ -39,7 +39,7 @@ export type DeeperId =
 
 /**
  * Where an entry's jump goes: the All children leaderboard, a child's table (the one `guideChild` picks, with its Robin
- * row open for `robinRow`), the Validation panel, the Scoring sidebar on the current view, Lon'qu's unit page, Robin's
+ * row open for `robinRow`), the Validation panel, the Scoring sidebar (on the current view when it's an explorer tab, else beside the leaderboard: #260), Lon'qu's unit page, Robin's
  * page, a child's front door, the Prologue's map page, the Run view (`log`: its inbox, Next map and chapter log), the
  * Wishlist tab, Roster, or nowhere (`here`: a header control, on every view). Then it highlights `target`.
  */
@@ -206,6 +206,7 @@ export const DEEPER: readonly DeeperEntry[] = [
     question: 'Can I change how children are scored?',
     answer:
       'Yes: the preset, the basis, the Spd target and edits to a preset’s weights re-score the explorer (the tables, unit pages and front doors). ' +
+      'The Scoring sidebar shows beside those tabs only (the Table and Units tabs); the Run view, the preparation page, Record results and the Wishlist never read it. ' +
       'They never change the wishlist, which ranks by flawless chance.',
     jump: { to: 'scoring', target: 'scoring-basis' },
     terms: [

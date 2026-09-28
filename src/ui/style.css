@@ -553,3 +553,12 @@ button.skill.linkish { padding: 0 6px; font-size: 11px; }
 @media (max-width: 700px) {
   .shell.why-open { grid-template-columns: 1fr; }
 }
+/* The Scoring sidebar only beside the explorer (#260): elsewhere the page gets its width back, and on a phone the
+   "Scoring ⚙" handle goes too. An open Skill card still takes the panel. */
+.shell.no-panel { grid-template-columns: 170px 1fr; }
+.shell.no-panel > .panel { display: none; }
+.shell.no-scoring > .sheet-handle { display: none; }
+@media (max-width: 700px) {
+  .shell.no-panel { grid-template-columns: 1fr; }
+  .shell.no-scoring { padding-bottom: 0; }
+}
