@@ -77,7 +77,7 @@ import { beforeMapItems, itemPlanOf, type BeforeMapItem, type ItemPlan, type Ite
 import { readings, recordedStats, type Readings, type ReadingsOptions, type UnitStats } from './readings';
 import { defaultPriorities, expForecast, suggestChanges, suggestedChanges, type ExpForecast, type ExpForecastOptions, type SuggestedChange } from './exp-forecast';
 import { BLIND_SPOTS, STRESS_TESTS, type BlindSpot, type StressTest } from './assumptions';
-import { matchBuilds, matchTemplate, shownMatch, templateSummary, templatesFor } from './builds';
+import { matchBuilds, matchTemplate, planBuild, shownMatch, templateSummary, templatesFor } from './builds';
 import type { SkillId } from '../game-data/skills';
 import { createScorer } from './scoring';
 import { pairUpSpd } from './pair-up';
@@ -1399,9 +1399,9 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       childBuild: (r) => {
         const input = skillInput(r);
         const k = `${r.pairing.child}|${context}|${r.startClass}|${input.reachable.join()}|${JSON.stringify(r.skillCandidates)}`;
-        return cached(k, () => matchBuilds(skillReach(input, dlcOf(settings)), context)[0]);
+        return cached(k, () => planBuild(skillReach(input, dlcOf(settings)), context));
       },
-      unitBuild: (s) => cached(`${typeof s === 'string' ? s : `robin-${s.gender}`}|${context}`, () => matchBuilds(unitReach(s, dlcOf(settings)), context)[0]),
+      unitBuild: (s) => cached(`${typeof s === 'string' ? s : `robin-${s.gender}`}|${context}`, () => planBuild(unitReach(s, dlcOf(settings)), context)),
       rank: (id) => skillRank(id, context),
     };
   };
