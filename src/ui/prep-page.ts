@@ -7,7 +7,7 @@
  *   **stance plan** (the play's stances turn by turn), the threats to it (each group's chance of killing someone on it)
  *   with a "worst case kills" flag, and a count of its to-dos, linked to the checklist. Units not fielded are listed
  *   below with their reason, arrivals by turn among them.
- * - The side column: the map's no-death chance beside the plan's flawless chance, expected turns and the deploy count;
+ * - The side column: the map's no-death chance, its expected turns and deploy count, and the whole run's flawless chance;
  *   one **Before this map** checklist in the game's menu order (pick units and pair up, inventory and trade, use items,
  *   skills, armory and forge), then **On the map**, each action with why; Threats (the cautious worst case beside each
  *   group's chance of killing someone and who takes it); the shopping list; seals and promotions; loadouts with the
@@ -347,7 +347,8 @@ export function prepReadout(engine: Engine, run: Run, map: string, input: PrepIn
   const lplus = difficulty === 'lunatic-plus';
   const gender = run.roster.run.gender ?? plan.robin.gender;
   const name = (u: RosterUnit | 'maiden') => unitName(u, gender);
-  const steps = engine.mapOrder(run).steps;
+  const order = engine.mapOrder(run);
+  const steps = order.steps;
   const index = Math.max(0, steps.findIndex((s) => s.map === map));
   const step = steps[index];
   const key = step?.key ?? map;
@@ -632,7 +633,8 @@ export function prepReadout(engine: Engine, run: Run, map: string, input: PrepIn
   const todo = actions.filter((a) => a.step !== 'map').length;
   const head = {
     noDeath: `No-death chance on this map: ${noDeathText(noDeath)}`,
-    flawless: `The plan’s flawless chance: ${chanceWithMargin(forecast)}`,
+    // The run's, not this map's (#244): every map to the endpoint counts; this map's own is the no-death chance.
+    flawless: `The whole run’s flawless chance, to ${labels.get(order.endpoint.key) ?? 'the endpoint'}: ${chanceWithMargin(forecast)}`,
     turns: `about ${Math.round(turns)} turn${Math.round(turns) === 1 ? '' : 's'}`,
     deploy: `deploy ${lineup.deployed.length} of ${max}${noPrep ? ' (forced)' : ''}`,
     detail: `${playDetail(engine, sim, play)}${noPrep ? '' : ` ${todo ? `${todo} thing${todo === 1 ? '' : 's'} to do before you start.` : 'Nothing to do in the preparations.'}`}`,
@@ -1010,7 +1012,8 @@ function body(ctx: PrepContext, plan: Plan, forecast: ExpForecast): HTMLElement 
       'div',
       { class: 'prep-box no-death' },
       h('b', {}, r.head.noDeath),
-      h('div', { class: 'small' }, `${r.head.flawless} · ${r.head.turns} · ${r.head.deploy}`),
+      h('div', { class: 'small' }, `${r.head.turns} · ${r.head.deploy}`),
+      h('div', { class: 'small' }, r.head.flawless),
       h('p', { class: 'muted small' }, r.head.detail),
     ),
     h(
