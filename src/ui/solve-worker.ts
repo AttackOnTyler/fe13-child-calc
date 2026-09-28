@@ -120,7 +120,15 @@ scope.onmessage = ({ data: m }) => {
   // The preparation page's forecast (#207): the same call the page made, off the page.
   if (m.kind === 'forecast') {
     const plan = m.plan ?? engine.adoptedPlan(m.run, pins);
-    return void scope.postMessage({ id: m.id, kind: 'forecast', plan, forecast: engine.expForecast(m.run, plan), done: true });
+    scope.postMessage({ id: m.id, kind: 'forecast', plan, forecast: engine.expForecast(m.run, plan), done: !m.map });
+    if (!m.map) return;
+    // Then the checklist's worth (#175 story 59): each action's removal costed, one reply a cost.
+    const input = { run: m.run, plan, map: m.map, seed: m.seed, budgets: m.budgets ?? [] };
+    for (let s = engine.actionWorthStep(input); ; s = engine.actionWorthStep({ ...input, cursor: s.cursor })) {
+      if (s.kind === 'edit-cost') scope.postMessage({ id: m.id, kind: 'edit-cost', key: s.key, cost: s.cost, done: s.done });
+      else if (s.done) scope.postMessage({ id: m.id, kind: 'edits', edits: s.edits, done: true });
+      if (s.done) return;
+    }
   }
   if (m.kind === 'edits') {
     // A unit's edits (#203): the list, then each cost (its edited plan isn't posted: the Wishlist tab doesn't adopt it).

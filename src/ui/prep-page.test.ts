@@ -58,6 +58,22 @@ describe('the preparation page (#207): pair cards beside one checklist', () => {
     expect(r.head.deploy).toBe('deploy 4 of 4 (forced)');
   });
 
+  it('shows each action’s worth in flawless points once the worker has costed its removal (#175 story 59)', () => {
+    const plan = engine.seedPlan(ch3Run);
+    const forecast = engine.expForecast(ch3Run, plan, { runs: 1 });
+    const bare = prepReadout(engine, ch3Run, 'chapter-3', { plan, forecast });
+    const [a, b] = actionsOf(bare).filter((x) => x.step === 'units');
+    expect(a!.worth).toBeUndefined();
+    const worth = new Map([
+      [a!.id, { gain: -0.012, margin: 0.004, runs: 32, verdict: 'worse' as const, settled: true }],
+      [b!.id, { gain: 0.001, margin: 0.003, runs: 32, verdict: 'close' as const, settled: true }],
+    ]);
+    const r = prepReadout(engine, ch3Run, 'chapter-3', { plan, forecast, worth });
+    const [x, y] = actionsOf(r).filter((z) => z.step === 'units');
+    expect(x).toMatchObject({ worth: 0.012, worthText: 'worth +1.2 ±0.4' });
+    expect(y).toMatchObject({ worthText: 'worth no measurable difference (−0.1 ±0.3)' });
+  });
+
   it('gives each pair its positions, jobs, EXP priority and expected EXP, milestone, stance plan and threats', () => {
     const run = ch3Run;
     const r = chapter3();

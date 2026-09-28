@@ -75,12 +75,12 @@ import {
   withoutPins,
   type DeployCandidate,
 } from '../engine';
-import { chanceText, chanceWithMargin, pointsText, riskText, signedPoints } from './chance';
+import { chanceText, chanceWithMargin, differenceText, riskText, signedPoints } from './chance';
 import { lossText, mapChecks } from './inbox';
 import { adoptedOf, openLosses } from '../engine';
 import { goldRange, goldText, milestoneShort, pinText, solveState } from './run-page';
 import { startSolve } from './solve-client';
-import { FLAWLESS_SEED, type Assumptions } from '../engine';
+import { EDIT_COST_BUDGET, FLAWLESS_SEED, type Assumptions, type EditCost } from '../engine';
 import { CHILD_UNITS } from '../game-data/children';
 import { ROBIN_GROWTHS } from '../game-data/robin';
 import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
@@ -160,8 +160,12 @@ export type PrepAction = {
   readonly step: PrepStep;
   readonly text: string;
   readonly why: string;
-  /** Flawless points it's worth, where the plan reads one. */
+  /**
+   * Flawless points it's worth (#175 story 59): the chance the plan loses without it (its removal's cost, the worker's
+   * `actionWorthStep`), once costed; with how it reads ("worth +1.2 ±0.4", provisional or no measurable difference).
+   */
   readonly worth?: number;
+  readonly worthText?: string;
   readonly units: readonly RosterUnit[];
 };
 
@@ -245,6 +249,8 @@ export type PrepInput = {
   readonly forecast: ExpForecast;
   /** The plan's readings (#197), when the worker has read them: at-risk pins. */
   readonly readings?: Readings;
+  /** Each checklist action's removal cost, by action id, as the worker has it so far (#175 story 59). */
+  readonly worth?: ReadonlyMap<string, EditCost>;
 };
 
 const PRIORITY_TEXT = { high: 'High', normal: 'Normal', low: 'Low' } as const;
@@ -390,7 +396,14 @@ export function prepReadout(engine: Engine, run: Run, map: string, input: PrepIn
 
   // ---- the checklist -----------------------------------------------------------------------------------------------
   const actions: PrepAction[] = [];
-  const add = (a: PrepAction) => actions.push(a);
+  // Its worth: minus its removal's cost (a seal bought or picked up reads as its class change).
+  const costOf = (id: string) => input.worth?.get(id) ?? input.worth?.get(id.replace(/:(buy|found)$/, ''));
+  const add = (a: PrepAction) => {
+    const c = costOf(a.id);
+    if (!c || !c.runs) return void actions.push(a);
+    const text = c.settled ? differenceText(-c.gain, c.margin, c.verdict === 'close' || c.verdict === 'unclear') : `≈ ${differenceText(-c.gain, c.margin)}, provisional`;
+    actions.push({ ...a, worth: -c.gain, worthText: `worth ${text}` });
+  };
   const supportOf = (a: RosterUnit, b: RosterUnit) => ms.find((x): x is Extract<Milestone, { kind: 'support' }> => x.kind === 'support' && !x.nonStarter && ((x.pair[0] === a && x.pair[1] === b) || (x.pair[0] === b && x.pair[1] === a)) && x.at.index >= index);
   const supportWhy = (a: RosterUnit, b: RosterUnit) => {
     const s = supportOf(a, b);
@@ -805,6 +818,15 @@ const CHECKED = new Set<string>();
 
 /** The page's plan and forecast, by run: the forecast runs the simulation, so the page draws first and fills in after. */
 const FORECASTS = new WeakMap<Run, { plan: Plan; forecast: ExpForecast }>();
+/** Each checklist action's removal cost as the worker posts it (#175 story 59), by run, map and action id. */
+const WORTH = new WeakMap<Run, Map<string, Map<string, EditCost>>>();
+const worthOf = (run: Run, map: string): Map<string, EditCost> => {
+  let byMap = WORTH.get(run);
+  if (!byMap) WORTH.set(run, (byMap = new Map()));
+  let m = byMap.get(map);
+  if (!m) byMap.set(map, (m = new Map()));
+  return m;
+};
 
 /** One pair card (see `PairCard`), with its pins and to-dos wired. */
 function pairCard(ctx: PrepContext, r: PrepReadout, c: PairCard, choices: readonly RosterUnit[]): HTMLElement {
@@ -894,7 +916,7 @@ function pairCard(ctx: PrepContext, r: PrepReadout, c: PairCard, choices: readon
 /** A checklist action with its tick (view state) and why. */
 function actionRow(a: PrepAction): HTMLElement {
   const box = h('input', { type: 'checkbox', checked: CHECKED.has(a.id) });
-  const row = h('label', { class: `act${CHECKED.has(a.id) ? ' done' : ''}`, id: `act-${a.id}` }, box, h('span', {}, a.text, h('br', {}), h('small', { class: 'muted' }, a.why)), a.worth ? h('span', { class: 'pos small' }, `+${pointsText(a.worth)}`) : null);
+  const row = h('label', { class: `act${CHECKED.has(a.id) ? ' done' : ''}`, id: `act-${a.id}` }, box, h('span', {}, a.text, h('br', {}), h('small', { class: 'muted' }, a.why)), a.worthText ? h('span', { class: `small ${(a.worth ?? 0) > 0 ? 'pos' : 'muted'}`, title: 'Flawless points the plan loses without it' }, a.worthText) : null);
   box.addEventListener('change', () => {
     if ((box as HTMLInputElement).checked) CHECKED.add(a.id);
     else CHECKED.delete(a.id);
@@ -907,7 +929,8 @@ function actionRow(a: PrepAction): HTMLElement {
 function body(ctx: PrepContext, plan: Plan, forecast: ExpForecast): HTMLElement {
   const { engine, run } = ctx;
   const readings = solveState(run)?.readings;
-  const r = prepReadout(engine, run, ctx.map, { plan, forecast, ...(readings ? { readings } : {}) });
+  const worth = WORTH.get(run)?.get(ctx.map);
+  const r = prepReadout(engine, run, ctx.map, { plan, forecast, ...(readings ? { readings } : {}), ...(worth?.size ? { worth } : {}) });
   const m = engine.maps().find((x) => x.id === ctx.map)!;
   const difficulty = run.roster.run.difficulty ?? 'normal';
   const table: ChapterDifficulty = difficulty === 'lunatic-plus' ? 'lunatic' : difficulty;
@@ -1084,6 +1107,8 @@ function body(ctx: PrepContext, plan: Plan, forecast: ExpForecast): HTMLElement 
 /** The run whose forecast the worker is working out, and the page waiting for it (the latest drawn). */
 let forecastAsked: Run | undefined;
 let waiting: { run: Run; ctx: PrepContext; slot: HTMLElement } | undefined;
+/** A redraw pending for the checklist's worth. */
+let redraw: ReturnType<typeof setTimeout> | undefined;
 
 export function prepPage(ctx: PrepContext): HTMLElement[] {
   const { engine, run } = ctx;
@@ -1101,14 +1126,43 @@ export function prepPage(ctx: PrepContext): HTMLElement[] {
     ctx.assumptions &&
     (forecastAsked === run ||
       startSolve(
-        { kind: 'forecast', assumptions: ctx.assumptions, run, seed: FLAWLESS_SEED, ...(held ? { plan: held } : {}), pins: run.pins ?? [] },
+        {
+          kind: 'forecast',
+          assumptions: ctx.assumptions,
+          run,
+          seed: FLAWLESS_SEED,
+          ...(held ? { plan: held } : {}),
+          pins: run.pins ?? [],
+          map: ctx.map,
+          budgets: [EDIT_COST_BUDGET.provisional, EDIT_COST_BUDGET.settled],
+        },
         (reply) => {
+          // Each action's worth as it lands (#175 story 59): redrawn at most every quarter second.
+          if (reply.kind === 'edit-cost') {
+            worthOf(run, ctx.map).set(reply.key, reply.cost);
+            if (!redraw)
+              redraw = setTimeout(() => {
+                redraw = undefined;
+                const w = waiting;
+                const f = FORECASTS.get(run);
+                if (f && w?.run === run && w.slot.isConnected) {
+                  const next = body(w.ctx, f.plan, f.forecast);
+                  w.slot.replaceWith(next);
+                  waiting = { ...w, slot: next };
+                }
+              }, 250);
+            return;
+          }
           if (reply.kind !== 'forecast') return;
           const f = { plan: reply.plan, forecast: reply.forecast };
           FORECASTS.set(run, f);
           if (forecastAsked === run) forecastAsked = undefined;
           const w = waiting;
-          if (w?.run === run && w.slot.isConnected) w.slot.replaceWith(body(w.ctx, f.plan, f.forecast));
+          if (w?.run === run && w.slot.isConnected) {
+            const next = body(w.ctx, f.plan, f.forecast);
+            w.slot.replaceWith(next);
+            waiting = { ...w, slot: next };
+          }
         },
         'prep',
       ));
