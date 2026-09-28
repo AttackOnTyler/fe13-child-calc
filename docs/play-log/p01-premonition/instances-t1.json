@@ -1,0 +1,49 @@
+[
+ {
+  "team": "player",
+  "x": 2,
+  "y": 5,
+  "class": "Lord (M)",
+  "level": 20,
+  "currentHp": 41,
+  "stats": null,
+  "items": [
+   "Falchion",
+   "Silver Sword"
+  ],
+  "skills": [],
+  "groupRef": null,
+  "differs": {}
+ },
+ {
+  "team": "player",
+  "x": 3,
+  "y": 4,
+  "class": "Tactician (M)",
+  "level": 20,
+  "currentHp": 38,
+  "stats": null,
+  "items": [
+   "Thoron",
+   "Steel Sword"
+  ],
+  "skills": [],
+  "groupRef": null,
+  "differs": {}
+ },
+ {
+  "team": "enemy",
+  "x": 13,
+  "y": 5,
+  "class": "Sorcerer (M)",
+  "level": 5,
+  "currentHp": 39,
+  "stats": null,
+  "items": [
+   "Grima's Truth"
+  ],
+  "skills": [],
+  "groupRef": 0,
+  "differs": {}
+ }
+]

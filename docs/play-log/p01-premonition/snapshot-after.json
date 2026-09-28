@@ -1,0 +1,71 @@
+{
+ "gold": 0,
+ "renown": 0,
+ "chaptersCleared": 1,
+ "units": [
+  {
+   "group": "other",
+   "appUnit": "robin",
+   "appClass": "tactician",
+   "unitId": 0,
+   "unit": "Avatar (M)",
+   "classId": 4,
+   "className": "Tactician (M)",
+   "level": 1,
+   "exp": 0,
+   "currentHp": 19,
+   "gains": {
+    "hp": 0,
+    "str": 0,
+    "mag": 0,
+    "skl": 0,
+    "spd": 0,
+    "lck": 0,
+    "def": 0,
+    "res": 0
+   },
+   "movementBonus": 0,
+   "position": [
+    255,
+    255
+   ],
+   "items": [],
+   "equippedSkills": [
+    "Veteran"
+   ],
+   "learnedSkills": [
+    "Veteran"
+   ],
+   "weaponExp": [
+    5,
+    0,
+    0,
+    0,
+    5,
+    0
+   ],
+   "supportPoints": [],
+   "logbook": {
+    "name": "Robin",
+    "asset": 2,
+    "flaw": 7
+   },
+   "hasChildBlock": false,
+   "final": {
+    "stats": {
+     "hp": 19,
+     "str": 8,
+     "mag": 5,
+     "skl": 5,
+     "spd": 6,
+     "lck": 4,
+     "def": 5,
+     "res": 4
+    },
+    "notes": [
+     "Robin asset/flaw base effect for str/def: not yet seen on screen"
+    ]
+   }
+  }
+ ]
+}
