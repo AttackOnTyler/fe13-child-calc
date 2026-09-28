@@ -122,7 +122,7 @@ export const DEEPER: readonly DeeperEntry[] = [
     id: 'wishlist',
     question: 'What is my run working towards?',
     answer: [
-      'The Wishlist tab (beside Run in the rail) is the endpoint army: Lead and Back rows, each unit with its class, 5-skill build, worth, parents and the skills they pass, and its reading (on track, at risk or behind). The rail’s count is the units not on track.',
+      'The Wishlist tab (beside Run in the rail) is the endpoint army: Lead and Back rows, each unit with its class, 5-skill build, worth, parents and the skills they pass, and its reading (on track, at risk or behind). The title counts the units fielded, and how many of the units the plan counts on (fielded, and the parents and children off the endpoint lineup) aren’t on track; the rail’s count is that number.',
       'Click a unit to list every edit that touches it with its cost, keeping it in or out among them; making one is the same as in the inbox.',
       'Also in the plan lists units the plan needs off the endpoint lineup (a parent there for its child). Reserves are in order, each naming the loss it mainly covers.',
       `The children ledger lists each child with its fixed parent, the wishlist’s parents and the skills they pass, and its ${ledgerStatus}: ${ledgerLabel('wished')}, ${ledgerLabel('out')}, ${ledgerLabel('married')}, ${ledgerLabel('missed')} or ${ledgerLabel('dead')}.`,

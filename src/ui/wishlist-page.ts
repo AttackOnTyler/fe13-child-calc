@@ -100,7 +100,7 @@ export type UnitRowView = {
 };
 
 export type WishlistReadout = {
-  /** "Wishlist for Endgame: 16 units · 2 not on track". */
+  /** "Wishlist for Endgame: 16 fielded · 40 of 52 planned units not on track". */
   readonly title: string;
   /** Lead / Back rows in lineup order, then Solo units. */
   readonly rows: readonly { readonly lead: UnitRowView; readonly back?: UnitRowView }[];
@@ -117,6 +117,20 @@ export type WishlistReadout = {
 export function notOnTrack(plan: Plan, readings: Readings | undefined): number {
   const reserves = new Set(plan.wishlist.reserves.map((r) => r.unit));
   return readings?.readings.filter((r) => r.reading !== 'on-track' && !reserves.has(r.unit)).length ?? 0;
+}
+
+/**
+ * The units the plan counts on, whose readings the count not on track is out of: the endpoint lineup's (fielded), and
+ * the units off it the readings name (a parent there for its child, a child on its way); reserves aside.
+ */
+export function plannedUnits(plan: Plan, readings: Readings | undefined): number {
+  const reserves = new Set(plan.wishlist.reserves.map((r) => r.unit));
+  return new Set([...plan.wishlist.units.map((w) => w.unit), ...(readings?.readings.map((r) => r.unit) ?? [])].filter((u) => !reserves.has(u))).size;
+}
+
+/** The count not on track in words, out of the planned units: "40 of 52 planned units not on track". */
+export function notOnTrackText(count: number, planned: number): string {
+  return count ? `${count} of ${planned} planned unit${planned === 1 ? '' : 's'} not on track` : 'every planned unit on track';
 }
 
 const skillName = (id: string) => (SKILLS as Readonly<Record<string, { readonly name: string } | undefined>>)[id]?.name ?? id;
@@ -187,11 +201,12 @@ export function wishlistReadout(
     : given.idleDone
       ? 'No unit off the wishlist restores any flawless chance for the likely losses.'
       : 'The reserves are chosen once the search is done, after each unit’s worth.';
-  const count = notOnTrack({ ...plan, wishlist: { ...plan.wishlist, reserves: reserveList } }, given.readings);
+  const held = { ...plan, wishlist: { ...plan.wishlist, reserves: reserveList } };
+  const count = notOnTrack(held, given.readings);
   const end = engine.mapOrder(run).endpoint;
   const endLabel = engine.maps().find((m) => m.id === end.map)?.label ?? end.key;
   return {
-    title: `Wishlist for ${endLabel}: ${units.length} unit${units.length === 1 ? '' : 's'}${given.readings ? ` · ${count ? `${count} not on track` : 'every unit on track'}` : ''}`,
+    title: `Wishlist for ${endLabel}: ${units.length} fielded${given.readings ? ` · ${notOnTrackText(count, plannedUnits(held, given.readings))}` : ''}`,
     rows,
     others,
     reserves: reserveRows,

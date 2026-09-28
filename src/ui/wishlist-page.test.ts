@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_ROSTER, addEntry, createEngine, rosterOf, rosterUnits, runFromRoster, unitName, withPin, withRoster, withRun, withSpouse, withState, type EditCost, type ReservesStep, type RosterUnit, type UnitWorth, type WorthStep } from '../engine';
-import { childrenLedger, costText, notOnTrack, unitEditsReadout, wishlistReadout, worthText } from './wishlist-page';
+import { childrenLedger, costText, notOnTrack, plannedUnits, unitEditsReadout, wishlistReadout, worthText } from './wishlist-page';
 import type { UnitEditView } from './solve-client';
 
 const worth = (w: Partial<UnitWorth> & { unit: RosterUnit }): UnitWorth => ({ forced: false, worth: undefined, margin: undefined, utility: undefined, utilityMargin: undefined, runs: 0, children: [], settled: false, ...w });
@@ -31,7 +31,7 @@ describe('the Wishlist tab’s sheet (#203)', () => {
     expect(plan.wishlist.units.find((w) => w.unit === pair.lead.unit)!.partner).toBe(pair.back!.unit);
     const child = plan.wishlist.children.find((c) => shown.some((u) => u.unit === c.child));
     if (child) expect(shown.find((u) => u.unit === child.child)!.parents).toMatch(new RegExp(`^${name(child.parents[0])} × .* · passes .* / `));
-    expect(r.title).toBe(`Wishlist for Endgame: ${plan.wishlist.units.length} units`);
+    expect(r.title).toBe(`Wishlist for Endgame: ${plan.wishlist.units.length} fielded`);
   });
 
   it('shows worth as it arrives, Chrom and Robin as forced, and each unit’s reading with the count not on track', () => {
@@ -46,7 +46,11 @@ describe('the Wishlist tab’s sheet (#203)', () => {
     const count = readings.readings.filter((x) => x.reading !== 'on-track').length;
     expect(r.notOnTrack).toBe(count);
     expect(notOnTrack(plan, readings)).toBe(count);
-    expect(r.title).toBe(`Wishlist for Endgame: ${units.length} units · ${count ? `${count} not on track` : 'every unit on track'}`);
+    // Out of the units the plan counts on (fielded and off the lineup), never more than it shows.
+    const planned = new Set([...units, ...readings.readings.map((x) => x.unit)]).size;
+    expect(plannedUnits(plan, readings)).toBe(planned);
+    expect(count).toBeLessThanOrEqual(planned);
+    expect(r.title).toBe(`Wishlist for Endgame: ${units.length} fielded · ${count ? `${count} of ${planned} planned units not on track` : 'every planned unit on track'}`);
     for (const x of readings.readings) {
       const shown = row(x.unit) ?? r.others.find((o) => o.unit === x.unit);
       expect(shown?.reading?.text).toBe(`${{ 'on-track': 'on track', 'at-risk': 'at risk', behind: 'behind' }[x.reading]}${x.pending ? '?' : ''}`);

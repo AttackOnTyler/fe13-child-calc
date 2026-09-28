@@ -97,7 +97,7 @@ import { runView, solveState } from './run-page';
 import { installWhy, setAssumptionsTab, whyOpen, whyPanel, type WhyContext } from './why';
 import { statedAssumptionsTab } from './stated-assumptions';
 import { onChecksProgress } from './checks-view';
-import { notOnTrack, unitWorthOf, wishlistPage, worthText } from './wishlist-page';
+import { notOnTrack, notOnTrackText, plannedUnits, unitWorthOf, wishlistPage, worthText } from './wishlist-page';
 import { prepPage } from './prep-page';
 import { CHILD_UNITS } from '../game-data/children';
 import { unitLink, type OpenUnit } from './unit-links';
@@ -146,12 +146,13 @@ let preparing: string | undefined;
 let prepFoe = 0;
 /** The Wishlist tab's unit whose edits are open (#203; view state). */
 let wishlistOpen: RosterUnit | undefined;
-/** The count of units not on track the Wishlist tab's rail button last showed (#203). */
+/** The count of units not on track the Wishlist tab's rail button last showed (#203), out of the planned units. */
 let wishlistCount = 0;
-/** The count of units not on track on the adopted plan (#203, #206): the Wishlist tab's rail button. */
-const wishlistNotOnTrack = (): number => {
+let wishlistPlanned = 0;
+/** The count of units not on track on the adopted plan (#203, #206), out of the planned units: the Wishlist tab's rail button. */
+const wishlistNotOnTrack = (): { readonly count: number; readonly planned: number } => {
   const s = solveState(run);
-  return s ? notOnTrack(s.plan, s.progress?.readings) : 0;
+  return s ? { count: notOnTrack(s.plan, s.progress?.readings), planned: plannedUnits(s.plan, s.progress?.readings) } : { count: 0, planned: 0 };
 };
 /**
  * The solve's progress for the run changed (#203): the Wishlist tab follows it, and the rail's count when it moves.
@@ -159,8 +160,8 @@ const wishlistNotOnTrack = (): number => {
  */
 const solveProgressed = (): void => {
   setTimeout(() => {
-    const count = wishlistNotOnTrack();
-    const parts: Part[] = [...(count !== wishlistCount ? (['rail'] as const) : []), ...(view === 'wishlist' ? (['main'] as const) : [])];
+    const { count, planned } = wishlistNotOnTrack();
+    const parts: Part[] = [...(count !== wishlistCount || planned !== wishlistPlanned ? (['rail'] as const) : []), ...(view === 'wishlist' ? (['main'] as const) : [])];
     if (parts.length) renderParts(parts);
   }, 0);
 };
@@ -580,7 +581,7 @@ function rail(): HTMLElement[] {
       h('b', { class: 'num' }, String(score ?? '—')),
     );
   const married = Object.values(roster.spouses).filter((s) => s?.bond === 'married').length / 2;
-  wishlistCount = wishlistNotOnTrack();
+  ({ count: wishlistCount, planned: wishlistPlanned } = wishlistNotOnTrack());
   return [
     h(
       'button',
@@ -609,7 +610,7 @@ function rail(): HTMLElement[] {
         },
       },
       h('span', {}, 'Wishlist'),
-      h('b', { class: `num${wishlistCount ? ' warn' : ' muted'}`, title: 'Units not on track' }, wishlistCount ? String(wishlistCount) : ''),
+      h('b', { class: `num${wishlistCount ? ' warn' : ' muted'}`, title: notOnTrackText(wishlistCount, wishlistPlanned) }, wishlistCount ? String(wishlistCount) : ''),
     ),
     h(
       'button',
