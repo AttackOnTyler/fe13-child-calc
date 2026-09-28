@@ -245,6 +245,15 @@ describe('the stepping call (#198, #199)', () => {
     expect(settled).toMatchObject({ runs: 4, settled: true, verdict: 'close' });
   });
 
+  it('costs a build skill edit on the runs: the simulation equips the builds', () => {
+    const adopted = engine.seedPlan(late);
+    const w = adopted.wishlist.units.find((x) => x.build.length > 1)!;
+    const edited = { ...adopted, wishlist: { ...adopted.wishlist, units: adopted.wishlist.units.map((x) => (x === w ? { ...x, build: x.build.slice(1) } : x)) } };
+    const cost = engine.editCost({ run: late, plan: adopted, edited, seed: 3, budget: 8, runs: 2, cap: 4 });
+    expect(cost.runs).toBeGreaterThan(0);
+    expect(cost.settled).toBe(true);
+  });
+
   it('re-scores the best plan’s chance only on a step that changed it', () => {
     let s = step(4);
     expect(s.chance).toBeDefined();

@@ -29,7 +29,7 @@
  * **Non-starters (#194):** an edit that leaves more couples unable to reach S by their deadline than the best plan has
  * is dropped unsimulated; one that leaves fewer is kept whatever its chance does (fixing a marriage that can't happen
  * comes first), and its fixes are tried first. A plan with a non-starter is never offered, as a proposal or a close
- * call. An edit the simulation can't see (`simKey`: a build skill, today) is a close call at no cost.
+ * call. An edit the simulation can't see (`simKey`: nothing it reads changes) is a close call at no cost.
  *
  * **Pins are hard constraints (#200):** the seed and the adopted plan keep them (the facade has them keep them), an
  * edit that breaks one more than the best plan is dropped unsimulated, and no plan breaking one is offered. The runs

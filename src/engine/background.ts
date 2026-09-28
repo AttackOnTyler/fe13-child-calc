@@ -154,7 +154,7 @@ function nextCost(
 
 const freshCosts = (): CostCursor => ({ budget: 0, next: 0, settled: [], plans: new Map() });
 
-/** The order a unit's edits are costed in (#203): the likeliest choices first; a build skill costs nothing to read. */
+/** The order a unit's edits are costed in (#203): the likeliest choices first, build skills and side goals last. */
 const COST_ORDER: readonly UnitEdit['kind'][] = ['keep', 'marriage', 'class', 'pass', 'lineup', 'pair', 'robin', 'priority', 'place', 'seal', 'item', 'build', 'side-goal'];
 
 /** Where a list of edits being costed stands. Pass it back unchanged. */

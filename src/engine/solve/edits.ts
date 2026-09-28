@@ -10,8 +10,8 @@
  *   different army, the Robin alternatives' job, #201). Rebuilt the same way.
  * - **The endpoint class:** a unit promotes to another class its Master Seal reaches (its planned class change, #194,
  *   and its wishlist class).
- * - **One build skill:** a unit's build swaps one skill for another its classes teach. The simulation doesn't equip
- *   builds (they're milestones, #194), so the step reads such an edit as a close call at no cost (`simKey`).
+ * - **One build skill:** a unit's build swaps one skill for another its classes teach. The runs equip each build
+ *   skill once the unit has learned it (the realism pass), so the swap is costed like any edit.
  * - **Passed skills:** a parent passes another skill it can pass (not its fixed pass, nor the other parent's); the
  *   simulation passes it only once the parent has learned it (#194).
  * - **Lineups and pairs,** on the maps the best plan loses the most on (its re-score's, riskiest first), as the map's
