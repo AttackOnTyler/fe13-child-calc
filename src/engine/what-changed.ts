@@ -101,12 +101,13 @@ export type WhatChanged = {
 
 /**
  * The latest entry's What changed (see the module comment), against the headline and readings worked out since
- * (`now`). Undefined with no entry.
+ * (`now`). Undefined before a map is recorded: the log's first entry (its starting point, before the chapter log) has
+ * nothing before it to change from.
  */
 export function whatChanged(run: Run, now: { readonly chance?: { readonly chance: number; readonly margin: number }; readonly readings?: Readings } = {}): WhatChanged | undefined {
   const i = run.entries.length - 1;
   const e = run.entries[i];
-  if (!e) return undefined;
+  if (!e || i < 1) return undefined;
   const f = e.forecast;
   const exp = (f && f.map === e.map ? f.exp : []).flatMap((x): ExpAgainstForecast[] => {
     const u = e.snapshot.units[x.unit];
