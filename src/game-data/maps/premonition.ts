@@ -1,0 +1,38 @@
+/** Invisible Ties: terrain (chars index TERRAIN in ./terrain) and placements, from the game's own map data (ROM P001, terrain 023). Don't hand-edit: re-extract. */
+export const MAP_PREMONITION = {
+ id: 'premonition', rom: 'P001', terrainFile: '023', width: 27, height: 27,
+ rows: [
+   "EEEEEEEEEEEEEEEEEEEEEEEEEEE",
+   "xxxxxxxxxEEEEEEEEExxxxxxxxx",
+   "xxxxxxxxxxxxuuuxxxxxxxxxxxx",
+   "xxxxxxxxxzxxuuuxxzxxxxxxxxx",
+   "xxxxxxxxxxxxuuuxxxxxxxxxxxx",
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "MMMxxxxxxzxxxxxxxzxxxxxxMMM",
+   "MMMMMMxxxxxxxxxxxxxxxMMMMMM",
+   "MMMMMMMMMxxxxxxxxxMMMMMMMMM",
+   "xxxMMMMMMMMMxxxMMMMMMMMMxxx",
+   "xxxxxxMMMMMMMMMMMMMMMxxxxxx",
+   "xxxxxxxxxMMMMMMMMMxxxxxxxxx",
+   "xxxxxxxxxxxxMMMxxxxxxxxxxxx",
+   "xxxzxxzxxxxxxxxxxxxxzxxzxxx",
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "xxxxxxxxxzxxxxxxxzxxxxxxxxx",
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "xxxyxxxyxxxxxxxxxxxyxxxyxxx",
+   "xxxxxxxxxzxxxxxxxzxxxxxxxxx",
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "xxxxxxxxxzxxxxxxxzxxxxxxxxx",
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "xxxxxxxyxxxxxxxxxxxyxxxxxxx",
+   "xxxxxxxxxzxxxxxxxzxxxxxxxxx",
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxx"
+ ],
+ spawns: [
+  {"faction":"Player","pid":"PID_P001_クロム","team":"player","at":[2,5],"to":[2,5],"difficulties":["normal","hard","lunatic"]},
+  {"faction":"Player","pid":"PID_P001_プレイヤー","team":"player","at":[3,4],"to":[3,4],"difficulties":["normal","hard","lunatic"]},
+  {"faction":"Enemy","pid":"PID_P001_ボス","team":"enemy","at":[13,5],"to":[13,5],"difficulties":["normal","hard","lunatic"],"class":"Sorcerer","items":["Grima's Truth"],"ai":{"start":"Null","mission":"Null","attack":"Null","move":"Null"},"group":0,"stationary":true,"boss":true},
+ ],
+} as const;
