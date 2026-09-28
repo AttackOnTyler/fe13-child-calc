@@ -439,12 +439,15 @@ button.skill.linkish { padding: 0 6px; font-size: 11px; }
 /* The next map's no-death chance (#181). */
 .prep-page .no-death p { margin: 2px 0 0; }
 
-/* The preparation page (#207): pair cards beside a column of the map's sections (variant D of #169). */
-.prep-cols { display: grid; grid-template-columns: minmax(0, 1fr) 440px; gap: 16px; padding: 0 12px 16px; align-items: start; }
+/* The preparation page (#207): pair cards beside a column of the map's sections (variant D of #169). The columns follow
+   the page's own width (a container query), not the viewport's: beside the rail an 800px content area left the cards a
+   thin column that overlapped the side one. */
+.prep-page { container-type: inline-size; }
+.prep-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 420px); gap: 16px; padding: 0 12px 16px; align-items: start; }
 .prep-side { border-left: 1px solid var(--line); padding-left: 14px; min-width: 0; }
 .prep-main { min-width: 0; }
 .prep-main .banner { margin: 8px 0; display: block; }
-.pair-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 8px; margin: 8px 0; }
+.pair-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 8px; margin: 8px 0; }
 .pair-card { border: 1px solid var(--line); border-radius: 6px; background: var(--panel); padding: 8px 10px; min-width: 0; }
 .pc-head { border-bottom: 1px solid var(--line); padding-bottom: 3px; margin-bottom: 4px; }
 .pair-card .mem { padding: 3px 0; }
@@ -469,6 +472,10 @@ button.skill.linkish { padding: 0 6px; font-size: 11px; }
 .act > span { flex: 1; }
 .act.done { opacity: 0.5; text-decoration: line-through; }
 .act.hl { background: rgba(90, 169, 255, 0.12); }
+@container (max-width: 960px) {
+  .prep-cols { grid-template-columns: minmax(0, 1fr); }
+  .prep-side { border-left: 0; padding-left: 0; }
+}
 @media (max-width: 900px) {
   .prep-cols { grid-template-columns: minmax(0, 1fr); }
   .prep-side { border-left: 0; padding-left: 0; }
