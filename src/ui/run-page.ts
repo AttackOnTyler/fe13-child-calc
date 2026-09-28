@@ -19,7 +19,7 @@ import { STATS, STAT_LABELS, type Stat } from '../game-data/stats';
 import { h } from './dom';
 import { guide } from './guide';
 import { mapsView, type MapsContext } from './maps-page';
-import { beforeTheLock, inboxNudge, inboxProgress, inboxView, robinName, robinToLock } from './inbox';
+import { beforeTheLock, inboxNudge, inboxProgress, inboxRobinMoved, inboxView, lockOffer, robinName, type RobinBest } from './inbox';
 import { GAME_OVER_UNITS, forecastBefore, openLosses, proposalId, recordMissed, unrecordLoss, withEntryForecast, type Comparison, type WhatItCost } from '../engine';
 import { openAssumptions, setComparison, whyText, type WhyMark } from './why';
 
@@ -1232,6 +1232,17 @@ const redraw = () => {
   v.el = next;
 };
 
+/**
+ * The Robin search's best so far for this run (#241 runthrough): its reference solved Robin and wishlist, while no
+ * Robin is locked. "Lock Robin and start" offers it before the player has chosen.
+ */
+export function robinSearchBest(run: Run): RobinBest | undefined {
+  const step = robinState?.key === robinStateKey(run) ? robinState.step : undefined;
+  if (!step || step.locked || robinLock(run)) return undefined;
+  const best = step.solved.find((s) => s.key === step.reference);
+  return best && { robin: best.robin, plan: best.plan };
+}
+
 const robinStateKey = (run: Run) => {
   const lock = robinLock(run);
   const facts = { ...run.roster.run, ...Object.fromEntries((lock?.open ?? []).map((f) => [f, null])) };
@@ -1272,6 +1283,7 @@ function robinSection(ctx: RunContext, inInbox = false): HTMLElement | null {
         state.cursor = reply.step.cursor;
         if (reply.done) state.running = false;
         redraw();
+        inboxRobinMoved();
       },
       'robin',
     );
@@ -1283,7 +1295,9 @@ function robinSection(ctx: RunContext, inInbox = false): HTMLElement | null {
     const r = robinReadout(ctx.engine, run, state.step, state.noRobin);
     for (const c of r.marks?.comparisons ?? []) setComparison(c.key, c.comparison, c.plans);
     const locked = robinLock(run);
-    const chosen = robinToLock(run, solveState(run)?.progress);
+    // The Robin the Lock takes: yours once chosen, else the search's best (#241 runthrough), never an unchosen default.
+    const offer = lockOffer(run, solveState(run)?.progress, robinSearchBest(run));
+    const chosen = offer.from === 'default' ? undefined : offer.robin;
     const button = robinButton({ running: state.running, ...(state.step ? { step: state.step } : {}) });
     return h(
       'details',
@@ -1311,9 +1325,14 @@ function robinSection(ctx: RunContext, inInbox = false): HTMLElement | null {
                   ? x.lock
                     ? h('button', { class: 'mini', title: 'Lock this Robin into the run facts and start: only Robin is locked, the rest stays editable', onclick: () => ctx.setRun(withRobinLock(run, x.robin)) }, 'Lock Robin and start')
                     : null
-                  : robinKeyOf(x.robin) === robinKeyOf(chosen)
+                  : robinKeyOf(x.robin) === robinKeyOf(chosen) && offer.from !== 'search'
                     ? h('span', { class: 'chip small' }, 'your Robin')
-                    : h('button', { class: 'mini', title: 'Take this Robin and its whole wishlist as your plan (lock it with the last card)', onclick: () => ctx.setRun(withEdit(run, { label: `Robin: ${robinName(x.robin)}`, plan: x.plan, accepted: true })) }, 'Choose'),
+                    : h(
+                        'span',
+                        {},
+                        robinKeyOf(x.robin) === robinKeyOf(chosen) ? h('span', { class: 'chip small', title: 'Nothing chosen yet: Lock Robin and start takes the search’s best' }, 'the Lock takes this') : null,
+                        h('button', { class: 'mini', title: 'Take this Robin and its whole wishlist as your plan (lock it with the last card)', onclick: () => ctx.setRun(withEdit(run, { label: `Robin: ${robinName(x.robin)}`, plan: x.plan, accepted: true })) }, 'Choose'),
+                      ),
               ),
             ),
           )

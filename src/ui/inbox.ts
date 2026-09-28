@@ -11,7 +11,8 @@
  *    costing… → provisional → settled, made as pins or as a plan edit;
  * 6. your edits, with the pins' combined cost (one pin's on request) and an undo each;
  * 7. the wishlist in one collapsed line;
- * 8. Lock Robin and start, last: it locks only Robin, and the Run view carries on below.
+ * 8. Lock Robin and start, last: it locks only Robin (yours once chosen, else the Robin search's best, #241 runthrough),
+ *    and the Run view carries on below.
  *
  * After the Lock (#206) the same inbox is titled "Before <map>: what needs you" (`afterLockReadout`): a loss item on top
  * while a death, missed recruit or off-plan marriage is open (#208: the re-solve for the army that's left, with the
@@ -32,7 +33,7 @@ import { chanceText, chanceWithMargin, differenceText, signedPoints } from './ch
 import { h } from './dom';
 import { guide } from './guide';
 import { startSolve, type UnitEditView } from './solve-client';
-import { closeCallsShown, milestoneShort, pinText, type RunContext, type SolveProgress } from './run-page';
+import { closeCallsShown, milestoneShort, pinText, robinSearchBest, type RunContext, type SolveProgress } from './run-page';
 import { setComparison, whyNumber, whyText, type WhyMark } from './why';
 import { currentRules } from './checked-rules';
 import { askChecks, checkRow, checksProgress, lineupOf, onChecksProgress, setupRows } from './checks-view';
@@ -57,6 +58,8 @@ export type InboxState = {
   readonly query: string;
   /** One edit's pins' own cost, read on request, by `editPinsKey`. */
   readonly pinCosts: ReadonlyMap<string, PinCost>;
+  /** The Robin search's best so far (the Robin card's), for the Lock (#241 runthrough). */
+  readonly robinBest?: RobinBest;
 };
 
 export type InboxRow = {
@@ -88,7 +91,7 @@ export type InboxItem =
       readonly note: string;
     }
   | { readonly kind: 'wishlist'; readonly summary: string; readonly lines: readonly string[] }
-  | { readonly kind: 'lock'; readonly text: string; readonly robin: PlanRobin | undefined };
+  | { readonly kind: 'lock'; readonly text: string; readonly robin: PlanRobin | undefined; readonly from: LockOffer['from'] };
 
 export type Inbox = { readonly title: string; readonly items: readonly InboxItem[] };
 
@@ -111,20 +114,36 @@ export const editPinsKey = (pins: readonly PlanPin[]) => pins.map(pinKey).join('
  */
 export const heldPlan = (run: Run, progress: SolveProgress | undefined): Plan | undefined => adoptedOf(run) ?? progress?.start ?? progress?.best;
 
-/** The Robin "Lock Robin and start" locks: the run facts' when all set, else the held plan's. */
-export function robinToLock(run: Run, progress: SolveProgress | undefined): PlanRobin | undefined {
-  const f = run.roster.run;
-  if (f.gender && f.asset && f.flaw) return { gender: f.gender, asset: f.asset, flaw: f.flaw };
-  return heldPlan(run, progress)?.robin;
-}
+/** The Robin search's top pick (the Robin card's best solved Robin) and its whole wishlist. */
+export type RobinBest = { readonly robin: PlanRobin; readonly plan: Plan };
 
 /**
- * The run with Robin locked by "Lock Robin and start": the Robin it shows (the facts', else the held plan's), else,
- * before the solve has replied, the adopted plan's (the seed's), worked out on the click. It always locks.
+ * The Robin "Lock Robin and start" locks, and where it's from (#241 runthrough): the run facts' when all set; else the
+ * Robin of the plan the player took (a Robin chosen, a proposal accepted, an edit made); else, with nothing chosen,
+ * the Robin search's best, whole wishlist and all; else the held plan's (the seed's), which no one has chosen.
  */
-export function lockedRun(engine: Engine, run: Run, progress: SolveProgress | undefined, pins?: readonly PlanPin[]): Run {
-  const robin = robinToLock(run, progress) ?? engine.adoptedPlan(run, pins ? { pins } : {}).robin;
-  return withRobinLock(run, robin);
+export type LockOffer = { readonly robin: PlanRobin | undefined; readonly from: 'facts' | 'chosen' | 'search' | 'default' };
+export function lockOffer(run: Run, progress: SolveProgress | undefined, best?: RobinBest): LockOffer {
+  const f = run.roster.run;
+  if (f.gender && f.asset && f.flaw) return { robin: { gender: f.gender, asset: f.asset, flaw: f.flaw }, from: 'facts' };
+  const adopted = adoptedOf(run);
+  if (adopted) return { robin: adopted.robin, from: 'chosen' };
+  if (best) return { robin: best.robin, from: 'search' };
+  return { robin: heldPlan(run, progress)?.robin, from: 'default' };
+}
+
+/** The Robin "Lock Robin and start" locks (`lockOffer`). */
+export const robinToLock = (run: Run, progress: SolveProgress | undefined, best?: RobinBest): PlanRobin | undefined => lockOffer(run, progress, best).robin;
+
+/**
+ * The run with Robin locked by "Lock Robin and start": the Robin it shows (`lockOffer`; the search's best with its
+ * wishlist adopted, as Choose would), else, before the solve has replied, the adopted plan's (the seed's), worked out
+ * on the click. It always locks.
+ */
+export function lockedRun(engine: Engine, run: Run, progress: SolveProgress | undefined, pins?: readonly PlanPin[], best?: RobinBest): Run {
+  const offer = lockOffer(run, progress, best);
+  if (offer.from === 'search' && best) return withRobinLock(withEdit(run, { label: `Robin: ${robinName(best.robin)}`, plan: best.plan, accepted: true }), best.robin);
+  return withRobinLock(run, offer.robin ?? engine.adoptedPlan(run, pins ? { pins } : {}).robin);
 }
 
 /** Every term of the search (split on spaces) in the edit's words, ignoring case. */
@@ -173,15 +192,31 @@ export function inboxReadout(run: Run, state: InboxState): Inbox {
   if (reserves.length) lines.push(`Reserves: ${reserves.map((r) => `${name(r.unit)}${r.covers ? ` (covers ${name(r.covers)})` : ''}`).join('; ')}`);
   items.push({ kind: 'wishlist', summary: plan ? `The wishlist (${units.length} fielded, ${reserves.length} reserves)` : 'The wishlist: working it out…', lines });
 
-  const robin = robinToLock(run, progress);
-  items.push({
-    kind: 'lock',
-    robin,
-    text: robin
-      ? `Lock Robin (${robinName(robin)}) and start the run. This locks only Robin; the rest of the wishlist stays editable and re-solves after every map.`
-      : 'Lock Robin and start: the seed plan’s Robin (the search hasn’t replied yet). This locks only Robin; the rest re-solves after every map.',
-  });
+  items.push(lockItem(run, state));
   return { title: 'Before the run: what needs you', items };
+}
+
+/**
+ * "Lock Robin and start" (#241 runthrough): which Robin it locks, said plainly. With nothing chosen it offers the Robin
+ * search's best; beside a Robin the player chose, it names the search's best when that's another.
+ */
+function lockItem(run: Run, state: InboxState): Extract<InboxItem, { kind: 'lock' }> {
+  const best = state.robinBest;
+  const { robin, from } = lockOffer(run, state.progress, best);
+  const rest = 'This locks only Robin; the rest of the wishlist stays editable and re-solves after every map.';
+  if (!robin) return { kind: 'lock', robin, from, text: 'Lock Robin and start: the seed plan’s Robin (the search hasn’t replied yet). This locks only Robin; the rest re-solves after every map.' };
+  const bestName = best ? `${robinName(best.robin)}${spouseWords(best)}` : '';
+  if (from === 'search')
+    return { kind: 'lock', robin, from, text: `Lock Robin (${bestName}: the Robin search’s best) and start the run. It takes that Robin’s whole wishlist as your plan and locks only Robin; the rest stays editable and re-solves after every map.` };
+  if (from === 'default') return { kind: 'lock', robin, from, text: `Lock Robin (${robinName(robin)}: the seed plan’s, which no one has chosen; the Robin search hasn’t ranked one yet) and start the run. ${rest}` };
+  const other = from === 'chosen' && best && robinName(best.robin) !== robinName(robin) ? ` The Robin search ranks ${bestName} the best: Choose it on the Robin card to lock that one instead.` : '';
+  return { kind: 'lock', robin, from, text: `Lock Robin (${robinName(robin)}${from === 'chosen' ? ', your plan’s' : ''}) and start the run. ${rest}${other}` };
+}
+
+/** ", marrying Sumia": whom the Robin's plan marries Robin to (nothing when no one). */
+function spouseWords({ robin, plan }: RobinBest): string {
+  const spouse = plan.wishlist.marriages.find((c) => c.includes('robin'))?.find((u) => u !== 'robin');
+  return spouse ? `, marrying ${unitName(spouse, robin.gender)}` : '';
 }
 
 /** "Anything else you want different?" (#204): the search over every edit, the matches shown each with its cost. */
@@ -751,6 +786,11 @@ export function inboxProgress(run: Run, progress: SolveProgress): void {
   }
 }
 
+/** The Robin search moved on (#241 runthrough): its best lands on the Lock. */
+export function inboxRobinMoved(): void {
+  redraw();
+}
+
 /** The checks' stakes and setup checks (#209), asked once the search is done after the Lock: the worker is free then. */
 function askChecksFor(ctx: RunContext, progress: SolveProgress | undefined): void {
   const plan = heldPlan(ctx.run, progress);
@@ -840,7 +880,10 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
   if (page?.key !== key) page = { key, costs: new Map(), edited: new Map(), pinCosts: new Map(), asked: new Set(), listing: false };
   const s = page;
   const after = !beforeTheLock(run);
-  const state = (): InboxState => ({ progress: progressOf.get(run), choices: s.choices, costs: s.costs, query, pinCosts: s.pinCosts });
+  const state = (): InboxState => {
+    const robinBest = robinSearchBest(run);
+    return { progress: progressOf.get(run), choices: s.choices, costs: s.costs, query, pinCosts: s.pinCosts, ...(robinBest ? { robinBest } : {}) };
+  };
   const readAfter = () => afterLockReadout(ctx.engine, run, state());
   let cached: { readonly version: number; readonly inbox: { readonly title: string; readonly items: readonly AnyItem[] } } | undefined;
   const read = () => {
@@ -1114,7 +1157,7 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
         'div',
         { class: 'banner lock-robin' },
         h('span', {}, l.text),
-        h('button', { title: 'Write this Robin into the run facts: only Robin is locked, the rest stays editable', onclick: () => set(lockedRun(ctx.engine, ctx.run, progressOf.get(run), ctx.pins?.())) }, 'Lock Robin and start'),
+        h('button', { title: 'Write this Robin into the run facts: only Robin is locked, the rest stays editable', onclick: () => set(lockedRun(ctx.engine, ctx.run, progressOf.get(run), ctx.pins?.(), robinSearchBest(run))) }, 'Lock Robin and start'),
       ),
     );
   };
