@@ -157,6 +157,13 @@ describe('What changed (#206)', () => {
     expect(whatChangedReadout(engine, withDismissedChange(played, id), progress)).toBeUndefined();
   });
 
+  it('waits for a recorded map: nothing on the log’s starting point, right after the Lock', () => {
+    const locked = runFromRoster(withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'lunatic', mode: 'classic', gender: 'F', asset: 'str', flaw: 'def' }));
+    expect(locked.entries.map((e) => e.map)).toEqual(['other']);
+    expect(whatChangedReadout(engine, locked, progress)).toBeUndefined();
+    expect(whatChangedReadout(engine, addEntry(locked, 'premonition', 1), progress)!.title).toBe(`What changed on ${label('premonition')}`);
+  });
+
   it('reads units that joined on the map from their join, and says so when a level wasn’t updated', () => {
     // The Prologue, recorded with everything copied: Chrom and Frederick join on it at their join levels.
     const open = addEntry(runFromRoster(facts), 'premonition', 1);
