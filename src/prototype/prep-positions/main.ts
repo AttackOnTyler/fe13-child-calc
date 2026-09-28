@@ -3,11 +3,11 @@
 // (A: board + turn stepper · B: the script as a checklist · C: unit lanes × turns). State lives in memory.
 import { ALLIES, ENEMIES, H, HANDOFF, HEADLINE, ROWS, SCRIPT, W, byId, dangerFor, walkable, type Pos, type Turn, type Unit } from './model';
 
-const VARIANTS = { A: 'Board + turn stepper', B: 'Script checklist', C: 'Unit lanes × turns' } as const;
+const VARIANTS = { A: 'Board + turn stepper', B: 'Script checklist', C: 'Unit lanes × turns', D: 'Merge: A’s stepper + B’s checklist, C’s board column' } as const;
 type V = keyof typeof VARIANTS;
 const q = new URLSearchParams(location.search);
-let variant = (q.get('variant') ?? 'A') as V;
-if (!(variant in VARIANTS)) variant = 'A';
+let variant = (q.get('variant') ?? 'D') as V;
+if (!(variant in VARIANTS)) variant = 'D';
 
 // ---- state -------------------------------------------------------------------------------------------------------
 let turnIx = 0;
@@ -146,10 +146,26 @@ function variantC(): string {
     ${t.detailed ? t.actions.map((a, i) => actionRow(t, a, i, true)).join('') : `<p class="outline">${esc(t.outline ?? '')}</p>`}${enemyReplay(t)}</div></div>`;
 }
 
+// ---- D: the merge — A's stepper + B's checklist on the left, C's board column on the right ------------------------
+function variantD(): string {
+  const t = SCRIPT[turnIx]!;
+  const bad = (s: Turn) => checked(s).some((x) => x.total >= x.hp);
+  const card = (s: Turn, i: number) => {
+    const cur = i === turnIx;
+    const head = `<div class="th" data-turn="${i}"><span class="tn">T${s.n}</span> <b>${esc(s.title)}</b> <span class="chip ${bad(s) ? 'bad' : 'ok'}">${bad(s) ? 'no safe line' : 'safe'}</span> <small>crit ${s.crit}%</small>${s.wakes ? ' <span class="chip warn">wakes group 1</span>' : ''}${s.detailed ? '' : ' <small>· outline</small>'}</div>`;
+    if (!cur) return `<section class="turn mini ${bad(s) ? 'bad' : ''}">${head}</section>`;
+    return `<section class="turn cur ${bad(s) ? 'bad' : ''}">${head}
+      ${s.detailed ? s.actions.map((a, j) => actionRow(s, a, j)).join('') : `<p class="outline">${esc(s.outline ?? '')}</p>`}
+      ${enemyReplay(s)}${s.n >= 6 ? `<div class="card"><b>Next-map handoff</b><br/><small>${esc(HANDOFF)}</small></div>` : ''}</section>`;
+  };
+  return `${headline()}<div class="colsC"><div>${stepper()}${turnIx === 0 ? skillTaps() : ''}<div class="script">${SCRIPT.map(card).join('')}</div></div>
+    <div class="side"><h3>T${t.n}: ${esc(t.title)}</h3>${safety(t)}${focusPicker()}${board(t)}</div></div>`;
+}
+
 // ---- render + switcher ----------------------------------------------------------------------------------------------
 const app = document.getElementById('app')!;
 function render() {
-  app.innerHTML = `<header><b>FE13 Child Calc</b> <small>Run › Prepare: Prologue: The Verge of History · lunatic · no preparation phase</small></header>` + { A: variantA, B: variantB, C: variantC }[variant]();
+  app.innerHTML = `<header><b>FE13 Child Calc</b> <small>Run › Prepare: Prologue: The Verge of History · lunatic · no preparation phase</small></header>` + { A: variantA, B: variantB, C: variantC, D: variantD }[variant]();
   const keys = Object.keys(VARIANTS) as V[];
   document.getElementById('switcher')!.innerHTML = `<button data-v="-1">←</button> <span>${variant} — ${VARIANTS[variant]}</span> <button data-v="1">→</button>`;
   (document.getElementById('switcher') as HTMLElement).dataset.keys = keys.join('');
