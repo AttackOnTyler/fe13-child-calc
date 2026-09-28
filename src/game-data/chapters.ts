@@ -162,8 +162,13 @@ export const LUNATIC_PLUS = {
   source: 'FEW Difficulty (oldid 737046)',
 } as const;
 
-/** The Lunatic+ pool on a map: the whole pool from Chapter 3 on, the four-skill pool before. */
+/**
+ * The Lunatic+ pool on a map: the whole pool from Chapter 3 on, the four-skill pool before. None on Premonition and the
+ * Outrealm maps (xenologues and Apotheosis), whose FEW pages print no pool (every one of them; the story chapters and
+ * paralogues all print theirs, Paralogue 22's page aside).
+ */
 export function lunaticPlusPoolFor(map: ChapterData): readonly string[] {
+  if (map.kind === 'xenologue' || map.id === 'premonition') return [];
   if (map.kind !== 'story' || map.order >= mapOrder(LUNATIC_PLUS.notBefore.map)) return LUNATIC_PLUS.pool;
   return LUNATIC_PLUS.pool.filter((s) => !(LUNATIC_PLUS.notBefore.skills as readonly string[]).includes(s));
 }

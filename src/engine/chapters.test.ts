@@ -33,6 +33,10 @@ describe('chapter data (consistency)', () => {
     expect(engine.lunaticPlusPool(byId.get('chapter-3')!)).toContain('Pavise+');
   });
 
+  it('gives no Lunatic+ skills where the page prints no pool: Premonition and the Outrealm maps', () => {
+    for (const id of ['premonition', 'champions-of-yore-1', 'lost-bloodlines-3', 'rogues-redeemers-1', 'apotheosis']) expect(engine.lunaticPlusPool(byId.get(id)!), id).toEqual([]);
+  });
+
   it('recruits only known units, and names only well-formed maps it unlocks', () => {
     for (const m of maps) {
       // Xenologues recruit Einherjar, who have no data here.
