@@ -116,7 +116,8 @@ describe('the map solver’s combat math', () => {
     expect(matchup(frederick, { ...back, skills: ['Dual Guard+'] }, 'S', axe).dualGuardRate).toBe(Math.floor((14 + 15) / 4 + 10 + 10));
     expect(matchup(frederick, undefined, null, axe).dualGuardRate).toBe(0);
     const m = matchup(frederick, back, 'A', axe);
-    expect(m.backDamage).toBe(20 + itemByName('Steel Sword')!.mt! - 7);
+    // The Steel Sword's C rank adds 1 Attack (#239).
+    expect(m.backDamage).toBe(20 + itemByName('Steel Sword')!.mt! + 1 - 7);
     expect(m.backHit).toBe(Math.min(100, Math.floor(itemByName('Steel Sword')!.hit! + (15 * 3 + 6) / 2 + 5 - (8 * 3 + 2) / 2)));
     expect(m.backCrit).toBe(Math.max(0, Math.floor((itemByName('Steel Sword')!.crit ?? 0) + 15 / 2 - 2)));
     // Frederick doesn't double; the Fighter strikes once a round.
@@ -174,5 +175,45 @@ describe('review fixes: dragonstones fall under Aegis+', () => {
     const plain = matchup(nowi, undefined, null, foe([]));
     expect(matchup(nowi, undefined, null, foe(['Aegis+'])).damage).toBe(Math.floor(plain.damage / 2));
     expect(matchup(nowi, undefined, null, foe(['Pavise+'])).damage).toBe(plain.damage);
+  });
+});
+
+describe('weapon rank bonuses (#239: the Premonition, observed in play)', () => {
+  // The chapter data's Premonition units against its Lunatic Validar; the game's forecast (play log P01-T2a) shows
+  // Chrom's Silver Sword at 18 damage, one hit at 94, and Validar's Grima's Truth at 21 damage and 82 hit.
+  const premonition = map('premonition');
+  const recruit = (name: string) => premonition.recruits.find((r) => r.unit === name)!;
+  const chrom: Fighter = { name: 'Chrom', className: 'Lord', stats: Object.fromEntries(Object.entries(recruit('Chrom').stats!).map(([k, v]) => [k, statValue(v)])) as Fighter['stats'], skills: [], weapon: weapon('Silver Sword') };
+  // Robin (M, +Str −Def): the play log's on-screen stats.
+  const robin: Fighter = { name: 'Robin', className: 'Tactician', stats: stats(38, 18, 14, 15, 13, 16, 14, 17), skills: [], weapon: weapon('Thoron') };
+  const validar = foesOf(premonition, 'lunatic')[0]!;
+
+  it('reproduces the game’s forecast apart: one hit of 18 at 94, and Validar’s 21 at 82', () => {
+    const r = matchup(chrom, undefined, null, validar);
+    expect({ damage: r.damage, hits: r.hits, doubles: r.doubles, hit: r.hit, worstHit: r.worstHit, worstRound: r.worstRound, foeHit: r.foeHit, oneRounds: r.oneRounds }).toEqual({
+      damage: 18,
+      hits: 1,
+      doubles: false,
+      hit: 94,
+      worstHit: 21,
+      worstRound: 21,
+      foeHit: 82,
+      oneRounds: false,
+    });
+  });
+
+  it('adds Attack and Hit by weapon kind and rank (SF Calculations): a sword’s B is +2 Atk; a tome’s A is +2 Atk, +5 Hit', () => {
+    const plain = { ...chrom, weapon: weapon('Iron Sword') };
+    const bronze = { ...chrom, weapon: weapon('Bronze Sword') };
+    // Iron (D) and Bronze (E) Swords add nothing; the Silver Sword (B) adds 2 beyond its 6 more Mt.
+    expect(matchup(chrom, undefined, null, validar).damage - matchup(plain, undefined, null, validar).damage).toBe(itemByName('Silver Sword')!.mt! - itemByName('Iron Sword')!.mt! + 2);
+    expect(matchup(bronze, undefined, null, validar).damage).toBe(matchup(plain, undefined, null, validar).damage - (itemByName('Iron Sword')!.mt! - itemByName('Bronze Sword')!.mt!));
+  });
+
+  it('paired with Robin, Chrom doubles on Robin’s +3 Spd (18 against 13), as the together stance would', () => {
+    const r = matchup(chrom, robin, null, validar);
+    expect(r.doubles).toBe(true);
+    // Robin's +1 Res from pair-up: Validar's hit is one less.
+    expect(r.worstHit).toBe(20);
   });
 });

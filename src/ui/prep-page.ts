@@ -252,7 +252,12 @@ export type PrepReadout = {
   readonly assumptions: readonly string[];
   /** The lineup the page plays: matchups and loadouts read it. */
   readonly lineup: Deployment;
+  /** Each pair's stance when it fights in the play, by its lead (#239): the matchup table scores that stance. */
+  readonly fighting: Readonly<Record<string, FightingStance>>;
 };
+
+/** A pair's stance when it fights (`fightingStance`): its stance plan's words, without how it got there. */
+export type FightingStance = Omit<SimStance, 'pair' | 'change'>;
 
 export type PrepInput = {
   readonly plan: Plan;
@@ -319,6 +324,21 @@ function stancePlan(play: MapPlay, lead: RosterUnit, name: (u: RosterUnit) => st
   const out = segs.map((s) => ({ turns: turnsText(s.from, s.to), text: s.text }));
   const past = { turns: `T${play.turns + 1}+`, text: `past the play (it ends on turn ${play.turns}): hold the last stance, and check each attack’s counter below before you commit` };
   return [...(out.length > STANCE_SEGMENTS ? [...out.slice(0, STANCE_SEGMENTS - 1), { turns: '…', text: `${out.length - STANCE_SEGMENTS + 1} more changes` }] : out), past];
+}
+
+/**
+ * The stance a pair fights in (#239): its stance on the first turn one of its units fights, else its first turn's. The
+ * matchup table scores this stance, as the stance plan plays it: the Premonition's Chrom doubled Validar in the table,
+ * paired, while the plan fought apart, where the game has him strike once.
+ */
+function fightingStance(play: MapPlay, pair: readonly string[]): FightingStance | undefined {
+  const lead = pair[0]!;
+  const at = (t: MapPlay['log'][number]) => t.stances.find((x) => x.pair === lead);
+  const turn = play.log.find((t) => at(t) && t.fights.some((f) => pair.includes(f.lead))) ?? play.log.find(at);
+  const s = turn && at(turn);
+  if (!s) return undefined;
+  const { pair: _pair, change: _change, ...stance } = s;
+  return stance;
 }
 
 /** A counter the card warns of: one that takes this share of the attacker's HP or more a round (#240). */
@@ -723,6 +743,10 @@ export function prepReadout(engine: Engine, run: Run, map: string, input: PrepIn
     checks: mapChecks(engine, run, key, plan, lineup).map((c) => c.text),
     assumptions: blind.map((b) => `${b.label} (${LEAN[b.lean]})`),
     lineup,
+    fighting: Object.fromEntries(lineup.pairs.flatMap((p) => {
+      const f = p.back && fightingStance(play, [p.lead, p.back]);
+      return f ? [[p.lead, f]] : [];
+    })),
   };
 }
 
@@ -1019,20 +1043,40 @@ function body(ctx: PrepContext, plan: Plan, forecast: ExpForecast): HTMLElement 
   const choices = [...byUnit.keys()];
   const all = [...r.before.flatMap((s) => s.actions), ...r.onMap];
 
-  // Matchups (#119): each lead with its back against the chosen foe.
-  const lineupRows = [...d.pairs.map((p) => ({ unit: p.lead, backId: p.back })), ...d.solo.map((unit) => ({ unit, backId: undefined as RosterUnit | undefined }))].flatMap(({ unit, backId }) => {
+  // Matchups (#119): each pair in the stance it fights in (#239), against the chosen foe. Together, the front with its
+  // back's pair-up; side by side, each unit with the other in Attack Stance (no pair-up stats); apart (or side by side
+  // only some of the time, the cautious reading), each unit alone.
+  type Row = { unit: RosterUnit; partner?: RosterUnit; paired: boolean; stance?: string };
+  const rows: Row[] = [
+    ...d.pairs.flatMap((p): Row[] => {
+      if (!p.back) return [{ unit: p.lead, paired: false }];
+      const f = r.fighting[p.lead];
+      if (!f || f.stance === 'together') {
+        const front = (f?.front as RosterUnit | undefined) ?? p.lead;
+        return [{ unit: front, partner: front === p.lead ? p.back : p.lead, paired: true }];
+      }
+      const always = f.stance === 'adjacent' && (f.adjacency === undefined || f.adjacency >= 1);
+      const stance = always ? 'side by side' : f.stance === 'adjacent' ? `apart; side by side ${Math.round(f.adjacency! * 100)}% of the time` : 'apart';
+      return [
+        { unit: p.lead, ...(always ? { partner: p.back } : {}), paired: false, stance },
+        { unit: p.back, ...(always ? { partner: p.lead } : {}), paired: false, stance },
+      ];
+    }),
+    ...d.solo.map((unit): Row => ({ unit, paired: false })),
+  ];
+  const lineupRows = rows.flatMap(({ unit, partner, paired, stance }) => {
     const c = byUnit.get(unit);
     const u = snap.units[unit];
     if (!c || !u || !foe) return [];
-    const back = backId ? byUnit.get(backId)?.fighter : undefined;
-    const support = backId ? (u.supports.find((s) => s.partner === backId)?.rank ?? null) : null;
-    const best = c.weapons.length ? bestWeapon(c.fighter, c.weapons, back, support, foe, poolFor(foe)) : undefined;
-    return [{ unit, u, backId, best }];
+    const back = partner ? byUnit.get(partner)?.fighter : undefined;
+    const support = partner ? (u.supports.find((s) => s.partner === partner)?.rank ?? null) : null;
+    const best = c.weapons.length ? bestWeapon(c.fighter, c.weapons, back, support, foe, poolFor(foe), paired) : undefined;
+    return [{ unit, u, backId: partner, stance, best }];
   });
   const cell = (ok: boolean, text: string, title?: string) => h('td', { class: ok ? 'pos' : 'neg', title }, text);
   const matchRow = (x: (typeof lineupRows)[number]) => {
     const res = x.best?.result;
-    const backName = x.backId ? unitName(x.backId, gender) : '—';
+    const backName = `${x.backId ? unitName(x.backId, gender) : '—'}${x.stance ? ` (${x.stance})` : ''}`;
     if (!res) return h('tr', {}, h('td', {}, unitName(x.unit, gender)), h('td', {}, backName), h('td', { colspan: '9', class: 'muted' }, 'No weapon recorded in its inventory'));
     return h(
       'tr',

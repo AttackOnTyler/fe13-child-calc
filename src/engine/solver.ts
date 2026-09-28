@@ -12,8 +12,12 @@
  *   bonus raised by 1 (C, B) or 2 (A, S) support. Dual strike rate = (both Skl) / 4 + 20/30/40/50/60 by support (+10
  *   with Dual Strike+). Dual guard rate = (both Def, or Res against magic) / 4 + 0/2/5/7/10 by support (+10 with
  *   Dual Guard+). Dual support adds Hit, Avoid, Crit and crit avoid by support rank.
- * - Weapon triangle (sword > axe > lance > sword): ±5 Hit at the advantaged side's E/D rank. Weapon ranks aren't
- *   recorded, so no rank bonus is counted and the triangle is taken at its smallest, a cautious reading.
+ * - Weapon rank bonus (SF Calculations; #239, the game's Premonition forecast): Attack and Hit by kind and rank — a
+ *   sword +1/+2/+3 Atk at C/B/A; a lance, bow or tome +1 Atk at C, +1 Atk and +5 Hit at B, +2 Atk and +5 Hit at A; an
+ *   axe +5/+10 Hit at C/B, +1 Atk and +10 Hit at A. Weapon ranks aren't recorded (`weapon-ranks`): a unit's is read as
+ *   the rank its weapon needs, a foe's as A in an advanced class (the cautious reading) and its weapon's rank otherwise.
+ * - Weapon triangle (sword > axe > lance > sword): ±5 Hit at the advantaged side's E/D rank, taken at its smallest, a
+ *   cautious reading.
  * - Plain Pavise/Aegis halve the lead's hits but not dual strikes; Pavise+/Aegis+ (Lunatic+) halve both (research
  *   #91). Lunatic+ counts the worst of its pool (Luna+: hits ignore half Def/Res; Hawkeye: always hits; Counter: melee
  *   damage comes back; Pavise+/Aegis+; Vantage+) unless the player recorded the skills seen; the pool leaves out
@@ -145,6 +149,29 @@ function dualSupport(rank: number): [number, number, number, number] {
   return [r >= 9 ? 20 : r >= 5 ? 15 : 10, r >= 10 ? 20 : r >= 6 ? 15 : r >= 2 ? 10 : 0, r >= 12 ? 20 : r >= 8 ? 15 : r >= 4 ? 10 : 0, r >= 11 ? 20 : r >= 7 ? 15 : r >= 3 ? 10 : 0];
 }
 
+/** Weapon rank bonuses by kind (SF Calculations): [Attack, Hit] at C, B and A; S reads as A. */
+const RANK_BONUS: Readonly<Record<string, readonly (readonly [number, number])[]>> = {
+  sword: [[1, 0], [2, 0], [3, 0]],
+  lance: [[1, 0], [1, 5], [2, 5]],
+  bow: [[1, 0], [1, 5], [2, 5]],
+  tome: [[1, 0], [1, 5], [2, 5]],
+  axe: [[0, 5], [0, 10], [1, 10]],
+};
+const RANK_INDEX: Readonly<Record<string, number>> = { C: 0, B: 1, A: 2, S: 2 };
+const NO_RANK_BONUS = [0, 0] as const;
+/**
+ * A weapon's rank bonus in a class's hands (`weapon-ranks`): at the rank the weapon needs, or A for a foe in an advanced
+ * class (a foe's rank is the cautious reading, as its stats are).
+ */
+function rankBonus(w: GameItem | undefined, cls: string, foe: boolean): readonly [number, number] {
+  const table = w && RANK_BONUS[w.kind];
+  if (!table) return NO_RANK_BONUS;
+  const id = foe ? CLASS_BY_NAME.get(cls) : undefined;
+  const rank = id && CLASSES[id].tier === 'advanced' ? 'A' : w.rank;
+  const i = rank === undefined ? undefined : RANK_INDEX[rank];
+  return i === undefined ? NO_RANK_BONUS : table[i]!;
+}
+
 const NO_WEAPON = { mt: 0, hit: 0, crit: 0 } as const;
 const WEAPON_STATS = new WeakMap<NonNullable<Fighter['weapon']>, { mt: number; hit: number; crit: number }>();
 const weaponStats = (w: Fighter['weapon']) => {
@@ -197,11 +224,13 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
   const effective = effectiveOn(w, foe.className);
   if (effective) notes.push(`${w!.name} is effective: Mt tripled`);
   const tri = triangle(w, foe.weapon);
+  const [rankAtk, rankHit] = rankBonus(w, lead.className, false);
+  const [foeRankAtk, foeRankHit] = rankBonus(foe.weapon, foe.className, true);
   // Faires, breakers and the hit and avoid skills, both sides (the realism pass): the rest of a unit's skills are procs
   // and stat bonuses the exchange doesn't play (`skills-in-combat`).
   const leadAvoid = breakerOf(lead.skills, foe.weapon) + avoidSkill(lead.skills);
   const foeAvoid = breakerOf(skills, w) + avoidSkill(skills);
-  const attack = (magic ? st('mag') : st('str')) + faireOf(lead.skills, w) + ws.mt * (effective ? 3 : 1);
+  const attack = (magic ? st('mag') : st('str')) + faireOf(lead.skills, w) + ws.mt * (effective ? 3 : 1) + rankAtk;
   let damage = Math.max(0, attack - (magic ? foe.stats.res : foe.stats.def));
   // Aegis covers bows, tomes and dragonstones; Pavise the rest, beaststones included (SF Skills).
   const aegisSide = (x: GameItem | undefined, m: boolean) => m || x?.kind === 'bow' || x?.kind === 'stone';
@@ -223,7 +252,8 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
     const bmagic = !!bw && (bw.kind === 'tome' || bw.magic === true);
     const bws = weaponStats(back.weapon);
     const beff = effectiveOn(bw, foe.className);
-    backDamage = Math.max(0, (bmagic ? back.stats.mag : back.stats.str) + faireOf(back.skills, bw) + bws.mt * (beff ? 3 : 1) - (bmagic ? foe.stats.res : foe.stats.def));
+    const [bRankAtk, bRankHit] = rankBonus(bw, back.className, false);
+    backDamage = Math.max(0, (bmagic ? back.stats.mag : back.stats.str) + faireOf(back.skills, bw) + bws.mt * (beff ? 3 : 1) + bRankAtk - (bmagic ? foe.stats.res : foe.stats.def));
     const bPlus = aegisSide(bw, bmagic) ? skills.has('Aegis+') : skills.has('Pavise+');
     if (bPlus || dragonskin) {
       backDamage = Math.floor(backDamage / 2);
@@ -233,7 +263,7 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
     dualStrikeRate = clamp(skl / 4 + STRIKE_BY_SUPPORT[support ?? 'none'] + (lead.skills.includes('Dual Strike+') || back.skills.includes('Dual Strike+') ? 10 : 0));
     // The dual strike itself uses the back's own stats and weapon; a back with no weapon can't strike.
     if (bw) {
-      backHit = clamp(bws.hit + (back.stats.skl * 3 + back.stats.lck) / 2 + 5 * triangle(bw, foe.weapon) + breakerOf(back.skills, foe.weapon) + hitSkill(back.skills) - ((foe.stats.spd * 3 + foe.stats.lck) / 2 + breakerOf(skills, bw) + avoidSkill(skills)));
+      backHit = clamp(bws.hit + bRankHit + (back.stats.skl * 3 + back.stats.lck) / 2 + 5 * triangle(bw, foe.weapon) + breakerOf(back.skills, foe.weapon) + hitSkill(back.skills) - ((foe.stats.spd * 3 + foe.stats.lck) / 2 + breakerOf(skills, bw) + avoidSkill(skills)));
       backCrit = clamp(bws.crit + back.stats.skl / 2 - foe.stats.lck);
     } else backDamage = 0;
   }
@@ -250,7 +280,7 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
   if (feff) notes.push(`${foe.name}’s ${fw!.name} is effective against the lead`);
   const leadDef = fmagic ? st('res') : st('def');
   const luna = skills.has('Luna+');
-  const worstHit = Math.max(0, (fmagic ? foe.stats.mag : foe.stats.str) + faireOf(skills, fw) + fmt * (feff ? 3 : 1) - (luna ? Math.floor(leadDef / 2) : leadDef));
+  const worstHit = Math.max(0, (fmagic ? foe.stats.mag : foe.stats.str) + faireOf(skills, fw) + fmt * (feff ? 3 : 1) + foeRankAtk - (luna ? Math.floor(leadDef / 2) : leadDef));
   const foeHits = fw ? (fw.brave ? 2 : 1) * (doubled ? 2 : 1) : 0;
   // Counter returns the lead's damage when it hits in melee and doesn't kill.
   const melee = !w || (w.range ?? '1') === '1';
@@ -264,9 +294,9 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
     : 0;
   const survives = worstRound < lead.stats.hp;
   const [sHit, sAvo, sCrit, sCritAvo] = back ? dualSupport(SUPPORT_RANK[support ?? 'none']) : [0, 0, 0, 0];
-  const hit = clamp(ws.hit + (st('skl') * 3 + st('lck')) / 2 + sHit + 5 * tri + breakerOf(lead.skills, foe.weapon) + hitSkill(lead.skills) - ((foe.stats.spd * 3 + foe.stats.lck) / 2 + foeAvoid));
+  const hit = clamp(ws.hit + rankHit + (st('skl') * 3 + st('lck')) / 2 + sHit + 5 * tri + breakerOf(lead.skills, foe.weapon) + hitSkill(lead.skills) - ((foe.stats.spd * 3 + foe.stats.lck) / 2 + foeAvoid));
   const crit = clamp(ws.crit + st('skl') / 2 + sCrit - foe.stats.lck);
-  const foeHit = skills.has('Hawkeye') ? 100 : clamp(fhit + (foe.stats.skl * 3 + foe.stats.lck) / 2 - 5 * tri + breakerOf(skills, w) + hitSkill(skills) - ((st('spd') * 3 + st('lck')) / 2 + sAvo + leadAvoid));
+  const foeHit = skills.has('Hawkeye') ? 100 : clamp(fhit + foeRankHit + (foe.stats.skl * 3 + foe.stats.lck) / 2 - 5 * tri + breakerOf(skills, w) + hitSkill(skills) - ((st('spd') * 3 + st('lck')) / 2 + sAvo + leadAvoid));
   const foeCrit = clamp(fcrit + foe.stats.skl / 2 - (st('lck') + sCritAvo));
   if (skills.has('Hawkeye')) notes.push('Hawkeye: the foe always hits');
   if (luna) notes.push('Luna+: the foe’s hits ignore half your defence');

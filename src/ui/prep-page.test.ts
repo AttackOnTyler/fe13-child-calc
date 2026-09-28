@@ -11,13 +11,14 @@ describe('the shopping list (#190)', () => {
   const chrom = { class: 'Great Lord', level: 15, promoted: true, reclassed: false, exp: 0, stats: { hp: 60, str: 35, mag: 5, skl: 35, spd: 35, lck: 35, def: 30, res: 20 }, skills: [], supports: [] };
 
   it('lists the next armory stop’s buys, with why, what they cost and the chance a run makes each', () => {
-    // One use left on Chrom’s only weapon: it runs dry on Chapter 25, whose armory sells a Silver Lance that wins the
-    // Great Lord more matchups there (the realism pass re-arms the lineup on the way), so that's what the runs buy.
+    // One use left on Chrom’s only weapon: it runs dry on Chapter 25, whose armory sells a Silver Sword that wins the
+    // Great Lord more matchups there (the realism pass re-arms the lineup on the way; its B rank adds 2 Attack to a
+    // sword's hits, 1 to a lance's, #239), so that's what the runs buy.
     const run = atLatest(played(all.slice(0, -2)), (s) => ({ ...s, gold: 3000, units: { chrom: { ...chrom, inventory: [{ item: 'Iron Sword', uses: 1 }] } } }));
     const s = shoppingReadout(engine, run, { runs: 2 });
     expect(s.title).toBe('Shopping list: Chapter 25');
     expect(s.note).toMatch(/^Gold on arrival: 3,000G\. What the simulated runs buy here, in priority order: rebuys/);
-    expect(s.rows[0]).toEqual(['Chrom', 'Buy Silver Lance (arms the lineup for this map)', '1,560G', '100%']);
+    expect(s.rows[0]).toEqual(['Chrom', 'Buy Silver Sword (arms the lineup for this map)', '1,410G', '100%']);
   });
 
   it('says when nothing is to be bought: no gold, or nothing left to play', () => {
@@ -70,12 +71,17 @@ describe('the preparation page (#207): pair cards beside one checklist', () => {
       expect(play[play.length - 1]).toEqual({ turns: 'T3+', text: 'past the play (it ends on turn 2): hold the last stance, and check each attack’s counter below before you commit' });
     });
 
+    it('gives the stance each pair fights in, which the matchup table scores (#239): apart here, not together', () => {
+      // The play keeps Chrom and Robin side by side only 10% of the time; paired, Robin's +3 Spd would have Chrom double.
+      expect((r ??= readout(lunatic, 'premonition')).fighting.chrom).toEqual({ stance: 'adjacent', adjacency: 0.1 });
+    });
+
     it('warns when an attack leaves the foe standing and its counter can kill, with the hit chance and the safe order', () => {
-      // Chrom’s Silver Sword leaves Validar standing; Grima’s Truth hits back for 19 at 77%: from 19 HP, Chrom dies
-      // 77% of the time. Robin takes the counter first, and Chrom only finishes (one hit of 16 kills before it answers,
-      // so only a miss lets it: 6% × 77%).
+      // Chrom’s Silver Sword leaves Validar standing; Grima’s Truth hits back for 21 at 82% (the game’s forecast, #239):
+      // from 21 HP, Chrom dies 82% of the time. Robin takes the counter first, and Chrom only finishes (one hit of 18
+      // kills before it answers, so only a miss lets it: 6% × 82%).
       expect(card().counters).toContain(
-        'Chrom attacking Validar (Sorcerer): it can live, and its counter (19 damage, 77% hit) kills Chrom at 19 HP or less (77.0% there). At that HP: Robin (M) attacks first, and Chrom only finishes it (at 16 HP or less left: 4.6% there).',
+        'Chrom attacking Validar (Sorcerer): it can live, and its counter (21 damage, 82% hit) kills Chrom at 21 HP or less (82.0% there). At that HP: Robin (M) attacks first, and Chrom only finishes it (at 18 HP or less left: 4.9% there).',
       );
       // Each unit on the card is checked, the deadliest first.
       expect(card().counters).toHaveLength(2);
@@ -189,7 +195,7 @@ describe('the checklist’s items and armory (#207)', () => {
     const r = prepReadout(engine, run, all[all.length - 2]!, { plan, forecast: engine.expForecast(run, plan, { runs: 2 }) });
     const armory = r.before.find((s) => s.step === 'armory')!;
     expect(armory.label).toBe('Armory and forge');
-    expect(armory.actions[0]).toMatchObject({ id: 'shop:0', text: 'Buy Silver Lance for Chrom (1,560G)', why: 'shopping list: arms the lineup for this map; 100% of runs', units: ['chrom'] });
+    expect(armory.actions[0]).toMatchObject({ id: 'shop:0', text: 'Buy Silver Sword for Chrom (1,410G)', why: 'shopping list: arms the lineup for this map; 100% of runs', units: ['chrom'] });
     expect(r.cards.find((c) => c.members.some((m) => m.unit === 'chrom'))!.todo).toContain('shop:0');
   });
 

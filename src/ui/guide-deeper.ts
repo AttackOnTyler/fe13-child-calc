@@ -377,13 +377,13 @@ export const DEEPER: readonly DeeperEntry[] = [
     answer: [
       'Prepare, beside the next map, opens its preparation page: the adopted plan’s lineup for the map, played turn by turn with your latest stats. Its head gives the map’s own no-death chance, the expected turns and the deploy count, then the whole run’s flawless chance to the endpoint, labelled as the run’s.',
       'Units who join on the map from its start (the Prologue’s four, Chapter 3’s Sumia) are in the lineup too, marked “joins”, with their join data; Premonition’s Chrom and Robin use that map’s own setup, marked “this map only”. Units not fielded are listed under the cards with why: a pin, a reserve, not in the wishlist, no room, or arriving later (with the turn, or how).',
-      'Matchups, collapsed in the column: pick a foe (the boss is starred) to see each lead against it with its back. Each row uses your latest entry’s stats, the unit’s best weapon from its inventory (forges count), and the back’s pair-up bonus and dual strikes: damage, whether one round kills (with dual strikes landing, too), doubling, the worst round it can take against its HP, and hit and crit both ways.',
+      'Matchups, collapsed in the column: pick a foe (the boss is starred) to see each pair against it in the stance its stance plan fights in. Together, the front with its back’s pair-up bonus and dual strikes; side by side, each unit with the other in Attack Stance (dual strikes, no pair-up bonus); apart, or side by side only some of the time, each unit alone. Each row uses your latest entry’s stats and the unit’s best weapon from its inventory (forges count): damage, whether one round kills (with dual strikes landing, too), doubling, the worst round it can take against its HP, and hit and crit both ways.',
       'Dual strikes get past plain Pavise and Aegis but not Pavise+ or Aegis+. On Lunatic+ the table assumes the worst of the map’s random-skill pool.',
-      'Weapon ranks aren’t recorded, so no rank bonus is counted. There’s no movement planning: no source publishes terrain or enemy AI.',
+      'Weapon ranks aren’t recorded: a unit’s rank bonus is read as the rank its weapon needs, a foe’s as A in an advanced class (a stated blind spot). There’s no movement planning: no source publishes terrain or enemy AI.',
     ],
     jump: { to: 'log', target: 'prepare' },
     terms: [
-      { term: 'matchup', def: 'A lead and back, with a weapon, against one foe: damage, one-round, doubling, worst round and survival, hit and crit.' },
+      { term: 'matchup', def: 'A unit, with a weapon and in its pair’s fighting stance, against one foe: damage, one-round, doubling, worst round and survival, hit and crit.' },
       { term: 'preparation page', def: 'A map’s page for getting ready: a pair card for each pair and unit alone in the plan’s lineup, beside the map’s no-death chance, one Before this map checklist, threats, the shopping list, seals, loadouts, checks, matchups and the chapter guide.' },
     ],
   },

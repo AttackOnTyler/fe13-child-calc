@@ -196,7 +196,11 @@ describe('the EXP priority in the solve (#195, #199)', () => {
     const late = editEntry(played, latestEntry(played)!.id, (s) => ({ ...s, units: Object.fromEntries(Object.entries(s.units).map(([u, x]) => [u, { ...x!, level: 10, stats: x!.stats && fair }])) }), 1);
     const plan = engine.seedPlan(late);
     const [first, last] = all.slice(-3, -1) as [string, string];
-    const unit = plan.wishlist.units.find((w) => w.unit !== 'chrom' && w.unit !== 'robin')!.unit;
+    // A wishlist unit the plan fields on both maps (its lineups follow the simulation's matchups).
+    const seeded = engine.expForecast(late, plan, { runs: 1 }).maps;
+    const fielded = (key: string) => seeded.find((m) => m.key === key)?.lineup?.deployed ?? [];
+    const both = new Set(fielded(first).filter((u) => fielded(last).includes(u)));
+    const unit = plan.wishlist.units.find((w) => w.unit !== 'chrom' && w.unit !== 'robin' && both.has(w.unit))!.unit;
     const high = { ...plan, roadmap: { ...plan.roadmap, priorities: [{ unit, priority: 'high' as const, from: first, to: last }] } };
     const priorityOf = (run: Run, i: number) => engine.expForecast(run, high, { runs: 1 }).exp.find((m) => m.key === [first, last][i])?.units.find((u) => u.unit === unit)?.priority;
     expect([priorityOf(late, 0), priorityOf(late, 1)]).toEqual(['high', 'high']);
