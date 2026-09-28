@@ -9,12 +9,13 @@ import { applyAction, solvePositions, type PlannedAction } from './solve';
 describe('the position solver (#265)', () => {
   const plan = solvePositions(prologueBoard());
 
-  it('keeps the hard line every turn from turn 1, and the outline routs in 7 turns or fewer', () => {
+  it('keeps the hard line every turn from turn 1, and the outline routs in 10 turns or fewer', () => {
     expect(plan.turns).toHaveLength(3);
     expect(plan.turns.every((t) => t.safety.safe)).toBe(true);
     expect(plan.hardLine).toBe(true);
     expect(plan.brokenTurns).toEqual([]);
-    expect(plan.routTurn).toBeLessThanOrEqual(7);
+    // 10, not the 7 it read before #271: the outer ring it used to cut corners through isn't on the map (attempt 1: 11).
+    expect(plan.routTurn).toBeLessThanOrEqual(10);
     // Every unit gets an action on turn 1 (a back rides with its lead), each with a reason.
     const t1 = plan.turns[0]!;
     expect(t1.actions.length).toBeGreaterThanOrEqual(3);

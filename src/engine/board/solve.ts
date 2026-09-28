@@ -459,7 +459,7 @@ function phaseScore(s: State, start: Board): { score: number; line: number; safe
   const broken = sf.units.filter((u) => u.dies).length + sf.lethalCounters.length;
   // What a line carries from the phase: the hard line, crit risk, goals and misses (progress is read off the board after).
   const line = -broken * BROKEN - sf.critRisk * CRIT + s.goal * 60 - s.spent - s.miss * KILL * 2 - s.actions.filter((a) => a.switched).length;
-  return { score: line + progress(start, s.board, leads(s.board)), line, safety: sf };
+  return { score: line + progress(start, s.board, leads(s.board)) + healInReach(s.board), line, safety: sf };
 }
 
 const ARMY = 600;
@@ -472,6 +472,26 @@ function boardValue(b: Board): number {
   let v = -live.reduce((n, e) => n + e.hp, 0) * HP_TAKEN - live.length * KILL;
   for (const p of b.players) v += (Math.max(0, p.hp) / p.fighter.stats.hp) * ARMY - (p.hp <= 0 ? BROKEN : 0);
   if (live.length) for (const p of leads(b)) v -= CLOSING * Math.min(...live.map((e) => manhattan(e.at, p.at)));
+  return v + healInReach(b);
+}
+
+/**
+ * The HP each healer can restore next turn, at half worth: its best heal on a hurt lead it can reach (Mov + 1). A back
+ * can't be healed, so a hurt unit left riding behind is worth less than one set down beside the healer (#271's stall).
+ */
+function healInReach(b: Board): number {
+  const hurt = leads(b).filter((p) => p.hp < p.fighter.stats.hp);
+  if (!hurt.length) return 0;
+  let v = 0;
+  for (const h of b.players) {
+    const staff = h.hp > 0 && h.items.find((i) => (HEAL_BASE[i.item] ?? 0) > 0 && (i.uses ?? 1) > 0);
+    if (!staff) continue;
+    const at = h.carriedBy ? playerById(b, h.carriedBy)!.at : h.at;
+    const amount = healAmount(staff.item, h.fighter.stats.mag);
+    let best = 0;
+    for (const p of hurt) if (p.id !== h.id && p.id !== h.carriedBy && manhattan(at, p.at) <= h.mov + 1) best = Math.max(best, Math.min(amount, p.fighter.stats.hp - p.hp) / p.fighter.stats.hp);
+    v += (best * ARMY) / 2;
+  }
   return v;
 }
 
