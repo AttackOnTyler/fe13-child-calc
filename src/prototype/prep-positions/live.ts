@@ -296,7 +296,7 @@ function board(): string {
     if (canReach.has(t)) { /* marked below */ }
     const us = [...ALLIES, ...ENEMIES].filter((u) => alive(u.id) && k(S.pos[u.id]) === t && !(u.id === 'chr'));
     const cls = ['c', `ter-${ROWS[y][x] === '+' ? 'bridge' : ROWS[y][x]}`, walkable(x, y) ? '' : 'off', d ? (d >= f.hp ? 'dz-kill' : 'dz') : '', pr.has(t) ? 'pred' : '', placing && walkable(x, y) ? 'placeable' : '', canReach.has(t) ? 'reach' : '', whatIf && k(whatIf.to) === t ? 'tried' : ''].join(' ');
-    cells += `<div class="${cls}" data-tile="${t}" title="(${t})${d ? ` · worst case on ${f.name}: ${d}` : ''}">${us.map((u) => `<span class="u ${u.side}${u.id === focus ? ' focus' : ''}${S.awake.has(u.id) || u.side === 'ally' ? '' : ' asleep'}" data-unit="${u.id}" title="${esc(u.name)} ${S.hp[u.id]}/${u.hp}">${letter[u.id] ?? u.name[0]}<sub>${S.hp[u.id]}</sub></span>`).join('')}${steps.has(t) ? `<i class="step">${steps.get(t)}</i>` : ''}</div>`;
+    cells += `<div class="${cls}" data-tile="${t}" title="(${t})${d ? ` · worst case on ${f.name}: ${d}` : ''}">${us.map((u) => `<span class="u ${u.side}${u.id === trying ? ' sel' : u.id === focus ? ' focus' : ''}${S.awake.has(u.id) || u.side === 'ally' ? '' : ' asleep'}" data-unit="${u.id}" title="${esc(u.name)} ${S.hp[u.id]}/${u.hp}">${letter[u.id] ?? u.name[0]}<sub>${S.hp[u.id]}</sub></span>`).join('')}${steps.has(t) ? `<i class="step">${steps.get(t)}</i>` : ''}</div>`;
   }
   return `<div class="board" style="grid-template-columns:repeat(${W},1fr)">${cells}</div>`;
 }
@@ -361,7 +361,7 @@ document.addEventListener('click', (ev) => {
   else if (d.tryAgain !== undefined) { trying = whatIf!.unit; }
   else if (d.cancelTry !== undefined) { trying = null; }
   // Trying a move (player phase, not fixing the board): click an ally, then a blue tile.
-  else if (phase === 'player' && !fixMode && d.unit && byId(d.unit).side === 'ally' && !sameUnit) { trying = d.unit; }
+  else if (phase === 'player' && !fixMode && d.unit && byId(d.unit).side === 'ally' && !sameUnit) { trying = d.unit; focus = d.unit; }
   else if (phase === 'player' && !fixMode && trying && (d.tile || d.unit)) {
     const tile = d.tile ?? k(S.pos[d.unit!]);
     whatIf = { unit: trying, to: tile.split(',').map(Number) as P };

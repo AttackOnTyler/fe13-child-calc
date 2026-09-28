@@ -66,3 +66,11 @@ header { padding: 8px 16px; border-bottom: 1px solid var(--line); }
 .c.placeable { cursor: crosshair; } .c.placeable:hover { outline: 2px solid var(--acc); }
 .go { margin: 10px 0 4px; } button.primary { background: var(--acc); color: #000; border: 0; padding: 5px 14px; font-weight: 600; }
 .sep { color: var(--dim); font-size: 11px; margin: 0 2px 0 6px; } label { font-size: 12px; margin-right: 8px; }
+/* try a move (#262) */
+.c.reach { box-shadow: inset 0 0 0 40px rgba(90, 150, 255, .55) !important; cursor: pointer; } .c.reach:hover { outline: 2px solid #fff; outline-offset: -2px; }
+.c.tried { outline: 3px solid #ffe07a; outline-offset: -3px; }
+.u.sel { outline: 3px solid #7fb4ff; outline-offset: 1px; }
+.card.try { border-color: var(--acc); } .card.try.bad { border-color: var(--bad); }
+.cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; } .cmp h4 { margin: 6px 0 2px; } .cmp ul { margin: 0; padding-left: 18px; font-size: 13px; }
+.okc { color: var(--ok); } .badc { color: var(--bad); } .dim { color: var(--dim); list-style: none; }
+.u { cursor: pointer; }
