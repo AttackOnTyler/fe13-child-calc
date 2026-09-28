@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_ROSTER, addEntry, createEngine, dismissMigrationNote, editEntry, exportRun, latestEntry, migrateRun, recordMarriage, runFromRoster, withPin, withRenown, withRun, withShopLine, withSideGoalPin, withSideGoalSecured, withSpouse, withItemPin, withItemsUsed, unitName, readUnits, withRobinLock, type Ceiling, type Engine, type Plan, type PlanRobin, type RobinStep, type Route, type RosterUnit, type Run, type Snapshot, type UnitSnapshot } from '../engine';
-import { childStatsNote, flawlessReadout, robinButton, robinReadout, heldText, itemPlanReadout, itemsUsedReadout, mapOrderReadout, migrationNoteReadout, solvedReadout, parseHeldText, parseSupportsText, roadmapReadout, shoppingReadout, sideGoalPlanReadout, sideGoalsReadout, supportsText, whenIdle } from './run-page';
+import { childStatsNote, flawlessReadout, robinButton, robinReadout, heldText, itemPlanReadout, itemsUsedReadout, mapOrderReadout, migrationNoteReadout, solvedReadout, parseHeldText, parseSupportsText, roadmapReadout, shoppingReadout, sideGoalPlanReadout, sideGoalsReadout, supportsText } from './run-page';
 import { chanceText } from './chance';
 
 describe('the map order readout (#179)', () => {
@@ -101,7 +101,8 @@ describe('the flawless chance readout (#186)', () => {
     expect(r.text).toMatch(new RegExp(`^Flawless chance: ${chanceText(chance.chance).replace(/[.()]/g, '\\$&')} ±.* · searching…$`));
     expect(r.detail).toContain('It’s the best plan the search has found so far');
     expect(r.detail).toContain('worked out again on fresh runs, so picking it doesn’t inflate it');
-    expect(r.found).toEqual([
+    // (The fixture's Lv 10 army reads 0% at the Endgame: the headline card leads with where its runs die.)
+    expect(r.found.filter((x) => !x.startsWith('No run gets through'))).toEqual([
       'Improvement: Chrom marries Olivia; Vaike marries Sully: +1.2 ±0.4',
       'Stahl marries Miriel: no measurable difference (−0.2 ±0.3)',
       'Not tried: Gaius marries Nowi (its ceiling 20.0% is below the best found, 50.0%)',
@@ -112,8 +113,8 @@ describe('the flawless chance readout (#186)', () => {
     expect(solvedReadout(engine, run, { ...progress, done: true, converged: true, pinCost }).found).toContain('Your 2 pins cost +3.1 ±1.2: the best plan found with them lifted, less the best found with them');
     const free = { ...pinCost, cost: -0.001, verdict: 'close' } as const;
     expect(solvedReadout(engine, run, { ...progress, done: true, converged: true, pinCost: free }).found).toContain('Your 2 pins cost no measurable difference (−0.1 ±1.2): the best plan found with them lifted, less the best found with them');
-    // Worked out on the page, there's nothing found to list.
-    expect(flawlessReadout(engine, run, { runs: 1 }).found).toEqual([]);
+    // Worked out on the page, there's nothing found to list (only where the runs die, at 0%).
+    expect(flawlessReadout(engine, run, { runs: 1 }).found.filter((x) => !x.startsWith('No run gets through'))).toEqual([]);
   });
 
   it('shows the ceiling at Apotheosis, now that its foes carry their forged weapons (#189)', () => {
@@ -471,7 +472,10 @@ describe('the Robin alternatives on the Run view (#201)', () => {
   it('shows each solved Robin’s whole-wishlist chance, its cost against the best and how its wishlist differs', () => {
     const r = robinReadout(engine, run, step, false);
     expect(r.title).toBe('Robin: open · 2 of 4 solved');
-    expect(r.status).toBe('3 of 4 options screened by their seed and ceiling · comparing…');
+    expect(r.status).toBe('Screening 3 of 4 options by their seed and ceiling…');
+    const screened = { ...step, options: step.options.map((o) => ({ ...o, screened: true })) };
+    expect(robinReadout(engine, run, screened, false).status).toBe('4 of 4 options screened · solving the picks (2 solved)…');
+    expect(robinReadout(engine, run, { ...screened, converged: true }, false).status).toBe('4 of 4 options screened by their seed and ceiling');
     expect(r.solved.map((x) => [x.text, x.lock])).toEqual([
       ["Female, +Spd −Lck, marrying Lon'qu: 70.0% ±2.0 · the best (the best Female Robin)", true],
       ["Male, +Str −Lck, marrying Sumia: 60.0% ±2.0 · −10.0 ±1.0 against the best · marries Robin × Sumia (not Robin × Lon'qu); fields Sumia (not Lon'qu); Frederick as Paladin (not Great Knight) (the best Male Robin)", true],
@@ -512,20 +516,13 @@ describe('the Robin alternatives on the Run view (#201)', () => {
     expect(robinReadout(engine, locked, { ...after, lockCost: undefined }, false).lock).toBe('What this lock cost: nothing measurable, among the Robins solved');
   });
 
-  it('waits for the headline’s search once: after the comparison the button offers to carry on, not to wait', () => {
-    let started = 0;
-    const start = () => void started++;
-    expect(robinButton({ running: false, waiting: false })).toEqual({ text: 'Compare Robins', disabled: false });
-    whenIdle.wait(start);
-    expect(robinButton({ running: false, waiting: whenIdle.waiting(start) })).toEqual({ text: 'Waiting for the search…', disabled: true });
-    // The search is done: the worker is handed over once.
-    whenIdle.free();
-    expect(started).toBe(1);
-    expect(robinButton({ running: true, waiting: whenIdle.waiting(start), step })).toEqual({ text: 'Comparing…', disabled: true });
+  it('compares on the click, never waiting for the headline’s search: after a step the button offers to carry on', () => {
+    // The comparison runs in its own worker: nothing to wait for (the runthrough read "Waiting for the search…" for
+    // minutes while the search's readings held the solve's worker).
+    expect(robinButton({ running: false })).toEqual({ text: 'Compare Robins', disabled: false });
+    expect(robinButton({ running: true, step })).toEqual({ text: 'Comparing…', disabled: true });
     // The comparison's step is done, short of converging.
-    expect(robinButton({ running: false, waiting: whenIdle.waiting(start), step })).toEqual({ text: 'Carry on', disabled: false });
-    expect(robinButton({ running: false, waiting: false, step: { converged: true } }).disabled).toBe(true);
-    whenIdle.free();
-    expect(started).toBe(1);
+    expect(robinButton({ running: false, step })).toEqual({ text: 'Carry on', disabled: false });
+    expect(robinButton({ running: false, step: { converged: true } }).disabled).toBe(true);
   });
 });
