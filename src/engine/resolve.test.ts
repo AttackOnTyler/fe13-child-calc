@@ -17,6 +17,7 @@ import {
   whatChanged,
   withDismissedChange,
   withEntryForecast,
+  withRobinLock,
   withRun,
   type FlawlessChance,
   type Plan,
@@ -54,6 +55,19 @@ describe('what the adopted roadmap can no longer meet (#206)', () => {
     const [a, b] = units.filter((u) => !planned.has(u) && u !== 'chrom' && u !== 'robin' && u !== 'lucina' && !u.startsWith('morgan'));
     const married = recordMarriage(late, id, a!, b!, 2);
     expect(engine.planBreaks(married, seed)).toContainEqual({ kind: 'married', couple: [a, b] });
+  });
+
+  it('keeps a held plan’s map order across recorded maps: its couples don’t turn into non-starters', () => {
+    // The plan made before Premonition names Premonition and the Prologue on its order; once they're recorded it still
+    // plays its own order (its child paralogues where it placed them), not the template's.
+    const open = runFromRoster(withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'lunatic', mode: 'classic' }));
+    const fresh = withRobinLock(open, engine.seedPlan(open).robin);
+    const held = engine.seedPlan(fresh);
+    const played = addEntry(addEntry(fresh, 'premonition', 1), 'prologue', 2);
+    const stuck = (r: typeof fresh) => engine.milestones(r, held).filter((m) => m.kind === 'support' && m.nonStarter).map((m) => m.id);
+    expect(stuck(fresh)).toEqual([]);
+    expect(stuck(played)).toEqual([]);
+    expect(engine.planBreaks(played, held)).toEqual([]);
   });
 });
 

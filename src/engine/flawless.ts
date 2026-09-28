@@ -189,13 +189,15 @@ export function withPlanRobin(run: Run, plan: Plan): Run {
 }
 
 /**
- * The map order as the plan plays it (#198): the roadmap's order when it holds exactly the maps still to play and ends
- * at the endpoint; otherwise the map order's own.
+ * The map order as the plan plays it (#198): the roadmap's order, less the maps recorded since it was made (a plan
+ * held across recorded maps keeps them), when it holds exactly the maps still to play and ends at the endpoint;
+ * otherwise the map order's own (which moved a held plan's child paralogues back to their template places, making
+ * its couples non-starters).
  */
 function plannedOrder(order: MapOrder, plan: Plan | undefined): MapOrder {
-  const keys = plan?.roadmap.order;
-  if (!keys || keys.length !== order.steps.length || keys[keys.length - 1] !== order.endpoint.key) return order;
   const byKey = new Map(order.steps.map((s) => [s.key, s]));
+  const keys = plan?.roadmap.order.filter((k) => byKey.has(k));
+  if (!keys || keys.length !== order.steps.length || keys[keys.length - 1] !== order.endpoint.key) return order;
   const steps = keys.flatMap((k) => byKey.get(k) ?? []);
   return new Set(keys).size === keys.length && steps.length === keys.length ? { ...order, steps } : order;
 }
