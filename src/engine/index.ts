@@ -571,9 +571,10 @@ export type Engine = {
   shopping(run: Run, entry: string): EntryShopping | undefined;
   /**
    * The side goals (#191), in map order, each with the plan's decision: the run's pin (always take or skip), else the
-   * default rule (`chaseByDefault`: chase when it costs at most one action a turn until its deadline).
+   * given plan's (#175 story 48: the solve chooses them), else the default rule (`chaseByDefault`: chase when it costs
+   * at most one action a turn until its deadline).
    */
-  sideGoals(run: Run): readonly SideGoalChoice[];
+  sideGoals(run: Run, plan?: Plan): readonly SideGoalChoice[];
   /** The side goals on an entry's map, secured as Record results set them, else pre-filled from the items the map gave. */
   sideGoalsSecured(run: Run, entry: string): readonly SideGoalRecord[];
   /**
@@ -1870,9 +1871,10 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
     internalLevels: (run, entry) => internalLevels(run, assumptions['class-change-internal-level'], entry),
     classChangeProposals: (run) => classChangeProposals(run),
     shopping: (run, entry) => entryShopping(run, entry),
-    sideGoals: (run) => sideGoalChoices(run.sideGoals),
+    sideGoals: (run, plan) => sideGoalChoices(run.sideGoals, plan?.roadmap.sideGoals),
     sideGoalsSecured: (run, entry) => sideGoalsSecured(run, entry),
-    renown: (run) => renownAhead(run, remainingMapOrder(run).steps, assumptions['paralogue-renown']),
+    // The maps the runs play without a plan: optional ones (Infinite Regalia) skipped, as `flawlessChance` has them.
+    renown: (run) => renownAhead(run, remainingMapOrder(run).steps.filter((s) => !s.optional), assumptions['paralogue-renown']),
     flawlessChance: (run, options) => (options?.plan ? planChance(run, { ...options, plan: options.plan }) : flawlessChance(run, assumptions, options)),
     simulateRuns: (input, seed, runs) => simulateRuns(input, seed, runs, assumptions),
     stressTests: () => STRESS_TESTS,
@@ -2014,7 +2016,7 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
           add('marriage', `rule-out:${coupleKey(c)}`, `${name(c[0])} and ${name(c[1])} don’t marry`, { kind: 'marriage', couple: c, forbid: true }, false);
       // Side goals still ahead: the other decision than the one the plan takes.
       const ahead = new Set(remainingMapOrder(run).steps.map((s) => s.map));
-      for (const g of sideGoalChoices(run.sideGoals))
+      for (const g of sideGoalChoices(run.sideGoals, base.roadmap.sideGoals))
         if (ahead.has(g.goal.map)) {
           const decision = g.decision === 'chase' ? 'skip' : 'chase';
           add('side-goal', `side-goal:${g.goal.id}:${decision}`, `${decision === 'chase' ? 'Always take' : 'Always skip'} ${g.goal.label}`, { kind: 'side-goal', goal: g.goal.id, decision }, true, () => base);

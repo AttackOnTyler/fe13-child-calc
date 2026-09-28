@@ -322,6 +322,11 @@ describe('side goals and renown on the Run view (#191)', () => {
     expect(sideGoalPlanReadout(engine, run).map((r) => r.text)).toEqual(['Chapter 16: Thieves: chase (at most one action a turn)', 'Chapter 18: Falling chests: chase (at most one action a turn)']);
     const pinned = withSideGoalPin(run, 'chapter-18-chests', 'skip');
     expect(sideGoalPlanReadout(engine, pinned)[1]).toMatchObject({ text: 'Chapter 18: Falling chests: always skip (pinned)', pin: 'skip' });
+    // The solve's decision on its plan (#175 story 48), under the player's pins.
+    const plan = engine.seedPlan(run);
+    const skipping = { ...plan, roadmap: { ...plan.roadmap, sideGoals: { ...plan.roadmap.sideGoals, 'chapter-18-chests': 'skip' as const } } };
+    expect(sideGoalPlanReadout(engine, run, skipping)[1]).toMatchObject({ text: 'Chapter 18: Falling chests: skip (the plan’s choice)', pin: undefined });
+    expect(sideGoalPlanReadout(engine, withSideGoalPin(run, 'chapter-18-chests', 'chase'), skipping)[1]!.text).toBe('Chapter 18: Falling chests: always take (pinned)');
   });
 
   it('shows each chased goal’s share of runs on its map’s row, and says renown isn’t recorded', () => {

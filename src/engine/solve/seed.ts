@@ -460,7 +460,14 @@ export function planFor(run: Run, ctx: SeedContext, options: SeedOptions, robin:
   return {
     robin,
     wishlist: { endpoint, units, marriages: marriages.map(([a, b]) => [a, b] as const), children, reserves: [] },
-    roadmap: { order: placedByStrength(input.maps, movableKeys(run)), lineups, seals: plannedSeals(input, (u) => classOf.get(u), endpoint), items: seedItems(input, sources, army, options.pins ?? [], ctx.assumptions) },
+    roadmap: {
+      order: placedByStrength(input.maps, movableKeys(run)),
+      lineups,
+      seals: plannedSeals(input, (u) => classOf.get(u), endpoint),
+      items: seedItems(input, sources, army, options.pins ?? [], ctx.assumptions),
+      // Each side goal ahead as the runs read it without a plan: its pin, else the default rule (#175 story 48).
+      sideGoals: Object.fromEntries(input.maps.flatMap((m) => (m.sideGoals ?? []).map((g) => [g.id, g.chase ? 'chase' : 'skip'] as const))),
+    },
   };
 }
 

@@ -627,22 +627,24 @@ function itemPlanSection(ctx: HeadlineContext, r: ItemPlanReadout | undefined, p
 /** A side goal's decision as the Run view writes it (#191): a pin, or the default rule's reason. */
 const DECISION_TEXT = {
   pinned: { chase: 'always take (pinned)', skip: 'always skip (pinned)' },
+  planned: { chase: 'chase (the plan’s choice)', skip: 'skip (the plan’s choice)' },
   default: { chase: 'chase (at most one action a turn)', skip: 'skip (more than one action a turn)' },
 } as const;
 
 /** The side goals on the map order still to play, each with the plan's decision (#191), for the Run view's pins. */
-export function sideGoalPlanReadout(engine: Engine, run: Run): readonly { readonly id: SideGoalId; readonly label: string; readonly what: string; readonly pin: SideGoalDecision | undefined; readonly text: string }[] {
+export function sideGoalPlanReadout(engine: Engine, run: Run, plan?: Plan): readonly { readonly id: SideGoalId; readonly label: string; readonly what: string; readonly pin: SideGoalDecision | undefined; readonly text: string }[] {
   const ahead = new Set(engine.mapOrder(run).steps.map((s) => s.map));
   return engine
-    .sideGoals(run)
+    .sideGoals(run, plan)
     .filter((c) => ahead.has(c.goal.map))
-    .map((c) => ({ id: c.goal.id, label: c.goal.label, what: c.goal.what, pin: c.pinned ? c.decision : undefined, text: `${c.goal.label}: ${DECISION_TEXT[c.pinned ? 'pinned' : 'default'][c.decision]}` }));
+    .map((c) => ({ id: c.goal.id, label: c.goal.label, what: c.goal.what, pin: c.pinned ? c.decision : undefined, text: `${c.goal.label}: ${DECISION_TEXT[c.pinned ? 'pinned' : c.planned ? 'planned' : 'default'][c.decision]}` }));
 }
 
 /** Side goals ahead, each pinnable to always take or skip (#191). */
 function sideGoalsSection(ctx: RunContext): HTMLElement {
-  const rows = sideGoalPlanReadout(ctx.engine, ctx.run);
-  const chased = ctx.engine.sideGoals(ctx.run).filter((c) => rows.some((r) => r.id === c.goal.id) && c.decision === 'chase').length;
+  const plan = solveState(ctx.run)?.plan;
+  const rows = sideGoalPlanReadout(ctx.engine, ctx.run, plan);
+  const chased = ctx.engine.sideGoals(ctx.run, plan).filter((c) => rows.some((r) => r.id === c.goal.id) && c.decision === 'chase').length;
   const pin = (id: SideGoalId, v: string) => ctx.setRun(withSideGoalPin(ctx.run, id, v === 'chase' || v === 'skip' ? v : undefined));
   return h(
     'details',

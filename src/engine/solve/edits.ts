@@ -29,7 +29,8 @@
  *   earlier or later (a quarter of the route, to the next or previous map with a preparation phase); a weapon's
  *   carrier from a map changes to another wishlist unit who wields its kind. An item pin is a hard constraint: a pinned
  *   item's uses aren't edited. Boots and the Arms Scroll aren't edited (no pin: no use).
- * - **Side goals:** none yet: their chase/skip edits come with #191's pins.
+ * - **Side goals (spec story 48):** a goal on a map the plan plays is chased instead of skipped, or skipped instead of
+ *   chased (`roadmap.sideGoals`); a goal the player pinned (`Run.sideGoals`) isn't edited.
  *
  * **Pins (#200)** hold: recorded and pinned marriages aren't edited, pinned items aren't moved, and the step drops an
  * edit whose lineups break a span or keep pin (`brokenPins`). `keptPins` makes an adopted plan from before a pin keep it.
@@ -47,6 +48,7 @@ import { itemByName } from '../../game-data/items';
 import { classWeaponKinds } from '../supply';
 import { remainingMapOrder } from '../map-order';
 import { rosterUnits, stateOf, unitName, type Couple, type RosterUnit } from '../roster';
+import { sideGoalChoices } from '../side-goals';
 import { CHILD_UNITS, type ChildId } from '../../game-data/children';
 import { CLASS_SKILLS } from '../../game-data/skills';
 import type { ClassId } from '../../game-data/classes';
@@ -487,5 +489,18 @@ export function* planEdits(run: Run, ctx: SeedContext, options: SeedOptions, pla
     }
   }
 
-  // Side goals (#191): none yet.
+  // Side goals (#175 story 48): each goal on a map the plan plays, the other decision; a pinned goal stays the player's.
+  const playedMaps = new Set(keys.map(mapOf));
+  for (const c of sideGoalChoices(run.sideGoals, plan.roadmap.sideGoals)) {
+    if (c.pinned || !playedMaps.has(c.goal.map)) continue;
+    const decision = c.decision === 'chase' ? 'skip' : 'chase';
+    yield {
+      kind: 'side-goal',
+      key: `side-goal:${c.goal.id}:${decision}`,
+      label: `${decision === 'chase' ? 'Chase' : 'Skip'} ${c.goal.label}`,
+      make: () => ({ ...plan, roadmap: { ...plan.roadmap, sideGoals: { ...plan.roadmap.sideGoals, [c.goal.id]: decision } } }),
+      units: [],
+      pins: [{ kind: 'side-goal', goal: c.goal.id, decision }],
+    };
+  }
 }

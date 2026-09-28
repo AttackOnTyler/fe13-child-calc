@@ -355,7 +355,7 @@ export function flawlessInput(
   const seenUnits = new Set<RosterUnit>(Object.keys(snap.units) as RosterUnit[]);
   const cleared = new Set(run.entries.map((e) => e.map));
   // Side goals chased or skipped by the plan's pins, else the default rule; renown's rewards on their maps (#191).
-  const choices = sideGoalChoices(run.sideGoals);
+  const choices = sideGoalChoices(run.sideGoals, plan?.roadmap.sideGoals);
   const renown = renownAhead(run, order.steps, assumptions['paralogue-renown']);
   // Held items (#193): the snapshot's and each map's pick-ups, and the plan's uses map by map.
   const sources = itemSources(snap, order.steps, choices);

@@ -114,7 +114,14 @@ describe('every edit the “anything else” search offers (#204)', () => {
     const out = choices.find((c) => c.kind === 'marriage' && c.pins[0]?.kind === 'marriage' && c.pins[0].forbid && c.pins[0].couple === couple)!;
     expect(out.label).toMatch(/ don’t marry$/);
     expect(out.make().wishlist.marriages.map((c) => [...c].sort().join())).not.toContain([...couple].sort().join());
-    expect(choices.filter((c) => c.kind === 'side-goal').every((c) => /^Always (take|skip) /.test(c.label))).toBe(true);
+    // A side goal the other way (#175 story 48): the plan's decision turned, with the pin that makes it the player's.
+    const goals = choices.filter((c) => c.kind === 'side-goal');
+    for (const g of goals) {
+      expect(g.label).toMatch(/^(Chase|Skip) /);
+      const pin = g.pins[0]!;
+      expect(pin.kind).toBe('side-goal');
+      if (pin.kind === 'side-goal') expect(g.make().roadmap.sideGoals?.[pin.goal]).toBe(pin.decision);
+    }
   });
 
   it('prices an edit made as pins with its pins played', () => {
