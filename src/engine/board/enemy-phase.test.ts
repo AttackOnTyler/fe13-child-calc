@@ -45,8 +45,9 @@ describe('the enemy phase on the Lunatic Prologue (#263)', () => {
 
   it('wakes the north when Frederick stands at (7,6), not at (5,11) (attempt 1, T5 and T6)', () => {
     const t5 = northOnly(prologueBoard({ frederick: [5, 11], robin: [2, 14], lissa: [1, 14] }, { frederick: 'chrom' }));
-    // Only Garrick (active from turn 1) is up; the band sleeps.
-    expect(wake(t5).woke).toEqual([at(t5, 8, 1).id]);
+    // Garrick is active from turn 1 (awake from the start); the band sleeps.
+    expect(at(t5, 8, 1).awake).toBe(true);
+    expect(wake(t5).woke).toEqual([]);
     const t6 = northOnly(prologueBoard({ frederick: [7, 6], robin: [2, 14], lissa: [1, 14] }, { frederick: 'chrom' }));
     const woke = wake(t6).woke;
     // The whole band wakes together, and both Myrmidons attack that same phase.

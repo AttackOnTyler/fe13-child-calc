@@ -90,6 +90,8 @@ import { FIRST_GEN_UNITS, type UnitId } from '../game-data/units';
 import { h } from './dom';
 import { guide } from './guide';
 import { howToRun } from './maps-page';
+import { positionSection } from './position-plan';
+import { capturedMap } from '../engine';
 
 export type PrepContext = {
   readonly engine: Engine;
@@ -254,6 +256,8 @@ export type PrepReadout = {
   readonly lineup: Deployment;
   /** Each pair's stance when it fights in the play, by its lead (#239): the matchup table scores that stance. */
   readonly fighting: Readonly<Record<string, FightingStance>>;
+  /** The units the play holds back (out of reach, it assumes) each turn (#248). */
+  readonly heldBack: readonly { readonly turn: number; readonly units: readonly RosterUnit[] }[];
 };
 
 /** A pair's stance when it fights (`fightingStance`): its stance plan's words, without how it got there. */
@@ -747,7 +751,25 @@ export function prepReadout(engine: Engine, run: Run, map: string, input: PrepIn
       const f = p.back && fightingStance(play, [p.lead, p.back]);
       return f ? [[p.lead, f]] : [];
     })),
+    heldBack: heldBackOf(play, lineup),
   };
+}
+
+/**
+ * The units the play holds back each turn (#248): its fronts (a pair together has one, its front; apart, both) that
+ * aren't in the foes' reach. The play assumes they're out of reach (`held-back-out-of-reach`); on a captured map the
+ * position plan checks it.
+ */
+function heldBackOf(play: MapPlay, lineup: Deployment): { readonly turn: number; readonly units: readonly RosterUnit[] }[] {
+  return play.log.map((t) => {
+    const fronts: RosterUnit[] = [...lineup.solo];
+    for (const p of lineup.pairs) {
+      const s = t.stances.find((x) => x.pair === p.lead);
+      if (p.back && s?.stance === 'together') fronts.push((s.front as RosterUnit | undefined) ?? p.lead);
+      else fronts.push(p.lead, ...(p.back ? [p.back] : []));
+    }
+    return { turn: t.turn, units: fronts.filter((u) => !t.exposed.includes(u)) };
+  });
 }
 
 const capital = (s: string) => `${s[0]!.toUpperCase()}${s.slice(1)}`;
@@ -1096,10 +1118,24 @@ function body(ctx: PrepContext, plan: Plan, forecast: ExpForecast): HTMLElement 
     );
   };
 
+  // The position plan (#266), on a map with a captured grid: its note on held-back units (#248) sits by the no-death chance.
+  const note = h('div', { class: 'pos-note' });
+  const positions = positionSection({
+    run,
+    setRun: ctx.setRun,
+    map: ctx.map,
+    difficulty,
+    units: d.deployed.flatMap((u) => (byUnit.get(u) ? [byUnit.get(u)!] : [])),
+    name: (u) => unitName(u, gender),
+    heldBack: r.heldBack,
+    playTurns: r.head.turns,
+    note,
+  });
   const main = h(
     'main',
     { class: 'prep-main' },
     r.banner ? h('div', { class: 'banner warn-b' }, h('b', {}, 'No preparation phase. '), r.banner.replace(/^No preparation phase: /, '')) : null,
+    positions,
     h('div', { class: 'pair-cards' }, ...r.cards.map((c) => pairCard(ctx, r, c, choices))),
     r.notFielded.length
       ? h(
@@ -1123,6 +1159,7 @@ function body(ctx: PrepContext, plan: Plan, forecast: ExpForecast): HTMLElement 
       h('div', { class: 'small' }, `${r.head.turns} · ${r.head.deploy}`),
       h('div', { class: 'small' }, r.head.flawless),
       h('p', { class: 'muted small' }, r.head.detail),
+      note,
     ),
     h(
       'details',
@@ -1297,7 +1334,7 @@ export function prepPage(ctx: PrepContext): HTMLElement[] {
         { class: 'unit-head' },
         h('div', {}, h('button', { class: 'ghost small', onclick: ctx.close }, '← Run')),
         h('h2', {}, `Prepare: ${m.label}${m.kind === 'story' ? `: ${m.title}` : ''}`),
-        h('div', { class: 'muted small' }, `${difficulty === 'lunatic-plus' ? 'Lunatic+' : difficulty} · the adopted plan’s lineup, played with your latest stats · no movement planning`),
+        h('div', { class: 'muted small' }, `${difficulty === 'lunatic-plus' ? 'Lunatic+' : difficulty} · the adopted plan’s lineup, played with your latest stats${capturedMap(ctx.map) ? ' · positions planned on the captured map' : ' · no movement planning'}`),
       ),
       lossBanner(ctx),
       slot,

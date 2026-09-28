@@ -19,6 +19,7 @@ describe('Going deeper', () => {
         'What is my run working towards?',
         'Where does this number come from?',
         'Can my units handle the next map?',
+        'How do I play a map turn by turn?',
         'Who should I deploy, paired with whom?',
         'What should I watch out for on this map?',
         'What should I buy, forge or promote before this map?',

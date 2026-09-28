@@ -6,6 +6,7 @@
  * edit never stops the search.
  * Where there's no Worker (tests), `startSolve` returns undefined and the page works the chance out itself.
  */
+import type { Board, PositionPlan, SolveOptions } from '../engine';
 import type { Assumptions, Ceiling, CheckedRules, EditCost, EditListing, ExpForecast, RuleStake, SetupCheck, PinCost, Plan, PlanPin, Readings, ReservesCursor, ReservesStep, RobinCursor, RobinStep, RosterUnit, Run, RunSim, SolveCursor, SolveStep, StressCase, WhatItCost, WorthCursor, WorthStep } from '../engine';
 
 /** A unit's edit as the worker posts it (#203): its plan is built and costed in the worker. */
@@ -153,6 +154,12 @@ export type SolveRequest =
       readonly plan: Plan;
       readonly rules: CheckedRules;
       readonly budgets: readonly number[];
+    })
+  | (Common & {
+      /** The Prepare page's position plan (#265, #266), in the `positions` slot: the solver from a board. */
+      readonly kind: 'positions';
+      readonly board: Board;
+      readonly options: SolveOptions;
     });
 
 /**
@@ -186,6 +193,7 @@ export type SolveReply =
   | { readonly id: number; readonly kind: 'setup'; readonly checks: readonly SetupCheck[]; readonly done: boolean }
   | { readonly id: number; readonly kind: 'setup-cost'; readonly rule: string; readonly cost: EditCost; readonly done: boolean }
   | { readonly id: number; readonly kind: 'stress'; readonly stress: StressCase; readonly chance: RunSim; readonly done: boolean }
+  | { readonly id: number; readonly kind: 'positions'; readonly plan: PositionPlan; readonly done: boolean }
   | { readonly id: number; readonly kind: 'why'; readonly chance: RunSim; /** The plan compared against's runs (with a unit: the plan's own). */ readonly base?: RunSim; readonly done: boolean };
 
 /**
@@ -193,7 +201,7 @@ export type SolveReply =
  * checks' stakes (#209), the stress tests (#211), the preparation page's forecast, or the Robin alternatives (#201: the
  * first decision, so they never wait behind the search and its readings).
  */
-export type SolveSlot = 'main' | 'edits' | 'why' | 'checks' | 'stress' | 'prep' | 'robin';
+export type SolveSlot = 'main' | 'edits' | 'why' | 'checks' | 'stress' | 'prep' | 'robin' | 'positions';
 
 /** A request as the page makes it: the client numbers it. */
 export type NewSolveRequest = SolveRequest extends infer R ? (R extends SolveRequest ? Omit<R, 'id'> : never) : never;

@@ -272,7 +272,8 @@ export function boardFromMap(
           group: s.group ?? 0,
           stationary: !!s.stationary,
           boss: !!s.boss,
-          awake: false,
+          // Active from enemy phase 1 whatever the player does: awake from the start, so "woke" reads real wakes only.
+          awake: (s.ai?.start ?? 'Everytime') === 'Everytime',
           order,
         },
       ];

@@ -34,6 +34,12 @@ export const GUIDE_TARGETS = [
   'record-results',
   'record-flow',
   'prep-page',
+  // The Prepare page's position plan (#266)
+  'position-plan',
+  'position-taps',
+  'position-enemy',
+  'position-board',
+  'position-try',
   'prepare',
   'matchup-foe',
   'matchup-table',

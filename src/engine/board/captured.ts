@@ -25,6 +25,8 @@ export type Placement = {
   readonly faction: string;
   readonly pid: string;
   readonly team: 'player' | 'enemy' | 'ally';
+  /** A named person's English name (none for Robin, whom the player names, or generic foes). */
+  readonly name?: string;
   /** Where it appears, and where it walks to (the same for a normal start). */
   readonly at: Tile;
   readonly to: Tile;
