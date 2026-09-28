@@ -96,6 +96,7 @@ export const DEEPER: readonly DeeperEntry[] = [
     answer: [
       'The Run view’s inbox opens on the Robin card: Compare Robins works out, in the background, the best plan with each Robin, and shows each one’s flawless chance against your plan’s.',
       `Choose takes a Robin’s whole wishlist as your plan. ${lock} Robin and start writes that Robin into ${runFacts} and locks only Robin: the rest of the wishlist stays editable and re-solves after every map. Unlock reopens it.`,
+      `Before you choose, ${lock} Robin and start takes the Robin the search ranks best, with its wishlist (the card marks it “the Lock takes this”); once you’ve chosen another, it keeps yours and names the search’s best beside it.`,
       'The no-Robin option solves the best plan with Robin no one’s parent (no Morgan): how much Robin’s marriage is worth.',
     ],
     jump: { to: 'log', target: 'robin-card' },

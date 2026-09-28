@@ -137,13 +137,41 @@ describe('the inbox before the Lock (#204)', () => {
     expect(item(run, 'wishlist')).toEqual({ kind: 'wishlist', summary: 'The wishlist (3 fielded, 1 reserves)', lines: ['Chrom + Robin', "Lon'qu, solo", "Reserves: Frederick (covers Lon'qu)"] });
     const lock = item(run, 'lock');
     expect(lock.robin).toEqual(spd);
-    expect(lock.text).toBe('Lock Robin (Female, +Spd −Lck) and start the run. This locks only Robin; the rest of the wishlist stays editable and re-solves after every map.');
+    expect(lock.text).toBe(
+      'Lock Robin (Female, +Spd −Lck: the seed plan’s, which no one has chosen; the Robin search hasn’t ranked one yet) and start the run. This locks only Robin; the rest of the wishlist stays editable and re-solves after every map.',
+    );
     const locked = withRobinLock(run, lock.robin!);
     expect(locked.roster.run).toMatchObject({ gender: 'F', asset: 'spd', flaw: 'lck', route: 'main-story' });
     expect(locked.pins?.map((p) => p.kind)).toEqual(['robin-lock']);
     // Landing on the Run view: the inbox before the Lock is done.
     expect(beforeTheLock(locked)).toBe(false);
     expect(item(run, 'lock', { progress: undefined })).toMatchObject({ robin: undefined, text: 'Lock Robin and start: the seed plan’s Robin (the search hasn’t replied yet). This locks only Robin; the rest re-solves after every map.' });
+  });
+
+  it('offers the Robin search’s best before you choose, and names it beside the Robin you chose (#241 runthrough)', () => {
+    const best = { robin: str, plan: better };
+    // Nothing chosen: the Lock takes the search's best, not the seed's untouched Robin, with its whole wishlist.
+    const lock = item(run, 'lock', { robinBest: best });
+    expect(lock).toMatchObject({ robin: str, from: 'search' });
+    expect(lock.text).toBe(
+      'Lock Robin (Male, +Str −Lck, marrying Sumia: the Robin search’s best) and start the run. It takes that Robin’s whole wishlist as your plan and locks only Robin; the rest stays editable and re-solves after every map.',
+    );
+    const engine = createEngine();
+    const locked = lockedRun(engine, run, progress, undefined, best);
+    expect(locked.roster.run).toMatchObject(str);
+    expect(locked.adopted).toBe(better);
+    expect(locked.edits?.map((e) => e.label)).toEqual(['Robin: Male, +Str −Lck']);
+    // Chosen another Robin: the Lock keeps yours, and names the search's best beside it.
+    const chosen = withEdit(run, { label: 'Robin: Female, +Spd −Lck', plan: seed, accepted: true });
+    const mine = item(chosen, 'lock', { robinBest: best });
+    expect(mine).toMatchObject({ robin: spd, from: 'chosen' });
+    expect(mine.text).toBe(
+      'Lock Robin (Female, +Spd −Lck, your plan’s) and start the run. This locks only Robin; the rest of the wishlist stays editable and re-solves after every map. The Robin search ranks Male, +Str −Lck, marrying Sumia the best: Choose it on the Robin card to lock that one instead.',
+    );
+    expect(lockedRun(engine, chosen, progress, undefined, best).roster.run).toMatchObject(spd);
+    // Chosen the search's best: nothing to name beside it.
+    const same = item(withEdit(run, { label: 'Robin: Male, +Str −Lck', plan: better, accepted: true }), 'lock', { robinBest: best });
+    expect(same.text).toBe('Lock Robin (Male, +Str −Lck, your plan’s) and start the run. This locks only Robin; the rest of the wishlist stays editable and re-solves after every map.');
   });
 
   it('locks before the solve has replied: the seed plan’s Robin into the run facts, and the Prologue recruits Robin', () => {
