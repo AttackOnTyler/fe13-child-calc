@@ -1,8 +1,8 @@
 /** The Prepare page's position plan (#266) and its held-back note (#248), on the Lunatic Prologue. */
 import { describe, expect, it } from 'vitest';
-import { enemyPhase, leads, liveEnemies, replay, solvePositions, type Board, type PositionEvent } from '../engine';
+import { enemyPhase, forecast, leads, liveEnemies, playerById, replay, solvePositions, type Board, type PositionEvent } from '../engine';
 import { prologueBoard } from '../engine/board/prologue-fixture';
-import { compare, forecastText, headline, heldBackNotes, turnLine } from './position-plan';
+import { compare, fightAs, forecastText, headline, heldBackNotes, turnLine } from './position-plan';
 
 const name = (id: string) => id[0]!.toUpperCase() + id.slice(1);
 
@@ -97,5 +97,31 @@ describe('the headline and the held-back note (#248)', () => {
   it('leaves a pair riding together out of the check: a held-back back with its lead held back too', () => {
     const notes = heldBackNotes(solvePositions(t2, { turns: 1, outlineCap: 0 }), [{ turn: 2, units: ['frederick', 'chrom'] }]);
     for (const n of notes) expect(n.units).not.toContain('chrom');
+  });
+});
+
+describe('fixing an enemy attack (#274)', () => {
+  // EP1 of attempt 2: a Barbarian attacks Frederick (Robin behind) on (8,12); Frederick's counter crits and kills it.
+  const b = prologueBoard({ frederick: [8, 12] }, { frederick: 'robin' });
+  const barb = liveEnemies(b).find((e) => e.foe.className === 'Barbarian' && !e.boss)!;
+  const from = [8, 11] as const;
+  const m = forecast(b, playerById(b, 'frederick')!, barb, [8, 12], from);
+
+  it('hit and missed play every strike of that side, or none', () => {
+    const r = fightAs(b, barb.id, 'frederick', from, 'missed', 'hit');
+    expect(r.targetHp).toBe(28);
+    expect(r.enemyHp).toBe(Math.max(0, barb.hp - m.damage * (m.doubles ? 2 : 1)));
+  });
+
+  it('a crit counter triples its first strike; “killed it” sets the foe to 0 whatever the numbers', () => {
+    const crit = fightAs(b, barb.id, 'frederick', from, 'missed', 'crit');
+    expect(crit.enemyHp).toBe(Math.max(0, barb.hp - m.damage * 3 - (m.doubles ? m.damage : 0)));
+    expect(fightAs(b, barb.id, 'frederick', from, 'hit', 'killed').enemyHp).toBe(0);
+  });
+
+  it('its crit triples its first strike; “killed” puts the unit at 0', () => {
+    const r = fightAs(b, barb.id, 'frederick', from, 'crit', 'missed');
+    expect(r.targetHp).toBe(Math.max(0, 28 - m.worstHit * 3 - (m.doubled ? m.worstHit : 0)));
+    expect(fightAs(b, barb.id, 'frederick', from, 'killed', 'missed').targetHp).toBe(0);
   });
 });

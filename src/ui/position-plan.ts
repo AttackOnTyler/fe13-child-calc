@@ -26,12 +26,14 @@ import {
   playFight,
   reaches,
   strikeOrder,
+  switched,
   holdBack,
   leads,
   lineupBoard,
   liveEnemies,
   menuAt,
   movement,
+  onMap,
   playerById,
   replay,
   safety,
@@ -188,7 +190,7 @@ type UiState = {
   /** "A unit is elsewhere": the unit picked, waiting for its tile. */
   placing?: string;
   /** Fixing the enemy phase: by enemy id, its attack as it went. */
-  fixes: Record<string, { target: string; ours: 'hit' | 'missed'; counter: 'hit' | 'missed'; to?: Tile }>;
+  fixes: Record<string, { target: string; ours: StrikeTap; counter: StrikeTap; to?: Tile }>;
   fixing: boolean;
   /** The turn-1 skill taps: the enemy shown. */
   skillAt: number;
@@ -377,7 +379,9 @@ function actionItem(b: Board, a: PlannedAction, live?: { push: (e: PositionEvent
   return h('li', { class: live ? 'next' : '' }, ...kids);
 }
 
-/** The predicted enemy phase: ✓ as predicted, or fix its attacks (target, whose strikes landed). */
+const TAPS: readonly StrikeTap[] = ['hit', 'missed', 'crit', 'killed'];
+
+/** The predicted enemy phase: ✓ as predicted, or fix its attacks (target, whose strikes landed, a crit, a kill). */
 function enemyPanel(b: Board, ui: UiState, push: (e: PositionEvent) => void, redraw: () => void): HTMLElement {
   const ep = enemyPhase(b);
   const attacks = ep.actions.filter((a) => a.target);
@@ -418,8 +422,22 @@ function enemyPanel(b: Board, ui: UiState, push: (e: PositionEvent) => void, red
                   h('option', { value: '', selected: f?.target === '' }, 'didn’t attack'),
                   ...leads(b).map((p) => h('option', { value: p.id, selected: (f?.target ?? a.target) === p.id }, p.name)),
                 ),
-                ...(['hit', 'missed'] as const).map((o) => h('button', { class: `mini${(f?.ours ?? 'hit') === o ? ' on' : ''}`, onclick: () => ((ui.fixes[a.enemy] = { target: f?.target ?? a.target!, counter: f?.counter ?? 'hit', ours: o }), redraw()) }, `its hit ${o}`)),
-                ...(['hit', 'missed'] as const).map((o) => h('button', { class: `mini${(f?.counter ?? 'hit') === o ? ' on' : ''}`, onclick: () => ((ui.fixes[a.enemy] = { target: f?.target ?? a.target!, ours: f?.ours ?? 'hit', counter: o }), redraw()) }, `counter ${o}`)),
+              )
+            : null,
+          ui.fixing
+            ? h(
+                'div',
+                { class: 'chips small' },
+                'Its strikes: ',
+                ...TAPS.map((o) => h('button', { class: `mini${(f?.ours ?? 'hit') === o ? ' on' : ''}`, onclick: () => ((ui.fixes[a.enemy] = { target: f?.target ?? a.target!, counter: f?.counter ?? 'hit', ours: o }), redraw()) }, o === 'killed' ? `killed ${nm(f?.target || a.target!)}` : o)),
+              )
+            : null,
+          ui.fixing
+            ? h(
+                'div',
+                { class: 'chips small' },
+                'Counter: ',
+                ...TAPS.map((o) => h('button', { class: `mini${(f?.counter ?? 'hit') === o ? ' on' : ''}`, onclick: () => ((ui.fixes[a.enemy] = { target: f?.target ?? a.target!, ours: f?.ours ?? 'hit', counter: o }), redraw()) }, o === 'killed' ? `killed ${nm(a.enemy)}` : o)),
               )
             : null,
         );
@@ -437,15 +455,34 @@ function enemyPanel(b: Board, ui: UiState, push: (e: PositionEvent) => void, red
   );
 }
 
-/** An enemy's attack played out as tapped: its strikes all land or all miss, the counter likewise. */
-function fightAs(b: Board, enemy: string, target: string, from: Tile, ours: 'hit' | 'missed', counter: 'hit' | 'missed'): { targetHp: number; enemyHp: number } {
+/** How one side's strikes went in a fixed enemy attack: all hit, all missed, the first a crit, or the fight killed. */
+export type StrikeTap = 'hit' | 'missed' | 'crit' | 'killed';
+
+/**
+ * An enemy's attack played out as tapped (#274): `ours` is the enemy's strikes on the unit, `counter` the unit's. Hit or
+ * missed plays every strike of that side, or none; a crit triples that side's first strike; killed ends the fight with
+ * the other side at 0, whatever the numbers say.
+ */
+export function fightAs(b: Board, enemy: string, target: string, from: Tile, ours: StrikeTap, counter: StrikeTap): { targetHp: number; enemyHp: number } {
   const e = enemyById(b, enemy)!;
   const t = playerById(b, target)!;
   const m = forecast(b, t, e, t.at, from);
   const d = manhattan(from, t.at);
-  const order = strikeOrder(m, 'enemy', reaches(t.fighter.weapon?.item, d), true);
-  const r = playFight(m, order, t.hp, e.hp, counter === 'hit' ? 'all' : 'none', ours === 'hit' ? 'all' : 'none');
-  return { targetHp: r.playerHp, enemyHp: r.enemyHp };
+  let p = t.hp;
+  let q = e.hp;
+  let critFoe = ours === 'crit';
+  let critUnit = counter === 'crit';
+  for (const s of strikeOrder(m, 'enemy', reaches(t.fighter.weapon?.item, d), true)) {
+    if (p <= 0 || q <= 0) break;
+    if (s === 'enemy' && ours !== 'missed') {
+      p -= m.worstHit * (critFoe ? 3 : 1);
+      critFoe = false;
+    } else if (s === 'player' && counter !== 'missed') {
+      q -= m.damage * (critUnit ? 3 : 1);
+      critUnit = false;
+    }
+  }
+  return { targetHp: ours === 'killed' ? 0 : Math.max(0, p), enemyHp: counter === 'killed' ? 0 : Math.max(0, q) };
 }
 
 /** Turn 1: each enemy's random skills, cautious (all) until tapped. */
@@ -532,10 +569,13 @@ function boardView(b: Board, turn: TurnPlan | undefined, ui: UiState, redraw: ()
     if (a.from[0] !== a.to[0] || a.from[1] !== a.to[1]) ghosts.add(tileKey(a.from));
   });
   const foeMoves = new Set((turn?.enemy ?? []).filter((a) => a.to[0] !== a.from[0] || a.to[1] !== a.from[1]).map((a) => tileKey(a.to)));
+  // Trying a pair's back: it moves as the lead after a Switch (#274).
   const trying = ui.trying?.unit ? playerById(b, ui.trying.unit) : undefined;
-  const reach = trying ? new Set(movement(b, trying).keys()) : undefined;
+  const moving = trying?.carriedBy ? switched(b, trying.id) : b;
+  const reach = trying ? new Set(movement(moving, playerById(moving, trying.id)!).keys()) : undefined;
   const click = (at: Tile) => {
-    if (!live) return;
+    // The outer ring isn't on the playable map (#271): nothing stands there.
+    if (!live || !onMap(map, at)) return;
     if (ui.placing) {
       push({ kind: 'place', unit: ui.placing, to: at });
       ui.placing = undefined;
@@ -558,9 +598,10 @@ function boardView(b: Board, turn: TurnPlan | undefined, ui: UiState, redraw: ()
       const t = terrainAt(map, [x, y]);
       const p = b.players.find((q) => !q.carriedBy && q.hp > 0 && q.at[0] === x && q.at[1] === y);
       const e = liveEnemies(b).find((q) => q.at[0] === x && q.at[1] === y);
+      const off = !onMap(map, [x, y]);
       const cls = [
         'cell',
-        `t-${TERRAIN_CLASS[t?.category ?? 1] ?? 'plain'}`,
+        off ? 'off' : `t-${TERRAIN_CLASS[t?.category ?? 1] ?? 'plain'}`,
         who && kills.has(k) ? 'd-kill' : threat.has(k) ? 'd-hit' : sleeping.has(k) ? 'd-sleep' : '',
         ghosts.has(k) ? 'ghost' : '',
         foeMoves.has(k) ? 'foe-move' : '',
@@ -573,7 +614,7 @@ function boardView(b: Board, turn: TurnPlan | undefined, ui: UiState, redraw: ()
       cells.push(
         h(
           'div',
-          { class: cls, title: `(${x},${y}) ${t?.name ?? ''}${p ? ` · ${p.name} ${p.hp}/${p.fighter.stats.hp}` : ''}${e ? ` · ${e.name} ${e.hp}/${e.foe.stats.hp}${e.awake ? '' : ' (asleep)'}` : ''}`, onclick: () => click([x, y]) },
+          { class: cls, title: `(${x},${y}) ${off ? 'off the map' : (t?.name ?? '')}${p ? ` · ${p.name} ${p.hp}/${p.fighter.stats.hp}` : ''}${e ? ` · ${e.name} ${e.hp}/${e.foe.stats.hp}${e.awake ? '' : ' (asleep)'}` : ''}`, onclick: () => click([x, y]) },
           label ? h('span', { class: p ? 'pc' : `pf${e?.awake ? '' : ' asleep'}` }, label) : null,
           planned.has(k) ? h('i', { class: 'step' }, planned.get(k)!.join(',')) : null,
         ),
@@ -583,7 +624,7 @@ function boardView(b: Board, turn: TurnPlan | undefined, ui: UiState, redraw: ()
     'div',
     { ...guide('position-board'), class: 'pos-board-wrap' },
     h('div', { class: 'pos-board', style: `grid-template-columns: repeat(${map.width}, var(--cell))` }, ...cells),
-    h('div', { class: 'muted small' }, `${who ? 'Dark red: the gang-up worst case kills ' + who.name + ' there. ' : ''}Red: an awake enemy can strike there; orange: a sleeping group’s reach (standing there wakes it). Numbers: this turn’s moves; dashed: where they start; red dash: predicted enemy moves. ${live ? 'Click a unit to try a move.' : ''}`),
+    h('div', { class: 'muted small' }, `${who ? 'Dark red: the gang-up worst case kills ' + who.name + ' there. ' : ''}Red: an awake enemy can strike there; orange: a sleeping group’s reach (standing there wakes it); hatched: the edge, off the playable map. Numbers: this turn’s moves; dashed: where they start; red dash: predicted enemy moves. ${live ? 'Click a unit to try a move.' : ''}`),
   );
 }
 
@@ -595,8 +636,15 @@ function tryPanel(ctx: PositionContext, b: Board, acted: readonly string[], plan
   const u = playerById(b, t.unit);
   if (!u) return null;
   const back = h('button', { class: 'ghost mini', onclick: () => ((ui.trying = undefined), redraw()) }, 'Back');
-  if (acted.includes(u.id)) return h('div', { ...guide('position-try'), class: 'small' }, `${u.name} has acted this turn. `, back);
-  if (!t.tile) return h('div', { ...guide('position-try'), class: 'small' }, `${u.name}: click a tile it can reach (outlined). `, back);
+  // A pair: try it as it stands, or Switch first so the back leads (#274). A switched pair acts on its lead's action (a
+  // unit that paired up can still take the lead), so it's the lead that must not have acted.
+  const lead = u.carriedBy ? playerById(b, u.carriedBy) : undefined;
+  if (acted.includes(lead?.id ?? u.id)) return h('div', { ...guide('position-try'), class: 'small' }, `${lead?.name ?? u.name} has acted this turn. `, back);
+  const other = u.back ?? lead?.id;
+  const switchButton = other
+    ? h('button', { class: `mini${u.carriedBy ? ' on' : ''}`, onclick: () => ((ui.trying = { unit: other }), redraw()) }, u.carriedBy ? `Switched: ${u.name} leads (undo)` : `Switch first (${nm(other)} leads)`)
+    : null;
+  if (!t.tile) return h('div', { ...guide('position-try'), class: 'small' }, `${u.name}${lead ? `, after a Switch (${lead.name} behind)` : ''}: click a tile it can reach (outlined). `, switchButton, back);
   if (!t.action) {
     const menu = menuAt(b, u.id, t.tile);
     return h(
@@ -638,7 +686,8 @@ function tryPanel(ctx: PositionContext, b: Board, acted: readonly string[], plan
     h(
       'div',
       { class: 'row' },
-      h('button', { class: 'primary mini', onclick: () => ((ui.mine = t.action), (ui.trying = undefined), redraw()) }, 'Use my version'),
+      // The button names the move it pins, so a comparison of two tiles can't apply the wrong one (#274).
+      h('button', { class: 'primary mini', onclick: () => ((ui.mine = t.action), (ui.trying = undefined), redraw()) }, `Use my version: ${actionText(b, t.action)}`),
       back,
       h('button', { class: 'ghost mini', onclick: () => ((ui.trying = { unit: u.id }), redraw()) }, 'Try another tile'),
     ),

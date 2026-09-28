@@ -4,7 +4,7 @@ import { liveEnemies, movement, playerById } from './board';
 import { keyTile, manhattan } from './captured';
 import { enemyPhase } from './enemy-phase';
 import { prologueBoard } from './prologue-fixture';
-import { applyAction, solvePositions, type PlannedAction } from './solve';
+import { applyAction, menuAt, solvePositions, type PlannedAction } from './solve';
 
 describe('the position solver (#265)', () => {
   const plan = solvePositions(prologueBoard());
@@ -69,5 +69,22 @@ describe('the position solver (#265)', () => {
     const t0 = performance.now();
     solvePositions(prologueBoard(), { turns: 1, outlineCap: 0 });
     expect(performance.now() - t0).toBeLessThan(3000);
+  });
+
+  it('offers a pair’s back its menu after a Switch, and the action plays switched (#274)', () => {
+    // Chrom carries Lissa on (3,13); Frederick at 16/28 on (3,11).
+    let b = prologueBoard({ chrom: [3, 13], frederick: [3, 11] }, { chrom: 'lissa' });
+    b = applyAction(b, { unit: 'frederick', from: [3, 11], to: [3, 11], command: { kind: 'wait' }, why: '' });
+    b = { ...b, players: b.players.map((p) => (p.id === 'frederick' ? { ...p, hp: 16 } : p)) };
+    const menu = menuAt(b, 'lissa', [3, 12]);
+    const heal = menu.find((a) => a.command.kind === 'heal')!;
+    expect(heal).toMatchObject({ unit: 'lissa', switched: true, from: [3, 13], to: [3, 12], command: { target: 'frederick', staff: 'Heal' } });
+    // The why says what it heals: Heal is 8 + Mag/2 (#272).
+    expect(heal.why).toBe('heals Frederick: +10 (16 → 26)');
+    const after = applyAction(b, heal);
+    expect(playerById(after, 'frederick')!.hp).toBe(26);
+    expect(playerById(after, 'lissa')).toMatchObject({ at: [3, 12], back: 'chrom' });
+    // The lead's own menu isn't switched.
+    expect(menuAt(b, 'chrom', [3, 12]).every((a) => !a.switched && a.unit === 'chrom')).toBe(true);
   });
 });
