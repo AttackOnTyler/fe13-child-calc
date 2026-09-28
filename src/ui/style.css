@@ -583,6 +583,7 @@ button.skill.linkish { padding: 0 6px; font-size: 11px; }
 .pos-board .cell { width: var(--cell); height: var(--cell); position: relative; background: #2b3a2b; font-size: 11px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-sizing: border-box; }
 .pos-board .t-water { background: #1f3552; }
 .pos-board .t-wall, .pos-board .t-block { background: #151515; }
+.pos-board .off { background: repeating-linear-gradient(45deg, #121212 0 3px, #1e1e1e 3px 6px); cursor: default; }
 .pos-board .t-woods { background: #1f4a25; }
 .pos-board .t-hill { background: #4a3d28; }
 .pos-board .t-sand { background: #57502f; }

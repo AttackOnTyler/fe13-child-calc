@@ -611,8 +611,13 @@ function whyOf(b: Board, a: PlannedAction): string {
       const counter = f && !f.countered ? `; ${name(b, c.target)} can’t counter from ${manhattan(a.to, enemyById(b, c.target)!.at)}` : '';
       return `${kill ? 'kills' : 'chips'} ${name(b, c.target)} with the ${c.weapon}${counter}`;
     }
-    case 'heal':
-      return `heals ${name(b, c.target)}`;
+    case 'heal': {
+      const u = playerById(a.switched ? switched(b, a.unit) : b, a.unit);
+      const t = playerById(b, c.target);
+      if (!u || !t) return `heals ${name(b, c.target)}`;
+      const hp = Math.min(t.fighter.stats.hp, t.hp + healAmount(c.staff, u.fighter.stats.mag));
+      return `heals ${t.name}: +${hp - t.hp} (${t.hp} → ${hp})`;
+    }
     case 'item':
       return `${a.trade ? `takes ${name(b, a.trade.with)}’s Vulnerary and ` : ''}drinks a Vulnerary`;
     case 'pair':
@@ -638,9 +643,14 @@ export type { GameItem };
 
 /**
  * The game's command menu for a unit at a tile (#266's try a move): each attack with each weapon that reaches (its
- * forecast), Staff, Items (a trade first when it needs one), Pair Up (the ally's tile), Separate, and Wait.
+ * forecast), Staff, Items (a trade first when it needs one), Pair Up (the ally's tile), Separate, and Wait. A pair's
+ * back gets its menu after a Switch (#274): it takes the lead first, and every action it offers plays switched.
  */
 export function menuAt(b: Board, unitId: string, tile: Tile): PlannedAction[] {
+  if (playerById(b, unitId)?.carriedBy) {
+    const s = switched(b, unitId);
+    return menuAt(s, unitId, tile).map((a) => ({ ...a, switched: true, why: whyOf(b, { ...a, switched: true }) }));
+  }
   const u = playerById(b, unitId);
   if (!u) return [];
   const s: State = { board: b, acted: new Set(), actions: [], attacks: [], goal: 0, spent: 0, miss: 0 };
