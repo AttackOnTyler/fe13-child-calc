@@ -54,7 +54,8 @@ describe('the preparation page (#207): pair cards beside one checklist', () => {
     expect(members.map((m) => m.name).sort()).toEqual(['Chrom', 'Frederick', 'Lissa', 'Robin (M)']);
     expect(members.every((m) => m.forced && m.joins === 'joins')).toBe(true);
     expect(r.head.noDeath).toMatch(/^No-death chance on this map: /);
-    expect(r.head.flawless).toMatch(/^The plan’s flawless chance: .* ±\d+\.\d$/);
+    // The flawless chance is the whole run's, not this map's (#244): the map's own is the no-death chance above it.
+    expect(r.head.flawless).toMatch(/^The whole run’s flawless chance, to Endgame: .* ±\d+\.\d$/);
     expect(r.head.deploy).toBe('deploy 4 of 4 (forced)');
   });
 

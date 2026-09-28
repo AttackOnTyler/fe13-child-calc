@@ -375,7 +375,7 @@ export const DEEPER: readonly DeeperEntry[] = [
     id: 'matchups',
     question: 'Can my units handle the next map?',
     answer: [
-      'Prepare, beside the next map, opens its preparation page: the adopted plan’s lineup for the map, played turn by turn with your latest stats. Its head gives the map’s no-death chance beside the plan’s flawless chance, the expected turns and the deploy count.',
+      'Prepare, beside the next map, opens its preparation page: the adopted plan’s lineup for the map, played turn by turn with your latest stats. Its head gives the map’s own no-death chance, the expected turns and the deploy count, then the whole run’s flawless chance to the endpoint, labelled as the run’s.',
       'Units who join on the map from its start (the Prologue’s four, Chapter 3’s Sumia) are in the lineup too, marked “joins”, with their join data; Premonition’s Chrom and Robin use that map’s own setup, marked “this map only”. Units not fielded are listed under the cards with why: a pin, a reserve, not in the wishlist, no room, or arriving later (with the turn, or how).',
       'Matchups, collapsed in the column: pick a foe (the boss is starred) to see each lead against it with its back. Each row uses your latest entry’s stats, the unit’s best weapon from its inventory (forges count), and the back’s pair-up bonus and dual strikes: damage, whether one round kills (with dual strikes landing, too), doubling, the worst round it can take against its HP, and hit and crit both ways.',
       'Dual strikes get past plain Pavise and Aegis but not Pavise+ or Aegis+. On Lunatic+ the table assumes the worst of the map’s random-skill pool.',
