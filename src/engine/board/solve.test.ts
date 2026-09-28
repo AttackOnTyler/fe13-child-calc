@@ -87,4 +87,15 @@ describe('the position solver (#265)', () => {
     // The lead's own menu isn't switched.
     expect(menuAt(b, 'chrom', [3, 12]).every((a) => !a.switched && a.unit === 'chrom')).toBe(true);
   });
+
+  it('a staff reaches a pair’s lead only, never its back', () => {
+    // Robin carries a hurt Frederick on (3,12); Lissa on (2,12), next to them.
+    let b = prologueBoard({ robin: [3, 12], lissa: [2, 12] }, { robin: 'frederick' });
+    b = { ...b, players: b.players.map((p) => (p.id === 'frederick' ? { ...p, hp: 16 } : p)) };
+    expect(menuAt(b, 'lissa', [2, 12]).some((a) => a.command.kind === 'heal')).toBe(false);
+    // Hurt the lead too: the heal is on Robin.
+    b = { ...b, players: b.players.map((p) => (p.id === 'robin' ? { ...p, hp: 10 } : p)) };
+    const heals = menuAt(b, 'lissa', [2, 12]).filter((a) => a.command.kind === 'heal');
+    expect(heals.map((a) => (a.command as { target: string }).target)).toEqual(['robin']);
+  });
 });
