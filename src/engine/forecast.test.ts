@@ -78,7 +78,8 @@ describe('the game’s Prologue forecasts (#250, research #255)', () => {
 
 describe('attacks from out of the foe’s reach (#249)', () => {
   it('Thunder from 2 on a melee foe has no counter; the sword is countered', () => {
-    for (const f of [garrick, myrmidon, barbarian].filter((x) => x.weapon?.range === '1')) {
+    // Garrick's Short Axe reaches 2 (his row is below); the Myrmidon and the Barbarian are melee.
+    for (const f of [myrmidon, barbarian]) {
       const m = matchup(robin, undefined, null, f);
       expect({ range: m.range, countered: m.countered, counterRound: m.counterRound }).toEqual({ range: 2, countered: false, counterRound: 0 });
       // The enemy phase still hurts: the foe walks up and strikes.
@@ -91,6 +92,10 @@ describe('attacks from out of the foe’s reach (#249)', () => {
 
   it('Garrick’s Short Axe reaches 2, so Thunder is countered there', () => {
     expect(matchup(robin, undefined, null, garrick)).toMatchObject({ countered: true });
+    // Both weapons are countered: the pick falls to damage, then hit.
+    const both = [weapon('Bronze Sword'), weapon('Thunder')];
+    const pick = bestWeapon({ ...robin, weapon: both[0] }, both, undefined, null, garrick, [])!;
+    expect(pick.result.countered).toBe(true);
   });
 
   it('picks Thunder over the Bronze Sword against the Myrmidon and the Barbarian at equal damage', () => {

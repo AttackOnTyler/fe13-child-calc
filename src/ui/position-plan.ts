@@ -27,7 +27,6 @@ import {
   reaches,
   strikeOrder,
   holdBack,
-  itemByName,
   leads,
   lineupBoard,
   liveEnemies,
@@ -290,7 +289,7 @@ function content(ctx: PositionContext, start: Board, redraw: () => void): (HTMLE
     'ol',
     { class: 'pos-actions' },
     ...(ui.view === 0 ? played.map((e) => h('li', { class: 'done muted' }, `✓ ${actionText(start, e.action)}${e.outcome && e.outcome.ours !== 'forecast' ? ` (${e.outcome.ours})` : ''}`)) : []),
-    ...(turn ? turn.actions.map((a, i) => actionItem(ctx, turn.before, a, ui.view === 0 && i === 0 ? { push, ui, redraw } : undefined)) : []),
+    ...(turn ? turn.actions.map((a, i) => actionItem(turn.before, a, ui.view === 0 && i === 0 ? { push, ui, redraw } : undefined)) : []),
   );
   const others = h('ul', { class: 'small pos-others' }, ...plan.turns.map((t, i) => (i === ui.view ? null : h('li', {}, turnLine(t, nm)))), ...plan.outline.map((o) => h('li', { class: 'muted' }, `T${o.turn} (outline): ${o.kills ? `${o.kills} kill${o.kills > 1 ? 's' : ''}, ` : ''}${o.left} left${o.woke ? `, wakes ${o.woke}` : ''}${o.safe ? '' : ' ✗'} · ${o.actions.join('; ')}`)));
   const taps =
@@ -302,7 +301,7 @@ function content(ctx: PositionContext, start: Board, redraw: () => void): (HTMLE
           h('span', { class: 'muted small' }, 'or tap how each fight went, in order: the rest re-solves after each.'),
         )
       : null;
-  const enemy = playerPhaseOver ? enemyPanel(ctx, board, ui, push, redraw) : null;
+  const enemy = playerPhaseOver ? enemyPanel(board, ui, push, redraw) : null;
   const skills = board.turn === 1 && !acted.length ? skillTaps(board, ui, push, redraw) : null;
   const fallbacks = fallbackRow(board, ui, push, redraw);
   const left = h(
@@ -345,7 +344,7 @@ const OUTCOMES: readonly (readonly [AttackOutcome['ours'], string])[] = [
 ];
 
 /** One scripted action: what, the forecast, why; the next one to play carries its taps. */
-function actionItem(ctx: PositionContext, b: Board, a: PlannedAction, live?: { push: (e: PositionEvent) => void; ui: UiState; redraw: () => void }): HTMLElement {
+function actionItem(b: Board, a: PlannedAction, live?: { push: (e: PositionEvent) => void; ui: UiState; redraw: () => void }): HTMLElement {
   const holds = a.command.kind === 'attack' ? ` · ends holding the ${a.command.weapon}` : '';
   const kids: (HTMLElement | string | null)[] = [
     h('b', {}, actionText(b, a)),
@@ -375,12 +374,11 @@ function actionItem(ctx: PositionContext, b: Board, a: PlannedAction, live?: { p
       );
     } else kids.push(h('div', { class: 'chips' }, h('button', { class: 'mini', onclick: () => push({ kind: 'act', action: a }) }, '✓ done')));
   }
-  void ctx;
   return h('li', { class: live ? 'next' : '' }, ...kids);
 }
 
 /** The predicted enemy phase: ✓ as predicted, or fix its attacks (target, whose strikes landed). */
-function enemyPanel(ctx: PositionContext, b: Board, ui: UiState, push: (e: PositionEvent) => void, redraw: () => void): HTMLElement {
+function enemyPanel(b: Board, ui: UiState, push: (e: PositionEvent) => void, redraw: () => void): HTMLElement {
   const ep = enemyPhase(b);
   const attacks = ep.actions.filter((a) => a.target);
   const movers = ep.actions.filter((a) => !a.target && (a.to[0] !== a.from[0] || a.to[1] !== a.from[1]));
@@ -437,7 +435,6 @@ function enemyPanel(ctx: PositionContext, b: Board, ui: UiState, push: (e: Posit
       h('span', { class: 'muted small' }, 'A foe that ended elsewhere: “A unit is elsewhere” below.'),
     ),
   );
-  void ctx;
 }
 
 /** An enemy's attack played out as tapped: its strikes all land or all miss, the counter likewise. */
@@ -648,4 +645,3 @@ function tryPanel(ctx: PositionContext, b: Board, acted: readonly string[], plan
   );
 }
 
-export { itemByName };

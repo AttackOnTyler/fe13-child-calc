@@ -601,7 +601,7 @@ button.skill.linkish { padding: 0 6px; font-size: 11px; }
 .pos-compare .pos, .pos-compare .neg { margin: 2px 0; }
 .warn-t { color: var(--warn); }
 @media (max-width: 700px) {
-  .pos-cols { grid-template-columns: minmax(0, 1fr); }
+  .pos-left, .pos-right { flex-basis: 100%; }
   .pos-right { position: static; }
   .pos-board { --cell: 19px; }
 }
