@@ -38,7 +38,9 @@ describe('the position plan’s loop (#266)', () => {
     expect(liveEnemies(end)).toHaveLength(0);
     expect(end.players.every((p) => p.hp > 0)).toBe(true);
     expect(rout).toBeGreaterThan(0);
-    expect(rout).toBeLessThanOrEqual(7);
+    // 10 since #273 (7 before): a walking foe is predicted on the equal tile nearest our units, as the game's bookmarks
+    // showed it can be, so the plan keeps further back. Attempt 1 took 11.
+    expect(rout).toBeLessThanOrEqual(10);
     expect(taps).toBeLessThanOrEqual(2 * rout);
   });
 
@@ -70,12 +72,17 @@ describe('the headline and the held-back note (#248)', () => {
   });
 
   it('reads the hard line, the crit risk and the rout turn', () => {
-    const full = solvePositions(prologueBoard());
+    // Attempt 1's T2 board, whose outline keeps the hard line to the rout.
+    const full = solvePositions(t2);
     const head = headline(full, [], name, 'about 6 turns');
     expect(head).toMatchObject({ ok: true, verdict: 'No death without a crit' });
     expect(head.lines[0]).toMatch(/^Crit risk over the next 3 turns: /);
     expect(head.lines[1]).toBe(`Rout on turn ${full.routTurn} (the play: about 6 turns)`);
-    expect(turnLine(full.turns[0]!, name)).toMatch(/^T1 · ✓ safe/);
+    // The outline's greedy line can break or stall where the 3-turn re-solve doesn't (#273's Prologue): said as such.
+    const stalled = headline({ ...full, hardLine: false, brokenTurns: [4, 5], routTurn: undefined }, [], name, 'about 6 turns');
+    expect(stalled).toMatchObject({ ok: false, verdict: 'The hard line breaks on T4, T5: this is the least-risk line' });
+    expect(stalled.lines[1]).toBe('No rout within the outline (the play: about 6 turns)');
+    expect(turnLine(full.turns[0]!, name)).toMatch(/^T2 · ✓ safe/);
     const attack = full.turns[0]!.actions.find((a) => a.forecast)!;
     expect(forecastText(attack)).toMatch(/^\d+×\d at \d+%, crit \d+%/);
   });

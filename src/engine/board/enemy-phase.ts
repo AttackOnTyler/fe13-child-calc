@@ -14,6 +14,11 @@
  *   shortest walk.
  * - **Order:** the dispos order, except that an enemy that can kill someone goes first (folklore).
  * - An enemy that can reach no one walks toward the nearest player unit (`AI_MV_NearestEnemy`).
+ * - **Ties** (#273): when several tiles serve an enemy equally (walkers: as near its striking range; attackers: as safe
+ *   from the counter, on as good terrain), the game's pick among them couldn't be reproduced. Six walkers read off two
+ *   turn-1 bookmarks fit no rule (target, path order, straight line), and folklore says the game rolls for it. So the
+ *   prediction takes the tie nearest our units (the cautious reading for the next turn), and `alternatives` lists the
+ *   others, for a one-tap correction.
  *
  * Each attack's result is predicted with the likeliest reading (a strike at 50% or more lands; no crits), and the next
  * enemy acts on that board. Not modelled: healers and staves, Dual Guard and Dual Strike rolls in the prediction,
@@ -46,6 +51,8 @@ export type AttackOption = {
   readonly enemy: EnemyPiece;
   readonly target: PlayerPiece;
   readonly tile: Tile;
+  /** The other tiles it could attack from as well (the game's pick among them is a roll; see Ties). */
+  readonly alternatives: readonly Tile[];
   readonly range: number;
   /** The fight from the target's side (its matchup against this enemy, on their tiles). */
   readonly m: Matchup;
@@ -77,6 +84,8 @@ export type EnemyAction = {
   readonly enemy: string;
   readonly from: Tile;
   readonly to: Tile;
+  /** Other tiles it could as well end on (see Ties): the page offers them when the game picked one of them. */
+  readonly alternatives?: readonly Tile[];
   readonly target?: string;
   readonly range?: number;
   /** The fight's predicted result (the likeliest reading), when it attacks. */
@@ -144,35 +153,41 @@ export function attackOptions(b: Board, e: EnemyPiece): AttackOption[] {
   const from = e.stationary ? new Map([[tileKey(e.at), 0]]) : movement(b, e);
   const out: AttackOption[] = [];
   for (const target of leads(b)) {
-    let best: { tile: Tile; spent: number; range: number; countered: boolean; bonus: number } | undefined;
+    // The tiles it can strike from, by preference: one the target can't counter from, then the best terrain. The
+    // shortest walk breaks a tie for the prediction only (the game rolls; see Ties).
+    const tiles: { tile: Tile; spent: number; range: number; countered: boolean; bonus: number }[] = [];
     for (const [k, spent] of from) {
       const tile = keyTile(k);
       const d = manhattan(tile, target.at);
       if (!reaches(w, d)) continue;
-      const countered = reaches(target.fighter.weapon?.item, d);
       const tb = tileBonus(b.map, tile);
-      const bonus = tb.avo + tb.def * 10;
-      const better = !best || (best.countered && !countered) || (best.countered === countered && (bonus > best.bonus || (bonus === best.bonus && spent < best.spent)));
-      if (better) best = { tile, spent, range: d, countered, bonus };
+      tiles.push({ tile, spent, range: d, countered: reaches(target.fighter.weapon?.item, d), bonus: tb.avo + tb.def * 10 });
     }
-    if (!best) continue;
+    if (!tiles.length) continue;
+    const rank = (t: (typeof tiles)[number]) => (t.countered ? 0 : 1e6) + t.bonus;
+    const top = Math.max(...tiles.map(rank));
+    const tied = tiles.filter((t) => rank(t) === top).sort((a, c) => a.spent - c.spent);
+    const best = tied[0]!;
     const m = forecast(b, target, e, target.at, best.tile);
     const strikes = strikeOrder(m, 'enemy', best.countered, true).filter((s) => s === 'enemy').length;
     const lethal = m.worstHit * strikes >= target.hp;
     const killChance = lethal ? 1 - exchange(best.countered ? m : { ...m, hits: 0 }, best.countered ? target.fighter.weapon?.item : undefined, target.hp, e.hp, 'enemy').survive : 0;
-    out.push({ enemy: e, target, tile: best.tile, range: best.range, m, countered: best.countered, lethal, killChance, expected: (m.worstHit * strikes * m.foeHit) / 100 });
+    const alternatives = tied.slice(1).map((t) => t.tile);
+    out.push({ enemy: e, target, tile: best.tile, alternatives, range: best.range, m, countered: best.countered, lethal, killChance, expected: (m.worstHit * strikes * m.foeHit) / 100 });
   }
   return out;
 }
 
 /**
- * The tile an enemy with no one to attack walks to: the reachable tile nearest (by its walking cost) to a tile from
- * which it could strike a player lead; it stays when none is nearer.
+ * Where an enemy with no one to attack walks: the reachable tiles nearest (by its walking cost) to a tile from which
+ * it could strike a player lead; it stays when none is nearer. The game's pick among those tiles is a roll (see Ties),
+ * so `tile` is the one nearest our leads in a straight line (then nearest to all of them), and `alternatives` the rest.
  */
-export function approachTile(b: Board, e: EnemyPiece): Tile {
-  if (e.stationary || e.ai.move === 'Null') return e.at;
+export function approachTiles(b: Board, e: EnemyPiece): { tile: Tile; alternatives: Tile[] } {
+  if (e.stationary || e.ai.move === 'Null') return { tile: e.at, alternatives: [] };
   const row = moveRow(e.foe.className);
-  const blocked = new Set(leads(b).map((p) => tileKey(p.at)));
+  const ours = leads(b);
+  const blocked = new Set(ours.map((p) => tileKey(p.at)));
   const w = weaponOf(e);
   // Goals: enterable tiles from which the weapon reaches a player lead (a melee foe: adjacent tiles).
   const dist = new Map<number, number>();
@@ -181,7 +196,7 @@ export function approachTile(b: Board, e: EnemyPiece): Tile {
     for (let x = 0; x < b.map.width; x++) {
       const k = tileKey([x, y]);
       if (blocked.has(k) || moveCost(b.map, [x, y], row) === null) continue;
-      if (leads(b).some((p) => reaches(w, manhattan([x, y], p.at)) || (!w && manhattan([x, y], p.at) === 1))) {
+      if (ours.some((p) => reaches(w, manhattan([x, y], p.at)) || (!w && manhattan([x, y], p.at) === 1))) {
         dist.set(k, 0);
         queue.push([k, 0]);
       }
@@ -203,21 +218,28 @@ export function approachTile(b: Board, e: EnemyPiece): Tile {
       }
     }
   }
-  let best = e.at;
-  let bestD = dist.get(tileKey(e.at)) ?? Infinity;
-  for (const [k] of movement(b, e)) {
-    const d = dist.get(k) ?? Infinity;
-    if (d < bestD) [best, bestD] = [keyTile(k), d];
-  }
-  return best;
+  const here = dist.get(tileKey(e.at)) ?? Infinity;
+  let bestD = here;
+  for (const [k] of movement(b, e)) bestD = Math.min(bestD, dist.get(k) ?? Infinity);
+  if (bestD === Infinity || bestD === here) return { tile: e.at, alternatives: [] };
+  const line = (t: Tile) => ours.map((p) => Math.hypot(t[0] - p.at[0], t[1] - p.at[1]));
+  const near = (t: Tile) => {
+    const l = line(t);
+    return Math.min(...l) * 1e3 + l.reduce((s, x) => s + x, 0);
+  };
+  const tied = [...movement(b, e).keys()].filter((k) => dist.get(k) === bestD).map(keyTile).sort((a, c) => near(a) - near(c));
+  return { tile: tied[0]!, alternatives: tied.slice(1) };
 }
+
+/** Where an enemy with no one to attack walks to (see `approachTiles`). */
+export const approachTile = (b: Board, e: EnemyPiece): Tile => approachTiles(b, e).tile;
 
 /** One enemy acting on the board: its action and the board after (the likeliest reading unless `landing` says). */
 export function act(b: Board, e: EnemyPiece, targeting: Targeting = folkloreTargeting, landing: { player: Landing; enemy: Landing } = LIKELY): { action: EnemyAction; board: Board } {
   const pick = targeting(attackOptions(b, e));
   if (!pick) {
-    const to = approachTile(b, e);
-    return { action: { enemy: e.id, from: e.at, to }, board: sameTile(to, e.at) ? b : withEnemy(b, { ...e, at: to }) };
+    const { tile: to, alternatives } = approachTiles(b, e);
+    return { action: { enemy: e.id, from: e.at, to, ...(alternatives.length ? { alternatives } : {}) }, board: sameTile(to, e.at) ? b : withEnemy(b, { ...e, at: to }) };
   }
   const order = strikeOrder(pick.m, 'enemy', pick.countered, true);
   const r = playFight(pick.m, order, pick.target.hp, e.hp, landing.player, landing.enemy);
@@ -231,7 +253,7 @@ export function act(b: Board, e: EnemyPiece, targeting: Targeting = folkloreTarg
     next = withPlayer(withPlayer(next, lead as PlayerPiece), { ...freed, at: pick.target.at } as PlayerPiece);
   }
   return {
-    action: { enemy: e.id, from: e.at, to: pick.tile, target: pick.target.id, range: pick.range, result: { targetHp: r.playerHp, enemyHp: r.enemyHp }, lethal: pick.lethal, killChance: pick.killChance },
+    action: { enemy: e.id, from: e.at, to: pick.tile, ...(pick.alternatives.length ? { alternatives: pick.alternatives } : {}), target: pick.target.id, range: pick.range, result: { targetHp: r.playerHp, enemyHp: r.enemyHp }, lethal: pick.lethal, killChance: pick.killChance },
     board: next,
   };
 }
