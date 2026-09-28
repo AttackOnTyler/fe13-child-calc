@@ -379,6 +379,15 @@ describe('stances and exposure (#183)', () => {
     expect(play).toMatchObject({ noDeath: 1, turns: 1 });
   });
 
+  it('fronts the sturdier unit when either is as safe: the one keeping more HP through the worst attack', () => {
+    // A Biter hitting 10 can't kill either in a round (40 HP each), but the Def 20 unit loses nothing to it.
+    const soft: Fighter = { ...hero, name: 'Soft', stats: stats(40, 15, 0, 60, 40, 0, 0, 0) };
+    const tough: Fighter = { ...hero, name: 'Tough', stats: stats(40, 15, 0, 60, 40, 0, 20, 0) };
+    // Bonded, so it stays together (each could attack alone).
+    const play = engine.playMap({ map: rout([group(biter(3))]), lineup: [pair(soft, tough, null)], bonds: [['soft', 'tough']] }, 1);
+    expect(play.log[0]!.stances[0]).toMatchObject({ pair: 'soft', stance: 'together', front: 'tough' });
+  });
+
   it('pairs up again before a wave that would kill either unit alone: Pair Up costs the mover’s action', () => {
     // Def 10 each: alone a Biter's 30 leaves 20 (dead at 20 HP); paired, +1 Def leaves 19.
     const a: Fighter = { ...hero, name: 'Ann', stats: stats(20, 15, 0, 60, 40, 0, 10, 0) };
