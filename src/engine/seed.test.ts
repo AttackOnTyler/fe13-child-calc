@@ -261,8 +261,8 @@ describe('the stepping call (#198, #199)', () => {
   });
 
   it('settles a clearly worse edit’s cost: the endpoint fought by Chrom and Robin alone', () => {
-    // Every unit recorded at Lv 10 with the same fair stats, so the plan's chance isn't nil.
-    const fair = { hp: 50, str: 26, mag: 26, skl: 28, spd: 28, lck: 22, def: 22, res: 20 };
+    // Every unit recorded at Lv 10 with the same strong stats, so the whole army clears the endpoint and two alone don't.
+    const fair = { hp: 60, str: 35, mag: 35, skl: 35, spd: 35, lck: 30, def: 30, res: 28 };
     const run = editEntry(late, latestEntry(late)!.id, (s) => ({ ...s, units: Object.fromEntries(Object.entries(s.units).map(([u, x]) => [u, { ...x!, level: 10, stats: x!.stats && fair }])) }), 1);
     const plan = engine.seedPlan(run);
     const endpoint = plan.roadmap.order.at(-1)!;
