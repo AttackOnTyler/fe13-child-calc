@@ -31,6 +31,18 @@ describe('replaying the position log', () => {
   });
 });
 
+describe('an enemy phase that kills a pair’s lead', () => {
+  it('sets its back down on the lead’s tile, free to act (#274’s “killed” tap)', () => {
+    const b = prologueBoard({ chrom: [3, 13] }, { chrom: 'lissa' });
+    const foe = liveEnemies(b)[0]!;
+    const r = replay(b, [{ kind: 'enemy', actions: [{ enemy: foe.id, from: foe.at, to: [3, 12], target: 'chrom', result: { targetHp: 0, enemyHp: foe.hp } }] }]);
+    expect(playerById(r.board, 'chrom')).toMatchObject({ hp: 0 });
+    expect(playerById(r.board, 'chrom')!.back).toBeUndefined();
+    expect(playerById(r.board, 'lissa')).toMatchObject({ at: [3, 13] });
+    expect(playerById(r.board, 'lissa')!.carriedBy).toBeUndefined();
+  });
+});
+
 describe('the Prologue’s outer ring is off the map (#271)', () => {
   const ring = (k: number) => {
     const [x, y] = keyTile(k);

@@ -476,20 +476,26 @@ function boardValue(b: Board): number {
 }
 
 /**
- * The HP each healer can restore next turn, at half worth: its best heal on a hurt lead it can reach (Mov + 1). A back
- * can't be healed, so a hurt unit left riding behind is worth less than one set down beside the healer (#271's stall).
+ * The HP each healer can restore next turn, at half worth: its best heal on a hurt lead it can reach (Mov + 1). Only
+ * leads count (a healer can't heal its own partner, and whether a staff reaches another pair's back is left out, the
+ * cautious reading), so a hurt unit set down beside a healer is worth more than one riding behind (#271: the Prologue
+ * outline stalled with Frederick behind Lissa).
  */
 function healInReach(b: Board): number {
   const hurt = leads(b).filter((p) => p.hp < p.fighter.stats.hp);
   if (!hurt.length) return 0;
+  const tileOf = (p: PlayerPiece) => (p.carriedBy ? playerById(b, p.carriedBy)!.at : p.at);
   let v = 0;
   for (const h of b.players) {
     const staff = h.hp > 0 && h.items.find((i) => (HEAL_BASE[i.item] ?? 0) > 0 && (i.uses ?? 1) > 0);
     if (!staff) continue;
-    const at = h.carriedBy ? playerById(b, h.carriedBy)!.at : h.at;
     const amount = healAmount(staff.item, h.fighter.stats.mag);
+    const partner = (p: PlayerPiece) => p.id === h.id || p.id === h.carriedBy || p.id === h.back;
     let best = 0;
-    for (const p of hurt) if (p.id !== h.id && p.id !== h.carriedBy && manhattan(at, p.at) <= h.mov + 1) best = Math.max(best, Math.min(amount, p.fighter.stats.hp - p.hp) / p.fighter.stats.hp);
+    for (const p of hurt) {
+      if (partner(p) || manhattan(tileOf(h), tileOf(p)) > h.mov + 1) continue;
+      best = Math.max(best, Math.min(amount, p.fighter.stats.hp - p.hp) / p.fighter.stats.hp);
+    }
     v += (best * ARMY) / 2;
   }
   return v;

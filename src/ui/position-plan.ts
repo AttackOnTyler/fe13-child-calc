@@ -190,7 +190,7 @@ type UiState = {
   /** "A unit is elsewhere": the unit picked, waiting for its tile. */
   placing?: string;
   /** Fixing the enemy phase: by enemy id, its attack as it went. */
-  fixes: Record<string, { target: string; ours: StrikeTap; counter: StrikeTap; to?: Tile }>;
+  fixes: Record<string, { target: string; foe: StrikeTap; unit: StrikeTap; to?: Tile }>;
   fixing: boolean;
   /** The turn-1 skill taps: the enemy shown. */
   skillAt: number;
@@ -395,7 +395,7 @@ function enemyPanel(b: Board, ui: UiState, push: (e: PositionEvent) => void, red
       const e = enemyById(b, a.enemy)!;
       const t = playerById(b, f.target)!;
       // The fight as it went: its strikes and the counter as tapped.
-      const r = fightAs(b, e.id, t.id, f.to ?? a.to, f.ours, f.counter);
+      const r = fightAs(b, e.id, t.id, f.to ?? a.to, f.foe, f.unit);
       return { enemy: a.enemy, from: a.from, to: f.to ?? a.to, target: t.id, result: r };
     });
   return h(
@@ -418,7 +418,7 @@ function enemyPanel(b: Board, ui: UiState, push: (e: PositionEvent) => void, red
                 { class: 'chips' },
                 h(
                   'select',
-                  { 'aria-label': `${nm(a.enemy)}'s target`, onchange: (e) => ((ui.fixes[a.enemy] = { ...(f ?? { ours: 'hit', counter: 'hit' }), target: (e.target as HTMLSelectElement).value }), redraw()) },
+                  { 'aria-label': `${nm(a.enemy)}'s target`, onchange: (e) => ((ui.fixes[a.enemy] = { ...(f ?? { foe: 'hit', unit: 'hit' }), target: (e.target as HTMLSelectElement).value }), redraw()) },
                   h('option', { value: '', selected: f?.target === '' }, 'didn’t attack'),
                   ...leads(b).map((p) => h('option', { value: p.id, selected: (f?.target ?? a.target) === p.id }, p.name)),
                 ),
@@ -429,7 +429,7 @@ function enemyPanel(b: Board, ui: UiState, push: (e: PositionEvent) => void, red
                 'div',
                 { class: 'chips small' },
                 'Its strikes: ',
-                ...TAPS.map((o) => h('button', { class: `mini${(f?.ours ?? 'hit') === o ? ' on' : ''}`, onclick: () => ((ui.fixes[a.enemy] = { target: f?.target ?? a.target!, counter: f?.counter ?? 'hit', ours: o }), redraw()) }, o === 'killed' ? `killed ${nm(f?.target || a.target!)}` : o)),
+                ...TAPS.map((o) => h('button', { class: `mini${(f?.foe ?? 'hit') === o ? ' on' : ''}`, onclick: () => ((ui.fixes[a.enemy] = { target: f?.target ?? a.target!, unit: f?.unit ?? 'hit', foe: o }), redraw()) }, o === 'killed' ? `killed ${nm(f?.target || a.target!)}` : o)),
               )
             : null,
           ui.fixing
@@ -437,7 +437,7 @@ function enemyPanel(b: Board, ui: UiState, push: (e: PositionEvent) => void, red
                 'div',
                 { class: 'chips small' },
                 'Counter: ',
-                ...TAPS.map((o) => h('button', { class: `mini${(f?.counter ?? 'hit') === o ? ' on' : ''}`, onclick: () => ((ui.fixes[a.enemy] = { target: f?.target ?? a.target!, ours: f?.ours ?? 'hit', counter: o }), redraw()) }, o === 'killed' ? `killed ${nm(a.enemy)}` : o)),
+                ...TAPS.map((o) => h('button', { class: `mini${(f?.unit ?? 'hit') === o ? ' on' : ''}`, onclick: () => ((ui.fixes[a.enemy] = { target: f?.target ?? a.target!, foe: f?.foe ?? 'hit', unit: o }), redraw()) }, o === 'killed' ? `killed ${nm(a.enemy)}` : o)),
               )
             : null,
         );
@@ -459,30 +459,30 @@ function enemyPanel(b: Board, ui: UiState, push: (e: PositionEvent) => void, red
 export type StrikeTap = 'hit' | 'missed' | 'crit' | 'killed';
 
 /**
- * An enemy's attack played out as tapped (#274): `ours` is the enemy's strikes on the unit, `counter` the unit's. Hit or
- * missed plays every strike of that side, or none; a crit triples that side's first strike; killed ends the fight with
- * the other side at 0, whatever the numbers say.
+ * An enemy's attack played out as tapped (#274): `foe` is how the enemy's strikes on the unit went, `unit` how the unit's
+ * counter went. Hit or missed plays every strike of that side, or none; a crit triples that side's first strike; killed
+ * ends the fight on that side's first strike, the other side at 0 whatever the numbers say.
  */
-export function fightAs(b: Board, enemy: string, target: string, from: Tile, ours: StrikeTap, counter: StrikeTap): { targetHp: number; enemyHp: number } {
+export function fightAs(b: Board, enemy: string, target: string, from: Tile, foe: StrikeTap, unit: StrikeTap): { targetHp: number; enemyHp: number } {
   const e = enemyById(b, enemy)!;
   const t = playerById(b, target)!;
   const m = forecast(b, t, e, t.at, from);
   const d = manhattan(from, t.at);
   let p = t.hp;
   let q = e.hp;
-  let critFoe = ours === 'crit';
-  let critUnit = counter === 'crit';
+  let critFoe = foe === 'crit';
+  let critUnit = unit === 'crit';
   for (const s of strikeOrder(m, 'enemy', reaches(t.fighter.weapon?.item, d), true)) {
     if (p <= 0 || q <= 0) break;
-    if (s === 'enemy' && ours !== 'missed') {
-      p -= m.worstHit * (critFoe ? 3 : 1);
+    if (s === 'enemy' && foe !== 'missed') {
+      p = foe === 'killed' ? 0 : p - m.worstHit * (critFoe ? 3 : 1);
       critFoe = false;
-    } else if (s === 'player' && counter !== 'missed') {
-      q -= m.damage * (critUnit ? 3 : 1);
+    } else if (s === 'player' && unit !== 'missed') {
+      q = unit === 'killed' ? 0 : q - m.damage * (critUnit ? 3 : 1);
       critUnit = false;
     }
   }
-  return { targetHp: ours === 'killed' ? 0 : Math.max(0, p), enemyHp: counter === 'killed' ? 0 : Math.max(0, q) };
+  return { targetHp: Math.max(0, p), enemyHp: Math.max(0, q) };
 }
 
 /** Turn 1: each enemy's random skills, cautious (all) until tapped. */
@@ -640,9 +640,9 @@ function tryPanel(ctx: PositionContext, b: Board, acted: readonly string[], plan
   // unit that paired up can still take the lead), so it's the lead that must not have acted.
   const lead = u.carriedBy ? playerById(b, u.carriedBy) : undefined;
   if (acted.includes(lead?.id ?? u.id)) return h('div', { ...guide('position-try'), class: 'small' }, `${lead?.name ?? u.name} has acted this turn. `, back);
-  const other = u.back ?? lead?.id;
-  const switchButton = other
-    ? h('button', { class: `mini${u.carriedBy ? ' on' : ''}`, onclick: () => ((ui.trying = { unit: other }), redraw()) }, u.carriedBy ? `Switched: ${u.name} leads (undo)` : `Switch first (${nm(other)} leads)`)
+  const partner = u.back ?? lead?.id;
+  const switchButton = partner
+    ? h('button', { class: `mini${u.carriedBy ? ' on' : ''}`, onclick: () => ((ui.trying = { unit: partner }), redraw()) }, u.carriedBy ? `Switched: ${u.name} leads (undo)` : `Switch first (${nm(partner)} leads)`)
     : null;
   if (!t.tile) return h('div', { ...guide('position-try'), class: 'small' }, `${u.name}${lead ? `, after a Switch (${lead.name} behind)` : ''}: click a tile it can reach (outlined). `, switchButton, back);
   if (!t.action) {

@@ -42,6 +42,12 @@ export function replay(start: Board, events: readonly PositionEvent[]): { readon
           b = withEnemy(b, { ...foe, at: a.to, ...(a.result ? { hp: a.result.enemyHp } : {}), awake: true });
           const t = a.target ? playerById(b, a.target) : undefined;
           if (t && a.result) b = withPlayer(b, { ...t, hp: a.result.targetHp });
+          // A lead that falls sets its back down on its tile, as a player-phase attack does.
+          if (t?.back && a.result && a.result.targetHp <= 0) {
+            const { carriedBy: _, ...freed } = playerById(b, t.back)!;
+            const { back: __, ...lead } = playerById(b, t.id)!;
+            b = withPlayer(withPlayer(b, lead as PlayerPiece), freed as PlayerPiece);
+          }
         }
         b = { ...b, turn: b.turn + 1 };
         acted = [];
