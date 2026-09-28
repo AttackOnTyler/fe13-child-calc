@@ -440,7 +440,7 @@ function lossItem(engine: Engine, loss: LossItem, adopted: Plan, state: InboxSta
     keys: loss.losses.map((l) => l.key),
     same,
     note: same
-      ? 'Your plan already works without it: nothing to change.'
+      ? `Your plan doesn’t count on ${listWords(loss.losses.flatMap((l) => l.couple ?? [l.unit]).map(name))}: nothing to change.`
       : `Nothing changes until you accept it; until then, Prepare says your plan predates the loss.${refined && refined.plan !== loss.plan ? ' The re-solve improved on the first proposal.' : ''}`,
   };
 }
@@ -858,7 +858,7 @@ export function inboxView(ctx: RunContext, headline: HTMLElement, robin: HTMLEle
               'div',
               { class: 'row small' },
               loss.same
-                ? h('button', { class: 'mini', title: 'Your plan already works without it', onclick: () => set(withLossesSettled(run, loss.keys)) }, 'Got it')
+                ? h('button', { class: 'mini', title: 'Your plan doesn’t count on the units lost', onclick: () => set(withLossesSettled(run, loss.keys)) }, 'Got it')
                 : h('button', { class: 'mini', title: 'Adopt the re-solve for the army that’s left (undo it in Your edits)', onclick: () => set(withLossesSettled(withEdit(run, { label: loss.label, plan: loss.plan, accepted: true }), loss.keys)) }, 'Accept the re-solve'),
               loss.same ? null : h('button', { class: 'mini ghost', title: 'Keep your plan as it is: the inbox still says what it can no longer meet', onclick: () => set(withLossesSettled(run, loss.keys)) }, 'Keep my plan'),
             ),

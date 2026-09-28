@@ -93,7 +93,7 @@ export type LossItem = {
   readonly marriages: { readonly added: readonly (readonly [RosterUnit, RosterUnit])[]; readonly removed: readonly (readonly [RosterUnit, RosterUnit])[] };
   readonly units: { readonly added: readonly RosterUnit[]; readonly removed: readonly RosterUnit[] };
   readonly passes: readonly { readonly child: RosterUnit; readonly parent: RosterUnit; readonly from: string | null; readonly to: string | null }[];
-  /** The proposal changes nothing in the adopted plan: seeing it settles the losses. */
+  /** The loss broke none of the adopted plan's milestones and the proposal changes nothing in it: seeing it settles the losses. */
   readonly same: boolean;
 };
 
