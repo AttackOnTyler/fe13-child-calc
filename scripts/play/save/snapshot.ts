@@ -43,6 +43,9 @@ export const appUnit = (saveName: string): string | null => {
   return null;
 };
 
+const ASSET_BASE: Partial<Record<Stat, number>> = { hp: 5, lck: 4 };
+const FLAW_BASE: Partial<Record<Stat, number>> = { hp: 3, lck: 2 };
+
 export type FinalStats = {
   readonly stats: Readonly<Record<Stat, number>> | null;
   /** Why stats are missing or which unverified rule they rest on. */
@@ -51,7 +54,8 @@ export type FinalStats = {
 
 /**
  * Final stat = class base + the unit's additions + gains, capped at the class max + the unit's modifier.
- * Robin's asset/flaw base effect (+2 asset, -1 flaw, -2 for a Luck flaw) is fire-editor's rule and unverified.
+ * Robin's asset/flaw base effect: asset +5 HP / +4 Lck / +2 other, flaw -3 HP / -2 Lck / -1 other. Seen on screen for
+ * Mag/Def (Lv 1) and in saves for an HP asset (Lv 1: 24 HP; Premonition: 43 HP); the rest matches FEW's Premonition rows.
  */
 export const finalStats = (u: SaveUnit): FinalStats => {
   const notes: string[] = [];
@@ -68,9 +72,9 @@ export const finalStats = (u: SaveUnit): FinalStats => {
   if (unitId === 'robin' && u.logbook) {
     const a = STATS[u.logbook.asset - 1];
     const f = STATS[u.logbook.flaw - 1];
-    if (a) additions[u.logbook.asset - 1] += 2;
-    if (f) additions[u.logbook.flaw - 1] -= f === 'lck' ? 2 : 1;
-    notes.push('Robin asset/flaw base effect: unverified rule (+2/-1)');
+    if (a) additions[u.logbook.asset - 1] += ASSET_BASE[a] ?? 2;
+    if (f) additions[u.logbook.flaw - 1] -= FLAW_BASE[f] ?? 1;
+    if ((a && a !== 'mag' && a !== 'hp') || (f && f !== 'def')) notes.push(`Robin asset/flaw base effect for ${a}/${f}: not yet seen on screen`);
     const m: Record<string, number> = { ...ROBIN_MODIFIERS };
     for (const [k, v] of Object.entries(a ? ASSET_FLAW[a].assetModifier : {})) m[k] = (m[k] ?? 0) + v;
     for (const [k, v] of Object.entries(f ? ASSET_FLAW[f].flawModifier : {})) m[k] = (m[k] ?? 0) + v;

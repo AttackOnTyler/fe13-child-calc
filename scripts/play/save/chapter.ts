@@ -188,8 +188,17 @@ const parseUser = (b: Uint8Array, start: number, end: number) => {
   return { chaptersCleared: chapters, gold: u32(b, tail + 0x69), renown: u32(b, tail + 0x6d) };
 };
 
+/** Blocks by their 4-char tag, each with its end (the next block's start). Chapter and bookmark saves order them differently. */
+export const blocks = (body: Uint8Array): Map<string, { start: number; end: number }> => {
+  const offsets = blockOffsets(body);
+  return new Map(offsets.map((start, i) => [tag(body, start), { start, end: offsets[i + 1] ?? body.length }]));
+};
+
+/** A Chapter save or a bookmark (`Temporary`): the same container, its blocks found by tag. */
 export const parseChapter = (body: Uint8Array): ChapterSave => {
-  const [user, map, units, next] = blockOffsets(body);
-  const u = parseUser(body, user, map);
-  return { ...u, groups: parseUnits(body, units, next) };
+  const found = blocks(body);
+  const user = found.get('RESU');
+  const units = found.get('TINU');
+  if (!user || !units) throw new Error(`save lacks RESU/TINU blocks (has ${[...found.keys()].join(', ')})`);
+  return { ...parseUser(body, user.start, user.end), groups: parseUnits(body, units.start, units.end) };
 };
