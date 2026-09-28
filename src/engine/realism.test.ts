@@ -16,9 +16,10 @@ describe('realism anchors (the realism pass)', () => {
     const run = fresh('normal');
     const plan = engine.seedPlan(run);
     const r = engine.flawlessChance(run, { plan, runs: 6 });
-    // A careful Normal player clears the Main story without a loss the large majority of the time: the plan reads more
-    // than even odds (about 80% on 24 runs), not the few percent a modelling defect leaves.
-    expect(r.chance).toBeGreaterThan(0.5);
+    // A careful Normal player clears the Main story without a loss the large majority of the time: the plan reads well
+    // over even odds (about 85–90% on 24 runs, whichever Robin), not the few percent a modelling defect leaves, nor the
+    // two thirds an Endgame farmed to the turn cap left (the second realism pass).
+    expect(r.chance).toBeGreaterThan(0.7);
     const story = r.maps.filter((m) => /^(prologue|chapter-\d+|endgame)$/.test(m.key) && m.noDeath !== undefined);
     expect(story.length).toBeGreaterThan(20);
     for (const m of story) expect(m.noDeath!, m.key).toBeGreaterThanOrEqual(0.9);
@@ -33,12 +34,27 @@ describe('realism anchors (the realism pass)', () => {
     expect(c.chance!).toBeGreaterThanOrEqual(0.9);
   });
 
-  it('reads the Lunatic Prologue to Chapter 2 at 90% or more each', () => {
+  it('reads the Lunatic Prologue to Chapter 2 at 90% or more each, and Chapter 3 at 80% or more', () => {
+    // A careful Lunatic player clears the early chapters with Frederick walling and the healers healing, and the
+    // Longfort (Chapter 3) with its foes drawn out a few at a time, before the first armory opens: a unit lost there is
+    // the exception, not the rule (the second realism pass: Chapter 3 read 0%, its staves and weapons dry after plays
+    // twice as long as real ones).
     const run = fresh('lunatic');
     const r = engine.flawlessChance(run, { plan: engine.seedPlan(run), runs: 6 });
     for (const key of ['prologue', 'chapter-1', 'chapter-2']) {
       const m = r.maps.find((x) => x.key === key)!;
       expect(m.noDeath!, key).toBeGreaterThanOrEqual(0.9);
     }
+    expect(r.maps.find((x) => x.key === 'chapter-3')!.noDeath!).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it('reads the plan no higher with nobody rallying than with its Rallies (within the headline’s error)', () => {
+    // A careful player rallies only when the bonus is worth the rallier's action: taking Rally away can't help. The
+    // stress case read 84% over a 66% headline while a Rally holder rallied every turn instead of fighting (#211).
+    const run = runFromRoster(withRun(EMPTY_ROSTER, { route: 'main-story', difficulty: 'normal' }));
+    const plan = engine.seedPlan(run);
+    const r = engine.flawlessChance(run, { plan, runs: 6 });
+    const stressed = engine.stressChance(run, plan, 'no-rally', { runs: 6 });
+    expect(stressed.chance).toBeLessThanOrEqual(r.chance + r.margin);
   });
 });
