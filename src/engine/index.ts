@@ -77,7 +77,7 @@ import { beforeMapItems, itemPlanOf, type BeforeMapItem, type ItemPlan, type Ite
 import { readings, recordedStats, type Readings, type ReadingsOptions, type UnitStats } from './readings';
 import { defaultPriorities, expForecast, suggestChanges, suggestedChanges, type ExpForecast, type ExpForecastOptions, type SuggestedChange } from './exp-forecast';
 import { BLIND_SPOTS, STRESS_TESTS, type BlindSpot, type StressTest } from './assumptions';
-import { matchBuilds, matchTemplate, planBuild, shownMatch, templateSummary, templatesFor } from './builds';
+import { filledBuild, matchBuilds, matchTemplate, planBuild, shownMatch, templateSummary, templatesFor } from './builds';
 import type { SkillId } from '../game-data/skills';
 import { createScorer } from './scoring';
 import { pairUpSpd } from './pair-up';
@@ -1399,9 +1399,14 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
       childBuild: (r) => {
         const input = skillInput(r);
         const k = `${r.pairing.child}|${context}|${r.startClass}|${input.reachable.join()}|${JSON.stringify(r.skillCandidates)}`;
-        return cached(k, () => planBuild(skillReach(input, dlcOf(settings)), context));
+        return cached(k, () => matchBuilds(skillReach(input, dlcOf(settings)), context)[0]);
       },
-      unitBuild: (s) => cached(`${typeof s === 'string' ? s : `robin-${s.gender}`}|${context}`, () => planBuild(unitReach(s, dlcOf(settings)), context)),
+      unitBuild: (s) => cached(`${typeof s === 'string' ? s : `robin-${s.gender}`}|${context}`, () => matchBuilds(unitReach(s, dlcOf(settings)), context)[0]),
+      fullBuild: (b, s) => {
+        const reach = () => (typeof s === 'object' && 'pairing' in s ? skillReach(skillInput(s), dlcOf(settings)) : unitReach(s, dlcOf(settings)));
+        const who = typeof s === 'object' && 'pairing' in s ? `${s.pairing.child}|${s.startClass}|${skillInput(s).reachable.join()}|${JSON.stringify(s.skillCandidates)}` : typeof s === 'string' ? s : `robin-${s.gender}`;
+        return cached(`full|${who}|${context}|${b?.template.id ?? ''}`, () => (b ? filledBuild(b, reach(), context) : planBuild(reach(), context)));
+      },
       rank: (id) => skillRank(id, context),
     };
   };

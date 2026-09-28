@@ -70,6 +70,11 @@ export type SeedContext = {
   readonly childBuild: (r: ChildResult) => BuildMatch | undefined;
   /** The best build for a first-gen unit or Robin. */
   readonly unitBuild: (s: PageSubject) => BuildMatch | undefined;
+  /**
+   * A build as the wishlist names it: filled to five skills from what the unit's classes teach (`filledBuild`), for
+   * the child of a pairing or a first-gen unit or Robin. The seed matches marriages on the templates' builds.
+   */
+  readonly fullBuild: (b: BuildMatch | undefined, s: ChildResult | PageSubject) => BuildMatch | undefined;
   /** A skill's rank in the play context (higher is better). */
   readonly rank: (id: SkillId) => number;
 };
@@ -426,14 +431,14 @@ export function planFor(run: Run, ctx: SeedContext, options: SeedOptions, robin:
   const pairings = marriages.flatMap((c) => pairingsOf(c, r));
   if (!spouse.has('chrom')) pairings.push(...(BY_FIXED.get('chrom') ?? []).map((child): Pairing => ({ child, variableParent: { kind: 'unit', id: CHROM_FALLBACK_PARTNER } })));
   const children: WishlistChild[] = [];
-  const builds = new Map<RosterUnit, BuildMatch | undefined>();
+  const builds = new Map<RosterUnit, { readonly build: BuildMatch | undefined; readonly result: ChildResult }>();
   for (const p of pairings) {
     const result = ctx.result(p);
     if (!result || children.some((c) => c.child === p.child)) continue;
     const fixedParent: RosterUnit = CHILD_UNITS[p.child].fixedParent;
     const other: RosterUnit = p.variableParent.kind === 'robin' ? 'robin' : p.variableParent.id;
     const build = ctx.childBuild(result);
-    builds.set(p.child, build);
+    builds.set(p.child, { build, result });
     const passes = inArmy.has(p.child) ? ([null, null] as const) : passesFor(ctx, result, build);
     children.push({ child: p.child, parents: [fixedParent, other === CHROM_FALLBACK_PARTNER ? 'maiden' : other], passes: other === CHROM_FALLBACK_PARTNER ? [passes[0], null] : passes });
   }
@@ -442,9 +447,12 @@ export function planFor(run: Run, ctx: SeedContext, options: SeedOptions, robin:
   const army = keptAtEndpoint(ceilingArmy(input, ctx.assumptions), input.pins?.[input.maps.length - 1]);
   const classOf = new Map(army?.fielded.map((c) => [c.unit, c.shown.classId]) ?? []);
   const buildOf = (u: RosterUnit): SkillId[] => {
-    if (builds.has(u)) return skillIds(builds.get(u));
-    if (u === 'robin') return skillIds(ctx.unitBuild(r));
-    return isChild(u) || u === CHROM_FALLBACK_PARTNER ? [] : skillIds(ctx.unitBuild(u as Exclude<UnitId, 'maiden'>));
+    const child = builds.get(u);
+    if (child) return skillIds(ctx.fullBuild(child.build, child.result));
+    if (u === 'robin') return skillIds(ctx.fullBuild(ctx.unitBuild(r), r));
+    if (isChild(u) || u === CHROM_FALLBACK_PARTNER) return [];
+    const s = u as Exclude<UnitId, 'maiden'>;
+    return skillIds(ctx.fullBuild(ctx.unitBuild(s), s));
   };
   const units: WishlistUnit[] = [];
   const add = (unit: RosterUnit, position: WishlistUnit['position'], partner?: RosterUnit) =>
