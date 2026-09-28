@@ -681,6 +681,33 @@ describe('baits and bosses (realism pass)', () => {
     expect(first[1]!.survive).toBeCloseTo(1 - q * q, 9);
   });
 
+  it('reads when each foe begins moving from the chapter data’s AI notes', () => {
+    const at = (id: string, d: 'normal' | 'lunatic') => Object.fromEntries(engine.simMap(id, d).foes.map((g) => [g.key, g.moves ?? 1]));
+    // Chapter 1: every Risen moves at once. Chapter 7 (Normal): the Plegians begin on turn 6. Chapter 3 (Lunatic): the
+    // Feroxi wait until provoked.
+    expect(new Set(Object.values(at('chapter-1', 'lunatic')))).toEqual(new Set([1]));
+    expect(at('chapter-7', 'normal').Plegian).toBe(6);
+    expect(at('chapter-3', 'lunatic').Feroxi).toBe(Infinity);
+  });
+
+  it('lets a foe that waits attack nobody until its turn, or until attacked, and then only its attacker', () => {
+    // Two Axes that hit hard for the tank alone: the waiting one stays out of the fight until turn 3.
+    const late = group({ ...axe, name: 'Late', count: 1 }, { moves: 3 });
+    const play = engine.playMap({ map: rout([late]), lineup: [solo(tank('Wall'))] }, 1);
+    const enemyAt = (t: number) => play.log[t - 1]?.fights.filter((f) => f.phase === 'enemy').length ?? 0;
+    expect(play.log[0]!.fights.filter((f) => f.phase === 'player')).toHaveLength(1);
+    // Attacked on turn 1 it moves: it counters and attacks its attacker that enemy phase.
+    expect(enemyAt(1)).toBe(1);
+    expect(play.blindSpots).toContain('foes-wait');
+    // A waiting foe nobody attacks (the tank can't hurt it, so it chips a post instead): no attack from it until its
+    // turn, then it comes at the tank in reach.
+    const post: Foe = { ...brute, name: 'Target', weapon: undefined, count: 1, stats: stats(200, 0, 0, 0, 0, 60, 0, 0) };
+    const hard = group({ ...axe, name: 'Late', count: 1, stats: { ...axe.stats, def: 99 } }, { moves: 3 });
+    const idle = engine.playMap({ map: rout([group(post), hard]), lineup: [solo(tank('Rock'))] }, 1);
+    const lateAt = (t: number) => idle.log[t - 1]!.fights.filter((f) => f.phase === 'enemy' && f.foe === 'Late').length;
+    expect([lateAt(1), lateAt(2), lateAt(3)]).toEqual([0, 0, 1]);
+  });
+
   // A boss that holds and a stream of harmless posts that never ends: waiting for the field to clear never ends either.
   const post: Foe = { ...brute, name: 'Post', weapon: undefined, count: 3, stats: stats(10, 0, 0, 0, 0, 60, 0, 0) };
   const endless = (boss: Foe): SimMap => ({

@@ -50,6 +50,25 @@ const leavesOn = (g: EnemyGroup): number | undefined => {
   const m = /Leaves the map on turn (\d+)/i.exec(g.notes ?? '');
   return m ? parseInt(m[1]!, 10) : undefined;
 };
+/**
+ * When a foe begins moving on its own, from the chapter data's AI notes (FEW): from the start ("Immediately begins
+ * moving unprovoked", no note, or anything else), on a turn ("Begins moving unprovoked on turn 5", "Will not act until
+ * turn 8", "… or until turn 6"), or only once a unit comes to it (Infinity: "Only moves to attack units in range",
+ * "Will not move until …", "Begins moving if … is provoked", a door to open, one standing on a gate). A note for several
+ * foes of the group ("• The southern two immediately …; • The northern one …") reads as its earliest.
+ */
+export function movesOf(notes: string | undefined): number {
+  if (!notes) return 1;
+  let earliest = Infinity;
+  for (const part of notes.split(/;\s*/)) {
+    const turn = /(?:unprovoked on|until|by) turn (\d+)/i.exec(part);
+    if (/immediately begins? moving/i.test(part)) earliest = Math.min(earliest, 1);
+    else if (turn) earliest = Math.min(earliest, parseInt(turn[1]!, 10));
+    else if (!/will not move|will not act|begins? moving if|only moves? to attack|do(?:es)? not move|stands on a (?:gate|throne)|starts on a (?:gate|throne)/i.test(part)) earliest = Math.min(earliest, 1);
+  }
+  return earliest;
+}
+
 const sameName = (a: string | undefined, b: string | undefined) => !!a && !!b && a.replace(/[’']/g, "'") === b.replace(/[’']/g, "'");
 
 export function simMap(map: ChapterData, difficulty: Difficulty, options: SimMapOptions = {}): SimMap {
@@ -78,7 +97,22 @@ export function simMap(map: ChapterData, difficulty: Difficulty, options: SimMap
   const victoryText = map.conditions[table]?.victory ?? 'Rout the enemy';
   const boss = /^Defeat\s+(?:the\s+(?:boss\s+)?)?(.+)$/i.exec(victoryText.trim());
   const leaving = new Map(rows.flatMap((e) => (leavesOn(e) !== undefined ? [[e.name, leavesOn(e)!] as const] : [])));
-  const foes = foesOf(start, table, lplus).map((f) => group(f, undefined, leaving.has(f.name) ? { leaves: leaving.get(f.name)! } : {}));
+  // Each enemy group's row (the non-boss foes come in the table's order, the bosses' own rows left out): its AI notes.
+  const kept = start.enemies[table] ?? [];
+  let r = 0;
+  const rowOf = (f: Foe): EnemyGroup | undefined => {
+    if (f.boss) return undefined;
+    while (r < kept.length) {
+      const row = kept[r++]!;
+      const g = foeOf(row, false);
+      if (g.name === f.name && g.className === f.className && g.stats.hp === f.stats.hp) return row;
+    }
+    return undefined;
+  };
+  const foes = foesOf(start, table, lplus).map((f) => {
+    const moves = movesOf(rowOf(f)?.notes);
+    return group(f, undefined, { ...(leaving.has(f.name) ? { leaves: leaving.get(f.name)! } : {}), ...(moves !== 1 ? { moves } : {}) });
+  });
   if (boss) {
     const name = boss[1]!.trim().toLowerCase();
     const target = foes.find((g) => g.foe.boss && g.foe.name.toLowerCase() === name) ?? foes.find((g) => g.foe.boss && name.includes(g.foe.className.toLowerCase())) ?? foes.find((g) => g.foe.boss);
