@@ -74,8 +74,8 @@ describe('the map solver’s combat math', () => {
     expect(orton).toMatchObject({ name: 'Orton', className: 'Wyvern Rider', boss: true, skills: ['Tantivy'] });
     expect(orton.weapon?.name).toBe('Tomahawk');
     const m = matchup(frederick, undefined, null, orton);
-    // Worst hit: Orton's Str 18 + Tomahawk's Mt − Frederick's Def 14.
-    expect(m.worstHit).toBe(18 + itemByName('Tomahawk')!.mt! - 14);
+    // Worst hit: Orton's Str 18 + Tomahawk's Mt + his axe's rank-A Atk +1 + the triangle's +1 over a lance (#250) − Frederick's Def 14.
+    expect(m.worstHit).toBe(18 + itemByName('Tomahawk')!.mt! + 1 + 1 - 14);
   });
 
   it('doubles at a Spd lead of exactly 5, and is doubled the same way', () => {

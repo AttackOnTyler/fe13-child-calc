@@ -359,8 +359,8 @@ function counterRisk(unit: SimGroup['lead'], who: string, foe: Foe, foeName: str
   if (!best) return undefined;
   const m = best.result;
   const hp = unit.fighter.stats.hp;
-  const at = Math.min(hp, m.worstRound);
-  if (m.worstRound < hp * COUNTER_SHARE || at <= 0) return undefined;
+  const at = Math.min(hp, m.counterRound);
+  if (m.counterRound < hp * COUNTER_SHARE || at <= 0) return undefined;
   const risk = 1 - exchange(m, best.weapon?.item, at, foe.stats.hp, 'player').survive;
   if (risk < COUNTER_RISK) return undefined;
   const full = 1 - exchange(m, best.weapon?.item, hp, foe.stats.hp, 'player').survive;
@@ -1077,7 +1077,7 @@ function body(ctx: PrepContext, plan: Plan, forecast: ExpForecast): HTMLElement 
   const matchRow = (x: (typeof lineupRows)[number]) => {
     const res = x.best?.result;
     const backName = `${x.backId ? unitName(x.backId, gender) : '—'}${x.stance ? ` (${x.stance})` : ''}`;
-    if (!res) return h('tr', {}, h('td', {}, unitName(x.unit, gender)), h('td', {}, backName), h('td', { colspan: '9', class: 'muted' }, 'No weapon recorded in its inventory'));
+    if (!res) return h('tr', {}, h('td', {}, unitName(x.unit, gender)), h('td', {}, backName), h('td', { colspan: '10', class: 'muted' }, 'No weapon recorded in its inventory'));
     return h(
       'tr',
       {},
@@ -1088,7 +1088,8 @@ function body(ctx: PrepContext, plan: Plan, forecast: ExpForecast): HTMLElement 
       cell(res.oneRounds, res.oneRounds ? '✓' : res.oneRoundsWithDualStrikes ? '✓ w/ DS' : '✗', res.oneRoundsWithDualStrikes && !res.oneRounds ? `Only if dual strikes land (${res.dualStrikeRate}%)` : undefined),
       h('td', { class: 'num' }, `${res.dualStrikeRate || '—'}${res.dualStrikeRate ? '%' : ''}`),
       h('td', {}, `${res.doubles ? '2× ' : ''}${res.doubled ? 'doubled' : ''}` || '—'),
-      cell(res.survives, `${res.worstRound} / ${x.u.stats!.hp}`, `Worst hit ${res.worstHit}; the most it takes in a round`),
+      cell(res.survivesCounter, res.countered ? `${res.counterRound} / ${x.u.stats!.hp}` : `none (from ${res.range})`, res.countered ? `Its counter: worst hit ${res.worstHit}, the most it takes in a round` : `The foe can’t answer from ${res.range} tiles`),
+      cell(res.survives, `${res.worstRound} / ${x.u.stats!.hp}`, `When the foe attacks it: worst hit ${res.worstHit}, the most it takes in a round`),
       h('td', { class: 'num' }, `${res.hit} / ${res.crit}`),
       h('td', { class: 'num' }, `${res.foeHit} / ${res.foeCrit}`),
       h('td', { class: 'muted small' }, res.notes.join('; ')),
@@ -1200,7 +1201,7 @@ function body(ctx: PrepContext, plan: Plan, forecast: ExpForecast): HTMLElement 
             h(
               'table',
               { ...guide('matchup-table'), class: 'grid small' },
-              h('thead', {}, h('tr', {}, ...['Lead', 'Back', 'Weapon', 'Dmg', 'One round', 'Dual strike', 'Doubling', 'Worst round / HP', 'Hit / Crit', 'Foe hit / crit', 'Why'].map((t) => h('th', {}, t)))),
+              h('thead', {}, h('tr', {}, ...['Lead', 'Back', 'Weapon', 'Dmg', 'One round', 'Dual strike', 'Doubling', 'Counter / HP', 'Enemy phase / HP', 'Hit / Crit', 'Foe hit / crit', 'Why'].map((t) => h('th', {}, t)))),
               h('tbody', {}, ...lineupRows.map(matchRow)),
             ),
           )

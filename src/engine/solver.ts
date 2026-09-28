@@ -5,19 +5,26 @@
  * and hit and crit both ways. No movement planning: no source publishes terrain or enemy AI.
  *
  * Formulas (SF Calculations, Pair Up, Dual System):
- * - Attack = Str or Mag + Mt (tripled when effective) + rank bonus; damage = Attack − Def or Res.
- * - Hit = weapon Hit + (Skl × 3 + Lck) / 2; Avoid = (Spd × 3 + Lck) / 2; Crit = weapon Crit + Skl / 2; crit avoid = Lck.
+ * - Attack = Str or Mag + Mt (tripled when effective) + rank bonus; damage = Attack + triangle − Def or Res.
+ * - Hit = weapon Hit + ⌊(Skl × 3 + Lck) / 2⌋; Avoid = ⌊(Spd × 3 + Lck) / 2⌋; Crit = weapon Crit + ⌊Skl / 2⌋; crit
+ *   avoid = Lck. Each term is floored, as the game does ("fractions are omitted"; #250, research #255).
  * - Doubling: Spd − the other's Spd ≥ 5. Brave weapons strike twice per attack.
  * - Pair-up: the back adds its stat bonus (+1/+2/+3 for each stat at 10/20/30 and up) and its class bonus, the class
  *   bonus raised by 1 (C, B) or 2 (A, S) support. Dual strike rate = (both Skl) / 4 + 20/30/40/50/60 by support (+10
- *   with Dual Strike+). Dual guard rate = (both Def, or Res against magic) / 4 + 0/2/5/7/10 by support (+10 with
- *   Dual Guard+). Dual support adds Hit, Avoid, Crit and crit avoid by support rank.
+ *   with Dual Strike+; 0 when the Support unit has no weapon). Dual guard rate = (both Def, or Res against magic) / 4 +
+ *   0/2/5/7/10 by support (+10 with Dual Guard+). Dual Support adds Hit, Avoid, Crit and crit avoid by the total support
+ *   rank of the back and every adjacent ally (none 1, C 2 … S 5; +4 with Dual Support+; capped at 12).
  * - Weapon rank bonus (SF Calculations; #239, the game's Premonition forecast): Attack and Hit by kind and rank — a
  *   sword +1/+2/+3 Atk at C/B/A; a lance, bow or tome +1 Atk at C, +1 Atk and +5 Hit at B, +2 Atk and +5 Hit at A; an
  *   axe +5/+10 Hit at C/B, +1 Atk and +10 Hit at A. Weapon ranks aren't recorded (`weapon-ranks`): a unit's is read as
- *   the rank its weapon needs, a foe's as A in an advanced class (the cautious reading) and its weapon's rank otherwise.
- * - Weapon triangle (sword > axe > lance > sword): ±5 Hit at the advantaged side's E/D rank, taken at its smallest, a
- *   cautious reading.
+ *   the rank its weapon needs; a foe's is A on Lunatic (every Lunatic Prologue foe shows A, #255), A in an advanced
+ *   class, and its weapon's rank otherwise.
+ * - Weapon triangle (sword > axe > lance > sword; #250): sized by the advantaged side's rank — Hit ±5 at E/D, ±10 at C,
+ *   ±10 and Atk ±1 at B, ±15 and Atk ±1 at A — and the disadvantaged side loses its whole rank bonus.
+ * - Gamble: Hit −5, Crit +10 on the unit's own attacks. Outdoor Fighter: Hit and Avoid +10 on an outdoor map (only when
+ *   the caller says the map is outdoors; unknown reads as indoors).
+ * - Range (#249): the lead attacks from a distance its weapon reaches and the foe's can't when there is one (Thunder
+ *   from 2 on a melee foe), so `counterRound` is 0 there; `worstRound` stays the round the foe deals when it attacks.
  * - Plain Pavise/Aegis halve the lead's hits but not dual strikes; Pavise+/Aegis+ (Lunatic+) halve both (research
  *   #91). Lunatic+ counts the worst of its pool (Luna+: hits ignore half Def/Res; Hawkeye: always hits; Counter: melee
  *   damage comes back; Pavise+/Aegis+; Vantage+) unless the player recorded the skills seen; the pool leaves out
@@ -28,6 +35,7 @@ import type { BossRow, ChapterDifficulty, EnemyGroup, MapItem } from '../game-da
 import { itemByName, forgedStats, type Effectiveness, type GameItem } from '../game-data/items';
 import { MOD_STATS, STATS, type Gender, type ModStat, type Stat } from '../game-data/stats';
 import { className } from './classes';
+import { rangeOf } from './sim/exchange';
 
 export type SupportLevel = 'C' | 'B' | 'A' | 'S';
 
@@ -51,6 +59,16 @@ export type Foe = {
   readonly boss: boolean;
   /** Its level (the chapter data's), which the EXP formulas key on; a hand-built foe may leave it out. */
   readonly level?: number;
+  /** The weapon rank it fights at, when known (A on Lunatic); else read from its class and weapon (see `rankOf`). */
+  readonly rank?: string;
+};
+
+/** What the fight's surroundings add (#250): Outdoor Fighter's map, and the lead's adjacent allies' support ranks. */
+export type MatchupContext = {
+  /** The map is outdoors (Outdoor Fighter's +10 Hit and Avoid). Unknown reads as indoors. */
+  readonly outdoors?: boolean;
+  /** Each adjacent ally beyond the back, by its support rank with the lead (null: none); Dual Support stacks them. */
+  readonly adjacent?: readonly (SupportLevel | null)[];
 };
 
 export type Matchup = {
@@ -72,9 +90,16 @@ export type Matchup = {
   readonly dualGuardRate: number;
   /** How many times the foe strikes in a round (brave, doubling); 0 with no weapon. */
   readonly foeStrikes: number;
-  /** The biggest single hit the lead can take (no crit), and the most it takes in a round. */
+  /** The biggest single hit the lead can take (no crit), and the most it takes in a round when the foe attacks. */
   readonly worstHit: number;
   readonly worstRound: number;
+  /** The distance the lead attacks from (#249): one the foe can't answer from when its weapon allows, else 1 or its only range. */
+  readonly range: number;
+  /** Whether the foe can counter the lead's attack from that distance, and the most the counter deals in a round. */
+  readonly countered: boolean;
+  readonly counterRound: number;
+  /** The lead lives through that counter (no crit). */
+  readonly survivesCounter: boolean;
   readonly survives: boolean;
   readonly hit: number;
   readonly crit: number;
@@ -160,16 +185,46 @@ const RANK_BONUS: Readonly<Record<string, readonly (readonly [number, number])[]
 const RANK_INDEX: Readonly<Record<string, number>> = { C: 0, B: 1, A: 2, S: 2 };
 const NO_RANK_BONUS = [0, 0] as const;
 /**
- * A weapon's rank bonus in a class's hands (`weapon-ranks`): at the rank the weapon needs, or A for a foe in an advanced
- * class (a foe's rank is the cautious reading, as its stats are).
+ * The rank a weapon is used at (`weapon-ranks`): a foe's stated rank, else A for a foe in an advanced class (the
+ * cautious reading, as its stats are), else the rank the weapon needs.
  */
-function rankBonus(w: GameItem | undefined, cls: string, foe: boolean): readonly [number, number] {
-  const table = w && RANK_BONUS[w.kind];
-  if (!table) return NO_RANK_BONUS;
+function rankOf(w: GameItem | undefined, cls: string, foe: boolean, stated?: string): string | undefined {
+  if (!w) return undefined;
+  if (foe && stated) return stated;
   const id = foe ? CLASS_BY_NAME.get(cls) : undefined;
-  const rank = id && CLASSES[id].tier === 'advanced' ? 'A' : w.rank;
+  return id && CLASSES[id].tier === 'advanced' ? 'A' : w.rank;
+}
+/** A weapon's rank bonus at a rank: [Attack, Hit]. */
+function rankBonus(w: GameItem | undefined, rank: string | undefined): readonly [number, number] {
+  const table = w && RANK_BONUS[w.kind];
   const i = rank === undefined ? undefined : RANK_INDEX[rank];
-  return i === undefined ? NO_RANK_BONUS : table[i]!;
+  return !table || i === undefined ? NO_RANK_BONUS : table[i]!;
+}
+/** The weapon triangle's size by the advantaged side's rank (#250, SF Calculations): [Attack, Hit]. */
+const triangleSize = (rank: string | undefined): readonly [number, number] =>
+  rank === 'A' || rank === 'S' ? [1, 15] : rank === 'B' ? [1, 10] : rank === 'C' ? [0, 10] : [0, 5];
+
+/**
+ * The triangle between two weapons at their ranks: [Attack, Hit] for the first side (negative at a disadvantage), and
+ * whether each side keeps its rank bonus (the disadvantaged side loses it).
+ */
+function triangleOf(a: GameItem | undefined, aRank: string | undefined, b: GameItem | undefined, bRank: string | undefined): { atk: number; hit: number; aKeeps: boolean; bKeeps: boolean } {
+  const t = triangle(a, b);
+  if (!t) return { atk: 0, hit: 0, aKeeps: true, bKeeps: true };
+  const [atk, hit] = triangleSize(t > 0 ? aRank : bRank);
+  return { atk: t * atk, hit: t * hit, aKeeps: t > 0, bKeeps: t < 0 };
+}
+
+/**
+ * The distance an attacker strikes from (#249): one its weapon reaches and the defender's can't, when there is one (the
+ * nearest such), else the nearest it reaches; and whether the defender counters from there.
+ */
+export function attackRange(attacker: GameItem | undefined, defender: GameItem | undefined): { range: number; countered: boolean } {
+  const a = rangeOf(attacker);
+  if (!a) return { range: 1, countered: false };
+  const d = rangeOf(defender);
+  for (let r = a[0]; r <= a[1]; r++) if (!d || r < d[0] || r > d[1]) return { range: r, countered: false };
+  return { range: a[0], countered: true };
 }
 
 const NO_WEAPON = { mt: 0, hit: 0, crit: 0 } as const;
@@ -205,6 +260,12 @@ const breakerOf = (skills: readonly string[] | ReadonlySet<string>, other: GameI
 /** Hit Rate +20 and Avoid +10 (SF Skills). */
 const hitSkill = (skills: readonly string[] | ReadonlySet<string>) => (has(skills, 'Hit Rate +20') ? 20 : 0);
 const avoidSkill = (skills: readonly string[] | ReadonlySet<string>) => (has(skills, 'Avoid +10') ? 10 : 0);
+/** Gamble (SF Skills): Hit −5 and Crit +10 on the unit's own attacks. */
+const gambleHit = (skills: readonly string[] | ReadonlySet<string>) => (has(skills, 'Gamble') ? -5 : 0);
+const gambleCrit = (skills: readonly string[] | ReadonlySet<string>) => (has(skills, 'Gamble') ? 10 : 0);
+/** A halved combat-stat term, floored as the game floors each term. */
+const half = (n: number) => Math.floor(n / 2);
+const NO_CONTEXT: MatchupContext = {};
 
 /**
  * One lead + back pair against one foe. `lunaticPlus` lists the Lunatic+ skills to assume (the map's pool) when the
@@ -212,7 +273,7 @@ const avoidSkill = (skills: readonly string[] | ReadonlySet<string>) => (has(ski
  * (Attack Stance, #183): Dual Strike, Dual Guard and Dual Support as the Support unit, but no pair-up stats (SF Dual
  * System).
  */
-export function matchup(lead: Fighter, back: Fighter | undefined, support: SupportLevel | null, foe: Foe, lunaticPlus: readonly string[] = [], paired = true): Matchup {
+export function matchup(lead: Fighter, back: Fighter | undefined, support: SupportLevel | null, foe: Foe, lunaticPlus: readonly string[] = [], paired = true, ctx: MatchupContext = NO_CONTEXT): Matchup {
   const notes: string[] = [];
   const bonus = back && paired ? bonusOf(back, support) : NO_BONUS;
   const st = (s: Stat) => lead.stats[s] + (s === 'hp' ? 0 : (bonus[s as ModStat] ?? 0));
@@ -223,14 +284,19 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
   const ws = weaponStats(lead.weapon);
   const effective = effectiveOn(w, foe.className);
   if (effective) notes.push(`${w!.name} is effective: Mt tripled`);
-  const tri = triangle(w, foe.weapon);
-  const [rankAtk, rankHit] = rankBonus(w, lead.className, false);
-  const [foeRankAtk, foeRankHit] = rankBonus(foe.weapon, foe.className, true);
+  const fw = foe.weapon;
+  const leadRank = rankOf(w, lead.className, false);
+  const foeRank = rankOf(fw, foe.className, true, foe.rank);
+  // The triangle, sized by the winner's rank; the loser drops its rank bonus (#250).
+  const tri = triangleOf(w, leadRank, fw, foeRank);
+  const [rankAtk, rankHit] = tri.aKeeps ? rankBonus(w, leadRank) : NO_RANK_BONUS;
+  const [foeRankAtk, foeRankHit] = tri.bKeeps ? rankBonus(fw, foeRank) : NO_RANK_BONUS;
   // Faires, breakers and the hit and avoid skills, both sides (the realism pass): the rest of a unit's skills are procs
-  // and stat bonuses the exchange doesn't play (`skills-in-combat`).
-  const leadAvoid = breakerOf(lead.skills, foe.weapon) + avoidSkill(lead.skills);
-  const foeAvoid = breakerOf(skills, w) + avoidSkill(skills);
-  const attack = (magic ? st('mag') : st('str')) + faireOf(lead.skills, w) + ws.mt * (effective ? 3 : 1) + rankAtk;
+  // and stat bonuses the exchange doesn't play (`skills-in-combat`). Outdoor Fighter and Gamble (#250).
+  const outdoor = (s: readonly string[] | ReadonlySet<string>) => (ctx.outdoors && has(s, 'Outdoor Fighter') ? 10 : 0);
+  const leadAvoid = breakerOf(lead.skills, fw) + avoidSkill(lead.skills) + outdoor(lead.skills);
+  const foeAvoid = breakerOf(skills, w) + avoidSkill(skills) + outdoor(skills);
+  const attack = (magic ? st('mag') : st('str')) + faireOf(lead.skills, w) + ws.mt * (effective ? 3 : 1) + rankAtk + tri.atk;
   let damage = Math.max(0, attack - (magic ? foe.stats.res : foe.stats.def));
   // Aegis covers bows, tomes and dragonstones; Pavise the rest, beaststones included (SF Skills).
   const aegisSide = (x: GameItem | undefined, m: boolean) => m || x?.kind === 'bow' || x?.kind === 'stone';
@@ -252,26 +318,27 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
     const bmagic = !!bw && (bw.kind === 'tome' || bw.magic === true);
     const bws = weaponStats(back.weapon);
     const beff = effectiveOn(bw, foe.className);
-    const [bRankAtk, bRankHit] = rankBonus(bw, back.className, false);
-    backDamage = Math.max(0, (bmagic ? back.stats.mag : back.stats.str) + faireOf(back.skills, bw) + bws.mt * (beff ? 3 : 1) + bRankAtk - (bmagic ? foe.stats.res : foe.stats.def));
+    const bRank = rankOf(bw, back.className, false);
+    const btri = triangleOf(bw, bRank, fw, foeRank);
+    const [bRankAtk, bRankHit] = btri.aKeeps ? rankBonus(bw, bRank) : NO_RANK_BONUS;
+    backDamage = Math.max(0, (bmagic ? back.stats.mag : back.stats.str) + faireOf(back.skills, bw) + bws.mt * (beff ? 3 : 1) + bRankAtk + btri.atk - (bmagic ? foe.stats.res : foe.stats.def));
     const bPlus = aegisSide(bw, bmagic) ? skills.has('Aegis+') : skills.has('Pavise+');
     if (bPlus || dragonskin) {
       backDamage = Math.floor(backDamage / 2);
       notes.push(`${bPlus ? (aegisSide(bw, bmagic) ? 'Aegis+' : 'Pavise+') : 'Dragonskin'} halves dual strikes too`);
     } else if (shield) notes.push(`${aegisSide(w, magic) ? 'Aegis' : 'Pavise'} may halve the lead’s hits; dual strikes get past it`);
-    const skl = lead.stats.skl + back.stats.skl;
-    dualStrikeRate = clamp(skl / 4 + STRIKE_BY_SUPPORT[support ?? 'none'] + (lead.skills.includes('Dual Strike+') || back.skills.includes('Dual Strike+') ? 10 : 0));
-    // The dual strike itself uses the back's own stats and weapon; a back with no weapon can't strike.
+    // The dual strike itself uses the back's own stats and weapon; a back with no weapon can't strike (the forecast shows 0%).
     if (bw) {
-      backHit = clamp(bws.hit + bRankHit + (back.stats.skl * 3 + back.stats.lck) / 2 + 5 * triangle(bw, foe.weapon) + breakerOf(back.skills, foe.weapon) + hitSkill(back.skills) - ((foe.stats.spd * 3 + foe.stats.lck) / 2 + breakerOf(skills, bw) + avoidSkill(skills)));
-      backCrit = clamp(bws.crit + back.stats.skl / 2 - foe.stats.lck);
+      const skl = lead.stats.skl + back.stats.skl;
+      dualStrikeRate = clamp(skl / 4 + STRIKE_BY_SUPPORT[support ?? 'none'] + (lead.skills.includes('Dual Strike+') || back.skills.includes('Dual Strike+') ? 10 : 0));
+      backHit = clamp(bws.hit + bRankHit + half(back.stats.skl * 3 + back.stats.lck) + btri.hit + breakerOf(back.skills, fw) + hitSkill(back.skills) + outdoor(back.skills) + gambleHit(back.skills) - (half(foe.stats.spd * 3 + foe.stats.lck) + foeAvoid));
+      backCrit = clamp(bws.crit + half(back.stats.skl) + gambleCrit(back.skills) - foe.stats.lck);
     } else backDamage = 0;
   }
   const total = damage * hits;
   const oneRounds = total >= foe.stats.hp;
   const oneRoundsWithDualStrikes = total + backDamage * hits >= foe.stats.hp;
   // The foe's side.
-  const fw = foe.weapon;
   const fmagic = !!fw && (fw.kind === 'tome' || fw.magic === true);
   const fmt = fw?.mt ?? 0;
   const fhit = fw?.hit ?? 0;
@@ -280,28 +347,34 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
   if (feff) notes.push(`${foe.name}’s ${fw!.name} is effective against the lead`);
   const leadDef = fmagic ? st('res') : st('def');
   const luna = skills.has('Luna+');
-  const worstHit = Math.max(0, (fmagic ? foe.stats.mag : foe.stats.str) + faireOf(skills, fw) + fmt * (feff ? 3 : 1) + foeRankAtk - (luna ? Math.floor(leadDef / 2) : leadDef));
+  const worstHit = Math.max(0, (fmagic ? foe.stats.mag : foe.stats.str) + faireOf(skills, fw) + fmt * (feff ? 3 : 1) + foeRankAtk - tri.atk - (luna ? Math.floor(leadDef / 2) : leadDef));
   const foeHits = fw ? (fw.brave ? 2 : 1) * (doubled ? 2 : 1) : 0;
-  // Counter returns the lead's damage when it hits in melee and doesn't kill.
-  const melee = !w || (w.range ?? '1') === '1';
-  const counter = skills.has('Counter') && melee && !oneRounds ? damage * Math.min(hits, Math.max(1, Math.ceil(foe.stats.hp / Math.max(1, damage)) - 1)) : 0;
+  // The lead attacks from a distance the foe can't answer from when it can (#249). Counter returns the lead's damage
+  // when it hits in melee and doesn't kill.
+  const { range, countered } = attackRange(w, fw);
+  const counter = skills.has('Counter') && range === 1 && !oneRounds ? damage * Math.min(hits, Math.max(1, Math.ceil(foe.stats.hp / Math.max(1, damage)) - 1)) : 0;
   if (counter) notes.push(`Counter returns ${counter}`);
   const worstRound = worstHit * foeHits + counter;
+  const counterRound = (countered ? worstHit * foeHits : 0) + counter;
+  if (w && fw && !countered && rangeOf(fw)) notes.push(`From ${range} tiles ${foe.name} can’t counter`);
   // Dual Guard (SF Dual System): both units' Def (Res against magic) / 4, + 0/2/5/7/10 by support, +10 with Dual Guard+.
   const guardStat = fmagic ? 'res' : 'def';
   const dualGuardRate = back
     ? clamp((lead.stats[guardStat] + back.stats[guardStat]) / 4 + GUARD_BY_SUPPORT[support ?? 'none'] + (lead.skills.includes('Dual Guard+') || back.skills.includes('Dual Guard+') ? 10 : 0))
     : 0;
   const survives = worstRound < lead.stats.hp;
-  const [sHit, sAvo, sCrit, sCritAvo] = back ? dualSupport(SUPPORT_RANK[support ?? 'none']) : [0, 0, 0, 0];
-  const hit = clamp(ws.hit + rankHit + (st('skl') * 3 + st('lck')) / 2 + sHit + 5 * tri + breakerOf(lead.skills, foe.weapon) + hitSkill(lead.skills) - ((foe.stats.spd * 3 + foe.stats.lck) / 2 + foeAvoid));
-  const crit = clamp(ws.crit + st('skl') / 2 + sCrit - foe.stats.lck);
-  const foeHit = skills.has('Hawkeye') ? 100 : clamp(fhit + foeRankHit + (foe.stats.skl * 3 + foe.stats.lck) / 2 - 5 * tri + breakerOf(skills, w) + hitSkill(skills) - ((st('spd') * 3 + st('lck')) / 2 + sAvo + leadAvoid));
-  const foeCrit = clamp(fcrit + foe.stats.skl / 2 - (st('lck') + sCritAvo));
+  // Dual Support: the back and every adjacent ally, by summed support rank (#250, SF Dual System).
+  let supportRank = (back ? SUPPORT_RANK[support ?? 'none'] : 0) + (ctx.adjacent ?? []).reduce((n, s) => n + SUPPORT_RANK[s ?? 'none'], 0);
+  if (supportRank && (lead.skills.includes('Dual Support+') || back?.skills.includes('Dual Support+'))) supportRank += 4;
+  const [sHit, sAvo, sCrit, sCritAvo] = supportRank ? dualSupport(supportRank) : [0, 0, 0, 0];
+  const hit = clamp(ws.hit + rankHit + half(st('skl') * 3 + st('lck')) + sHit + tri.hit + breakerOf(lead.skills, fw) + hitSkill(lead.skills) + outdoor(lead.skills) + gambleHit(lead.skills) - (half(foe.stats.spd * 3 + foe.stats.lck) + foeAvoid));
+  const crit = clamp(ws.crit + half(st('skl')) + sCrit + gambleCrit(lead.skills) - foe.stats.lck);
+  const foeHit = skills.has('Hawkeye') ? 100 : clamp(fhit + foeRankHit + half(foe.stats.skl * 3 + foe.stats.lck) - tri.hit + breakerOf(skills, w) + hitSkill(skills) + outdoor(skills) + gambleHit(skills) - (half(st('spd') * 3 + st('lck')) + sAvo + leadAvoid));
+  const foeCrit = clamp(fcrit + half(foe.stats.skl) + gambleCrit(skills) - (st('lck') + sCritAvo));
   if (skills.has('Hawkeye')) notes.push('Hawkeye: the foe always hits');
   if (luna) notes.push('Luna+: the foe’s hits ignore half your defence');
   if (skills.has('Vantage+')) notes.push('Vantage+: on its turn the foe strikes first');
-  return { foe, damage, hits, doubles, doubled, oneRounds, oneRoundsWithDualStrikes, dualStrikeRate, backDamage, backHit, backCrit, dualGuardRate, foeStrikes: foeHits, worstHit, worstRound, survives, hit, crit, foeHit, foeCrit, notes };
+  return { foe, damage, hits, doubles, doubled, oneRounds, oneRoundsWithDualStrikes, dualStrikeRate, backDamage, backHit, backCrit, dualGuardRate, foeStrikes: foeHits, worstHit, worstRound, range, countered, counterRound, survivesCounter: counterRound < lead.stats.hp, survives, hit, crit, foeHit, foeCrit, notes };
 }
 
 /** The top of FEW's `min~max` (or the one number), bonuses included: the worst case for the player. */
@@ -342,8 +415,11 @@ export function foeOf(g: EnemyGroup | BossRow, boss: boolean): Foe {
 
 /** The foes of a map on a difficulty: its boss rows first, then each enemy group. */
 export function foesOf(map: { readonly enemies: Readonly<Partial<Record<ChapterDifficulty, readonly EnemyGroup[]>>>; readonly bosses: Readonly<Partial<Record<string, readonly BossRow[]>>> }, difficulty: ChapterDifficulty, lunaticPlus = false): Foe[] {
-  const bosses = ((lunaticPlus && map.bosses['lunatic-plus']) || map.bosses[difficulty] || []).map((b) => foeOf(b, true));
-  const groups = (map.enemies[difficulty] ?? []).map((g) => foeOf(g, false));
+  // Lunatic foes fight at rank A (every Lunatic Prologue foe shows A, research #255); other difficulties' ranks aren't
+  // seen yet, so they keep the class-and-weapon reading.
+  const ranked = (f: Foe): Foe => (difficulty === 'lunatic' ? { ...f, rank: 'A' } : f);
+  const bosses = ((lunaticPlus && map.bosses['lunatic-plus']) || map.bosses[difficulty] || []).map((b) => ranked(foeOf(b, true)));
+  const groups = (map.enemies[difficulty] ?? []).map((g) => ranked(foeOf(g, false)));
   // Each boss's own row in the enemy table, counted once: of its class and HP, named as the boss or its stats within two
   // of the boss data's (#189: late maps and Apotheosis have many foes of a boss's class at 80 HP; they stay).
   const own = new Set<number>();
@@ -363,10 +439,14 @@ export function foesOf(map: { readonly enemies: Readonly<Partial<Record<ChapterD
   return [...bosses, ...groups.filter((_, i) => !own.has(i))];
 }
 
-/** How `bestWeapon` ranks a matchup: one-rounding first, then surviving, then damage, then hit. */
-export const bestKey = (r: Matchup): number => (r.oneRounds ? 1e6 : 0) + (r.survives ? 1e5 : 0) + r.damage * r.hits * 100 + r.hit;
+/**
+ * How `bestWeapon` ranks a matchup: one-rounding first, then surviving its counter, then damage, then no counter at
+ * all (#249: Thunder from 2 over a sword at equal damage), then hit.
+ */
+export const bestKey = (r: Matchup): number =>
+  (r.oneRounds ? 1e7 : 0) + (r.survivesCounter ? 1e6 : 0) + r.damage * r.hits * 1000 + (r.countered ? 0 : 500) + r.hit;
 
-/** The best of a unit's weapons against a foe: most damage, then hit. */
+/** The best of a unit's weapons against a foe: most damage, then no counter, then hit. */
 export function bestWeapon(fighter: Fighter, weapons: readonly NonNullable<Fighter['weapon']>[], back: Fighter | undefined, support: SupportLevel | null, foe: Foe, lunaticPlus: readonly string[], paired = true): { weapon: Fighter['weapon']; result: Matchup } | undefined {
   let best: { weapon: Fighter['weapon']; result: Matchup } | undefined;
   let bestK = 0;
