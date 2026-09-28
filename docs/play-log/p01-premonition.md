@@ -84,6 +84,14 @@ This is the Prepare page, which is what the session obeys.
 
 Filed at the end of this map, per #227: the gaps from P00 and P01, grouped by root cause. Settled rows wait for "Observed-play evidence" (#235) to register as observed play.
 
+- #239 Matchup shows Chrom doubling Validar and an 18-damage worst round; the game shows one hit and 21 (P01-T2a)
+- #240 Prepare page goes silent past its stance plan, with no lethal-counter warning (P01-T3)
+- #241 "Lock Robin and start" locks the untouched default Robin (P00-S3)
+- #242 With every Lunatic plan at 0% ±0.0, setup decisions have no signal (P00-S1, S2)
+- #243 In-play checks are offered for units that can't gain EXP (P01-S5)
+- #244 A map's Prepare card headlines the run's flawless chance (P00-S6)
+- Not filed: P00-S4 (first-load order; fine as is), P00-S5 (to settle when Lucina joins), P00-S7 (a note).
+
 ## Resume
 
 Next is **Prologue: The Verge of History**, from slot 2. Per protocol #228, **play waits until this batch's issues land**; then the run's app (`127.0.0.1:5247`) gets main pulled and re-solves.
