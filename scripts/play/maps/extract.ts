@@ -66,23 +66,26 @@ const jobNames = new Map(jobs.flatMap(([jid, at]) => {
   const name = key ? text.get(key) : undefined;
   return name ? [[jid, name] as const] : [];
 }));
-/** A person file's people (`data/person/<name>`): each `PID_*` to its class's English name. */
-const peopleIn = (file: string): Map<string, string> => {
+/** A person file's people (`data/person/<name>`): each `PID_*` to its class's English name and its own. */
+type Person = { readonly class: string; readonly name?: string };
+const peopleIn = (file: string): Map<string, Person> => {
   const path = join(romfs, `data/person/${file}.bin.lz`);
   if (!existsSync(path)) return new Map();
   const p = Bin.load(path);
-  const out = new Map<string, string>();
+  const out = new Map<string, Person>();
   for (const q of p.pointers) {
     const pid = p.str(q);
     const jid = pid?.startsWith('PID_') ? p.str(q + 8) : null;
-    const name = jid ? jobNames.get(jid) : undefined;
-    if (pid && name) out.set(pid, name);
+    const cls = jid ? jobNames.get(jid) : undefined;
+    const mpid = cls ? p.str(q + 12) : null;
+    const name = mpid ? text.get(mpid) : undefined;
+    if (pid && cls) out.set(pid, { class: cls, ...(name ? { name } : {}) });
   }
   return out;
 };
 /** The named characters every chapter shares (`static`), then a chapter's own people. */
 const STATIC_PEOPLE = peopleIn('static');
-const peopleOf = (rom: string): Map<string, string> => new Map([...STATIC_PEOPLE, ...peopleIn(rom)]);
+const peopleOf = (rom: string): Map<string, Person> => new Map([...STATIC_PEOPLE, ...peopleIn(rom)]);
 const moveCosts = Array.from({ length: rowCount }, (_, r) =>
   Array.from({ length: categoryCount }, (_, c) => { const v = game.u8(costAt + r * stride + c); return v === 0xff ? null : v; }));
 
@@ -148,11 +151,11 @@ for (const ch of chapters) {
       const unit = () => {
         const pid = d.str(at);
         const items = Array.from({ length: 5 }, (_, k) => d.str(at + 0x1c + k * 8)).flatMap((iid) => (iid ? [text.get(`M${iid}`) ?? iid] : []));
-        const cls = pid ? people.get(pid) : undefined;
-        return { ...(cls ? { class: cls } : {}), ...(items.length ? { items } : {}) };
+        const who = pid ? people.get(pid) : undefined;
+        return { ...(who?.name ? { name: who.name } : {}), ...(who ? { class: who.class } : {}), ...(items.length ? { items } : {}) };
       };
       spawns.push({
-        faction, pid: d.str(at), team,
+        faction, pid: d.str(at), team, ...(team === 'player' && d.str(at) && people.get(d.str(at)!)?.name ? { name: people.get(d.str(at)!)!.name } : {}),
         at: [d.u8(at + 0x16), d.u8(at + 0x17)], to: [d.u8(at + 0x18), d.u8(at + 0x19)],
         difficulties: difficulties(f1, f2), ...(f1 & 0x10 ? { deploySlot: true } : {}), ...(f1 & 0x02 ? { forced: true } : {}),
         ...(team === 'player' ? {} : { ...unit(), ...ai(), group: d.u8(at + 0x69), ...(f2 & 0x10 ? { stationary: true } : {}), ...(f2 & 0x08 ? { boss: true } : {}) }),

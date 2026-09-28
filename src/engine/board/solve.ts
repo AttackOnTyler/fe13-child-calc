@@ -615,3 +615,20 @@ export function actionText(b: Board, a: PlannedAction): string {
 }
 
 export type { GameItem };
+
+/**
+ * The game's command menu for a unit at a tile (#266's try a move): each attack with each weapon that reaches (its
+ * forecast), Staff, Items (a trade first when it needs one), Pair Up (the ally's tile), Separate, and Wait.
+ */
+export function menuAt(b: Board, unitId: string, tile: Tile): PlannedAction[] {
+  const u = playerById(b, unitId);
+  if (!u) return [];
+  const s: State = { board: b, acted: new Set(), actions: [], attacks: [], goal: 0, spent: 0, miss: 0 };
+  const rest = options(s, u, 999).filter((a) => sameTile(a.to, tile) && a.command.kind !== 'attack');
+  const attacks: PlannedAction[] = [];
+  for (const e of liveEnemies(b))
+    for (const w of u.weapons)
+      if (reaches(w.item, manhattan(tile, e.at)))
+        attacks.push({ unit: u.id, from: u.at, to: tile, command: { kind: 'attack', target: e.id, weapon: w.item.name }, forecast: attackForecast(b, u, e, tile, w), why: '' });
+  return [...attacks, ...rest].map((a) => ({ ...a, why: whyOf(b, a) }));
+}

@@ -14,7 +14,7 @@
  *
  * Started by `solve-client.ts`, which terminates it to stop a solve.
  */
-import { READING_SECONDS, SOLVE_SECONDS, createEngine, type Assumptions, type Ceiling, type Engine, type FlawlessChance, type Plan, type Run, type SearchCursor } from '../engine';
+import { READING_SECONDS, SOLVE_SECONDS, createEngine, solvePositions, type Assumptions, type Ceiling, type Engine, type FlawlessChance, type Plan, type Run, type SearchCursor } from '../engine';
 import type { SolveReply, SolveRequest } from './solve-client';
 import { pacer } from './pace';
 
@@ -33,6 +33,8 @@ const deadline = (seconds: number) => {
 };
 
 scope.onmessage = ({ data: m }) => {
+  // The position plan needs no engine: the solver works on the board alone.
+  if (m.kind === 'positions') return void scope.postMessage({ id: m.id, kind: 'positions', plan: solvePositions(m.board, m.options), done: true });
   const engine = engineFor(m.assumptions);
   const pins = 'pins' in m && m.pins ? { pins: m.pins } : {};
   if (m.kind === 'solve') {

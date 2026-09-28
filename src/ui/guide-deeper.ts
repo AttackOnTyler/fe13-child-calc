@@ -32,6 +32,7 @@ export type DeeperId =
   | 'chapter-log'
   | 'record-results'
   | 'matchups'
+  | 'positions'
   | 'threats'
   | 'deployment'
   | 'supply'
@@ -380,12 +381,30 @@ export const DEEPER: readonly DeeperEntry[] = [
       'Units who join on the map from its start (the Prologue’s four, Chapter 3’s Sumia) are in the lineup too, marked “joins”, with their join data; Premonition’s Chrom and Robin use that map’s own setup, marked “this map only”. Units not fielded are listed under the cards with why: a pin, a reserve, not in the wishlist, no room, or arriving later (with the turn, or how).',
       'Matchups, collapsed in the column: pick a foe (the boss is starred) to see each pair against it in the stance its stance plan fights in. Together, the front with its back’s pair-up bonus and dual strikes; side by side, each unit with the other in Attack Stance (dual strikes, no pair-up bonus); apart, or side by side only some of the time, each unit alone. Each row uses your latest entry’s stats and the unit’s best weapon from its inventory (forges count): damage, whether one round kills (with dual strikes landing, too), doubling, the counter its attack takes (none when it strikes from a distance the foe can’t answer, like Thunder from 2 on a sword) and the worst round the foe deals it on enemy phase, each against its HP, and hit and crit both ways.',
       'Dual strikes get past plain Pavise and Aegis but not Pavise+ or Aegis+. On Lunatic+ the table assumes the worst of the map’s random-skill pool.',
-      'Weapon ranks aren’t recorded: a unit’s rank bonus is read as the rank its weapon needs, a foe’s as A in an advanced class (a stated blind spot). There’s no movement planning: no source publishes terrain or enemy AI.',
+      'Weapon ranks aren’t recorded: a unit’s rank bonus is read as the rank its weapon needs, a foe’s as A on Lunatic or in an advanced class (a stated blind spot). The triangle is sized by the winning side’s rank, and the losing side loses its rank bonus. The matchups have no positions; the position plan above them does (How do I play a map turn by turn?).',
     ],
     jump: { to: 'log', target: 'prepare' },
     terms: [
       { term: 'matchup', def: 'A unit, with a weapon and in its pair’s fighting stance, against one foe: damage, one-round, doubling, the counter and the enemy-phase worst round with survival, hit and crit.' },
       { term: 'preparation page', def: 'A map’s page for getting ready: a pair card for each pair and unit alone in the plan’s lineup, beside the map’s no-death chance, one Before this map checklist, threats, the shopping list, seals, loadouts, checks, matchups and the chapter guide.' },
+    ],
+  },
+  {
+    id: 'positions',
+    question: 'How do I play a map turn by turn?',
+    answer: [
+      'On a map whose grid is captured (every story map and paralogue), the preparation page opens with the position plan: a script for the next three turns and an outline to the rout, solved on the real terrain with the enemies’ own AI (when each group wakes, who it can reach, whom it likely attacks).',
+      'Its headline is the hard line: no death without a crit. After every player phase no unit may be killable on enemy phase with every non-crit hit landing, doubles counted, and no attack’s counter may kill its attacker. When no line keeps it, the page says which turns break and shows the least-risk line. It also gives the crit risk over the planned turns, the rout turn against the play’s, and any turn where the play’s “held back” units can’t all stand out of reach (the no-death chance above assumes they can).',
+      'Each turn lists its actions in order: the unit, its tile, the command (Attack with which weapon, Staff, Items, Trade, Pair Up, Switch, Separate, Wait), the forecast and why. On the right, each unit’s worst case, a “danger to” picker and the board: red where an enemy can strike, dark red where the worst case kills the unit picked, numbered moves, dashed ghosts where units start and red dashes for the enemies’ predicted moves.',
+      'Play it and confirm or correct: ✓ Played as planned when every fight went as forecast, or tap how each fight went (missed, crit, killed, Dual Strike; the counter hit or missed) and the rest of the turn re-solves. Then the predicted enemy phase: ✓ As predicted, or fix an attack (its target, its hit, the counter). A turn played as forecast is two taps. If the board drifts, put a unit (or foe) on its real tile or set an HP. Everything is kept in the run.',
+      'Try a move: click a unit, a tile it can reach, then a command from the game’s menu there. The turn re-solves around it, and the page lists what’s better, worse and the same than the plan: the hard line, lethal counters, kills, damage, foes left, HP after, wakes and the rout turn. Use your version, go back, or try another tile.',
+      'On turn 1 you can tap what each enemy rolled (its random skills); until then it’s read with all of them.',
+    ],
+    jump: { to: 'log', target: 'prepare' },
+    terms: [
+      { term: 'hard line', def: 'No death without a crit: after each player phase no unit is killable by the enemy phase with every non-crit hit landing, and no planned attack’s counter can kill.' },
+      { term: 'gang-up worst case', def: 'Every awake enemy that can reach a unit’s tile attacks it, every non-crit hit landing: targeting-free, so safe whatever the AI picks.' },
+      { term: 'confirm or correct', def: 'Tapping how each fight and the enemy phase really went; the plan re-solves from the board that leaves.' },
     ],
   },
   {
@@ -457,7 +476,7 @@ export const DEEPER: readonly DeeperEntry[] = [
 export const DEEPER_GROUPS: readonly { readonly title: string; readonly ids: readonly DeeperId[] }[] = [
   {
     title: 'Your run',
-    ids: ['start', 'robin-choice', 'inbox-before', 'wishlist', 'why', 'matchups', 'deployment', 'threats', 'supply', 'record-results', 'inbox-after', 'loss', 'chapter-log', 'map-data', 'how-to-run', 'assumption'],
+    ids: ['start', 'robin-choice', 'inbox-before', 'wishlist', 'why', 'matchups', 'positions', 'deployment', 'threats', 'supply', 'record-results', 'inbox-after', 'loss', 'chapter-log', 'map-data', 'how-to-run', 'assumption'],
   },
   {
     title: 'Exploring',

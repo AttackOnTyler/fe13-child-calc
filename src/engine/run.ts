@@ -27,6 +27,7 @@ import { parseItemsUsed, type ItemUsed } from './item-plan';
 import type { Plan, PlanPin } from './solve/plan';
 import { parsePins } from './solve/pins';
 import type { CheckOutcome, Observation } from './checks';
+import type { PositionEvent } from './board/log';
 import { EMPTY_ROSTER, parseRoster, withSpouse, withState, type Roster, type RosterUnit, type RunFacts } from './roster';
 
 export type SupportLevel = 'C' | 'B' | 'A' | 'S';
@@ -147,6 +148,11 @@ export type Run = {
   readonly version: 2;
   /** Lunatic+ random skills the player saw on a map's enemies (#120): map id → foe key → skills. */
   readonly seen?: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>>;
+  /**
+   * The position plan's inputs on each captured map (#266), by map id: every action played with its outcome, each enemy
+   * phase as confirmed or fixed, the fallbacks. The board is replayed from them (`replay` in engine/board/log).
+   */
+  readonly positions?: Readonly<Record<string, readonly PositionEvent[]>>;
   /**
    * Everything on the roster but unit states and spouses: Run facts. A migrated run's rule-outs are empty (they became
    * pins); nothing writes them since #212 retired the Plan page.
@@ -941,7 +947,29 @@ export function parseRunFields(raw: Record<string, unknown>): Run {
   // The pins (#200), #193's item pins (`itemPins`, before #200) read into them.
   const pins = parsePins(raw.pins, raw.itemPins);
   const withGoals: Run = { ...withCounts, ...(Object.keys(goals).length ? { sideGoals: goals } : {}), ...(renown ? { renown } : {}), ...(pins.length ? { pins } : {}) };
-  return Object.keys(seen).length ? { ...withGoals, seen } : withGoals;
+  const positions = parsePositions(raw.positions);
+  const withPositions: Run = Object.keys(positions).length ? { ...withGoals, positions } : withGoals;
+  return Object.keys(seen).length ? { ...withPositions, seen } : withPositions;
+}
+
+const EVENT_KINDS = new Set(['act', 'enemy', 'place', 'hp', 'skills']);
+/** The position plan's events as saved: kept as written when each has a known kind (the board replays them). */
+function parsePositions(raw: unknown): Record<string, PositionEvent[]> {
+  const out: Record<string, PositionEvent[]> = {};
+  for (const [map, events] of Object.entries(isObject(raw) ? raw : {}))
+    if (Array.isArray(events) && MAPS.some((m) => m.id === map)) {
+      const ok = events.filter((e): e is PositionEvent => isObject(e) && EVENT_KINDS.has(e.kind as string));
+      if (ok.length) out[map] = ok;
+    }
+  return out;
+}
+
+/** A map's position-plan events replaced (#266); an empty list clears them. */
+export function withPositionEvents(run: Run, map: string, events: readonly PositionEvent[]): Run {
+  const { [map]: _, ...rest } = run.positions ?? {};
+  const positions = events.length ? { ...rest, [map]: events } : rest;
+  const { positions: __, ...base } = run;
+  return Object.keys(positions).length ? { ...base, positions } : base;
 }
 
 /** The run as a file (JSON): `run:v2` as it is, read back by `importRun`. */

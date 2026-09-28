@@ -31,8 +31,8 @@ export const MAP_PREMONITION = {
    "xxxxxxxxxxxxxxxxxxxxxxxxxxx"
  ],
  spawns: [
-  {"faction":"Player","pid":"PID_P001_クロム","team":"player","at":[2,5],"to":[2,5],"difficulties":["normal","hard","lunatic"]},
+  {"faction":"Player","pid":"PID_P001_クロム","team":"player","name":"Chrom","at":[2,5],"to":[2,5],"difficulties":["normal","hard","lunatic"]},
   {"faction":"Player","pid":"PID_P001_プレイヤー","team":"player","at":[3,4],"to":[3,4],"difficulties":["normal","hard","lunatic"]},
-  {"faction":"Enemy","pid":"PID_P001_ボス","team":"enemy","at":[13,5],"to":[13,5],"difficulties":["normal","hard","lunatic"],"class":"Sorcerer","items":["Grima's Truth"],"ai":{"start":"Null","mission":"Null","attack":"Null","move":"Null"},"group":0,"stationary":true,"boss":true},
+  {"faction":"Enemy","pid":"PID_P001_ボス","team":"enemy","at":[13,5],"to":[13,5],"difficulties":["normal","hard","lunatic"],"name":"Validar","class":"Sorcerer","items":["Grima's Truth"],"ai":{"start":"Null","mission":"Null","attack":"Null","move":"Null"},"group":0,"stationary":true,"boss":true},
  ],
 } as const;

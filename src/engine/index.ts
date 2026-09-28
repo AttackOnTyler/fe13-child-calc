@@ -251,6 +251,7 @@ export {
   waitsForRobin,
   recordFallen,
   withConfirmed,
+  withPositionEvents,
   recordMarriage,
   recordMissed,
   unrecordLoss,
@@ -2373,3 +2374,5 @@ export function createEngine(assumptions: Assumptions = DEFAULT_ASSUMPTIONS): En
 
   return engine;
 }
+
+export * from './board';
