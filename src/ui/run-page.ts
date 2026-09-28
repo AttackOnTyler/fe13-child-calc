@@ -355,6 +355,8 @@ export type FlawlessReadout = {
   readonly found: readonly string[];
   /** What the search found less its improvements and close calls: the inbox lists those as its own items (#204). */
   readonly notes: readonly string[];
+  /** With a 0% headline (no run gets through), where the runs die, shown under the chance itself (`noRunGetsThrough`). */
+  readonly dies?: { readonly text: string; readonly marks: readonly WhyMark[] };
   /** The plan's roadmap (#194); absent once the endpoint is recorded. */
   readonly roadmap?: RoadmapReadout;
   /** The plan's item plan (#193), and the plan itself (its wishlist offers the item pins' units); absent once the endpoint is recorded. */
@@ -502,7 +504,6 @@ function readoutOf(
   const improvements = progress ? [...progress.proposals.map((p) => `Improvement: ${p.edits.join('; ')}: ${differenceText(p.gain, p.margin, p.close, p.turns)}`), ...calls.map((c) => `${c.label}: ${differenceText(c.gain, c.margin, true, c.turns)}`)] : [];
   const dies = noRunGetsThrough(r);
   const notes = [
-    ...(dies ? [dies.text] : []),
     ...(progress
       ? [
         ...progress.pruned.map((c) => `Not tried: ${c.label} (its ceiling ${chanceText(c.ceiling)} is below the best found, ${chanceText(c.best)})`),
@@ -534,7 +535,7 @@ function readoutOf(
       ...r.sideGoals.filter((g) => g.key === m.key && g.chase && g.secured !== undefined).map((g): WhyMark => [`secured ${chanceText(g.secured!)}`, `side-goal:${g.id}`]),
     ]),
     found: [] as (readonly WhyMark[])[],
-    notes: notes.map((n): WhyMark[] => (dies && n === dies.text ? dies.marks : progress?.pinCost && n.startsWith('Your ') ? [[differenceText(progress.pinCost.cost, progress.pinCost.margin, progress.pinCost.verdict === 'close' || progress.pinCost.verdict === 'unclear'), 'edit:pin-cost']] : [])),
+    notes: notes.map((n): WhyMark[] => (progress?.pinCost && n.startsWith('Your ') ? [[differenceText(progress.pinCost.cost, progress.pinCost.margin, progress.pinCost.verdict === 'close' || progress.pinCost.verdict === 'unclear'), 'edit:pin-cost']] : [])),
     comparisons,
   };
   if (progress)
@@ -564,6 +565,7 @@ function readoutOf(
     ...(readings ? { readings } : {}),
     found: [...improvements, ...notes],
     notes,
+    ...(dies ? { dies } : {}),
     why,
   };
 }
@@ -940,6 +942,8 @@ export function flawlessSection(ctx: HeadlineContext, inInbox = false): HTMLElem
         'summary',
         {},
         h('b', {}, ...(r ? marked(r.text, r.why?.text) : ['Flawless chance: working it out…'])),
+        // No run gets through: where they die leads, in plain sight (not folded away with the detail).
+        r?.dies ? h('div', { class: 'small dies' }, ...marked(r.dies.text, r.dies.marks)) : null,
         // The stress-test ranges (#211), each explained in the Why panel; the stated assumptions tab beside them.
         h(
           'span',

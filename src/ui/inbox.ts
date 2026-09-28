@@ -534,10 +534,10 @@ export function afterLockReadout(engine: Engine, run: Run, state: InboxState): A
     const maps = progress?.chance.maps ?? [];
     const first = maps.findIndex((m) => m.noDeath === undefined);
     const past = first > 0 ? maps[first - 1]!.label : maps.find((m) => m.noDeath !== undefined && m.noDeath < 1)?.label;
-    const n = new Set(unreadable.map((r) => r.worst!.id)).size;
+    const n = unreadable.length;
     items.push({
       kind: 'unread',
-      text: `${n} milestone${n === 1 ? '' : 's'} (${listWords(unreadable.map((r) => name(r.unit)))}) can’t be read until a run gets past ${past ?? 'the maps where the runs die'}: no run reaches ${n === 1 ? 'it' : 'them'} with nobody lost.`,
+      text: `${n} unit${n === 1 ? '’s' : 's’'} milestones (${listWords(unreadable.map((r) => name(r.unit)))}) can’t be read until a run gets past ${past ?? 'the maps where the runs die'}: no run reaches them with nobody lost.`,
     });
   }
 

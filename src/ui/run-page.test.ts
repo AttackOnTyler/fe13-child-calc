@@ -101,8 +101,9 @@ describe('the flawless chance readout (#186)', () => {
     expect(r.text).toMatch(new RegExp(`^Flawless chance: ${chanceText(chance.chance).replace(/[.()]/g, '\\$&')} ±.* · searching…$`));
     expect(r.detail).toContain('It’s the best plan the search has found so far');
     expect(r.detail).toContain('worked out again on fresh runs, so picking it doesn’t inflate it');
-    // (The fixture's Lv 10 army reads 0% at the Endgame: the headline card leads with where its runs die.)
-    expect(r.found.filter((x) => !x.startsWith('No run gets through'))).toEqual([
+    // The fixture's Lv 10 army reads 0% at the Endgame: the headline card leads with where its runs die.
+    if (chance.chance === 0) expect(r.dies!.text).toMatch(/^No run gets through with nobody lost\./);
+    expect(r.found).toEqual([
       'Improvement: Chrom marries Olivia; Vaike marries Sully: +1.2 ±0.4',
       'Stahl marries Miriel: no measurable difference (−0.2 ±0.3)',
       'Not tried: Gaius marries Nowi (its ceiling 20.0% is below the best found, 50.0%)',
@@ -113,8 +114,8 @@ describe('the flawless chance readout (#186)', () => {
     expect(solvedReadout(engine, run, { ...progress, done: true, converged: true, pinCost }).found).toContain('Your 2 pins cost +3.1 ±1.2: the best plan found with them lifted, less the best found with them');
     const free = { ...pinCost, cost: -0.001, verdict: 'close' } as const;
     expect(solvedReadout(engine, run, { ...progress, done: true, converged: true, pinCost: free }).found).toContain('Your 2 pins cost no measurable difference (−0.1 ±1.2): the best plan found with them lifted, less the best found with them');
-    // Worked out on the page, there's nothing found to list (only where the runs die, at 0%).
-    expect(flawlessReadout(engine, run, { runs: 1 }).found.filter((x) => !x.startsWith('No run gets through'))).toEqual([]);
+    // Worked out on the page, there's nothing found to list.
+    expect(flawlessReadout(engine, run, { runs: 1 }).found).toEqual([]);
   });
 
   it('shows the ceiling at Apotheosis, now that its foes carry their forged weapons (#189)', () => {
