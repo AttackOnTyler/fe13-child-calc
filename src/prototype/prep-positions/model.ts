@@ -109,67 +109,58 @@ const start = (ids: string[]) => Object.fromEntries(ENEMIES.filter((e) => ids.in
 
 export const SCRIPT: Turn[] = [
   {
-    n: 1, detailed: true, title: 'Wall with Frederick; keep Robin and Lissa out of reach', safe: true, crit: 0.8,
-    safety: 'Frederick walls; everyone else ends out of reach.',
-    allies: { fre: [2, 12], chr: [2, 12], rob: [3, 14], lis: [2, 14] }, foes: { ...start([...SOUTH, ...NORTH]), g: [8, 1] }, awake: [...SOUTH, 'g'],
+    n: 1, detailed: true, title: 'Frederick charges: kill the Myrmidon, draw the south onto him', safe: true, crit: 1.2,
+    safety: 'Found by a search over the grid (search-t1.ts): 36 safe forward openings; this one draws the most foes onto Frederick while Robin and Lissa stay out of every reach.',
+    allies: { fre: [5, 10], chr: [5, 10], rob: [2, 14], lis: [3, 13] }, foes: { m2: [9, 12], b1: [1, 8], b2: [7, 9], w: [10, 6], ...start(NORTH), g: [8, 1] }, awake: ['m2', 'b1', 'b2', 'w', 'g'], dead: ['m1'],
     actions: [
-      { id: '1a', unit: 'chr', to: [2, 14], cmd: 'Pair Up', target: 'fre', pair: 'Frederick leads, Chrom behind', why: 'Chrom out of reach as the back; +3 Spd, +3 Lck to Frederick (Lord pair-up). Starts Chrom × Frederick support points.' },
-      { id: '1b', unit: 'fre', to: [2, 12], cmd: 'Wait', why: 'Draws the southern Myrmidon and Barbarian onto the wall: both die or break on counters.' },
-      { id: '1c', unit: 'lis', to: [2, 14], cmd: 'Wait', why: 'Out of every foe’s reach (checked against all 5 awake).' },
-      { id: '1d', unit: 'rob', to: [3, 14], cmd: 'Wait', equip: 'Thunder', why: 'Out of reach; adjacent to Lissa (+10 hit next turn). Ends holding Thunder: counters at 1–2.' },
+      { id: '1a', unit: 'chr', to: [2, 14], cmd: 'Pair Up', target: 'fre', pair: 'Frederick leads, Chrom behind', why: 'Chrom rides along out of reach; +3 Spd, +3 Lck to Frederick. Chrom × Frederick support points.' },
+      { id: '1b', unit: 'fre', to: [5, 10], cmd: 'Attack', target: 'm1', forecast: '27 vs 26 HP · 100% · counter 2 at 73% · DS 35%', why: 'A turn-1 kill, and (5,10) is the tile the southern Myrmidon and both Barbarians can reach — nobody else can be.', exp: 'Frederick +11' },
+      { id: '1c', unit: 'lis', to: [3, 13], cmd: 'Wait', why: 'Out of every foe’s reach; 4 moves from Frederick for a heal on T3.' },
+      { id: '1d', unit: 'rob', to: [2, 14], cmd: 'Wait', equip: 'Thunder', why: 'Out of reach; from here (4,12) is 4 moves: Thunder range 2 onto the western Barbarian next turn.' },
     ],
     enemy: [
-      { id: 'm1', to: [2, 11], does: 'attacks Frederick: 0 dmg · Frederick’s counter 27 kills it' },
-      { id: 'b1', to: [1, 12], does: 'attacks Frederick: 5 dmg · counter 24 (→ 6 HP)' },
-      { id: 'm2', to: [4, 12], does: 'moves up, no target in reach' },
-      { id: 'b2', to: [5, 12], does: 'moves up, no target in reach' },
+      { id: 'm2', to: [5, 11], does: 'attacks Frederick: 2 dmg · counter 27 kills it' },
+      { id: 'b1', to: [4, 10], does: 'attacks Frederick: 5 dmg · counter 24 (→ 6 HP)' },
+      { id: 'b2', to: [6, 10], does: 'attacks Frederick: 5 dmg · counter 24 (→ 6 HP)' },
       { id: 'w', to: [8, 9], does: 'moves up, no target in reach' },
     ],
   },
   {
-    n: 2, detailed: true, title: 'Kill both near threats; Robin finishes from range 2', safe: true, crit: 1.4,
-    safety: 'Both near threats die before enemy phase; the Barbarian can reach Robin only.',
-    allies: { fre: [3, 12], chr: [3, 12], rob: [2, 13], lis: [2, 12] }, foes: { b2: [5, 12], w: [8, 9], ...start(NORTH), g: [8, 1] }, awake: ['b2', 'w', 'g'], dead: ['m1', 'm2', 'b1'],
+    n: 2, detailed: true, title: 'Frederick kills the Mage; Robin finishes a Barbarian from range 2', safe: true, crit: 1.0,
+    safety: 'The one 6-HP Barbarian left can reach Robin (14 < 19) and Frederick, not Lissa in the corner.',
+    allies: { fre: [8, 10], chr: [8, 10], rob: [4, 12], lis: [1, 14] }, foes: { b2: [6, 10], ...start(NORTH), g: [8, 1] }, awake: ['b2', 'g'], dead: ['m1', 'm2', 'b1', 'w'],
     actions: [
-      { id: '2a', unit: 'fre', to: [3, 12], cmd: 'Attack', target: 'm2', forecast: '27 vs 26 HP · 100% · counter 6 at 73% · DS 35%', why: 'The only unit that kills the Myrmidon; alive, it doubles Robin (24 ≥ 19).', exp: 'Frederick +11' },
-      { id: '2b', unit: 'rob', to: [2, 13], cmd: 'Attack', target: 'b1', forecast: 'Thunder 8 vs 6 HP · 83% · no counter (range 2)', why: 'Range 2: the Barbarian can’t counter. Lissa adjacent: +10 hit.', exp: 'Robin +30 (Veteran)', branch: 'If Thunder misses: Lissa stays at (2,14), Robin waits; the Barbarian can reach only Robin (12 < 19). Still safe.' },
-      { id: '2c', unit: 'lis', to: [2, 12], cmd: 'Heal', target: 'fre', forecast: '+10 HP', why: 'Out of reach of the Elwind Mage at (8,9) and the Barbarian (blocked).', exp: 'Lissa +17' },
+      { id: '2a', unit: 'fre', to: [8, 10], cmd: 'Attack', target: 'w', forecast: '27 vs 23 HP · 100% · counter 13 at 55%', why: 'The Mage is the south’s only foe that can kill Lissa at range 2; it dies before it gets the chance.', exp: 'Frederick +11' },
+      { id: '2b', unit: 'rob', to: [4, 12], cmd: 'Attack', target: 'b1', forecast: 'Thunder 8 vs 6 HP · 83% · no counter (range 2)', why: 'Range 2: no counter.', exp: 'Robin +30 (Veteran)', branch: 'If Thunder misses: Robin still ends at (4,12); both 6-HP Barbarians can reach him (14 + 14 = 28 ≥ 19). Re-plan: Lissa stays cornered, and Frederick’s attack goes to the (6,10) Barbarian instead of the Mage.' },
+      { id: '2c', unit: 'lis', to: [1, 14], cmd: 'Wait', why: 'The corner: out of the last Barbarian’s reach.' },
     ],
-    enemy: [
-      { id: 'b2', to: [3, 13], does: 'attacks Robin: 14 dmg (→ 5) · Thunder counter 8' },
-      { id: 'w', to: [4, 10], does: 'moves up, no target in reach' },
-    ],
+    enemy: [{ id: 'b2', to: [5, 12], does: 'attacks Robin: 14 dmg (→ 5) · Thunder counter 8 kills it at 83%' }],
   },
   {
-    n: 3, detailed: true, title: 'No safe line: two foes can each kill Lissa without a crit', safe: false, crit: 1.1,
-    safety: 'Breaks the hard line. The Elwind Mage doubles Lissa (12 × 2 = 24 ≥ 17) and the Barbarian doubles her too (16 × 2 = 32); the pair can kill only one. Least-risk line below: the Barbarian needs both hits (85% × 85% ≈ 72%) — so the fix is upstream: a 3-turn search would reject T2’s Lissa-heals-from-(2,12) before we get here (stub).',
-    allies: { fre: [4, 11], chr: [4, 11], rob: [1, 13], lis: [1, 14] }, foes: { b2: [3, 13], ...start(NORTH), g: [8, 1] }, awake: ['b2', 'g'], dead: ['m1', 'm2', 'b1', 'w'],
+    n: 3, detailed: true, title: 'South clear: heal up and stage out of the north’s reach', safe: true, crit: 0.0,
+    safety: 'Only the sleeping north and Garrick remain; nobody ends where group 1 would wake.',
+    allies: { fre: [6, 9], chr: [6, 9], rob: [5, 10], lis: [5, 9] }, foes: { ...start(NORTH), g: [8, 1] }, awake: ['g'], dead: ['m1', 'm2', 'b1', 'w', 'b2'],
     actions: [
-      { id: '3d', unit: 'chr', cmd: 'Trade', target: 'fre', why: 'Free before Frederick acts: Chrom’s Vulnerary to Frederick for T4–T5.' },
-      { id: '3a', unit: 'fre', to: [4, 11], cmd: 'Attack', target: 'w', forecast: '27 vs 23 HP · 100% · counter 13 at 55%', why: 'Of the two killers, the Mage reaches more tiles; the Barbarian can be walled off.', exp: 'Frederick +11' },
-      { id: '3c', unit: 'rob', to: [1, 13], cmd: 'Wait', equip: 'Thunder', why: 'Blocks one of the two tiles next to Lissa’s corner; takes at most 14 of 15 after the heal.' },
-      { id: '3b', unit: 'lis', to: [1, 14], cmd: 'Heal', target: 'rob', forecast: '+10 HP (5 → 15)', why: 'The corner: only (2,14) is open next to her, so only the Barbarian can reach her.', exp: 'Lissa +17' },
+      { id: '3a', unit: 'lis', to: [5, 9], cmd: 'Heal', target: 'fre', forecast: '+10 HP (16 → 26)', why: 'Frederick needs 26+ to take the north’s gang-up on T4.', exp: 'Lissa +17' },
+      { id: '3b', unit: 'fre', to: [6, 9], cmd: 'Wait', why: 'Stages 3 tiles from the bridge’s foot without waking group 1.' },
+      { id: '3c', unit: 'rob', to: [5, 10], cmd: 'Wait', why: 'Next to Lissa and Frederick: summed support ranks for next turn’s fights.' },
     ],
-    enemy: [{ id: 'b2', to: [2, 14], does: 'attacks Lissa (predicted: the kill) · 16 × 2 at 85%' }],
+    enemy: [],
   },
   {
-    n: 4, detailed: false, title: 'Clean up the south; stage for the pull', safe: true, crit: 0.4, allies: { fre: [5, 11], chr: [5, 11], rob: [2, 13], lis: [1, 14] }, foes: { ...start(NORTH), g: [8, 1] }, awake: ['g'], dead: ['m1', 'm2', 'b1', 'w', 'b2'],
-    safety: 'Outline: safe if the Barbarian dies.', outline: 'The pair kills the Barbarian (24 vs 14). Lissa heals Robin. Frederick stages at (5,11), out of the north’s reach.', actions: [], enemy: [],
+    n: 4, detailed: false, title: 'Pull the northern group onto the wall', safe: true, crit: 2.1, wakes: 'group 1 (2 Myrmidons, 2 Barbarians, Elthunder Mage)', allies: { fre: [7, 6], chr: [7, 6], rob: [5, 10], lis: [4, 10] }, foes: { ...start(NORTH), g: [8, 1] }, awake: [...NORTH, 'g'], dead: ['m1', 'm2', 'b1', 'w', 'b2'],
+    safety: 'Outline.', outline: 'Frederick to (7,6), the bridge’s foot: wakes group 1 on purpose (#254). The bridge lets only a few reach him; the Myrmidons die on counters.', actions: [], enemy: [],
   },
   {
-    n: 5, detailed: false, title: 'Pull the northern group onto the wall', safe: true, crit: 1.6, wakes: 'group 1 (2 Myrmidons, 2 Barbarians, Elthunder Mage)', allies: { fre: [7, 6], chr: [7, 6], rob: [5, 11], lis: [4, 11] }, foes: { ...start(NORTH), g: [8, 1] }, awake: [...NORTH, 'g'], dead: ['m1', 'm2', 'b1', 'w', 'b2'],
-    safety: 'Outline: worst case on Frederick 23 of 28 (Myrmidon, Myrmidon, Elthunder Mage).', outline: 'Frederick to (7,6), the bridge’s foot: wakes group 1 (a planned wake, #254). The Myrmidons die on counters.', actions: [], enemy: [],
+    n: 5, detailed: false, title: 'Finish the north', safe: true, crit: 1.2, allies: { fre: [8, 4], chr: [8, 4], rob: [7, 6], lis: [6, 6] }, foes: { g: [8, 1] }, awake: ['g'], dead: ['m1', 'm2', 'b1', 'w', 'b2', 'm3', 'm4', 'b3', 'b4', 't'],
+    safety: 'Outline.', outline: 'Frederick kills the Elthunder Mage; Robin chips a Barbarian from 2. Handoff: Chrom’s Vulnerary to Robin for Chapter 1.', actions: [], enemy: [],
   },
   {
-    n: 6, detailed: false, title: 'Finish the north', safe: true, crit: 0.9, allies: { fre: [8, 4], chr: [8, 4], rob: [7, 6], lis: [6, 6] }, foes: { g: [8, 1] }, awake: ['g'], dead: ['m1', 'm2', 'b1', 'w', 'b2', 'm3', 'm4', 'b3', 'b4', 't'],
-    safety: 'Outline.', outline: 'Frederick kills the Elthunder Mage; Robin chips a Barbarian from 2. Handoff: Chrom’s Rapier stays; Vulnerary to Robin for Chapter 1.', actions: [], enemy: [],
-  },
-  {
-    n: 7, detailed: false, title: 'Garrick, with crit-avoid from adjacency', safe: true, crit: 0.0, allies: { fre: [8, 2], chr: [8, 2], rob: [7, 2], lis: [9, 2] }, foes: { g: [8, 1] }, awake: ['g'], dead: ['m1', 'm2', 'b1', 'w', 'b2', 'm3', 'm4', 'b3', 'b4', 't'],
-    safety: 'Outline.', outline: 'Frederick attacks from (8,2) with Robin and Lissa adjacent: summed support rank raises crit-avoid past Garrick’s Gamble crit (5% → 0%). Rout on turn 7.', actions: [], enemy: [],
+    n: 6, detailed: false, title: 'Garrick', safe: true, crit: 5.0, allies: { fre: [8, 2], chr: [8, 2], rob: [7, 5], lis: [9, 5] }, foes: { g: [8, 1] }, awake: ['g'], dead: ['m1', 'm2', 'b1', 'w', 'b2', 'm3', 'm4', 'b3', 'b4', 't'],
+    safety: 'Outline. Nobody can stand next to Frederick for crit-avoid: Garrick’s Short Axe kills Robin or Lissa at range 1–2, so his 5% Gamble crit is accepted.', outline: 'Frederick attacks from (8,2); Garrick’s counter and his enemy-phase attack are the map’s biggest crit risk. Rout on turn 6.', actions: [], enemy: [],
   },
 ];
 
-export const HEADLINE = { crit: 5.8, rout: 7, stretch: 6, baseline: '11 turns, Lissa lost, one deviation' };
-export const HANDOFF = 'For Chapter 1 (no Preparations): Vulnerary → Robin; Chrom keeps the Rapier; Frederick’s Silver Lance at 20+ uses.';
+export const HEADLINE = { crit: 9.8, rout: 6, stretch: 6, baseline: '11 turns, Lissa lost, one deviation' };
+export const HANDOFF = 'For Chapter 1 (no Preparations): Vulnerary → Robin on T5; Chrom keeps the Rapier; Frederick’s Silver Lance at 20+ uses.';
 export const byId = (id: string) => [...ALLIES, ...ENEMIES].find((u) => u.id === id)!;

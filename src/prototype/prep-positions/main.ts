@@ -112,7 +112,7 @@ function variantA(): string {
   return `${headline()}${stepper()}<div class="colsA"><div>${focusPicker()}${board(t)}</div><div>
     <h2>T${t.n}: ${esc(t.title)}</h2>${safety(t)}
     ${t.detailed ? t.actions.map((a, i) => actionRow(t, a, i)).join('') : `<p class="outline">${esc(t.outline ?? '')}</p>`}
-    ${enemyReplay(t)}${turnIx === 0 ? skillTaps() : ''}${t.n >= 6 ? `<div class="card"><b>Next-map handoff</b><br/><small>${esc(HANDOFF)}</small></div>` : ''}</div></div>`;
+    ${enemyReplay(t)}${turnIx === 0 ? skillTaps() : ''}${t.n >= 5 ? `<div class="card"><b>Next-map handoff</b><br/><small>${esc(HANDOFF)}</small></div>` : ''}</div></div>`;
 }
 
 // ---- B: the script as a checklist -------------------------------------------------------------------------------
@@ -156,7 +156,7 @@ function variantD(): string {
     if (!cur) return `<section class="turn mini ${bad(s) ? 'bad' : ''}">${head}</section>`;
     return `<section class="turn cur ${bad(s) ? 'bad' : ''}">${head}
       ${s.detailed ? s.actions.map((a, j) => actionRow(s, a, j)).join('') : `<p class="outline">${esc(s.outline ?? '')}</p>`}
-      ${enemyReplay(s)}${s.n >= 6 ? `<div class="card"><b>Next-map handoff</b><br/><small>${esc(HANDOFF)}</small></div>` : ''}</section>`;
+      ${enemyReplay(s)}${s.n >= 5 ? `<div class="card"><b>Next-map handoff</b><br/><small>${esc(HANDOFF)}</small></div>` : ''}</section>`;
   };
   return `${headline()}<div class="colsC"><div>${stepper()}${turnIx === 0 ? skillTaps() : ''}<div class="script">${SCRIPT.map(card).join('')}</div></div>
     <div class="side"><h3>T${t.n}: ${esc(t.title)}</h3>${safety(t)}${focusPicker()}${board(t)}</div></div>`;
