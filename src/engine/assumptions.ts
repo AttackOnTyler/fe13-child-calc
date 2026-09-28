@@ -750,12 +750,14 @@ export const BLIND_SPOTS: readonly BlindSpot[] = [
   },
   {
     id: 'class-change-at-cap',
-    label: 'Class changes at the level cap or when needed',
+    label: 'Class changes only between maps, at the level cap or when needed',
     why:
       'Each class change the plan makes (a class-reached milestone) is used in the preparations after the unit reaches its level cap, or ' +
       'before the map that needs the class, whichever comes first, from level 10, with a seal the run holds or one an armory sells ' +
-      'there. Seals found mid-map aren’t used before the map ends, and only sure seals are picked up. Changing class earlier or later ' +
-      'moves its stats along the way.',
+      'there. Class changes happen only between maps: a unit that reaches its cap mid-map fights on in its class until the map ends ' +
+      '(its EXP past the cap is lost), where the game lets a seal be used on any turn, so milestones never name a mid-map seal. Seals ' +
+      'found mid-map aren’t used before the map ends, and only sure seals are picked up. Changing class earlier or later moves its ' +
+      'stats along the way.',
     lean: 'either',
     touches: ['flawless', 'milestone'],
   },

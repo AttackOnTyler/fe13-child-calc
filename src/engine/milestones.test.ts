@@ -122,6 +122,12 @@ describe('skill and recruitment milestones (#194)', () => {
 });
 
 describe('class-reached milestones (#194)', () => {
+  it('states that class changes happen only between maps, never a mid-map seal (spec story 37’s “possibly mid-map”)', () => {
+    const spot = engine.blindSpots().find((b) => b.id === 'class-change-at-cap')!;
+    expect(spot.label).toBe('Class changes only between maps, at the level cap or when needed');
+    expect(spot.why).toContain('milestones never name a mid-map seal');
+  });
+
   // Played through Chapter 9: Paralogue 4, then Chapters 10, 11 and 12 before the armory sells Master Seals.
   const run = playedThrough('chapter-9', { vaike: unit('Fighter', 15), sully: unit('Cavalier', 15), stahl: unit('Cavalier', 15) });
   const seeded = engine.seedPlan(run);
