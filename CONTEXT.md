@@ -374,11 +374,11 @@ The page for getting ready for the next map, reached from Next map: threats, dep
 _Avoid_: Prep screen, battle prep
 
 **Pair card**:
-The preparation page's card for one pair or solo unit in the roadmap's lineup for the next map: positions and partner, each unit's job, EXP priority and expected EXP, the milestone it feeds, an at-risk pin, the stance plan and the threats to it, with a count of its to-dos (the actions stay in the page's one checklist).
+The preparation page's card for one pair or solo unit in the roadmap's lineup for the next map: positions and partner, each unit's job, EXP priority and expected EXP, the milestone it feeds, an at-risk pin, the stance plan and the threats to it, the attacks whose counter can kill (with the safe order), with a count of its to-dos (the actions stay in the page's one checklist).
 _Avoid_: Unit card, deployment row
 
 **Stance plan**:
-A pair's stances turn by turn on one map, from the simulation ("T1–4 together, Robin in front → T5 Switch: Chrom in front").
+A pair's stances turn by turn on one map, from the simulation ("T1–4 together, Robin in front → T5 Switch: Chrom in front"), ending with what to do past the play's last turn ("T6+ past the play").
 _Avoid_: Formation plan
 
 **No-death chance**:
