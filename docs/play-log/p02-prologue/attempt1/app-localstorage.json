@@ -1,0 +1,3510 @@
+{
+ "fe13-child-calc:scoring:v1": {
+  "preset": "physical-lead",
+  "edits": {},
+  "basis": "caps-lb",
+  "role": "preset",
+  "supportRank": "A",
+  "classMode": "auto",
+  "dlc": false,
+  "cols": {
+   "caps": true,
+   "mods": true,
+   "growths": false,
+   "speed": true,
+   "build": true
+  },
+  "context": "main-story",
+  "rally": 8,
+  "tonic": true,
+  "pairUp": 8,
+  "target": "context",
+  "margin": 2
+ },
+ "fe13-child-calc:checked-rules:v1": {
+  "answers": {
+   "back-without-dual-strike": {
+    "value": "nothing",
+    "how": "check",
+    "evidence": {
+     "run": "Lunatic Classic, Main story",
+     "map": "prologue"
+    },
+    "at": 1790604405089
+   }
+  },
+  "mismatches": []
+ },
+ "fe13-child-calc:guide:v1": {
+  "seen": true
+ },
+ "fe13-child-calc:run:v2": {
+  "version": 2,
+  "roster": {
+   "run": {
+    "gender": "M",
+    "asset": "str",
+    "flaw": "def",
+    "difficulty": "lunatic",
+    "mode": "classic",
+    "route": "main-story"
+   },
+   "states": {},
+   "spouses": {},
+   "ruleOuts": []
+  },
+  "entries": [
+   {
+    "id": "e1",
+    "map": "other",
+    "label": "Before the chapter log",
+    "snapshot": {
+     "units": {},
+     "convoy": [],
+     "gold": null,
+     "states": {},
+     "spouses": {}
+    },
+    "createdAt": 0
+   },
+   {
+    "id": "e2",
+    "map": "premonition",
+    "snapshot": {
+     "units": {},
+     "convoy": [],
+     "gold": null,
+     "states": {},
+     "spouses": {}
+    },
+    "createdAt": 1790565728468,
+    "forecast": {
+     "chance": 0,
+     "margin": 0,
+     "key": "premonition",
+     "map": "premonition",
+     "noDeath": 1,
+     "spend": 0,
+     "exp": [],
+     "readings": [
+      {
+       "unit": "lonqu",
+       "reading": "behind"
+      },
+      {
+       "unit": "sully",
+       "reading": "behind"
+      },
+      {
+       "unit": "lucina",
+       "reading": "behind"
+      },
+      {
+       "unit": "gregor",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "lissa",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "owain",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "robin",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "sumia",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "miriel",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "frederick",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "brady",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "maribelle",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "vaike",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "cordelia",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "henry",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "severa",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "gaius",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "panne",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "yarne",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "donnel",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "noire",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "tharja",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "inigo",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "libra",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "olivia",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "cherche",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "gerome",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "virion",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "nah",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "nowi",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "stahl",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "chrom",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "kellam",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "ricken",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "kjelle",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "cynthia",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "morgan-f",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "laurent",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "basilio",
+       "reading": "at-risk",
+       "pending": true
+      },
+      {
+       "unit": "flavia",
+       "reading": "at-risk",
+       "pending": true
+      }
+     ]
+    },
+    "checks": [
+     {
+      "rule": "back-without-dual-strike",
+      "text": "Chrom + Robin (M): in a combat where Robin (M) doesn\u2019t Dual Strike (or strikes for 0), note whether Robin (M) gains any EXP."
+     },
+     {
+      "rule": "back-kill-lead-exp",
+      "text": "Chrom + Robin (M): if Robin (M)\u2019s Dual Strike lands a kill, note whether Chrom still gains EXP."
+     },
+     {
+      "rule": "veteran-as-back",
+      "text": "Robin backs Chrom: after a Dual Strike of Robin\u2019s that deals damage but doesn\u2019t kill, on a foe of Robin\u2019s level and tier, note Robin\u2019s EXP (5: Veteran counts only leading; 7: it counts paired).",
+      "observed": "didnt-happen",
+      "outcome": "none"
+     }
+    ]
+   },
+   {
+    "id": "e3",
+    "map": "prologue",
+    "snapshot": {
+     "units": {
+      "chrom": {
+       "class": "Lord",
+       "level": 1,
+       "promoted": false,
+       "reclassed": false,
+       "exp": 0,
+       "stats": {
+        "hp": 20,
+        "str": 7,
+        "mag": 1,
+        "skl": 8,
+        "spd": 8,
+        "lck": 5,
+        "def": 7,
+        "res": 1
+       },
+       "skills": [
+        "Dual Strike+"
+       ],
+       "inventory": [
+        {
+         "item": "Falchion",
+         "uses": null
+        },
+        {
+         "item": "Rapier",
+         "uses": 35
+        }
+       ],
+       "supports": []
+      },
+      "robin": {
+       "class": "Tactician",
+       "level": 1,
+       "promoted": false,
+       "reclassed": false,
+       "exp": 40,
+       "stats": {
+        "hp": 19,
+        "str": 8,
+        "mag": 5,
+        "skl": 5,
+        "spd": 6,
+        "lck": 4,
+        "def": 5,
+        "res": 4
+       },
+       "skills": [
+        "Veteran"
+       ],
+       "inventory": [
+        {
+         "item": "Thunder",
+         "uses": 43
+        },
+        {
+         "item": "Bronze Sword",
+         "uses": 50
+        }
+       ],
+       "supports": []
+      },
+      "lissa": {
+       "class": "Cleric",
+       "level": 1,
+       "promoted": false,
+       "reclassed": false,
+       "exp": 34,
+       "stats": {
+        "hp": 17,
+        "str": 1,
+        "mag": 5,
+        "skl": 4,
+        "spd": 4,
+        "lck": 8,
+        "def": 3,
+        "res": 4
+       },
+       "skills": [
+        "Miracle"
+       ],
+       "inventory": [
+        {
+         "item": "Heal",
+         "uses": 28
+        },
+        {
+         "item": "Vulnerary",
+         "uses": 3
+        }
+       ],
+       "supports": []
+      },
+      "frederick": {
+       "class": "Great Knight",
+       "level": 2,
+       "promoted": false,
+       "reclassed": false,
+       "exp": 26,
+       "stats": {
+        "hp": 29,
+        "str": 14,
+        "mag": 2,
+        "skl": 13,
+        "spd": 11,
+        "lck": 6,
+        "def": 14,
+        "res": 4
+       },
+       "skills": [
+        "Discipline",
+        "Outdoor Fighter"
+       ],
+       "inventory": [
+        {
+         "item": "Silver Lance",
+         "uses": 16
+        }
+       ],
+       "supports": []
+      }
+     },
+     "convoy": [],
+     "gold": 5000,
+     "states": {
+      "lissa": "dead"
+     },
+     "spouses": {}
+    },
+    "createdAt": 1790604292513,
+    "forecast": {
+     "chance": 0,
+     "margin": 0,
+     "key": "prologue",
+     "map": "prologue",
+     "noDeath": 0.993935179064034,
+     "spend": 0,
+     "exp": [
+      {
+       "unit": "frederick",
+       "exp": 101,
+       "level": {
+        "low": 2.01,
+        "median": 2.01,
+        "high": 2.01
+       }
+      },
+      {
+       "unit": "chrom",
+       "exp": 173,
+       "level": {
+        "low": 2.73,
+        "median": 2.73,
+        "high": 2.73
+       }
+      },
+      {
+       "unit": "robin",
+       "exp": 0,
+       "level": {
+        "low": 1,
+        "median": 1,
+        "high": 1
+       }
+      },
+      {
+       "unit": "lissa",
+       "exp": 85,
+       "level": {
+        "low": 1.85,
+        "median": 1.85,
+        "high": 1.85
+       }
+      }
+     ],
+     "readings": [
+      {
+       "unit": "lucina",
+       "reading": "behind"
+      },
+      {
+       "unit": "kjelle",
+       "reading": "behind"
+      },
+      {
+       "unit": "lonqu",
+       "reading": "behind"
+      },
+      {
+       "unit": "sully",
+       "reading": "behind"
+      },
+      {
+       "unit": "gregor",
+       "reading": "behind"
+      },
+      {
+       "unit": "lissa",
+       "reading": "behind"
+      },
+      {
+       "unit": "owain",
+       "reading": "behind"
+      },
+      {
+       "unit": "frederick",
+       "reading": "behind"
+      },
+      {
+       "unit": "laurent",
+       "reading": "behind"
+      },
+      {
+       "unit": "miriel",
+       "reading": "behind"
+      },
+      {
+       "unit": "brady",
+       "reading": "behind"
+      },
+      {
+       "unit": "maribelle",
+       "reading": "behind"
+      },
+      {
+       "unit": "vaike",
+       "reading": "behind"
+      },
+      {
+       "unit": "cordelia",
+       "reading": "behind"
+      },
+      {
+       "unit": "henry",
+       "reading": "behind"
+      },
+      {
+       "unit": "severa",
+       "reading": "behind"
+      },
+      {
+       "unit": "gaius",
+       "reading": "behind"
+      },
+      {
+       "unit": "panne",
+       "reading": "behind"
+      },
+      {
+       "unit": "yarne",
+       "reading": "behind"
+      },
+      {
+       "unit": "donnel",
+       "reading": "behind"
+      },
+      {
+       "unit": "noire",
+       "reading": "behind"
+      },
+      {
+       "unit": "tharja",
+       "reading": "behind"
+      },
+      {
+       "unit": "inigo",
+       "reading": "behind"
+      },
+      {
+       "unit": "libra",
+       "reading": "behind"
+      },
+      {
+       "unit": "olivia",
+       "reading": "behind"
+      },
+      {
+       "unit": "cherche",
+       "reading": "behind"
+      },
+      {
+       "unit": "gerome",
+       "reading": "behind"
+      },
+      {
+       "unit": "virion",
+       "reading": "behind"
+      },
+      {
+       "unit": "nah",
+       "reading": "behind"
+      },
+      {
+       "unit": "nowi",
+       "reading": "behind"
+      },
+      {
+       "unit": "stahl",
+       "reading": "behind"
+      },
+      {
+       "unit": "chrom",
+       "reading": "behind"
+      },
+      {
+       "unit": "kellam",
+       "reading": "behind"
+      },
+      {
+       "unit": "ricken",
+       "reading": "behind"
+      },
+      {
+       "unit": "basilio",
+       "reading": "behind"
+      },
+      {
+       "unit": "flavia",
+       "reading": "behind"
+      },
+      {
+       "unit": "cynthia",
+       "reading": "at-risk"
+      },
+      {
+       "unit": "morgan-f",
+       "reading": "at-risk"
+      },
+      {
+       "unit": "robin",
+       "reading": "at-risk"
+      },
+      {
+       "unit": "sumia",
+       "reading": "at-risk"
+      }
+     ]
+    },
+    "checks": [
+     {
+      "rule": "rally-exp",
+      "text": "Lissa can Rally: Rally once and note the EXP it gives (0 if no EXP bar appears).",
+      "observed": "didnt-happen",
+      "outcome": "none"
+     },
+     {
+      "rule": "back-without-dual-strike",
+      "text": "Frederick + Chrom: in a combat where Chrom doesn\u2019t Dual Strike (or strikes for 0), note whether Chrom gains any EXP.",
+      "observed": false,
+      "outcome": "checked"
+     },
+     {
+      "rule": "back-kill-lead-exp",
+      "text": "Frederick + Chrom: if Chrom\u2019s Dual Strike lands a kill, note whether Frederick still gains EXP.",
+      "observed": "didnt-happen",
+      "outcome": "none"
+     }
+    ]
+   }
+  ],
+  "pins": [
+   {
+    "kind": "robin-lock",
+    "robin": {
+     "gender": "M",
+     "asset": "str",
+     "flaw": "def"
+    },
+    "open": [
+     "gender",
+     "asset",
+     "flaw"
+    ]
+   }
+  ],
+  "adopted": {
+   "robin": {
+    "gender": "M",
+    "asset": "str",
+    "flaw": "def"
+   },
+   "wishlist": {
+    "endpoint": "endgame",
+    "units": [
+     {
+      "unit": "chrom",
+      "position": "lead",
+      "partner": "frederick",
+      "classId": "great-lord",
+      "build": [
+       "dual-strike-plus",
+       "bowfaire",
+       "luna",
+       "aether",
+       "defender"
+      ]
+     },
+     {
+      "unit": "frederick",
+      "position": "back",
+      "partner": "chrom",
+      "classId": "great-knight",
+      "build": [
+       "pavise",
+       "aegis",
+       "dual-guard-plus",
+       "luna",
+       "strength-plus-2"
+      ]
+     },
+     {
+      "unit": "basilio",
+      "position": "lead",
+      "partner": "virion",
+      "classId": "warrior",
+      "build": [
+       "rally-strength",
+       "axefaire",
+       "dual-guard-plus",
+       "counter",
+       "axebreaker"
+      ]
+     },
+     {
+      "unit": "virion",
+      "position": "back",
+      "partner": "basilio",
+      "classId": "sniper",
+      "build": [
+       "bowfaire",
+       "prescience",
+       "tomefaire",
+       "skill-plus-2",
+       "hit-rate-plus-20"
+      ]
+     },
+     {
+      "unit": "cherche",
+      "position": "lead",
+      "partner": "flavia",
+      "classId": "wyvern-lord",
+      "build": [
+       "strength-plus-2",
+       "tomefaire",
+       "deliverer",
+       "dual-support-plus",
+       "lancebreaker"
+      ]
+     },
+     {
+      "unit": "flavia",
+      "position": "back",
+      "partner": "cherche",
+      "classId": "hero",
+      "build": [
+       "pavise",
+       "armsthrift",
+       "sol",
+       "axebreaker",
+       "patience"
+      ]
+     },
+     {
+      "unit": "lucina",
+      "position": "lead",
+      "partner": "robin",
+      "classId": "great-lord",
+      "build": [
+       "dual-strike-plus",
+       "bowfaire",
+       "luna",
+       "aether",
+       "defender"
+      ]
+     },
+     {
+      "unit": "robin",
+      "position": "back",
+      "partner": "lucina",
+      "classId": "grandmaster",
+      "build": [
+       "vantage",
+       "vengeance",
+       "wrath",
+       "anathema",
+       "miracle"
+      ]
+     },
+     {
+      "unit": "tharja",
+      "position": "lead",
+      "partner": "lonqu",
+      "classId": "dark-knight",
+      "build": [
+       "pavise",
+       "hex",
+       "lifetaker",
+       "luna",
+       "anathema"
+      ]
+     },
+     {
+      "unit": "lonqu",
+      "position": "back",
+      "partner": "tharja",
+      "classId": "swordmaster",
+      "build": [
+       "avoid-plus-10",
+       "quick-burn",
+       "lucky-seven",
+       "vantage",
+       "lancebreaker"
+      ]
+     },
+     {
+      "unit": "laurent",
+      "position": "lead",
+      "partner": "gaius",
+      "classId": "dark-knight",
+      "build": [
+       "vantage",
+       "vengeance",
+       "wrath",
+       "anathema",
+       "miracle"
+      ]
+     },
+     {
+      "unit": "gaius",
+      "position": "back",
+      "partner": "laurent",
+      "classId": "assassin",
+      "build": [
+       "avoid-plus-10",
+       "lethality",
+       "lucky-seven",
+       "movement-plus-1",
+       "axebreaker"
+      ]
+     },
+     {
+      "unit": "noire",
+      "position": "lead",
+      "partner": "kjelle",
+      "classId": "sniper",
+      "build": [
+       "galeforce",
+       "armsthrift",
+       "sol",
+       "bowfaire",
+       "patience"
+      ]
+     },
+     {
+      "unit": "kjelle",
+      "position": "back",
+      "partner": "noire",
+      "classId": "general",
+      "build": [
+       "avoid-plus-10",
+       "quick-burn",
+       "lucky-seven",
+       "outdoor-fighter",
+       "lancebreaker"
+      ]
+     },
+     {
+      "unit": "maribelle",
+      "position": "solo",
+      "classId": "war-monk",
+      "build": [
+       "galeforce",
+       "tomefaire",
+       "renewal",
+       "dual-support-plus",
+       "magic-plus-2"
+      ]
+     },
+     {
+      "unit": "brady",
+      "position": "solo",
+      "classId": "war-monk",
+      "build": [
+       "galeforce",
+       "tomefaire",
+       "luna",
+       "renewal",
+       "magic-plus-2"
+      ]
+     }
+    ],
+    "marriages": [
+     [
+      "virion",
+      "cherche"
+     ],
+     [
+      "stahl",
+      "nowi"
+     ],
+     [
+      "vaike",
+      "maribelle"
+     ],
+     [
+      "donnel",
+      "tharja"
+     ],
+     [
+      "lonqu",
+      "sully"
+     ],
+     [
+      "gaius",
+      "panne"
+     ],
+     [
+      "libra",
+      "olivia"
+     ],
+     [
+      "henry",
+      "cordelia"
+     ],
+     [
+      "chrom",
+      "maiden"
+     ],
+     [
+      "robin",
+      "miriel"
+     ],
+     [
+      "frederick",
+      "sumia"
+     ]
+    ],
+    "children": [
+     {
+      "child": "gerome",
+      "parents": [
+       "cherche",
+       "virion"
+      ],
+      "passes": [
+       "rally-resistance",
+       "rally-skill"
+      ]
+     },
+     {
+      "child": "nah",
+      "parents": [
+       "nowi",
+       "stahl"
+      ],
+      "passes": [
+       "tomefaire",
+       "astra"
+      ]
+     },
+     {
+      "child": "brady",
+      "parents": [
+       "maribelle",
+       "vaike"
+      ],
+      "passes": [
+       "galeforce",
+       "sol"
+      ]
+     },
+     {
+      "child": "noire",
+      "parents": [
+       "tharja",
+       "donnel"
+      ],
+      "passes": [
+       "pavise",
+       "sol"
+      ]
+     },
+     {
+      "child": "kjelle",
+      "parents": [
+       "sully",
+       "lonqu"
+      ],
+      "passes": [
+       "outdoor-fighter",
+       "lancebreaker"
+      ]
+     },
+     {
+      "child": "yarne",
+      "parents": [
+       "panne",
+       "gaius"
+      ],
+      "passes": [
+       "strength-plus-2",
+       "vantage"
+      ]
+     },
+     {
+      "child": "inigo",
+      "parents": [
+       "olivia",
+       "libra"
+      ],
+      "passes": [
+       "galeforce",
+       "anathema"
+      ]
+     },
+     {
+      "child": "severa",
+      "parents": [
+       "cordelia",
+       "henry"
+      ],
+      "passes": [
+       "galeforce",
+       "axefaire"
+      ]
+     },
+     {
+      "child": "lucina",
+      "parents": [
+       "chrom",
+       "maiden"
+      ],
+      "passes": [
+       "aether",
+       null
+      ]
+     },
+     {
+      "child": "morgan-f",
+      "parents": [
+       "robin",
+       "miriel"
+      ],
+      "passes": [
+       "vantage",
+       "vengeance"
+      ]
+     },
+     {
+      "child": "laurent",
+      "parents": [
+       "miriel",
+       "robin"
+      ],
+      "passes": [
+       "anathema",
+       "vantage"
+      ]
+     },
+     {
+      "child": "cynthia",
+      "parents": [
+       "sumia",
+       "frederick"
+      ],
+      "passes": [
+       "renewal",
+       "aegis"
+      ]
+     }
+    ],
+    "reserves": []
+   },
+   "roadmap": {
+    "order": [
+     "chapter-1",
+     "chapter-2",
+     "chapter-3",
+     "paralogue-1",
+     "chapter-4",
+     "chapter-5",
+     "paralogue-2",
+     "chapter-6",
+     "chapter-7",
+     "paralogue-3",
+     "chapter-8",
+     "chapter-9",
+     "paralogue-4",
+     "chapter-10",
+     "chapter-11",
+     "chapter-12",
+     "chapter-13",
+     "chapter-14",
+     "chapter-15",
+     "paralogue-8",
+     "chapter-16",
+     "paralogue-5",
+     "paralogue-12",
+     "paralogue-14",
+     "chapter-17",
+     "chapter-18",
+     "paralogue-7",
+     "paralogue-9",
+     "paralogue-10",
+     "paralogue-13",
+     "paralogue-17",
+     "chapter-19",
+     "paralogue-15",
+     "chapter-20",
+     "chapter-21",
+     "paralogue-6",
+     "paralogue-11",
+     "paralogue-16",
+     "chapter-22",
+     "chapter-23",
+     "chapter-24",
+     "chapter-25",
+     "endgame"
+    ],
+    "lineups": [
+     {
+      "key": "endgame",
+      "pairs": [
+       {
+        "lead": "chrom",
+        "back": "frederick"
+       },
+       {
+        "lead": "basilio",
+        "back": "virion"
+       },
+       {
+        "lead": "cherche",
+        "back": "flavia"
+       },
+       {
+        "lead": "lucina",
+        "back": "robin"
+       },
+       {
+        "lead": "tharja",
+        "back": "lonqu"
+       },
+       {
+        "lead": "laurent",
+        "back": "gaius"
+       },
+       {
+        "lead": "noire",
+        "back": "kjelle"
+       }
+      ],
+      "solo": [
+       "maribelle",
+       "brady"
+      ]
+     }
+    ],
+    "seals": [
+     {
+      "unit": "chrom",
+      "classId": "great-lord",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "robin",
+      "classId": "grandmaster",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "sully",
+      "classId": "paladin",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "virion",
+      "classId": "sniper",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "stahl",
+      "classId": "paladin",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "vaike",
+      "classId": "warrior",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "miriel",
+      "classId": "dark-knight",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "sumia",
+      "classId": "falcon-knight",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "kellam",
+      "classId": "general",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "lonqu",
+      "classId": "swordmaster",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "ricken",
+      "classId": "dark-knight",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "maribelle",
+      "classId": "war-monk",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "gaius",
+      "classId": "assassin",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "cordelia",
+      "classId": "falcon-knight",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "gregor",
+      "classId": "hero",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "tharja",
+      "classId": "dark-knight",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "cherche",
+      "classId": "wyvern-lord",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "henry",
+      "classId": "dark-knight",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "lucina",
+      "classId": "great-lord",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "inigo",
+      "classId": "hero",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "brady",
+      "classId": "war-monk",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "kjelle",
+      "classId": "general",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "cynthia",
+      "classId": "falcon-knight",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "severa",
+      "classId": "hero",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "gerome",
+      "classId": "wyvern-lord",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "morgan-f",
+      "classId": "falcon-knight",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "laurent",
+      "classId": "dark-knight",
+      "seal": "master",
+      "key": "endgame"
+     },
+     {
+      "unit": "noire",
+      "classId": "sniper",
+      "seal": "master",
+      "key": "endgame"
+     }
+    ],
+    "items": [
+     {
+      "item": "Hammer",
+      "unit": "frederick",
+      "key": "paralogue-1",
+      "source": "chapter-3:Hammer#0"
+     },
+     {
+      "item": "Goddess Icon",
+      "unit": "frederick",
+      "key": "chapter-6",
+      "source": "paralogue-2:Goddess Icon#0"
+     },
+     {
+      "item": "Secret Book",
+      "unit": "frederick",
+      "key": "chapter-7",
+      "source": "chapter-6:Secret Book#0"
+     },
+     {
+      "item": "Steel Sword",
+      "unit": "robin",
+      "key": "paralogue-3",
+      "source": "chapter-7:Steel Sword#0"
+     },
+     {
+      "item": "Steel Bow",
+      "unit": "virion",
+      "key": "paralogue-3",
+      "source": "chapter-7:Steel Bow#0"
+     },
+     {
+      "item": "Blessed Bow",
+      "unit": "virion",
+      "key": "chapter-8",
+      "source": "paralogue-3:Blessed Bow#0"
+     },
+     {
+      "item": "Killing Edge",
+      "unit": "robin",
+      "key": "chapter-9",
+      "source": "chapter-8:Killing Edge#0"
+     },
+     {
+      "item": "Killer Bow",
+      "unit": "virion",
+      "key": "paralogue-4",
+      "source": "chapter-9:Killer Bow#0"
+     },
+     {
+      "item": "Talisman",
+      "unit": "frederick",
+      "key": "chapter-10",
+      "source": "paralogue-4:Talisman#0"
+     },
+     {
+      "item": "Killing Edge",
+      "unit": "robin",
+      "key": "chapter-10",
+      "source": "paralogue-4:Killing Edge#0"
+     },
+     {
+      "item": "Wyrmslayer",
+      "unit": "frederick",
+      "key": "chapter-11",
+      "source": "chapter-10:Wyrmslayer#0"
+     },
+     {
+      "item": "Energy Drop",
+      "unit": "cherche",
+      "key": "chapter-12",
+      "source": "chapter-8:Energy Drop#0"
+     },
+     {
+      "item": "Spirit Dust",
+      "unit": "tharja",
+      "key": "chapter-12",
+      "source": "chapter-11:Spirit Dust#0"
+     },
+     {
+      "item": "Goddess Icon",
+      "unit": "frederick",
+      "key": "chapter-12",
+      "source": "chapter-11:Goddess Icon#0"
+     },
+     {
+      "item": "Levin Sword",
+      "unit": "robin",
+      "key": "chapter-12",
+      "source": "chapter-11:Levin Sword#0"
+     },
+     {
+      "item": "Beast Killer",
+      "unit": "frederick",
+      "key": "chapter-13",
+      "source": "chapter-12:Beast Killer#0"
+     },
+     {
+      "item": "Silver Sword",
+      "unit": "robin",
+      "key": "chapter-13",
+      "source": "chapter-12:Silver Sword#0"
+     },
+     {
+      "item": "Secret Book",
+      "unit": "virion",
+      "key": "paralogue-5",
+      "source": "chapter-13:Secret Book#0"
+     },
+     {
+      "item": "Longbow",
+      "unit": "virion",
+      "key": "paralogue-5",
+      "source": "chapter-13:Longbow#0"
+     },
+     {
+      "item": "Silver Bow",
+      "unit": "virion",
+      "key": "paralogue-5",
+      "source": "chapter-13:Silver Bow#0"
+     },
+     {
+      "item": "Silver Axe",
+      "unit": "cherche",
+      "key": "paralogue-5",
+      "source": "chapter-13:Silver Axe#0"
+     },
+     {
+      "item": "Spirit Dust",
+      "unit": "tharja",
+      "key": "paralogue-6",
+      "source": "paralogue-5:Spirit Dust#0"
+     },
+     {
+      "item": "Killing Edge",
+      "unit": "robin",
+      "key": "paralogue-7",
+      "source": "paralogue-6:Killing Edge#0"
+     },
+     {
+      "item": "Talisman",
+      "unit": "maribelle",
+      "key": "paralogue-11",
+      "source": "paralogue-10:Talisman#0"
+     },
+     {
+      "item": "Levin Sword",
+      "unit": "robin",
+      "key": "paralogue-11",
+      "source": "paralogue-10:Levin Sword#0"
+     },
+     {
+      "item": "Seraph Robe",
+      "unit": "frederick",
+      "key": "paralogue-12",
+      "source": "paralogue-11:Seraph Robe#0"
+     },
+     {
+      "item": "Goddess Icon",
+      "unit": "frederick",
+      "key": "paralogue-13",
+      "source": "paralogue-12:Goddess Icon#0"
+     },
+     {
+      "item": "Dracoshield",
+      "unit": "frederick",
+      "key": "paralogue-14",
+      "source": "paralogue-13:Dracoshield#0"
+     },
+     {
+      "item": "Energy Drop",
+      "unit": "cherche",
+      "key": "paralogue-14",
+      "source": "paralogue-13:Energy Drop#0"
+     },
+     {
+      "item": "Beast Killer",
+      "unit": "frederick",
+      "key": "paralogue-14",
+      "source": "paralogue-13:Beast Killer#0"
+     },
+     {
+      "item": "Hammer",
+      "unit": "frederick",
+      "key": "paralogue-14",
+      "source": "paralogue-13:Hammer#0"
+     },
+     {
+      "item": "Energy Drop",
+      "unit": "cherche",
+      "key": "paralogue-16",
+      "source": "paralogue-15:Energy Drop#0"
+     },
+     {
+      "item": "Steel Bow",
+      "unit": "virion",
+      "key": "paralogue-16",
+      "source": "paralogue-15:Steel Bow#0"
+     },
+     {
+      "item": "Spirit Dust",
+      "unit": "tharja",
+      "key": "chapter-14",
+      "source": "paralogue-16:Spirit Dust#0"
+     },
+     {
+      "item": "Talisman",
+      "unit": "frederick",
+      "key": "chapter-15",
+      "source": "chapter-14:Talisman#0"
+     },
+     {
+      "item": "Arcthunder",
+      "unit": "tharja",
+      "key": "chapter-16",
+      "source": "chapter-15:Arcthunder#0"
+     },
+     {
+      "item": "Steel Sword",
+      "unit": "robin",
+      "key": "chapter-16",
+      "source": "chapter-15:Steel Sword#0"
+     },
+     {
+      "item": "Beast Killer",
+      "unit": "frederick",
+      "key": "chapter-17",
+      "source": "chapter-16:Beast Killer#0"
+     },
+     {
+      "item": "Silver Sword",
+      "unit": "robin",
+      "key": "chapter-17",
+      "source": "chapter-16:Silver Sword#0"
+     },
+     {
+      "item": "Killer Axe",
+      "unit": "cherche",
+      "key": "chapter-17",
+      "source": "chapter-16:Killer Axe#0"
+     },
+     {
+      "item": "Steel Sword",
+      "unit": "robin",
+      "key": "chapter-17",
+      "source": "chapter-16:Steel Sword#0"
+     },
+     {
+      "item": "Steel Bow",
+      "unit": "virion",
+      "key": "chapter-17",
+      "source": "chapter-16:Steel Bow#0"
+     },
+     {
+      "item": "Killer Bow",
+      "unit": "virion",
+      "key": "chapter-18",
+      "source": "chapter-17:Killer Bow#0"
+     },
+     {
+      "item": "Energy Drop",
+      "unit": "cherche",
+      "key": "paralogue-17",
+      "source": "chapter-18:Energy Drop#0"
+     },
+     {
+      "item": "Amatsu",
+      "unit": "robin",
+      "key": "paralogue-17",
+      "source": "chapter-18:Amatsu#0"
+     },
+     {
+      "item": "Silver Axe",
+      "unit": "cherche",
+      "key": "paralogue-17",
+      "source": "chapter-18:Silver Axe#0"
+     },
+     {
+      "item": "Arcfire",
+      "unit": "tharja",
+      "key": "paralogue-17",
+      "source": "chapter-18:Arcfire#0"
+     },
+     {
+      "item": "Sol",
+      "unit": "robin",
+      "key": "chapter-20",
+      "source": "chapter-19:Sol#0"
+     },
+     {
+      "item": "Silver Bow",
+      "unit": "virion",
+      "key": "chapter-20",
+      "source": "chapter-19:Silver Bow#0"
+     },
+     {
+      "item": "Silver Axe",
+      "unit": "cherche",
+      "key": "chapter-20",
+      "source": "chapter-19:Silver Axe#0"
+     },
+     {
+      "item": "Arcwind",
+      "unit": "robin",
+      "key": "chapter-20",
+      "source": "chapter-19:Arcwind#0"
+     },
+     {
+      "item": "Silver Sword",
+      "unit": "robin",
+      "key": "chapter-20",
+      "source": "chapter-19:Silver Sword#0"
+     },
+     {
+      "item": "Dracoshield",
+      "unit": "frederick",
+      "key": "chapter-21",
+      "source": "chapter-20:Dracoshield#0"
+     },
+     {
+      "item": "Bolganone",
+      "unit": "tharja",
+      "key": "chapter-21",
+      "source": "chapter-20:Bolganone#0"
+     },
+     {
+      "item": "Longbow",
+      "unit": "virion",
+      "key": "chapter-21",
+      "source": "chapter-20:Longbow#0"
+     },
+     {
+      "item": "Secret Book",
+      "unit": "robin",
+      "key": "chapter-22",
+      "source": "chapter-21:Secret Book#0"
+     },
+     {
+      "item": "Bolt Axe",
+      "unit": "frederick",
+      "key": "chapter-22",
+      "source": "chapter-21:Bolt Axe#0"
+     },
+     {
+      "item": "Mire",
+      "unit": "tharja",
+      "key": "chapter-22",
+      "source": "chapter-21:Mire#0"
+     },
+     {
+      "item": "Goddess Icon",
+      "unit": "frederick",
+      "key": "chapter-23",
+      "source": "chapter-22:Goddess Icon#0"
+     },
+     {
+      "item": "Yewfelle",
+      "unit": "virion",
+      "key": "chapter-23",
+      "source": "chapter-22:Yewfelle#0"
+     },
+     {
+      "item": "Gungnir",
+      "unit": "frederick",
+      "key": "chapter-23",
+      "source": "chapter-22:Gungnir#0"
+     },
+     {
+      "item": "Valflame",
+      "unit": "tharja",
+      "key": "chapter-23",
+      "source": "chapter-22:Valflame#0"
+     },
+     {
+      "item": "Dracoshield",
+      "unit": "basilio",
+      "key": "chapter-24",
+      "source": "chapter-9:Dracoshield#0"
+     },
+     {
+      "item": "Seraph Robe",
+      "unit": "basilio",
+      "key": "chapter-24",
+      "source": "chapter-10:Seraph Robe#0"
+     },
+     {
+      "item": "Speedwing",
+      "unit": "flavia",
+      "key": "chapter-24",
+      "source": "chapter-11:Speedwing#0"
+     },
+     {
+      "item": "Speedwing",
+      "unit": "flavia",
+      "key": "chapter-24",
+      "source": "paralogue-6:Speedwing#0"
+     },
+     {
+      "item": "Seraph Robe",
+      "unit": "flavia",
+      "key": "chapter-24",
+      "source": "paralogue-7:Seraph Robe#0"
+     },
+     {
+      "item": "Dracoshield",
+      "unit": "flavia",
+      "key": "chapter-24",
+      "source": "paralogue-8:Dracoshield#0"
+     },
+     {
+      "item": "Speedwing",
+      "unit": "flavia",
+      "key": "chapter-24",
+      "source": "paralogue-14:Speedwing#0"
+     },
+     {
+      "item": "Speedwing",
+      "unit": "flavia",
+      "key": "chapter-24",
+      "source": "chapter-16:Speedwing#0"
+     },
+     {
+      "item": "Talisman",
+      "unit": "basilio",
+      "key": "chapter-24",
+      "source": "chapter-23:Talisman#0"
+     },
+     {
+      "item": "Armorslayer",
+      "unit": "flavia",
+      "key": "chapter-24",
+      "source": "chapter-11:Armorslayer#0"
+     },
+     {
+      "item": "Wyrmslayer",
+      "unit": "flavia",
+      "key": "chapter-24",
+      "source": "paralogue-11:Wyrmslayer#0"
+     },
+     {
+      "item": "Hammer",
+      "unit": "flavia",
+      "key": "chapter-24",
+      "source": "chapter-15:Hammer#0"
+     },
+     {
+      "item": "Noble Rapier",
+      "unit": "flavia",
+      "key": "chapter-24",
+      "source": "chapter-18:Noble Rapier#0"
+     },
+     {
+      "item": "Armorslayer",
+      "unit": "flavia",
+      "key": "chapter-24",
+      "source": "chapter-18:Armorslayer#0"
+     },
+     {
+      "item": "Noble Rapier",
+      "unit": "flavia",
+      "key": "chapter-24",
+      "source": "chapter-21:Noble Rapier#0"
+     },
+     {
+      "item": "Helswath",
+      "unit": "flavia",
+      "key": "chapter-24",
+      "source": "chapter-22:Helswath#0"
+     },
+     {
+      "item": "Balmung",
+      "unit": "flavia",
+      "key": "chapter-24",
+      "source": "chapter-22:Balmung#0"
+     },
+     {
+      "item": "Arcfire",
+      "unit": "tharja",
+      "key": "chapter-24",
+      "source": "chapter-23:Arcfire#0"
+     },
+     {
+      "item": "Wyrmslayer",
+      "unit": "flavia",
+      "key": "chapter-24",
+      "source": "chapter-23:Wyrmslayer#0"
+     },
+     {
+      "item": "Silver Bow",
+      "unit": "virion",
+      "key": "chapter-24",
+      "source": "chapter-23:Silver Bow#0"
+     },
+     {
+      "item": "Silver Sword",
+      "unit": "robin",
+      "key": "chapter-24",
+      "source": "chapter-23:Silver Sword#0"
+     },
+     {
+      "item": "Silver Axe",
+      "unit": "cherche",
+      "key": "chapter-24",
+      "source": "chapter-23:Silver Axe#0"
+     },
+     {
+      "item": "Thoron",
+      "unit": "tharja",
+      "key": "chapter-25",
+      "source": "chapter-24:Thoron#0"
+     },
+     {
+      "item": "Tomahawk",
+      "unit": "flavia",
+      "key": "chapter-25",
+      "source": "chapter-24:Tomahawk#0"
+     },
+     {
+      "item": "Exalted Falchion",
+      "unit": "flavia",
+      "key": "chapter-25",
+      "source": "chapter-24:Exalted Falchion#0"
+     },
+     {
+      "item": "Goetia",
+      "unit": "tharja",
+      "key": "endgame",
+      "source": "chapter-25:Goetia#0"
+     },
+     {
+      "item": "Levin Sword",
+      "unit": "robin",
+      "key": "endgame",
+      "source": "chapter-25:Levin Sword#0"
+     },
+     {
+      "item": "Strength Tonic",
+      "unit": "chrom",
+      "key": "endgame",
+      "source": "paralogue-14:Strength Tonic#0"
+     },
+     {
+      "item": "Speed Tonic",
+      "unit": "basilio",
+      "key": "endgame",
+      "source": "buy"
+     },
+     {
+      "item": "Speed Tonic",
+      "unit": "cherche",
+      "key": "endgame",
+      "source": "buy"
+     },
+     {
+      "item": "Strength Tonic",
+      "unit": "lucina",
+      "key": "endgame",
+      "source": "buy"
+     },
+     {
+      "item": "Speed Tonic",
+      "unit": "tharja",
+      "key": "endgame",
+      "source": "buy"
+     },
+     {
+      "item": "Magic Tonic",
+      "unit": "laurent",
+      "key": "endgame",
+      "source": "buy"
+     },
+     {
+      "item": "Speed Tonic",
+      "unit": "noire",
+      "key": "endgame",
+      "source": "buy"
+     }
+    ],
+    "sideGoals": {
+     "paralogue-2-village": "chase",
+     "chapter-10-thieves": "chase",
+     "chapter-11-thief": "chase",
+     "paralogue-6-result": "chase",
+     "paralogue-7-result": "skip",
+     "paralogue-9-ruger": "chase",
+     "paralogue-11-result": "skip",
+     "paralogue-12-thieves": "chase",
+     "paralogue-13-result": "chase",
+     "paralogue-14-villages": "chase",
+     "chapter-16-thieves": "chase",
+     "chapter-18-chests": "chase"
+    },
+    "priorities": [
+     {
+      "unit": "sully",
+      "priority": "high",
+      "from": "chapter-2",
+      "to": "chapter-15"
+     },
+     {
+      "unit": "lonqu",
+      "priority": "high",
+      "from": "chapter-5",
+      "to": "chapter-15"
+     },
+     {
+      "unit": "gregor",
+      "priority": "high",
+      "from": "paralogue-8",
+      "to": "chapter-16"
+     },
+     {
+      "unit": "robin",
+      "priority": "high",
+      "from": "paralogue-5",
+      "to": "paralogue-5"
+     },
+     {
+      "unit": "robin",
+      "priority": "high",
+      "from": "paralogue-7",
+      "to": "paralogue-7"
+     },
+     {
+      "unit": "sumia",
+      "priority": "high",
+      "from": "paralogue-5",
+      "to": "paralogue-5"
+     },
+     {
+      "unit": "sumia",
+      "priority": "high",
+      "from": "paralogue-7",
+      "to": "paralogue-7"
+     },
+     {
+      "unit": "miriel",
+      "priority": "high",
+      "from": "paralogue-12",
+      "to": "paralogue-12"
+     },
+     {
+      "unit": "frederick",
+      "priority": "high",
+      "from": "paralogue-12",
+      "to": "paralogue-12"
+     },
+     {
+      "unit": "maribelle",
+      "priority": "high",
+      "from": "paralogue-14",
+      "to": "chapter-18"
+     },
+     {
+      "unit": "vaike",
+      "priority": "high",
+      "from": "paralogue-14",
+      "to": "chapter-18"
+     },
+     {
+      "unit": "cordelia",
+      "priority": "high",
+      "from": "paralogue-9",
+      "to": "paralogue-9"
+     },
+     {
+      "unit": "henry",
+      "priority": "high",
+      "from": "paralogue-9",
+      "to": "paralogue-9"
+     },
+     {
+      "unit": "panne",
+      "priority": "high",
+      "from": "paralogue-10",
+      "to": "paralogue-10"
+     },
+     {
+      "unit": "gaius",
+      "priority": "high",
+      "from": "paralogue-10",
+      "to": "paralogue-10"
+     },
+     {
+      "unit": "tharja",
+      "priority": "high",
+      "from": "paralogue-13",
+      "to": "chapter-19"
+     },
+     {
+      "unit": "donnel",
+      "priority": "high",
+      "from": "paralogue-13",
+      "to": "chapter-19"
+     },
+     {
+      "unit": "olivia",
+      "priority": "high",
+      "from": "paralogue-15",
+      "to": "chapter-21"
+     },
+     {
+      "unit": "libra",
+      "priority": "high",
+      "from": "paralogue-15",
+      "to": "chapter-21"
+     },
+     {
+      "unit": "cherche",
+      "priority": "high",
+      "from": "paralogue-6",
+      "to": "paralogue-6"
+     },
+     {
+      "unit": "virion",
+      "priority": "high",
+      "from": "paralogue-6",
+      "to": "paralogue-6"
+     },
+     {
+      "unit": "nowi",
+      "priority": "high",
+      "from": "paralogue-11",
+      "to": "paralogue-11"
+     },
+     {
+      "unit": "stahl",
+      "priority": "high",
+      "from": "paralogue-11",
+      "to": "paralogue-11"
+     }
+    ]
+   }
+  },
+  "edits": [
+   {
+    "label": "Robin: Male, +Str \u2212Def",
+    "before": null,
+    "accepted": true
+   },
+   {
+    "label": "Re-solve after Lissa died on Prologue",
+    "accepted": true,
+    "before": {
+     "robin": {
+      "gender": "M",
+      "asset": "str",
+      "flaw": "def"
+     },
+     "wishlist": {
+      "endpoint": "endgame",
+      "units": [
+       {
+        "unit": "chrom",
+        "position": "lead",
+        "partner": "frederick",
+        "classId": "great-lord",
+        "build": [
+         "dual-strike-plus",
+         "bowfaire",
+         "luna",
+         "aether",
+         "defender"
+        ]
+       },
+       {
+        "unit": "frederick",
+        "position": "back",
+        "partner": "chrom",
+        "classId": "great-knight",
+        "build": [
+         "pavise",
+         "aegis",
+         "dual-guard-plus",
+         "luna",
+         "strength-plus-2"
+        ]
+       },
+       {
+        "unit": "basilio",
+        "position": "lead",
+        "partner": "robin",
+        "classId": "warrior",
+        "build": [
+         "rally-strength",
+         "axefaire",
+         "dual-guard-plus",
+         "counter",
+         "axebreaker"
+        ]
+       },
+       {
+        "unit": "robin",
+        "position": "back",
+        "partner": "basilio",
+        "classId": "grandmaster",
+        "build": [
+         "vantage",
+         "vengeance",
+         "wrath",
+         "anathema",
+         "miracle"
+        ]
+       },
+       {
+        "unit": "cherche",
+        "position": "lead",
+        "partner": "flavia",
+        "classId": "wyvern-lord",
+        "build": [
+         "strength-plus-2",
+         "tomefaire",
+         "deliverer",
+         "dual-support-plus",
+         "lancebreaker"
+        ]
+       },
+       {
+        "unit": "flavia",
+        "position": "back",
+        "partner": "cherche",
+        "classId": "hero",
+        "build": [
+         "pavise",
+         "armsthrift",
+         "sol",
+         "axebreaker",
+         "patience"
+        ]
+       },
+       {
+        "unit": "lucina",
+        "position": "lead",
+        "partner": "kellam",
+        "classId": "great-lord",
+        "build": [
+         "dual-strike-plus",
+         "bowfaire",
+         "luna",
+         "aether",
+         "defender"
+        ]
+       },
+       {
+        "unit": "kellam",
+        "position": "back",
+        "partner": "lucina",
+        "classId": "general",
+        "build": [
+         "pavise",
+         "dual-guard-plus",
+         "renewal",
+         "luna",
+         "rally-defence"
+        ]
+       },
+       {
+        "unit": "tharja",
+        "position": "lead",
+        "partner": "lonqu",
+        "classId": "dark-knight",
+        "build": [
+         "pavise",
+         "hex",
+         "lifetaker",
+         "luna",
+         "anathema"
+        ]
+       },
+       {
+        "unit": "lonqu",
+        "position": "back",
+        "partner": "tharja",
+        "classId": "swordmaster",
+        "build": [
+         "avoid-plus-10",
+         "quick-burn",
+         "lucky-seven",
+         "vantage",
+         "lancebreaker"
+        ]
+       },
+       {
+        "unit": "noire",
+        "position": "lead",
+        "partner": "kjelle",
+        "classId": "sniper",
+        "build": [
+         "galeforce",
+         "armsthrift",
+         "sol",
+         "bowfaire",
+         "patience"
+        ]
+       },
+       {
+        "unit": "kjelle",
+        "position": "back",
+        "partner": "noire",
+        "classId": "general",
+        "build": [
+         "avoid-plus-10",
+         "quick-burn",
+         "lucky-seven",
+         "outdoor-fighter",
+         "lancebreaker"
+        ]
+       },
+       {
+        "unit": "cynthia",
+        "position": "lead",
+        "partner": "miriel",
+        "classId": "falcon-knight",
+        "build": [
+         "vantage",
+         "vengeance",
+         "tomefaire",
+         "galeforce",
+         "hit-rate-plus-20"
+        ]
+       },
+       {
+        "unit": "miriel",
+        "position": "back",
+        "partner": "cynthia",
+        "classId": "dark-knight",
+        "build": [
+         "magic-plus-2",
+         "tomefaire",
+         "rally-magic",
+         "dual-support-plus",
+         "anathema"
+        ]
+       },
+       {
+        "unit": "lissa",
+        "position": "solo",
+        "classId": "war-monk",
+        "build": [
+         "rally-magic",
+         "rally-speed",
+         "rally-movement",
+         "tomefaire",
+         "renewal"
+        ]
+       },
+       {
+        "unit": "maribelle",
+        "position": "solo",
+        "classId": "war-monk",
+        "build": [
+         "galeforce",
+         "tomefaire",
+         "renewal",
+         "dual-support-plus",
+         "magic-plus-2"
+        ]
+       }
+      ],
+      "marriages": [
+       [
+        "robin",
+        "sumia"
+       ],
+       [
+        "chrom",
+        "maiden"
+       ],
+       [
+        "frederick",
+        "miriel"
+       ],
+       [
+        "virion",
+        "cherche"
+       ],
+       [
+        "stahl",
+        "nowi"
+       ],
+       [
+        "vaike",
+        "maribelle"
+       ],
+       [
+        "donnel",
+        "tharja"
+       ],
+       [
+        "lonqu",
+        "sully"
+       ],
+       [
+        "gaius",
+        "panne"
+       ],
+       [
+        "gregor",
+        "lissa"
+       ],
+       [
+        "libra",
+        "olivia"
+       ],
+       [
+        "henry",
+        "cordelia"
+       ]
+      ],
+      "children": [
+       {
+        "child": "morgan-f",
+        "parents": [
+         "robin",
+         "sumia"
+        ],
+        "passes": [
+         "vantage",
+         "tomefaire"
+        ]
+       },
+       {
+        "child": "cynthia",
+        "parents": [
+         "sumia",
+         "robin"
+        ],
+        "passes": [
+         "tomefaire",
+         "vantage"
+        ]
+       },
+       {
+        "child": "lucina",
+        "parents": [
+         "chrom",
+         "maiden"
+        ],
+        "passes": [
+         "aether",
+         null
+        ]
+       },
+       {
+        "child": "laurent",
+        "parents": [
+         "miriel",
+         "frederick"
+        ],
+        "passes": [
+         "renewal",
+         "aegis"
+        ]
+       },
+       {
+        "child": "gerome",
+        "parents": [
+         "cherche",
+         "virion"
+        ],
+        "passes": [
+         "rally-resistance",
+         "rally-skill"
+        ]
+       },
+       {
+        "child": "nah",
+        "parents": [
+         "nowi",
+         "stahl"
+        ],
+        "passes": [
+         "tomefaire",
+         "astra"
+        ]
+       },
+       {
+        "child": "brady",
+        "parents": [
+         "maribelle",
+         "vaike"
+        ],
+        "passes": [
+         "galeforce",
+         "sol"
+        ]
+       },
+       {
+        "child": "noire",
+        "parents": [
+         "tharja",
+         "donnel"
+        ],
+        "passes": [
+         "pavise",
+         "sol"
+        ]
+       },
+       {
+        "child": "kjelle",
+        "parents": [
+         "sully",
+         "lonqu"
+        ],
+        "passes": [
+         "outdoor-fighter",
+         "lancebreaker"
+        ]
+       },
+       {
+        "child": "yarne",
+        "parents": [
+         "panne",
+         "gaius"
+        ],
+        "passes": [
+         "strength-plus-2",
+         "vantage"
+        ]
+       },
+       {
+        "child": "owain",
+        "parents": [
+         "lissa",
+         "gregor"
+        ],
+        "passes": [
+         "galeforce",
+         "sol"
+        ]
+       },
+       {
+        "child": "inigo",
+        "parents": [
+         "olivia",
+         "libra"
+        ],
+        "passes": [
+         "galeforce",
+         "anathema"
+        ]
+       },
+       {
+        "child": "severa",
+        "parents": [
+         "cordelia",
+         "henry"
+        ],
+        "passes": [
+         "galeforce",
+         "axefaire"
+        ]
+       }
+      ],
+      "reserves": []
+     },
+     "roadmap": {
+      "order": [
+       "premonition",
+       "prologue",
+       "chapter-1",
+       "chapter-2",
+       "chapter-3",
+       "paralogue-1",
+       "chapter-4",
+       "chapter-5",
+       "paralogue-2",
+       "chapter-6",
+       "chapter-7",
+       "paralogue-3",
+       "chapter-8",
+       "chapter-9",
+       "paralogue-4",
+       "chapter-10",
+       "chapter-11",
+       "chapter-12",
+       "chapter-13",
+       "chapter-14",
+       "chapter-15",
+       "paralogue-8",
+       "chapter-16",
+       "paralogue-5",
+       "paralogue-12",
+       "paralogue-14",
+       "chapter-17",
+       "chapter-18",
+       "paralogue-7",
+       "paralogue-9",
+       "paralogue-10",
+       "paralogue-13",
+       "paralogue-17",
+       "chapter-19",
+       "paralogue-15",
+       "chapter-20",
+       "chapter-21",
+       "paralogue-6",
+       "paralogue-11",
+       "paralogue-16",
+       "chapter-22",
+       "chapter-23",
+       "chapter-24",
+       "chapter-25",
+       "endgame"
+      ],
+      "lineups": [
+       {
+        "key": "endgame",
+        "pairs": [
+         {
+          "lead": "chrom",
+          "back": "frederick"
+         },
+         {
+          "lead": "basilio",
+          "back": "robin"
+         },
+         {
+          "lead": "cherche",
+          "back": "flavia"
+         },
+         {
+          "lead": "lucina",
+          "back": "kellam"
+         },
+         {
+          "lead": "tharja",
+          "back": "lonqu"
+         },
+         {
+          "lead": "noire",
+          "back": "kjelle"
+         },
+         {
+          "lead": "cynthia",
+          "back": "miriel"
+         }
+        ],
+        "solo": [
+         "lissa",
+         "maribelle"
+        ]
+       }
+      ],
+      "seals": [
+       {
+        "unit": "chrom",
+        "classId": "great-lord",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "robin",
+        "classId": "grandmaster",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "lissa",
+        "classId": "war-monk",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "sully",
+        "classId": "paladin",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "virion",
+        "classId": "sniper",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "stahl",
+        "classId": "paladin",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "vaike",
+        "classId": "warrior",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "miriel",
+        "classId": "dark-knight",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "sumia",
+        "classId": "falcon-knight",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "kellam",
+        "classId": "general",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "lonqu",
+        "classId": "swordmaster",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "ricken",
+        "classId": "dark-knight",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "maribelle",
+        "classId": "war-monk",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "gaius",
+        "classId": "assassin",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "cordelia",
+        "classId": "falcon-knight",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "gregor",
+        "classId": "hero",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "tharja",
+        "classId": "dark-knight",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "cherche",
+        "classId": "wyvern-lord",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "henry",
+        "classId": "dark-knight",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "lucina",
+        "classId": "great-lord",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "owain",
+        "classId": "swordmaster",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "inigo",
+        "classId": "hero",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "brady",
+        "classId": "war-monk",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "kjelle",
+        "classId": "general",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "cynthia",
+        "classId": "falcon-knight",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "severa",
+        "classId": "hero",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "gerome",
+        "classId": "wyvern-lord",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "morgan-f",
+        "classId": "falcon-knight",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "laurent",
+        "classId": "dark-knight",
+        "seal": "master",
+        "key": "endgame"
+       },
+       {
+        "unit": "noire",
+        "classId": "sniper",
+        "seal": "master",
+        "key": "endgame"
+       }
+      ],
+      "items": [
+       {
+        "item": "Hammer",
+        "unit": "frederick",
+        "key": "paralogue-1",
+        "source": "chapter-3:Hammer#0"
+       },
+       {
+        "item": "Goddess Icon",
+        "unit": "frederick",
+        "key": "chapter-6",
+        "source": "paralogue-2:Goddess Icon#0"
+       },
+       {
+        "item": "Secret Book",
+        "unit": "frederick",
+        "key": "chapter-7",
+        "source": "chapter-6:Secret Book#0"
+       },
+       {
+        "item": "Killing Edge",
+        "unit": "robin",
+        "key": "chapter-9",
+        "source": "chapter-8:Killing Edge#0"
+       },
+       {
+        "item": "Steel Lance",
+        "unit": "kellam",
+        "key": "chapter-9",
+        "source": "chapter-8:Steel Lance#0"
+       },
+       {
+        "item": "Talisman",
+        "unit": "frederick",
+        "key": "chapter-10",
+        "source": "paralogue-4:Talisman#0"
+       },
+       {
+        "item": "Killing Edge",
+        "unit": "robin",
+        "key": "chapter-10",
+        "source": "paralogue-4:Killing Edge#0"
+       },
+       {
+        "item": "Energy Drop",
+        "unit": "cherche",
+        "key": "chapter-12",
+        "source": "chapter-8:Energy Drop#0"
+       },
+       {
+        "item": "Spirit Dust",
+        "unit": "tharja",
+        "key": "chapter-12",
+        "source": "chapter-11:Spirit Dust#0"
+       },
+       {
+        "item": "Goddess Icon",
+        "unit": "frederick",
+        "key": "chapter-12",
+        "source": "chapter-11:Goddess Icon#0"
+       },
+       {
+        "item": "Levin Sword",
+        "unit": "robin",
+        "key": "chapter-12",
+        "source": "chapter-11:Levin Sword#0"
+       },
+       {
+        "item": "Beast Killer",
+        "unit": "kellam",
+        "key": "chapter-13",
+        "source": "chapter-12:Beast Killer#0"
+       },
+       {
+        "item": "Silver Lance",
+        "unit": "kellam",
+        "key": "chapter-13",
+        "source": "chapter-12:Silver Lance#0"
+       },
+       {
+        "item": "Silver Sword",
+        "unit": "robin",
+        "key": "chapter-13",
+        "source": "chapter-12:Silver Sword#0"
+       },
+       {
+        "item": "Secret Book",
+        "unit": "miriel",
+        "key": "paralogue-5",
+        "source": "chapter-13:Secret Book#0"
+       },
+       {
+        "item": "Silver Axe",
+        "unit": "cherche",
+        "key": "paralogue-5",
+        "source": "chapter-13:Silver Axe#0"
+       },
+       {
+        "item": "Spirit Dust",
+        "unit": "tharja",
+        "key": "paralogue-6",
+        "source": "paralogue-5:Spirit Dust#0"
+       },
+       {
+        "item": "Killing Edge",
+        "unit": "robin",
+        "key": "paralogue-7",
+        "source": "paralogue-6:Killing Edge#0"
+       },
+       {
+        "item": "Blessed Lance",
+        "unit": "kellam",
+        "key": "paralogue-8",
+        "source": "paralogue-7:Blessed Lance#0"
+       },
+       {
+        "item": "Dracoshield",
+        "unit": "frederick",
+        "key": "paralogue-9",
+        "source": "paralogue-8:Dracoshield#0"
+       },
+       {
+        "item": "Talisman",
+        "unit": "frederick",
+        "key": "paralogue-11",
+        "source": "paralogue-10:Talisman#0"
+       },
+       {
+        "item": "Levin Sword",
+        "unit": "robin",
+        "key": "paralogue-11",
+        "source": "paralogue-10:Levin Sword#0"
+       },
+       {
+        "item": "Seraph Robe",
+        "unit": "frederick",
+        "key": "paralogue-12",
+        "source": "paralogue-11:Seraph Robe#0"
+       },
+       {
+        "item": "Goddess Icon",
+        "unit": "frederick",
+        "key": "paralogue-13",
+        "source": "paralogue-12:Goddess Icon#0"
+       },
+       {
+        "item": "Dracoshield",
+        "unit": "frederick",
+        "key": "paralogue-14",
+        "source": "paralogue-13:Dracoshield#0"
+       },
+       {
+        "item": "Energy Drop",
+        "unit": "cherche",
+        "key": "paralogue-14",
+        "source": "paralogue-13:Energy Drop#0"
+       },
+       {
+        "item": "Beast Killer",
+        "unit": "kellam",
+        "key": "paralogue-14",
+        "source": "paralogue-13:Beast Killer#0"
+       },
+       {
+        "item": "Energy Drop",
+        "unit": "cherche",
+        "key": "paralogue-16",
+        "source": "paralogue-15:Energy Drop#0"
+       },
+       {
+        "item": "Spirit Dust",
+        "unit": "tharja",
+        "key": "chapter-14",
+        "source": "paralogue-16:Spirit Dust#0"
+       },
+       {
+        "item": "Talisman",
+        "unit": "lissa",
+        "key": "chapter-15",
+        "source": "chapter-14:Talisman#0"
+       },
+       {
+        "item": "Steel Lance",
+        "unit": "kellam",
+        "key": "chapter-16",
+        "source": "chapter-15:Steel Lance#0"
+       },
+       {
+        "item": "Arcthunder",
+        "unit": "tharja",
+        "key": "chapter-16",
+        "source": "chapter-15:Arcthunder#0"
+       },
+       {
+        "item": "Beast Killer",
+        "unit": "kellam",
+        "key": "chapter-17",
+        "source": "chapter-16:Beast Killer#0"
+       },
+       {
+        "item": "Silver Sword",
+        "unit": "robin",
+        "key": "chapter-17",
+        "source": "chapter-16:Silver Sword#0"
+       },
+       {
+        "item": "Killer Axe",
+        "unit": "cherche",
+        "key": "chapter-17",
+        "source": "chapter-16:Killer Axe#0"
+       },
+       {
+        "item": "Energy Drop",
+        "unit": "cherche",
+        "key": "paralogue-17",
+        "source": "chapter-18:Energy Drop#0"
+       },
+       {
+        "item": "Silver Axe",
+        "unit": "cherche",
+        "key": "paralogue-17",
+        "source": "chapter-18:Silver Axe#0"
+       },
+       {
+        "item": "Silver Lance",
+        "unit": "kellam",
+        "key": "paralogue-17",
+        "source": "chapter-18:Silver Lance#0"
+       },
+       {
+        "item": "Arcfire",
+        "unit": "miriel",
+        "key": "paralogue-17",
+        "source": "chapter-18:Arcfire#0"
+       },
+       {
+        "item": "Killer Lance",
+        "unit": "kellam",
+        "key": "paralogue-17",
+        "source": "chapter-18:Killer Lance#0"
+       },
+       {
+        "item": "Silver Lance",
+        "unit": "kellam",
+        "key": "chapter-20",
+        "source": "chapter-19:Silver Lance#0"
+       },
+       {
+        "item": "Silver Axe",
+        "unit": "cherche",
+        "key": "chapter-20",
+        "source": "chapter-19:Silver Axe#0"
+       },
+       {
+        "item": "Arcwind",
+        "unit": "miriel",
+        "key": "chapter-20",
+        "source": "chapter-19:Arcwind#0"
+       },
+       {
+        "item": "Silver Sword",
+        "unit": "robin",
+        "key": "chapter-20",
+        "source": "chapter-19:Silver Sword#0"
+       },
+       {
+        "item": "Dracoshield",
+        "unit": "frederick",
+        "key": "chapter-21",
+        "source": "chapter-20:Dracoshield#0"
+       },
+       {
+        "item": "Bolganone",
+        "unit": "tharja",
+        "key": "chapter-21",
+        "source": "chapter-20:Bolganone#0"
+       },
+       {
+        "item": "Secret Book",
+        "unit": "frederick",
+        "key": "chapter-22",
+        "source": "chapter-21:Secret Book#0"
+       },
+       {
+        "item": "Bolt Axe",
+        "unit": "frederick",
+        "key": "chapter-22",
+        "source": "chapter-21:Bolt Axe#0"
+       },
+       {
+        "item": "Mire",
+        "unit": "tharja",
+        "key": "chapter-22",
+        "source": "chapter-21:Mire#0"
+       },
+       {
+        "item": "Goddess Icon",
+        "unit": "frederick",
+        "key": "chapter-23",
+        "source": "chapter-22:Goddess Icon#0"
+       },
+       {
+        "item": "Gungnir",
+        "unit": "kellam",
+        "key": "chapter-23",
+        "source": "chapter-22:Gungnir#0"
+       },
+       {
+        "item": "Valflame",
+        "unit": "tharja",
+        "key": "chapter-23",
+        "source": "chapter-22:Valflame#0"
+       },
+       {
+        "item": "Dracoshield",
+        "unit": "basilio",
+        "key": "chapter-24",
+        "source": "chapter-9:Dracoshield#0"
+       },
+       {
+        "item": "Seraph Robe",
+        "unit": "basilio",
+        "key": "chapter-24",
+        "source": "chapter-10:Seraph Robe#0"
+       },
+       {
+        "item": "Speedwing",
+        "unit": "flavia",
+        "key": "chapter-24",
+        "source": "chapter-11:Speedwing#0"
+       },
+       {
+        "item": "Speedwing",
+        "unit": "flavia",
+        "key": "chapter-24",
+        "source": "paralogue-6:Speedwing#0"
+       },
+       {
+        "item": "Seraph Robe",
+        "unit": "basilio",
+        "key": "chapter-24",
+        "source": "paralogue-7:Seraph Robe#0"
+       },
+       {
+        "item": "Speedwing",
+        "unit": "flavia",
+        "key": "chapter-24",
+        "source": "paralogue-14:Speedwing#0"
+       },
+       {
+        "item": "Speedwing",
+        "unit": "flavia",
+        "key": "chapter-24",
+        "source": "chapter-16:Speedwing#0"
+       },
+       {
+        "item": "Talisman",
+        "unit": "maribelle",
+        "key": "chapter-24",
+        "source": "chapter-23:Talisman#0"
+       },
+       {
+        "item": "Wyrmslayer",
+        "unit": "flavia",
+        "key": "chapter-24",
+        "source": "chapter-10:Wyrmslayer#0"
+       },
+       {
+        "item": "Armorslayer",
+        "unit": "flavia",
+        "key": "chapter-24",
+        "source": "chapter-11:Armorslayer#0"
+       },
+       {
+        "item": "Wyrmslayer",
+        "unit": "flavia",
+        "key": "chapter-24",
+        "source": "paralogue-11:Wyrmslayer#0"
+       },
+       {
+        "item": "Hammer",
+        "unit": "flavia",
+        "key": "chapter-24",
+        "source": "paralogue-13:Hammer#0"
+       },
+       {
+        "item": "Hammer",
+        "unit": "flavia",
+        "key": "chapter-24",
+        "source": "chapter-15:Hammer#0"
+       },
+       {
+        "item": "Amatsu",
+        "unit": "flavia",
+        "key": "chapter-24",
+        "source": "chapter-18:Amatsu#0"
+       },
+       {
+        "item": "Noble Rapier",
+        "unit": "flavia",
+        "key": "chapter-24",
+        "source": "chapter-18:Noble Rapier#0"
+       },
+       {
+        "item": "Armorslayer",
+        "unit": "flavia",
+        "key": "chapter-24",
+        "source": "chapter-18:Armorslayer#0"
+       },
+       {
+        "item": "Sol",
+        "unit": "flavia",
+        "key": "chapter-24",
+        "source": "chapter-19:Sol#0"
+       },
+       {
+        "item": "Noble Rapier",
+        "unit": "flavia",
+        "key": "chapter-24",
+        "source": "chapter-21:Noble Rapier#0"
+       },
+       {
+        "item": "Helswath",
+        "unit": "flavia",
+        "key": "chapter-24",
+        "source": "chapter-22:Helswath#0"
+       },
+       {
+        "item": "Yewfelle",
+        "unit": "basilio",
+        "key": "chapter-24",
+        "source": "chapter-22:Yewfelle#0"
+       },
+       {
+        "item": "Balmung",
+        "unit": "flavia",
+        "key": "chapter-24",
+        "source": "chapter-22:Balmung#0"
+       },
+       {
+        "item": "Arcfire",
+        "unit": "miriel",
+        "key": "chapter-24",
+        "source": "chapter-23:Arcfire#0"
+       },
+       {
+        "item": "Wyrmslayer",
+        "unit": "flavia",
+        "key": "chapter-24",
+        "source": "chapter-23:Wyrmslayer#0"
+       },
+       {
+        "item": "Silver Sword",
+        "unit": "robin",
+        "key": "chapter-24",
+        "source": "chapter-23:Silver Sword#0"
+       },
+       {
+        "item": "Silver Lance",
+        "unit": "kellam",
+        "key": "chapter-24",
+        "source": "chapter-23:Silver Lance#0"
+       },
+       {
+        "item": "Silver Axe",
+        "unit": "flavia",
+        "key": "chapter-24",
+        "source": "chapter-23:Silver Axe#0"
+       },
+       {
+        "item": "Spear",
+        "unit": "kellam",
+        "key": "chapter-25",
+        "source": "chapter-24:Spear#0"
+       },
+       {
+        "item": "Thoron",
+        "unit": "tharja",
+        "key": "chapter-25",
+        "source": "chapter-24:Thoron#0"
+       },
+       {
+        "item": "Tomahawk",
+        "unit": "flavia",
+        "key": "chapter-25",
+        "source": "chapter-24:Tomahawk#0"
+       },
+       {
+        "item": "Exalted Falchion",
+        "unit": "flavia",
+        "key": "chapter-25",
+        "source": "chapter-24:Exalted Falchion#0"
+       },
+       {
+        "item": "Goetia",
+        "unit": "tharja",
+        "key": "endgame",
+        "source": "chapter-25:Goetia#0"
+       },
+       {
+        "item": "Levin Sword",
+        "unit": "robin",
+        "key": "endgame",
+        "source": "chapter-25:Levin Sword#0"
+       },
+       {
+        "item": "Strength Tonic",
+        "unit": "chrom",
+        "key": "endgame",
+        "source": "paralogue-14:Strength Tonic#0"
+       },
+       {
+        "item": "Speed Tonic",
+        "unit": "basilio",
+        "key": "endgame",
+        "source": "buy"
+       },
+       {
+        "item": "Speed Tonic",
+        "unit": "cherche",
+        "key": "endgame",
+        "source": "buy"
+       },
+       {
+        "item": "Strength Tonic",
+        "unit": "lucina",
+        "key": "endgame",
+        "source": "buy"
+       },
+       {
+        "item": "Speed Tonic",
+        "unit": "tharja",
+        "key": "endgame",
+        "source": "buy"
+       },
+       {
+        "item": "Speed Tonic",
+        "unit": "noire",
+        "key": "endgame",
+        "source": "buy"
+       },
+       {
+        "item": "Strength Tonic",
+        "unit": "cynthia",
+        "key": "endgame",
+        "source": "buy"
+       }
+      ],
+      "sideGoals": {
+       "paralogue-2-village": "chase",
+       "chapter-10-thieves": "chase",
+       "chapter-11-thief": "chase",
+       "paralogue-6-result": "chase",
+       "paralogue-7-result": "skip",
+       "paralogue-9-ruger": "chase",
+       "paralogue-11-result": "skip",
+       "paralogue-12-thieves": "chase",
+       "paralogue-13-result": "chase",
+       "paralogue-14-villages": "chase",
+       "chapter-16-thieves": "chase",
+       "chapter-18-chests": "chase"
+      },
+      "priorities": [
+       {
+        "unit": "sully",
+        "priority": "high",
+        "from": "chapter-2",
+        "to": "chapter-15"
+       },
+       {
+        "unit": "lonqu",
+        "priority": "high",
+        "from": "chapter-5",
+        "to": "chapter-15"
+       },
+       {
+        "unit": "lissa",
+        "priority": "high",
+        "from": "prologue",
+        "to": "chapter-1"
+       },
+       {
+        "unit": "lissa",
+        "priority": "high",
+        "from": "paralogue-8",
+        "to": "chapter-16"
+       },
+       {
+        "unit": "gregor",
+        "priority": "high",
+        "from": "paralogue-8",
+        "to": "chapter-16"
+       },
+       {
+        "unit": "robin",
+        "priority": "high",
+        "from": "paralogue-5",
+        "to": "paralogue-5"
+       },
+       {
+        "unit": "robin",
+        "priority": "high",
+        "from": "paralogue-7",
+        "to": "paralogue-7"
+       },
+       {
+        "unit": "sumia",
+        "priority": "high",
+        "from": "paralogue-5",
+        "to": "paralogue-5"
+       },
+       {
+        "unit": "sumia",
+        "priority": "high",
+        "from": "paralogue-7",
+        "to": "paralogue-7"
+       },
+       {
+        "unit": "miriel",
+        "priority": "high",
+        "from": "paralogue-12",
+        "to": "paralogue-12"
+       },
+       {
+        "unit": "frederick",
+        "priority": "high",
+        "from": "paralogue-12",
+        "to": "paralogue-12"
+       },
+       {
+        "unit": "maribelle",
+        "priority": "high",
+        "from": "paralogue-14",
+        "to": "chapter-18"
+       },
+       {
+        "unit": "vaike",
+        "priority": "high",
+        "from": "paralogue-14",
+        "to": "chapter-18"
+       },
+       {
+        "unit": "cordelia",
+        "priority": "high",
+        "from": "paralogue-9",
+        "to": "paralogue-9"
+       },
+       {
+        "unit": "henry",
+        "priority": "high",
+        "from": "paralogue-9",
+        "to": "paralogue-9"
+       },
+       {
+        "unit": "panne",
+        "priority": "high",
+        "from": "paralogue-10",
+        "to": "paralogue-10"
+       },
+       {
+        "unit": "gaius",
+        "priority": "high",
+        "from": "paralogue-10",
+        "to": "paralogue-10"
+       },
+       {
+        "unit": "tharja",
+        "priority": "high",
+        "from": "paralogue-13",
+        "to": "chapter-19"
+       },
+       {
+        "unit": "donnel",
+        "priority": "high",
+        "from": "paralogue-13",
+        "to": "chapter-19"
+       },
+       {
+        "unit": "olivia",
+        "priority": "high",
+        "from": "paralogue-15",
+        "to": "chapter-21"
+       },
+       {
+        "unit": "libra",
+        "priority": "high",
+        "from": "paralogue-15",
+        "to": "chapter-21"
+       },
+       {
+        "unit": "cherche",
+        "priority": "high",
+        "from": "paralogue-6",
+        "to": "paralogue-6"
+       },
+       {
+        "unit": "virion",
+        "priority": "high",
+        "from": "paralogue-6",
+        "to": "paralogue-6"
+       },
+       {
+        "unit": "nowi",
+        "priority": "high",
+        "from": "paralogue-11",
+        "to": "paralogue-11"
+       },
+       {
+        "unit": "stahl",
+        "priority": "high",
+        "from": "paralogue-11",
+        "to": "paralogue-11"
+       }
+      ]
+     }
+    }
+   }
+  ],
+  "renown": {
+   "start": 0,
+   "claimed": []
+  },
+  "corrections": {
+   "units": {
+    "frederick": 1.12
+   }
+  },
+  "calibration": [
+   {
+    "entry": "e3",
+    "unit": "frederick",
+    "percentile": 1
+   },
+   {
+    "entry": "e3",
+    "unit": "robin",
+    "percentile": 1
+   }
+  ],
+  "settledLosses": [
+   "dead:lissa"
+  ],
+  "dismissedChanges": [
+   "e3"
+  ]
+ }
+}
