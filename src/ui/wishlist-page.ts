@@ -360,7 +360,15 @@ function unitCell(ctx: WishlistContext, u: UnitRowView): HTMLElement {
           : h('span', { class: `chip wl-reading ${u.reading.kind}`, title: u.reading.title }, u.reading.text)
         : null,
     ),
-    u.build.length ? h('div', { class: 'small wl-build' }, ...u.build.map((s) => h('span', { class: 'skill' }, s))) : null,
+    u.build.length
+      ? h(
+          'div',
+          { class: 'small wl-build' },
+          ...u.build.map((s) => h('span', { class: 'skill' }, s)),
+          // The plan fills builds to five: a shorter one is all the unit's classes teach.
+          u.build.length < 5 ? h('span', { class: 'muted' }, `${u.build.length}/5: no other skill its classes teach`) : null,
+        )
+      : null,
     u.parents ? h('div', { class: 'muted small' }, u.parents) : null,
   );
 }

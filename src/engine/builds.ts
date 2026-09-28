@@ -149,6 +149,45 @@ export function matchTemplate(t: BuildTemplate, reach: SkillReach, context: Play
   };
 }
 
+/** A build's full size: five skills equipped. */
+export const BUILD_SIZE = 5;
+
+/**
+ * A build filled to five skills (spec #175: the wishlist names each unit's 5-skill build): each slot the template can't
+ * fill takes the best-ranked skill the unit can learn by class, on its start line first (a reclass costs a seal and
+ * levels), that isn't in the build and conflicts with none of it. A slot stays empty, with its reason, only when no
+ * such skill is left.
+ */
+export function filledBuild(m: BuildMatch, reach: SkillReach, context: PlayContext): BuildMatch {
+  const have = new Set(m.slots.flatMap((s) => (s.skill ? [s.skill.id] : [])));
+  if (have.size >= BUILD_SIZE || m.slots.every((s) => s.skill)) return m;
+  const clash = (a: SkillId, b: SkillId) => CONFLICTS.some((e) => (e.a === a && e.b === b) || (e.a === b && e.b === a));
+  const pool = [...reach.classSources]
+    .flatMap(([skill, sources]) => {
+      const cls = sources.filter((s): s is ClassSource => s.kind === 'class').sort(byEffort)[0];
+      return cls ? [{ skill, rank: ref(skill, context).rank, cls }] : [];
+    })
+    .sort((a, b) => Number(a.cls.reclass) - Number(b.cls.reclass) || b.rank - a.rank || a.cls.level - b.cls.level);
+  let added = 0;
+  const slots = m.slots.map((slot): BuildSlotMatch => {
+    if (slot.skill) return slot;
+    const pick = pool.find((x) => !have.has(x.skill) && ![...have].some((h) => clash(h, x.skill)));
+    if (!pick) return { ...slot, reason: `${slot.reason ?? 'nothing in the template'}; no other skill its classes teach is left` };
+    have.add(pick.skill);
+    added += pick.rank;
+    return { ...slot, skill: ref(pick.skill, context), preference: undefined, source: pick.cls, reason: undefined };
+  });
+  return { ...m, slots, tier: have.size, quality: m.quality + added };
+}
+
+/** The plan's build for a unit: the best-ranked template for the context (shown or not), filled to five (`filledBuild`). */
+export function planBuild(reach: SkillReach, context: PlayContext): BuildMatch | undefined {
+  const best = templatesFor(context)
+    .map((t) => matchTemplate(t, reach, context))
+    .sort(compareBuilds)[0];
+  return best && filledBuild(best, reach, context);
+}
+
 /** Why none of a slot's skills fits: unreachable, already in another slot, or only from a parent who passes another. */
 function emptyReason(slot: readonly SkillId[], chosen: readonly (Option | undefined)[], reach: SkillReach): string {
   const why = (id: SkillId): string => {

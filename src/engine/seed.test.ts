@@ -153,6 +153,16 @@ describe('the seed (#198)', () => {
     const ceiling = engine.ceiling(fresh, { plan, runs: 1 })!;
     expect(ceiling.units.find((u) => u.id === 'lucina')?.skills).toContain(SKILLS[pass].name);
   });
+
+  it('gives every wishlist unit a 5-skill build: the template, then the best skills its classes teach', () => {
+    for (const difficulty of ['normal', 'lunatic'] as const) {
+      const plan = engine.seedPlan(runFromRoster(withRun(EMPTY_ROSTER, { route: 'main-story', difficulty, mode: 'classic' })));
+      for (const w of plan.wishlist.units) {
+        expect(w.build, `${w.unit} (${difficulty})`).toHaveLength(5);
+        expect(new Set(w.build).size).toBe(5);
+      }
+    }
+  });
 });
 
 describe('a plan’s roadmap (#198)', () => {
