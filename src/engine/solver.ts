@@ -69,7 +69,11 @@ export type MatchupContext = {
   readonly outdoors?: boolean;
   /** Each adjacent ally beyond the back, by its support rank with the lead (null: none); Dual Support stacks them. */
   readonly adjacent?: readonly (SupportLevel | null)[];
+  /** The Def and Avoid each side's tile gives (a position plan's terrain); none when unset. */
+  readonly leadTile?: TileBonus;
+  readonly foeTile?: TileBonus;
 };
+export type TileBonus = { readonly def: number; readonly avo: number };
 
 export type Matchup = {
   readonly foe: Foe;
@@ -294,10 +298,12 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
   // Faires, breakers and the hit and avoid skills, both sides (the realism pass): the rest of a unit's skills are procs
   // and stat bonuses the exchange doesn't play (`skills-in-combat`). Outdoor Fighter and Gamble (#250).
   const outdoor = (s: readonly string[] | ReadonlySet<string>) => (ctx.outdoors && has(s, 'Outdoor Fighter') ? 10 : 0);
-  const leadAvoid = breakerOf(lead.skills, fw) + avoidSkill(lead.skills) + outdoor(lead.skills);
-  const foeAvoid = breakerOf(skills, w) + avoidSkill(skills) + outdoor(skills);
+  const leadAvoid = breakerOf(lead.skills, fw) + avoidSkill(lead.skills) + outdoor(lead.skills) + (ctx.leadTile?.avo ?? 0);
+  const foeAvoid = breakerOf(skills, w) + avoidSkill(skills) + outdoor(skills) + (ctx.foeTile?.avo ?? 0);
   const attack = (magic ? st('mag') : st('str')) + faireOf(lead.skills, w) + ws.mt * (effective ? 3 : 1) + rankAtk + tri.atk;
-  let damage = Math.max(0, attack - (magic ? foe.stats.res : foe.stats.def));
+  const leadTile = ctx.leadTile?.def ?? 0;
+  const foeTile = ctx.foeTile?.def ?? 0;
+  let damage = Math.max(0, attack - (magic ? foe.stats.res : foe.stats.def) - foeTile);
   // Aegis covers bows, tomes and dragonstones; Pavise the rest, beaststones included (SF Skills).
   const aegisSide = (x: GameItem | undefined, m: boolean) => m || x?.kind === 'bow' || x?.kind === 'stone';
   const shieldPlusHit = aegisSide(w, magic) ? skills.has('Aegis+') : skills.has('Pavise+');
@@ -321,7 +327,7 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
     const bRank = rankOf(bw, back.className, false);
     const btri = triangleOf(bw, bRank, fw, foeRank);
     const [bRankAtk, bRankHit] = btri.aKeeps ? rankBonus(bw, bRank) : NO_RANK_BONUS;
-    backDamage = Math.max(0, (bmagic ? back.stats.mag : back.stats.str) + faireOf(back.skills, bw) + bws.mt * (beff ? 3 : 1) + bRankAtk + btri.atk - (bmagic ? foe.stats.res : foe.stats.def));
+    backDamage = Math.max(0, (bmagic ? back.stats.mag : back.stats.str) + faireOf(back.skills, bw) + bws.mt * (beff ? 3 : 1) + bRankAtk + btri.atk - (bmagic ? foe.stats.res : foe.stats.def) - foeTile);
     const bPlus = aegisSide(bw, bmagic) ? skills.has('Aegis+') : skills.has('Pavise+');
     if (bPlus || dragonskin) {
       backDamage = Math.floor(backDamage / 2);
@@ -347,7 +353,7 @@ export function matchup(lead: Fighter, back: Fighter | undefined, support: Suppo
   if (feff) notes.push(`${foe.name}’s ${fw!.name} is effective against the lead`);
   const leadDef = fmagic ? st('res') : st('def');
   const luna = skills.has('Luna+');
-  const worstHit = Math.max(0, (fmagic ? foe.stats.mag : foe.stats.str) + faireOf(skills, fw) + fmt * (feff ? 3 : 1) + foeRankAtk - tri.atk - (luna ? Math.floor(leadDef / 2) : leadDef));
+  const worstHit = Math.max(0, (fmagic ? foe.stats.mag : foe.stats.str) + faireOf(skills, fw) + fmt * (feff ? 3 : 1) + foeRankAtk - tri.atk - (luna ? Math.floor(leadDef / 2) : leadDef) - leadTile);
   const foeHits = fw ? (fw.brave ? 2 : 1) * (doubled ? 2 : 1) : 0;
   // The lead attacks from a distance the foe can't answer from when it can (#249). Counter returns the lead's damage
   // when it hits in melee and doesn't kill.
