@@ -224,3 +224,26 @@ describe('stakes (#209)', () => {
     for (const r of OPEN_RULES) if (r.assumption) expect(r.other.value).not.toEqual(r.best.value);
   });
 });
+
+describe('the Rally check needs a unit that can Rally (#251)', () => {
+  // The Prologue recorded: Lissa is a Lv 1 Cleric (Miracle), whatever skills her build plans later.
+  const prologue = addEntry(addEntry(runFromRoster(facts), 'premonition', 1), 'prologue', 2);
+  const plan = engine.seedPlan(prologue);
+  const withBuild: Plan = { ...plan, wishlist: { ...plan.wishlist, units: [...plan.wishlist.units.filter((w) => w.unit !== 'lissa'), { ...(plan.wishlist.units.find((w) => w.unit === 'lissa') ?? { unit: 'lissa' }), build: ['rally-luck'] } as Plan['wishlist']['units'][number]] } };
+  const lineup: PlanLineup = { key: 'chapter-1', pairs: [], solo: ['chrom', 'lissa', 'frederick', 'robin'] };
+  const rules = (run: Run) => engine.mapChecks(run, withBuild, 'chapter-1', { lineup }).map((c) => c.rule);
+
+  it('isn’t offered for a Cleric whose only skill is Miracle, even with Rally in her planned build', () => {
+    expect(rules(prologue)).not.toContain('rally-exp');
+  });
+
+  it('is offered once a unit holds a Rally, or its class teaches one at its level', () => {
+    const id = latestEntry(prologue)!.id;
+    const held = editEntry(prologue, id, (s) => ({ ...s, units: { ...s.units, lissa: { ...s.units.lissa!, skills: ['Miracle', 'Rally Luck'] } } }), 3);
+    expect(rules(held)).toContain('rally-exp');
+    const general = editEntry(prologue, id, (s) => ({ ...s, units: { ...s.units, frederick: { ...s.units.frederick!, class: 'General', level: 5 } } }), 3);
+    expect(rules(general)).toContain('rally-exp');
+    const early = editEntry(prologue, id, (s) => ({ ...s, units: { ...s.units, frederick: { ...s.units.frederick!, class: 'General', level: 4 } } }), 3);
+    expect(rules(early)).not.toContain('rally-exp');
+  });
+});

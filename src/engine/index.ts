@@ -250,6 +250,7 @@ export {
   isLost,
   waitsForRobin,
   recordFallen,
+  withConfirmed,
   recordMarriage,
   recordMissed,
   unrecordLoss,

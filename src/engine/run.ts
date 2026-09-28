@@ -95,6 +95,11 @@ export type RunEntry = {
    */
   readonly fell?: readonly RosterUnit[];
   /**
+   * Units whose level and EXP the player confirmed as recorded (#251): one that gained nothing reads as a result of 0
+   * EXP, not as "not updated".
+   */
+  readonly confirmed?: readonly RosterUnit[];
+  /**
    * The checks this map offered (#209), kept when the map's entry is made (Record results' Checks step lists only these),
    * each with the raw observation once taken and what it did to the rule.
    */
@@ -480,7 +485,25 @@ export function mapProgress(run: Run, i: number, unit: RosterUnit, assumptions: 
   }
   if (was.class !== u.class || u.level < was.level) return { kind: 'class-change', joined };
   const earned = (u.level - was.level) * 100 + u.exp - was.exp;
-  return earned === 0 ? { kind: 'unchanged', joined } : { kind: 'earned', earned, joined };
+  return earned === 0 && !e.confirmed?.includes(unit) ? { kind: 'unchanged', joined } : { kind: 'earned', earned, joined };
+}
+
+/**
+ * Marks a unit's recorded level and EXP on entry `id` as confirmed, or clears the mark (#251): a unit that really
+ * gained nothing is then a result of 0 EXP, not "not updated".
+ */
+export function withConfirmed(run: Run, id: string, unit: RosterUnit, confirmed: boolean, now: number): Run {
+  return withEntry(
+    run,
+    id,
+    (e) => {
+      const rest = (e.confirmed ?? []).filter((u) => u !== unit);
+      const next = confirmed ? [...rest, unit] : rest;
+      const { confirmed: _, ...base } = e;
+      return next.length ? { ...base, confirmed: next } : base;
+    },
+    now,
+  );
 }
 
 /**
@@ -883,7 +906,9 @@ export function parseRunFields(raw: Record<string, unknown>): Run {
     const sideGoals = parseSideGoalsSecured(e.sideGoals);
     const itemsUsed = parseItemsUsed(e.itemsUsed);
     const forecast = parseEntryForecast(e.forecast);
-    const fell = Array.isArray(e.fell) ? [...new Set(e.fell.filter((u): u is RosterUnit => typeof u === 'string' && UNIT_BY_NAME_IDS.has(u)))] : [];
+    const units = (x: unknown) => (Array.isArray(x) ? [...new Set(x.filter((u): u is RosterUnit => typeof u === 'string' && UNIT_BY_NAME_IDS.has(u)))] : []);
+    const fell = units(e.fell);
+    const confirmed = units(e.confirmed);
     const checks = parseEntryChecks(e.checks);
     return [
       {
@@ -899,6 +924,7 @@ export function parseRunFields(raw: Record<string, unknown>): Run {
         ...(itemsUsed ? { itemsUsed } : {}),
         ...(forecast ? { forecast } : {}),
         ...(fell.length ? { fell } : {}),
+        ...(confirmed.length ? { confirmed } : {}),
         ...(checks.length ? { checks } : {}),
       },
     ];
