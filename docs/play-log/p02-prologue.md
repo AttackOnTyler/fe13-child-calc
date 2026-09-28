@@ -128,7 +128,11 @@ The app's own comparison after Record results:
 
 Filed at the end of this map, per #227, grouped by root cause:
 
-- _to be filed_
+- #248 Prologue's stance plan says separate from T2, but no tile keeps the army out of reach; its 99.4% no-death chance rests on it (P02-T2)
+- #249 Matchups charge a melee foe's counter to a 1–2 range attack from range 2 (P02-S4)
+- #250 Matchup damage runs 2 over the game for a lance against an axe (P02-S5)
+- #251 Checks offered for things a unit can't do (Lissa's Rally), and Record results reads "gained nothing" as "not updated" (P02-S3, P02-E1)
+- Not filed: P02-S2 (random skills read high; recorded foe skills exist), P02-N1 (my error), P02-N2 (renown and Chrom's Vulnerary, to settle on screen first).
 
 ## Resume
 
