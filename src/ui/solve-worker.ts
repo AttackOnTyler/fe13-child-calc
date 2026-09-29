@@ -14,7 +14,7 @@
  *
  * Started by `solve-client.ts`, which terminates it to stop a solve.
  */
-import { READING_SECONDS, SOLVE_SECONDS, createEngine, solvePositions, type Assumptions, type Ceiling, type Engine, type FlawlessChance, type Plan, type Run, type SearchCursor } from '../engine';
+import { READING_SECONDS, SOLVE_SECONDS, createEngine, solvePositions, type SearchProgress, type Assumptions, type Ceiling, type Engine, type FlawlessChance, type Plan, type Run, type SearchCursor } from '../engine';
 import type { SolveReply, SolveRequest } from './solve-client';
 import { pacer } from './pace';
 
@@ -34,7 +34,17 @@ const deadline = (seconds: number) => {
 
 scope.onmessage = ({ data: m }) => {
   // The position plan needs no engine: the solver works on the board alone.
-  if (m.kind === 'positions') return void scope.postMessage({ id: m.id, kind: 'positions', plan: solvePositions(m.board, m.options), done: true });
+  if (m.kind === 'positions') {
+    // Progress about four times a second while the search runs (#285).
+    let last = 0;
+    const onProgress = (progress: SearchProgress) => {
+      const now = performance.now();
+      if (now - last < 250) return;
+      last = now;
+      scope.postMessage({ id: m.id, kind: 'positions-progress', progress, done: false });
+    };
+    return void scope.postMessage({ id: m.id, kind: 'positions', plan: solvePositions(m.board, { ...m.options, onProgress }), done: true });
+  }
   const engine = engineFor(m.assumptions);
   const pins = 'pins' in m && m.pins ? { pins: m.pins } : {};
   if (m.kind === 'solve') {
