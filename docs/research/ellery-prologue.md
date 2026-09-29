@@ -2,6 +2,17 @@
 
 Ticket: "What does Ellery's Lunatic Prologue play look like: turns, trades, wake timing?" (#280), map #253. Source: the user's NotebookLM notebook "Awakening Character Identity and Unit Optimization Strategy" (101 sources, mostly Ellery's streams). It was asked two questions on 2026-09-28. The answers are the notebook's synthesis with quotes; the video titles are as it cites them. **The notebook can be wrong.** Each claim below is marked **checked** (against our ROM data or attempt 3) or **unverified**.
 
+## Caveat: the notebook conflates the Prologue with Chapter 1
+
+Several source videos play both maps (for example "Frederick CANNOT Be Stopped! … (Chapter 0, 1, 2 Strategies)"), and the user flagged the conflation. A third question asked the notebook to label each claim by map. It answered "all Prologue", but that is **disproved** for the boss quote: "we need the boss to move onto the fort… he's going to break his weapon". The Prologue has no fort (our ROM grid: plain, water, bridge, partitions, edifice), and Garrick can't move. Chapter 1 has forts and woods, a Hammer Fighter, an Archer and a Fighter boss. So the notebook's map labels are unreliable, and each claim stands only as far as the map data backs it:
+
+- **Prologue for certain:** the water trick. Chapter 1 has no water, no Myrmidons and no Mage.
+- **Chapter 1, not the Prologue:** luring the boss onto a fort to break his weapon.
+- **Unassigned:** the "about 11 damage … we have 22 HP" gang-up. The "4, 4, 3" damage doesn't match our Prologue numbers (Barbarians 6, Myrmidons 0 against Frederick), and it would fit Chapter 1's Fighters. Also unassigned: "Lissa won't be able to heal me … I will use the vulnerary".
+- **Map-neutral:** Chrom trading his Vulnerary to Frederick on T1, which works on either map. Also Separate and drop.
+
+To pin these down, watch the cited videos at the moments quoted.
+
 ## Findings
 
 1. **The water trick.** The Tactician (Robin) and the Lord (Chrom) can stand on the Prologue's water; Barbarians and Myrmidons can't. Robin, paired with Chrom, sits on water and chips or kills the melee foes that gather on the shore, with Thunder at range 1–2. **Only the Mage threatens him there.**
@@ -9,7 +20,7 @@ Ticket: "What does Ellery's Lunatic Prologue play look like: turns, trades, wake
    - Our solver already models this. It never used it, because Robin rode as Frederick's back all map.
 2. **The Mage first.** "The Mage is the only unit capable of dealing heavy 2-range magic damage to Frederick"; he kills it on player phase or baits it onto a counter before the melee foes arrive.
    - Without the Mage, the gang-up is small: "we're taking 11 damage total and we have 22 HP… there is literally no enemies that are a danger to Frederick anymore" ("Frederick CANNOT Be Stopped!").
-   - **Checked in spirit:** in attempt 3's EP6 the Mage was 15 of the 27. Without it, Frederick takes 12, not 27.
+   - The quote's map is unassigned (see the caveat). From our own numbers, though: in attempt 3's EP6 the Mage was 15 of the 27. Without it, Frederick takes 12, not 27.
 3. **Frederick heals himself.** On T1 Chrom trades his Vulnerary to Frederick before pairing up, "which means Lissa won't be able to heal me, which is fine because I will use the [vulnerary]". So Lissa never steps into reach.
    - Attempt 3's engine check agrees: a heal from Lissa standing beside Frederick left her with a worst case of 46 against 17 HP.
 4. **Lissa and Robin out of every foe's reach, Frederick (with Chrom) as the only one in reach:** "So both Lissa and Robin are out of range of all enemies" (Iron Man). The fast clears wake the north on **T2**, with Frederick pushed to the edge of their reach. **Unverified:** "T2" is the notebook's summary.
@@ -20,8 +31,8 @@ Ticket: "What does Ellery's Lunatic Prologue play look like: turns, trades, wake
    - fast clears with Frederick sweeping: **5–10 turns**;
    - the full-EXP double water trick: about 59 ("59 turns that's actually not bad at all for a double water trick").
    - Attempt 1 took 11.
-9. **Garrick:** killed around T5–T8 in fast clears, and sometimes fed to Robin.
-   - **Wrong as stated:** "pulls Garrick away … onto a forest". Garrick can't move (ROM flag 0x10, research #254), and the map has no forest.
+9. **Garrick:** killed around T5–T8 in fast clears, and sometimes fed to Robin (unverified).
+   - The fort and forest boss lure is **Chapter 1**, not the Prologue. Garrick can't move (ROM flag 0x10, research #254), and the Prologue has neither terrain.
 
 ## For the tempo decision
 
