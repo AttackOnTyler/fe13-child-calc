@@ -1,0 +1,465 @@
+{
+ "gold": 5000,
+ "renown": 0,
+ "chaptersCleared": 1,
+ "units": [
+  {
+   "group": "blue (map)",
+   "appUnit": "chrom",
+   "appClass": "lord",
+   "unitId": 3,
+   "unit": "Chrom",
+   "classId": 0,
+   "className": "Lord (M)",
+   "level": 1,
+   "exp": 30,
+   "currentHp": 20,
+   "gains": {
+    "hp": 0,
+    "str": 0,
+    "mag": 0,
+    "skl": 0,
+    "spd": 0,
+    "lck": 0,
+    "def": 0,
+    "res": 0
+   },
+   "movementBonus": 0,
+   "position": [
+    8,
+    10
+   ],
+   "items": [
+    {
+     "id": 15,
+     "name": "Falchion",
+     "uses": 0,
+     "equipped": true
+    },
+    {
+     "id": 10,
+     "name": "Rapier",
+     "uses": 35,
+     "equipped": false
+    },
+    {
+     "id": 152,
+     "name": "Vulnerary",
+     "uses": 3,
+     "equipped": false
+    }
+   ],
+   "equippedSkills": [
+    "Dual Strike+"
+   ],
+   "learnedSkills": [
+    "Dual Strike+"
+   ],
+   "weaponExp": [
+    6,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "supportPoints": [],
+   "logbook": null,
+   "hasChildBlock": false,
+   "final": {
+    "stats": {
+     "hp": 20,
+     "str": 7,
+     "mag": 1,
+     "skl": 8,
+     "spd": 8,
+     "lck": 5,
+     "def": 7,
+     "res": 1
+    },
+    "notes": []
+   }
+  },
+  {
+   "group": "blue (map)",
+   "appUnit": "lissa",
+   "appClass": "priest",
+   "unitId": 4,
+   "unit": "Lissa",
+   "classId": 53,
+   "className": "Cleric",
+   "level": 1,
+   "exp": 17,
+   "currentHp": 17,
+   "gains": {
+    "hp": 0,
+    "str": 0,
+    "mag": 0,
+    "skl": 0,
+    "spd": 0,
+    "lck": 0,
+    "def": 0,
+    "res": 0
+   },
+   "movementBonus": 0,
+   "position": [
+    8,
+    10
+   ],
+   "items": [
+    {
+     "id": 133,
+     "name": "Heal",
+     "uses": 29,
+     "equipped": false
+    },
+    {
+     "id": 152,
+     "name": "Vulnerary",
+     "uses": 3,
+     "equipped": false
+    }
+   ],
+   "equippedSkills": [
+    "Miracle"
+   ],
+   "learnedSkills": [
+    "Miracle"
+   ],
+   "weaponExp": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "supportPoints": [],
+   "logbook": null,
+   "hasChildBlock": false,
+   "final": {
+    "stats": {
+     "hp": 17,
+     "str": 1,
+     "mag": 5,
+     "skl": 4,
+     "spd": 4,
+     "lck": 8,
+     "def": 3,
+     "res": 4
+    },
+    "notes": []
+   }
+  },
+  {
+   "group": "blue (map)",
+   "appUnit": "frederick",
+   "appClass": "great-knight",
+   "unitId": 5,
+   "unit": "Frederick",
+   "classId": 14,
+   "className": "Great Knight (M)",
+   "level": 1,
+   "exp": 89,
+   "currentHp": 20,
+   "gains": {
+    "hp": 0,
+    "str": 0,
+    "mag": 0,
+    "skl": 0,
+    "spd": 0,
+    "lck": 0,
+    "def": 0,
+    "res": 0
+   },
+   "movementBonus": 0,
+   "position": [
+    7,
+    7
+   ],
+   "items": [
+    {
+     "id": 38,
+     "name": "Silver Lance",
+     "uses": 20,
+     "equipped": true
+    }
+   ],
+   "equippedSkills": [
+    "Discipline",
+    "Outdoor Fighter"
+   ],
+   "learnedSkills": [
+    "Discipline",
+    "Outdoor Fighter"
+   ],
+   "weaponExp": [
+    15,
+    80,
+    15,
+    0,
+    0,
+    0
+   ],
+   "supportPoints": [],
+   "logbook": null,
+   "hasChildBlock": false,
+   "final": {
+    "stats": {
+     "hp": 28,
+     "str": 13,
+     "mag": 2,
+     "skl": 12,
+     "spd": 10,
+     "lck": 6,
+     "def": 14,
+     "res": 3
+    },
+    "notes": []
+   }
+  },
+  {
+   "group": "blue (map)",
+   "appUnit": "robin",
+   "appClass": "tactician",
+   "unitId": 0,
+   "unit": "Avatar (M)",
+   "classId": 4,
+   "className": "Tactician (M)",
+   "level": 1,
+   "exp": 0,
+   "currentHp": 19,
+   "gains": {
+    "hp": 0,
+    "str": 0,
+    "mag": 0,
+    "skl": 0,
+    "spd": 0,
+    "lck": 0,
+    "def": 0,
+    "res": 0
+   },
+   "movementBonus": 0,
+   "position": [
+    7,
+    7
+   ],
+   "items": [
+    {
+     "id": 107,
+     "name": "Thunder",
+     "uses": 45,
+     "equipped": true
+    },
+    {
+     "id": 1,
+     "name": "Bronze Sword",
+     "uses": 50,
+     "equipped": false
+    }
+   ],
+   "equippedSkills": [
+    "Veteran"
+   ],
+   "learnedSkills": [
+    "Veteran"
+   ],
+   "weaponExp": [
+    5,
+    0,
+    0,
+    0,
+    5,
+    0
+   ],
+   "supportPoints": [],
+   "logbook": {
+    "name": "Robin",
+    "asset": 2,
+    "flaw": 7
+   },
+   "hasChildBlock": false,
+   "final": {
+    "stats": {
+     "hp": 19,
+     "str": 8,
+     "mag": 5,
+     "skl": 5,
+     "spd": 6,
+     "lck": 4,
+     "def": 5,
+     "res": 4
+    },
+    "notes": [
+     "Robin asset/flaw base effect for str/def: not yet seen on screen"
+    ]
+   }
+  },
+  {
+   "group": "red (map)",
+   "appUnit": null,
+   "appClass": "barbarian",
+   "unitId": 4096,
+   "unit": "#4096",
+   "classId": 18,
+   "className": "Barbarian",
+   "level": 3,
+   "exp": 0,
+   "currentHp": 34,
+   "gains": {
+    "hp": 14,
+    "str": 6,
+    "mag": 0,
+    "skl": 3,
+    "spd": 5,
+    "lck": 3,
+    "def": 0,
+    "res": 0
+   },
+   "movementBonus": 0,
+   "position": [
+    8,
+    1
+   ],
+   "items": [
+    {
+     "id": 64,
+     "name": "Short Axe",
+     "uses": 25,
+     "equipped": true
+    }
+   ],
+   "equippedSkills": [
+    "Gamble"
+   ],
+   "learnedSkills": [
+    "Gamble"
+   ],
+   "weaponExp": [
+    0,
+    0,
+    90,
+    0,
+    0,
+    0
+   ],
+   "supportPoints": [],
+   "logbook": null,
+   "hasChildBlock": false,
+   "final": {
+    "stats": null,
+    "notes": [
+     "no additions for unit #4096"
+    ]
+   }
+  },
+  {
+   "group": "red (map)",
+   "appUnit": null,
+   "appClass": "barbarian",
+   "unitId": 4098,
+   "unit": "#4098",
+   "classId": 18,
+   "className": "Barbarian",
+   "level": 1,
+   "exp": 0,
+   "currentHp": 5,
+   "gains": {
+    "hp": 14,
+    "str": 6,
+    "mag": 0,
+    "skl": 3,
+    "spd": 5,
+    "lck": 5,
+    "def": 0,
+    "res": 0
+   },
+   "movementBonus": 0,
+   "position": [
+    7,
+    6
+   ],
+   "items": [
+    {
+     "id": 59,
+     "name": "Iron Axe",
+     "uses": 39,
+     "equipped": true
+    }
+   ],
+   "equippedSkills": [],
+   "learnedSkills": [],
+   "weaponExp": [
+    0,
+    0,
+    90,
+    0,
+    0,
+    0
+   ],
+   "supportPoints": [],
+   "logbook": null,
+   "hasChildBlock": false,
+   "final": {
+    "stats": null,
+    "notes": [
+     "no additions for unit #4098"
+    ]
+   }
+  },
+  {
+   "group": "red (map)",
+   "appUnit": null,
+   "appClass": "barbarian",
+   "unitId": 4098,
+   "unit": "#4098",
+   "classId": 18,
+   "className": "Barbarian",
+   "level": 1,
+   "exp": 0,
+   "currentHp": 5,
+   "gains": {
+    "hp": 14,
+    "str": 6,
+    "mag": 0,
+    "skl": 3,
+    "spd": 5,
+    "lck": 5,
+    "def": 0,
+    "res": 0
+   },
+   "movementBonus": 0,
+   "position": [
+    8,
+    7
+   ],
+   "items": [
+    {
+     "id": 59,
+     "name": "Iron Axe",
+     "uses": 39,
+     "equipped": true
+    }
+   ],
+   "equippedSkills": [],
+   "learnedSkills": [],
+   "weaponExp": [
+    0,
+    0,
+    90,
+    0,
+    0,
+    0
+   ],
+   "supportPoints": [],
+   "logbook": null,
+   "hasChildBlock": false,
+   "final": {
+    "stats": null,
+    "notes": [
+     "no additions for unit #4098"
+    ]
+   }
+  }
+ ]
+}

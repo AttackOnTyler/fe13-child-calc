@@ -1,0 +1,321 @@
+{
+ "gold": 5000,
+ "renown": 0,
+ "chaptersCleared": 2,
+ "units": [
+  {
+   "group": "army",
+   "appUnit": "chrom",
+   "appClass": "lord",
+   "unitId": 3,
+   "unit": "Chrom",
+   "classId": 0,
+   "className": "Lord (M)",
+   "level": 1,
+   "exp": 60,
+   "currentHp": 20,
+   "gains": {
+    "hp": 0,
+    "str": 0,
+    "mag": 0,
+    "skl": 0,
+    "spd": 0,
+    "lck": 0,
+    "def": 0,
+    "res": 0
+   },
+   "movementBonus": 0,
+   "position": [
+    255,
+    255
+   ],
+   "items": [
+    {
+     "id": 15,
+     "name": "Falchion",
+     "uses": 0,
+     "equipped": true
+    },
+    {
+     "id": 10,
+     "name": "Rapier",
+     "uses": 35,
+     "equipped": false
+    },
+    {
+     "id": 152,
+     "name": "Vulnerary",
+     "uses": 3,
+     "equipped": false
+    }
+   ],
+   "equippedSkills": [
+    "Dual Strike+"
+   ],
+   "learnedSkills": [
+    "Dual Strike+"
+   ],
+   "weaponExp": [
+    7,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "supportPoints": [
+    0,
+    0,
+    1
+   ],
+   "logbook": null,
+   "hasChildBlock": false,
+   "final": {
+    "stats": {
+     "hp": 20,
+     "str": 7,
+     "mag": 1,
+     "skl": 8,
+     "spd": 8,
+     "lck": 5,
+     "def": 7,
+     "res": 1
+    },
+    "notes": []
+   }
+  },
+  {
+   "group": "army",
+   "appUnit": "lissa",
+   "appClass": "priest",
+   "unitId": 4,
+   "unit": "Lissa",
+   "classId": 53,
+   "className": "Cleric",
+   "level": 1,
+   "exp": 34,
+   "currentHp": 17,
+   "gains": {
+    "hp": 0,
+    "str": 0,
+    "mag": 0,
+    "skl": 0,
+    "spd": 0,
+    "lck": 0,
+    "def": 0,
+    "res": 0
+   },
+   "movementBonus": 0,
+   "position": [
+    255,
+    255
+   ],
+   "items": [
+    {
+     "id": 133,
+     "name": "Heal",
+     "uses": 28,
+     "equipped": false
+    },
+    {
+     "id": 152,
+     "name": "Vulnerary",
+     "uses": 3,
+     "equipped": false
+    }
+   ],
+   "equippedSkills": [
+    "Miracle"
+   ],
+   "learnedSkills": [
+    "Miracle"
+   ],
+   "weaponExp": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    2
+   ],
+   "supportPoints": [
+    0,
+    0,
+    1,
+    0,
+    1
+   ],
+   "logbook": null,
+   "hasChildBlock": false,
+   "final": {
+    "stats": {
+     "hp": 17,
+     "str": 1,
+     "mag": 5,
+     "skl": 4,
+     "spd": 4,
+     "lck": 8,
+     "def": 3,
+     "res": 4
+    },
+    "notes": []
+   }
+  },
+  {
+   "group": "army",
+   "appUnit": "frederick",
+   "appClass": "great-knight",
+   "unitId": 5,
+   "unit": "Frederick",
+   "classId": 14,
+   "className": "Great Knight (M)",
+   "level": 2,
+   "exp": 15,
+   "currentHp": 29,
+   "gains": {
+    "hp": 1,
+    "str": 0,
+    "mag": 1,
+    "skl": 1,
+    "spd": 0,
+    "lck": 0,
+    "def": 1,
+    "res": 0
+   },
+   "movementBonus": 0,
+   "position": [
+    255,
+    255
+   ],
+   "items": [
+    {
+     "id": 38,
+     "name": "Silver Lance",
+     "uses": 17,
+     "equipped": true
+    }
+   ],
+   "equippedSkills": [
+    "Discipline",
+    "Outdoor Fighter"
+   ],
+   "learnedSkills": [
+    "Discipline",
+    "Outdoor Fighter"
+   ],
+   "weaponExp": [
+    15,
+    86,
+    15,
+    0,
+    0,
+    0
+   ],
+   "supportPoints": [
+    3,
+    0,
+    0,
+    0,
+    0,
+    1
+   ],
+   "logbook": null,
+   "hasChildBlock": false,
+   "final": {
+    "stats": {
+     "hp": 29,
+     "str": 13,
+     "mag": 3,
+     "skl": 13,
+     "spd": 10,
+     "lck": 6,
+     "def": 15,
+     "res": 3
+    },
+    "notes": []
+   }
+  },
+  {
+   "group": "army",
+   "appUnit": "robin",
+   "appClass": "tactician",
+   "unitId": 0,
+   "unit": "Avatar (M)",
+   "classId": 4,
+   "className": "Tactician (M)",
+   "level": 1,
+   "exp": 0,
+   "currentHp": 19,
+   "gains": {
+    "hp": 0,
+    "str": 0,
+    "mag": 0,
+    "skl": 0,
+    "spd": 0,
+    "lck": 0,
+    "def": 0,
+    "res": 0
+   },
+   "movementBonus": 0,
+   "position": [
+    255,
+    255
+   ],
+   "items": [
+    {
+     "id": 107,
+     "name": "Thunder",
+     "uses": 45,
+     "equipped": true
+    },
+    {
+     "id": 1,
+     "name": "Bronze Sword",
+     "uses": 50,
+     "equipped": false
+    }
+   ],
+   "equippedSkills": [
+    "Veteran"
+   ],
+   "learnedSkills": [
+    "Veteran"
+   ],
+   "weaponExp": [
+    5,
+    0,
+    0,
+    0,
+    5,
+    0
+   ],
+   "supportPoints": [
+    0,
+    0,
+    0,
+    3
+   ],
+   "logbook": {
+    "name": "Robin",
+    "asset": 2,
+    "flaw": 7
+   },
+   "hasChildBlock": false,
+   "final": {
+    "stats": {
+     "hp": 19,
+     "str": 8,
+     "mag": 5,
+     "skl": 5,
+     "spd": 6,
+     "lck": 4,
+     "def": 5,
+     "res": 4
+    },
+    "notes": [
+     "Robin asset/flaw base effect for str/def: not yet seen on screen"
+    ]
+   }
+  }
+ ]
+}

@@ -1,0 +1,29 @@
+Prepare page inputs, attempt 5 (positions.prologue, 24 inputs, in order). "fc" = the forecast tap.
+
+T1  act  Frederick (2,14)->(4,14) Pair Up with Robin
+T1  act  Robin pair (4,14)->(9,13), Switch, Frederick attacks Myrmidon e10: fc
+T1  act  Chrom (3,13)->(1,13) Pair Up with Lissa
+T1  act  Lissa pair (1,13)->(3,14) Wait
+EP1 fix  Barbarian e7 from (9,12) on Frederick: its strike hit, counter "killed Barbarian" (Robin's Dual Strike finished it)
+EP1 stop Mage e6 (10,11) [predicted]; Barbarian e9 (2,12) [predicted]
+EP1 place Myrmidon e8 at (7,12)   [predicted (4,13), ties (2,13)(5,14)(3,12): not listed]
+T2  act  Frederick (9,13)->(3,12) attacks Barbarian e9: fc, counter hit (Frederick 16, Barbarian 5)
+T2  act  Lissa pair (3,14)->(1,12), Switch, Chrom attacks e9: fc (killed)
+EP2 as predicted (Myrmidon e8 (4,12) dies on Frederick's counter; Mage e6 -> (6,12))
+T3  act  Frederick (3,12)->(6,11) attacks Mage e6: fc (killed)
+T3  act  Chrom pair (1,12)->(6,12) Wait   [the re-solve dropped the planned heal]
+EP3 as predicted (no attacks)
+T4  act  Frederick (6,11)->(6,8) Wait   (wakes the north band)
+T4  act  Chrom pair (6,12)->(5,8), Switch, Lissa heals Frederick 16->26
+EP4 as predicted (Myrmidon e1 (6,7) dies on the counter; e2 (7,6), e3 (8,7), e4 (7,5), e5 (8,5))
+T5  act  Frederick (6,8)->(7,7) attacks Mage e3: fc (killed)
+T5  act  Lissa pair (5,8)->(8,10) Wait
+EP5 fix  Myrmidon e2 hit, killed on the counter; Barbarian e4 (7,6) hit, countered to 5; Barbarian e5 (8,7) missed, countered to 5
+T6  hp   Frederick 20   (the fix above had left him at 26: see P02e-U1)
+T6  act  Lissa pair (8,10)->(9,7), Switch, Chrom attacks e5: fc (killed)
+T6  act  Frederick (7,7)->(8,6) attacks Barbarian e4: fc (killed; Frederick Lv 2)
+EP6 as predicted (no attacks)
+T7  act  Chrom pair (9,7)->(8,5), Switch, Lissa heals Frederick 20->29 (page: ->28)
+T7  act  Frederick (8,6)->(8,2) attacks Garrick: tapped "killed" + counter hit. WRONG TAP:
+         Garrick was left at 11 as forecast and died on EP7 (attacked Frederick, hit, died on the counter).
+         The page has no undo short of "Start over", so the record stands with that tap (P02e-U2).
