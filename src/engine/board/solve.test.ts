@@ -4,7 +4,7 @@ import { liveEnemies, movement, playerById } from './board';
 import { keyTile, manhattan, sameTile, tileKey } from './captured';
 import { enemyPhase } from './enemy-phase';
 import { prologueBoard } from './prologue-fixture';
-import { actionText, applyAction, menuAt, actingTiles, solvePositions, type PlannedAction } from './solve';
+import { actingTiles, actionText, applyAction, menuAt, solvePositions, type PlannedAction } from './solve';
 
 describe('the position solver (#265)', () => {
   const plan = solvePositions(prologueBoard(), { phaseEnds: 3 });
@@ -112,6 +112,18 @@ describe('the position solver (#265)', () => {
     expect(attack).toMatchObject({ unit: 'frederick', switched: true, from: [1, 13], to: [3, 10] });
     // Said in the game's order: the lead moves, then Switch, then the back's command.
     expect(actionText(b, attack!)).toBe('Lissa → (3,10), Switch (Frederick leads): Attack Myrmidon (Silver Lance)');
+    // The menu is the lead's reach too: nothing at a tile only the back could reach.
+    expect(menuAt(b, 'frederick', [4, 9])).toEqual([]);
+    // A back with less Mov than its lead gets its whole menu wherever the lead can take the pair: Frederick (7) carries
+    // Lissa (5, 6 leading) from (1,13) to (8,13), 7 away.
+    const carried = prologueBoard({ frederick: [1, 13] }, { frederick: 'lissa' });
+    expect(actingTiles(carried, 'lissa').has(tileKey([8, 13]))).toBe(true);
+    expect(menuAt(carried, 'lissa', [8, 13]).some((a) => a.command.kind === 'wait' && a.switched)).toBe(true);
+    // Attempt 3's T1, within the lead's reach, is still offered: Robin (5, 6 with Frederick behind) takes the pair from
+    // (4,14) to (8,12), then Switch, and Frederick attacks the Myrmidon on (9,12).
+    const a3 = prologueBoard({}, { robin: 'frederick' });
+    const east = liveEnemies(a3).find((e) => e.at[0] === 9 && e.at[1] === 12)!;
+    expect(menuAt(a3, 'frederick', [8, 12]).find((a) => a.command.kind === 'attack' && a.command.target === east.id)).toMatchObject({ switched: true, from: [4, 14] });
     // The solver never offers the move the game forbids.
     const t1 = solvePositions(b, { turns: 1 }).turns[0]!.actions;
     expect(t1.some((a) => a.switched && sameTile(a.to, [4, 9]))).toBe(false);
