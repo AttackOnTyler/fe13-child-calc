@@ -12,8 +12,7 @@ describe('the position solver (#265)', () => {
   it('plans every turn from turn 1 to the rout, within the game-over cap and the budget (#284)', () => {
     expect(plan.routTurn).toBeDefined();
     expect(plan.turns).toHaveLength(plan.routTurn!);
-    expect(plan.outline).toEqual([]);
-    expect(plan.hardLine).toBe(true);
+    expect(plan.withinRisk).toBe(true);
     expect(plan.proven).toBe(true);
     // Every unit gets an action on turn 1 (a back rides with its lead), each with a reason.
     const t1 = plan.turns[0]!;
@@ -37,7 +36,7 @@ describe('the position solver (#265)', () => {
     // plan is the least-risk line, over the cap, and a wide search agrees.
     const wide = solvePositions(missed, { acted: ['robin'], turns: 1, beam: 40, phaseEnds: 6 });
     expect(again.turns[0]!.safety.safe).toBe(wide.turns[0]!.safety.safe);
-    expect(again.hardLine).toBe(false);
+    expect(again.withinRisk).toBe(false);
     expect(again.gameOver).toBeGreaterThan(0.01);
     // Solved before the roll, the same turn has a safe line: the roll that matters goes where a miss can be covered.
     expect(solvePositions(t2, { turns: 1 }).turns[0]!.safety.safe).toBe(true);

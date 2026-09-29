@@ -35,8 +35,9 @@ describe('the safety checker (#264)', () => {
     expect(fred.threats.length).toBeGreaterThan(1);
     expect(s.units.filter((u) => u.unit !== 'frederick').every((u) => u.total === 0)).toBe(true);
     // Only the crits are left: a small risk, not none.
-    expect(s.critRisk).toBeGreaterThanOrEqual(0);
-    expect(s.critRisk).toBeLessThan(0.05);
+    const risk = s.units.reduce((n, u) => n + u.deathChance, 0);
+    expect(risk).toBeGreaterThanOrEqual(0);
+    expect(risk).toBeLessThan(0.05);
     // The northern band isn't woken by it.
     expect(s.awake).not.toContain(at(b0, 7, 3).id);
   });
@@ -113,10 +114,25 @@ describe('pricing deaths by worth (#282)', () => {
       { unit: 'chrom', hp: 20, total: 0, threats: [], dies: false, deathChance: 0.1 },
       { unit: 'lissa', hp: 17, total: 0, threats: [], dies: false, deathChance: 0.5 },
       { unit: 'frederick', hp: 28, total: 0, threats: [], dies: false, deathChance: 0.2 },
-    ], lethalCounters: [], safe: true, critRisk: 0, awake: [] };
+    ], lethalCounters: [], safe: true, awake: [] };
     const p = priceDeaths(s, { lissa: 4, frederick: 10 });
     expect(p.gameOver).toBeCloseTo(0.1, 12);
     // Lissa 0.5 × 4 + Frederick 0.2 × 10; Chrom's is game over, not worth.
     expect(p.worthLost).toBeCloseTo(4, 12);
+  });
+});
+
+describe('the gang-up: tiles held by foes that don’t attack (#282 review)', () => {
+  it('a sleeping foe on one of two free tiles leaves room for one attacker, not two', () => {
+    // Frederick at (5,13), Chrom (4,13) and Lissa (5,14) beside him: (5,12) and (6,13) are open, but a foe that sleeps
+    // (Null start) holds (6,13). Two awake Barbarians reach him; Frederick's counter can't fell one without a crit.
+    const b = prologueBoard({ frederick: [5, 13], chrom: [4, 13], lissa: [5, 14], robin: [1, 14] });
+    const barbs = b.enemies.filter((e) => e.foe.className === 'Barbarian' && !e.boss);
+    const a1 = { ...barbs[0]!, at: [5, 10] as const, awake: true };
+    const a2 = { ...barbs[1]!, at: [6, 11] as const, awake: true };
+    const sleeper = { ...barbs[2]!, at: [6, 13] as const, awake: false, ai: { ...barbs[2]!.ai, start: 'Null' } };
+    const fred = safety(withPieces(b, b.players, [a1, a2, sleeper])).units.find((u) => u.unit === 'frederick')!;
+    expect(fred.threats).toHaveLength(2);
+    expect(fred.total).toBe(fred.threats[0]!.damage);
   });
 });

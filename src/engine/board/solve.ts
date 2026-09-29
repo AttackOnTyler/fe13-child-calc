@@ -111,13 +111,9 @@ export type TurnPlan = {
   readonly after: Board;
 };
 
-export type OutlineTurn = { readonly turn: number; readonly kills: number; readonly left: number; readonly woke: number; readonly safe: boolean; readonly actions: readonly string[] };
-
 export type PositionPlan = {
   /** Every turn of the line, from the board's to the rout (or as far as it gets). */
   readonly turns: readonly TurnPlan[];
-  /** Kept empty: the whole line is detailed now (#284). */
-  readonly outline: readonly OutlineTurn[];
   /** The turn the last enemy falls on predicted outcomes; undefined when no line gets there. */
   readonly routTurn: number | undefined;
   /** No open line could rout sooner (over the phase ends the search tries). */
@@ -126,18 +122,12 @@ export type PositionPlan = {
   readonly gameOver: number;
   readonly worthLost: number;
   readonly budget: number;
-  /** Within the game-over cap and the budget. */
-  readonly hardLine: boolean;
-  /** Turns where a unit's gang-up worst case kills it without a crit, or a planned attack's counter can. */
-  readonly brokenTurns: readonly number[];
-  /** Every unit's death chance summed over the line. */
-  readonly critRisk: number;
-  /** Nodes the search expanded. */
-  readonly expanded: number;
+  /** Within the game-over cap and the budget: the risk the plan takes is one it may take. */
+  readonly withinRisk: boolean;
 };
 
-/** How the search stands: nodes expanded and open, the lowest open rout bound, the best rout found. */
-export type SearchProgress = { readonly expanded: number; readonly frontier: number; readonly bound: number; readonly bestRout?: number };
+/** How the search stands: nodes expanded, the lowest open rout bound, the best rout found. */
+export type SearchProgress = { readonly expanded: number; readonly bound: number; readonly bestRout?: number };
 
 export type SolveOptions = {
   /** How many turns ahead the search may go (default 30): 1 solves just this turn, ranked by progress. */
@@ -145,13 +135,11 @@ export type SolveOptions = {
   /** The beam over a phase's actions (default 10), and the phase ends each node expands into (default 4). */
   readonly beam?: number;
   readonly phaseEnds?: number;
-  /** Unit worth in flawless points by unit (default 1 each: a death costs one), the map's budget of expected worth lost
-   * (default 0.2), and the game-over cap (default 1%). */
+  /** Unit worth in flawless points by unit (default 1 each: a death costs one), and the map's budget of expected worth
+   * lost (default 0.2). */
   readonly worth?: Readonly<Record<string, number>>;
   readonly budget?: number;
-  readonly gameOverCap?: number;
-  /** A bound on nodes (default none), and a report after each. */
-  readonly maxNodes?: number;
+  /** A report after each node expanded. */
   readonly onProgress?: (p: SearchProgress) => void;
   /** Units that already acted this turn (a re-solve after a combat). */
   readonly acted?: readonly string[];
@@ -345,6 +333,8 @@ function options(s: State, u: PlayerPiece): PlannedAction[] {
     }
     return ts;
   };
+  /** Pair Ups already offered (one per ally and trade, whichever tile next to the ally it comes from). */
+  const pairs = new Set<string>();
   for (const k of tiles) {
     const to: Tile = [k % 64, Math.floor(k / 64)];
     for (const trade of tradesAt(to)) {
@@ -377,22 +367,25 @@ function options(s: State, u: PlayerPiece): PlannedAction[] {
           push({ kind: 'heal', target: x.id, staff: staff.item });
         }
       if (v.hp < v.fighter.stats.hp && usesOf(v, 'Vulnerary')) push({ kind: 'item', item: 'Vulnerary' });
-      if (!trade && back) {
+      // Separate: set the back down next to the tile (a trade first is offered too, #283 review).
+      const carried = v.back ? playerById(tb, v.back) : undefined;
+      if (carried)
         for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
           const drop: Tile = [to[0] + dx, to[1] + dy];
-          if (!occupant(b, drop) || sameTile(drop, u.at)) if (moveCost(b.map, drop, moveRow(back.fighter.className)) !== null) out.push({ unit: u.id, from: u.at, to, command: { kind: 'separate', to: drop }, why: '' });
+          if (!occupant(b, drop) || sameTile(drop, u.at)) if (moveCost(b.map, drop, moveRow(carried.fighter.className)) !== null) push({ kind: 'separate', to: drop });
         }
-      }
       push({ kind: 'wait' });
+      // Pair Up onto an ally next to the tile (the ally leads), after a trade with it or none.
+      if (!u.back)
+        for (const x of allies) {
+          if (x.back || manhattan(x.at, to) !== 1 || (trade && trade.with !== x.id)) continue;
+          if (!pairs.has(`${x.id}:${JSON.stringify(trade ?? null)}`)) {
+            pairs.add(`${x.id}:${JSON.stringify(trade ?? null)}`);
+            out.push({ unit: u.id, from: u.at, to: x.at, ...t, command: { kind: 'pair', with: x.id }, why: '' });
+          }
+        }
     }
   }
-  // Pair Up: onto an ally it can reach (the ally leads).
-  if (!u.back)
-    for (const x of allies) {
-      if (x.back) continue;
-      const adj = tiles.some((k) => manhattan([k % 64, Math.floor(k / 64)], x.at) === 1);
-      if (adj) out.push({ unit: u.id, from: u.at, to: x.at, command: { kind: 'pair', with: x.id }, why: '' });
-    }
   return out;
 }
 
@@ -439,7 +432,6 @@ const RISK = 400;
 /** The worth and limits a search prices deaths by (#282), and what's left of them on a line. */
 type Pricing = { readonly worth: Readonly<Record<string, number>>; readonly budgetLeft: number; readonly capLeft: number };
 const deathCost = (p: Pricing, unit: string) => (GAME_OVER_UNITS.includes(unit) ? BROKEN : DEATH * (p.worth[unit] ?? 1));
-const CRIT = 2e5;
 const KILL = 400;
 const HP_TAKEN = 12;
 const CLOSING = 3;
@@ -622,7 +614,8 @@ function endTurn(b: Board): { after: Board; enemy: EnemyAction[]; woke: string[]
 
 const DEFAULT_WORTH = 1;
 const DEFAULT_BUDGET = 0.2;
-const DEFAULT_CAP = 0.01;
+/** The game-over cap (#278: "a tiny cap"): Chrom's or Robin's death, at most 1% per map. */
+const GAME_OVER_CAP = 0.01;
 
 /**
  * A lower bound on the turn the last enemy falls (#284): each foe needs one of our units within reach of it on a player
@@ -718,12 +711,11 @@ const betterRout = (a: Node, b: Node) => a.worthLost !== b.worthLost ? a.worthLo
  */
 export function solvePositions(board: Board, opts: SolveOptions = {}): PositionPlan {
   const beam = opts.beam ?? 10;
-  const k = opts.phaseEnds ?? 4;
+  const ends = opts.phaseEnds ?? 4;
   const horizon = opts.turns ?? 30;
-  const maxNodes = opts.maxNodes ?? Infinity;
   const prio = opts.expPriority ?? {};
   const budget = opts.budget ?? DEFAULT_BUDGET;
-  const cap = opts.gameOverCap ?? DEFAULT_CAP;
+  const cap = GAME_OVER_CAP;
   const worth = Object.fromEntries(board.players.map((p) => [p.id, opts.worth?.[p.id] ?? DEFAULT_WORTH]));
   const before = (a: Node, b: Node) => (a.bound !== b.bound ? a.bound < b.bound : a.value !== b.value ? a.value > b.value : a.turns.length > b.turns.length);
   const frontier = new Frontier(before);
@@ -746,12 +738,10 @@ export function solvePositions(board: Board, opts: SolveOptions = {}): PositionP
       proven = true;
       break;
     }
-    if (expanded >= maxNodes) break;
     expanded++;
     const first = n.turns.length === 0;
     const pricing: Pricing = { worth, budgetLeft: budget - n.worthLost, capLeft: 1 - (1 - cap) / (1 - n.gameOver) };
-    const ends = playerPhase(n.board, first ? new Set(opts.acted ?? []) : new Set(), prio, beam, pricing, first ? opts.pinned : undefined).slice(0, k);
-    for (const end of ends) {
+    for (const end of playerPhase(n.board, first ? new Set(opts.acted ?? []) : new Set(), prio, beam, pricing, first ? opts.pinned : undefined).slice(0, ends)) {
       const gameOver = 1 - (1 - n.gameOver) * (1 - end.price.gameOver);
       const worthLost = n.worthLost + end.price.worthLost;
       const e = endTurn(end.state.board);
@@ -785,22 +775,18 @@ export function solvePositions(board: Board, opts: SolveOptions = {}): PositionP
       seen.add(key);
       frontier.push(child);
     }
-    opts.onProgress?.({ expanded, frontier: frontier.size, bound: frontier.peek()?.bound ?? n.bound, ...(best ? { bestRout: best.turns.at(-1)!.turn } : {}) });
+    opts.onProgress?.({ expanded, bound: frontier.peek()?.bound ?? n.bound, ...(best ? { bestRout: best.turns.at(-1)!.turn } : {}) });
   }
   const line = best ?? furthest ?? leastRisk ?? root;
   const turns = line.turns;
   return {
     turns,
-    outline: [],
     routTurn: best ? best.turns.at(-1)!.turn : undefined,
     proven: proven && !!best,
     gameOver: line.gameOver,
     worthLost: line.worthLost,
     budget,
-    hardLine: line.gameOver <= cap && line.worthLost <= budget,
-    brokenTurns: turns.filter((t) => !t.safety.safe).map((t) => t.turn),
-    critRisk: turns.reduce((n, t) => n + t.safety.units.reduce((m, u) => m + u.deathChance, 0), 0),
-    expanded,
+    withinRisk: line.gameOver <= cap && line.worthLost <= budget,
   };
 }
 

@@ -58,7 +58,7 @@ describe('the headline and the held-back note (#248)', () => {
     expect(heldBackNotes(solvePositions(prologueBoard(), { turns: 1 }), [{ turn: 1, units: ['robin', 'lissa'] }])).toEqual([]);
   });
 
-  it('reads the hard line, the crit risk and the rout turn', () => {
+  it('reads the rout, its proof and the risk against the budget', () => {
     // Attempt 1's T2 board, solved to the rout.
     const full = solvePositions(t2, { phaseEnds: 3 });
     const head = headline(full, [], name, 'about 6 turns');
@@ -76,7 +76,7 @@ describe('the headline and the held-back note (#248)', () => {
   it('compares a tried move with the plan: better, worse, same', () => {
     const b = prologueBoard();
     const base = solvePositions(b, { turns: 1 });
-    // Robin walks up alone into the south's reach: worse on the hard line.
+    // Robin walks up alone into the south's reach: worse on no death without a crit.
     const pinned = { unit: 'robin', from: [4, 14] as const, to: [5, 12] as const, command: { kind: 'wait' as const }, why: '' };
     const mine = solvePositions(b, { turns: 1, pinned });
     const c = compare(mine, base, name);
@@ -162,6 +162,6 @@ describe('re-solve on deviation, the budget and the headline (#285)', () => {
     expect(head.lines[0]).toMatch(/expected worth lost .* of 0\.2 \(default\)$/);
     expect(head.lines[1]).toBe('The play estimated about 7 turns');
     expect(headline({ ...plan, proven: false }, [], name).verdict).toBe(`Best found so far: rout on turn ${plan.routTurn}`);
-    expect(headline({ ...plan, hardLine: false }, [], name)).toMatchObject({ ok: false, verdict: 'Over the risk budget: this is the least-risk line' });
+    expect(headline({ ...plan, withinRisk: false }, [], name)).toMatchObject({ ok: false, verdict: 'Over the risk budget: this is the least-risk line' });
   });
 });

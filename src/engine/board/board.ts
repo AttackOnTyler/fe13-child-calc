@@ -219,7 +219,7 @@ export const weaponsOf = (names: readonly string[]): Weapon[] =>
  * class bases' weapon kinds; weapon ranks aren't recorded, so any rank passes) that isn't locked to other units or
  * classes (the item's "only": "Chrom and Marth", "Lord, Great Lord, and Lodestar"; an enemy-only item never).
  */
-export function canUse(className: string, item: GameItem | undefined, unitName = ''): boolean {
+export function canUse(className: string, item: GameItem | undefined, unitName: string): boolean {
   if (!item) return false;
   if (item.kind === 'item') return true;
   const cls = className.replace(/ \([MF]\)$/, '');
