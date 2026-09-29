@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { enemyPhase, forecast, leads, liveEnemies, playerById, replay, solvePositions, type Board, type PositionEvent } from '../engine';
 import { prologueBoard } from '../engine/board/prologue-fixture';
-import { compare, fightAs, forecastText, headline, heldBackNotes, turnLine } from './position-plan';
+import { compare, fightAs, forecastText, headline, heldBackNotes, planAhead, riskBudget, turnLine } from './position-plan';
 
 const name = (id: string) => id[0]!.toUpperCase() + id.slice(1);
 
@@ -62,13 +62,12 @@ describe('the headline and the held-back note (#248)', () => {
     // Attempt 1's T2 board, solved to the rout.
     const full = solvePositions(t2, { phaseEnds: 3 });
     const head = headline(full, [], name, 'about 6 turns');
-    expect(head).toMatchObject({ ok: true, verdict: 'No death without a crit' });
-    expect(head.lines[0]).toMatch(new RegExp(`^Crit risk over the next ${full.turns.length} turns: `));
-    expect(head.lines[1]).toBe(`Rout on turn ${full.routTurn} (the play: about 6 turns)`);
-    // The outline's greedy line can break or stall where the 3-turn re-solve doesn't (#273's Prologue): said as such.
-    const stalled = headline({ ...full, hardLine: false, brokenTurns: [4, 5], routTurn: undefined }, [], name, 'about 6 turns');
-    expect(stalled).toMatchObject({ ok: false, verdict: 'The hard line breaks on T4, T5: this is the least-risk line' });
-    expect(stalled.lines[1]).toBe('No rout within the outline (the play: about 6 turns)');
+    expect(head).toMatchObject({ ok: true, verdict: `${full.proven ? 'Proven' : 'Best found so far'}: rout on turn ${full.routTurn}` });
+    expect(head.lines[0]).toMatch(/^Risk: game over /);
+    expect(head.lines[1]).toBe('The play estimated about 6 turns');
+    // No rout within the budget: the line that gets furthest, said as such.
+    const stalled = headline({ ...full, routTurn: undefined }, [], name, 'about 6 turns');
+    expect(stalled).toMatchObject({ ok: false, verdict: 'No rout found within the risk budget: this line gets furthest' });
     expect(turnLine(full.turns[0]!, name)).toMatch(/^T2 · /);
     const attack = full.turns[0]!.actions.find((a) => a.forecast)!;
     expect(forecastText(attack)).toMatch(/^\d+×\d at \d+%, crit \d+%/);
@@ -121,5 +120,48 @@ describe('fixing an enemy attack (#274)', () => {
 
   it('a unit killed by the first strike lands no counter', () => {
     expect(fightAs(b, barb.id, 'frederick', from, 'killed', 'hit')).toEqual({ targetHp: 0, enemyHp: barb.hp });
+  });
+});
+
+describe('re-solve on deviation, the budget and the headline (#285)', () => {
+  const start = prologueBoard();
+  const plan = solvePositions(start, { phaseEnds: 3 });
+  const t1 = plan.turns[0]!;
+
+  it('follows the line while play goes as planned, and leaves it on the first deviation', () => {
+    const played: PositionEvent[] = [{ kind: 'act', action: t1.actions[0]! }];
+    const ahead = planAhead(plan, played)!;
+    expect(ahead.turns[0]!.actions).toEqual(t1.actions.slice(1));
+    expect(ahead.turns.length).toBe(plan.turns.length);
+    // The whole turn, then its enemy phase as predicted: the next turn is up, nothing re-solved.
+    const turn: PositionEvent[] = [...t1.actions.map((action) => ({ kind: 'act' as const, action })), { kind: 'enemy', actions: t1.enemy }];
+    expect(planAhead(plan, turn)!.turns[0]!.turn).toBe(2);
+    // A miss, a fixed enemy phase or a unit put elsewhere leaves the plan.
+    expect(planAhead(plan, [{ kind: 'act', action: t1.actions[0]!, outcome: { ours: 'missed' } }])).toBeUndefined();
+    expect(planAhead(plan, [...turn.slice(0, -1), { kind: 'enemy', actions: [] }])).toBeUndefined();
+    expect(planAhead(plan, [{ kind: 'place', unit: 'robin', to: [5, 14] }])).toBeUndefined();
+  }, 120_000);
+
+  it('prices deaths from the run plan when it can, else says it uses the default', () => {
+    const b = riskBudget({ frederick: 0.02, lissa: 0.01, chrom: undefined }, 0.6);
+    expect(b.worth).toEqual({ frederick: 0.02, lissa: 0.01 });
+    // 40% of a death somewhere on the map, at the lineup's mean worth.
+    expect(b.budget).toBeCloseTo(0.4 * 0.015, 12);
+    expect(b.note).toBe('the run plan’s expected loss on this map');
+    // At a 0% run every worth reads about 0: deaths would cost nothing, so the default stands, and says so.
+    const flat = riskBudget({ frederick: 0, lissa: 0 }, 0.6);
+    expect(flat.worth).toEqual({});
+    expect(flat.budget).toBeUndefined();
+    expect(flat.note).toMatch(/^default/);
+  });
+
+  it('heads the page with the proof, the risk and the budget', () => {
+    const head = headline(plan, [], name, 'about 7 turns', 'default');
+    expect(head).toMatchObject({ ok: true, verdict: `Proven: rout on turn ${plan.routTurn}` });
+    expect(head.lines[0]).toMatch(/^Risk: game over \d/);
+    expect(head.lines[0]).toMatch(/expected worth lost .* of 0\.2 \(default\)$/);
+    expect(head.lines[1]).toBe('The play estimated about 7 turns');
+    expect(headline({ ...plan, proven: false }, [], name).verdict).toBe(`Best found so far: rout on turn ${plan.routTurn}`);
+    expect(headline({ ...plan, hardLine: false }, [], name)).toMatchObject({ ok: false, verdict: 'Over the risk budget: this is the least-risk line' });
   });
 });

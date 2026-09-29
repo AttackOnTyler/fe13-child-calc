@@ -1,16 +1,19 @@
 /**
  * The Prepare page's position plan (#266; variant D of #258, the loop of #262), on a map with a captured grid:
  *
- * - **Headline:** "No death without a crit" (or the turns that break it), the crit risk over the planned turns, the rout
- *   turn against the play's, and where the play's "held back" can't keep its units out of reach (#248).
- * - **Left:** a turn stepper over the script. The selected turn lists its actions (unit → tile, command, target,
- *   forecast, why, the weapon it ends holding); other turns are one line each; the outline runs to the rout.
+ * - **Headline** (#285): "Proven: rout on turn N" (or the best found so far while the search runs, with its progress),
+ *   the game-over chance and the expected worth lost against the map's risk budget, the play's estimate, and where the
+ *   play's "held back" can't keep its units out of reach (#248).
+ * - **Left:** a turn stepper over the whole line, turn 1 to the rout. The open turn lists its actions (unit → tile,
+ *   trade, command, target, forecast, why, the weapon it ends holding); every other turn is one line, a click opens it.
  * - **Right (sticky):** the safety verdict per unit, a "danger to" picker and the board: terrain, the danger zone
  *   (can be hit, or killed without a crit), the planned moves numbered with ghosts where units start, and the predicted
  *   enemy moves.
  * - **Confirm or correct:** outcome taps on each combat; after the player phase, the predicted enemy phase with ✓ or
- *   fix on its attacks; "a unit is elsewhere" and HP fallbacks. Each input re-solves (after each combat). Every input is
- *   kept in the run (`run.positions`), and the board is replayed from them.
+ *   fix on its attacks; "a unit is elsewhere" and HP fallbacks. Played as planned, the page follows the line it has
+ *   (`planAhead`); an input that leaves it (a miss, a crit, a fixed attack, another stop, a unit elsewhere, a tried
+ *   move) re-solves from the real board (#278). Every input is kept in the run (`run.positions`), and the board is
+ *   replayed from them.
  * - **Try a move:** a unit, a tile, then the game's command menu there; the turn re-solves around it and the page lists
  *   what's better, worse and the same against the plan; use it, go back, or try another tile.
  * - **Turn-1 skill taps:** each enemy's random skills, cautious (all) until tapped.
@@ -51,6 +54,7 @@ import {
   type PositionEvent,
   type PositionPlan,
   type RosterUnit,
+  type SearchProgress,
   type Run,
   type Safety,
   type Tile,
@@ -73,7 +77,57 @@ export type PositionContext = {
   readonly playTurns?: string;
   /** Re-draws the note beside the no-death chance (#248). */
   readonly note?: HTMLElement;
+  /** What prices a death (#282, #285): unit worth, the map's budget, and where they came from (`riskBudget`). */
+  readonly risk?: RiskBudget;
 };
+
+/** Unit worth and the map's budget of expected worth lost, as the solve takes them, and a note on their source. */
+export type RiskBudget = { readonly worth: Readonly<Record<string, number>>; readonly budget?: number; readonly note: string };
+
+/**
+ * The run plan's pricing for a map (#278): each deployed unit's worth (Chrom and Robin have none: their death is game
+ * over), and the budget, the worth the plan already expects to lose here, read as the chance someone dies on the map
+ * (1 − its no-death chance) at the lineup's mean worth: an approximation, the simulation doesn't say who. When no worth
+ * is costed yet, or every one reads about 0 (a run at 0% has nothing to lose), deaths couldn't be priced: the solver's
+ * default stands (a death costs 1, a budget of 0.2), and the note says so.
+ */
+export function riskBudget(worths: Readonly<Record<string, number | undefined>>, noDeath: number | undefined): RiskBudget {
+  const known = Object.entries(worths).filter((e): e is [string, number] => e[1] !== undefined);
+  if (noDeath === undefined || !known.length || known.every(([, w]) => w < 1e-4))
+    return { worth: {}, note: `default: ${noDeath === undefined || !known.length ? 'unit worth not costed yet' : 'the run reads 0%, so unit worth can’t price a death'}` };
+  const mean = known.reduce((n, [, w]) => n + w, 0) / known.length;
+  return { worth: Object.fromEntries(known), budget: (1 - noDeath) * mean, note: 'the run plan’s expected loss on this map' };
+}
+
+const sameAction = (a: PlannedAction, b: PlannedAction) =>
+  JSON.stringify([a.unit, a.to, a.command, a.trade ?? null, !!a.switched, a.equip ?? null]) === JSON.stringify([b.unit, b.to, b.command, b.trade ?? null, !!b.switched, b.equip ?? null]);
+const sameEnemy = (a: readonly EnemyAction[], b: readonly EnemyAction[]) =>
+  JSON.stringify(a.map((x) => [x.enemy, x.to, x.target ?? null, x.result ?? null])) === JSON.stringify(b.map((x) => [x.enemy, x.to, x.target ?? null, x.result ?? null]));
+
+/**
+ * The plan's line ahead of the inputs played since it was solved (#285): the rest of the current turn, then the turns
+ * after. Undefined once play leaves it: an action other than the next one, an outcome other than the forecast, an enemy
+ * phase other than the predicted one, a unit put elsewhere, an HP set or a skill tapped.
+ */
+export function planAhead(plan: PositionPlan, played: readonly PositionEvent[]): PositionPlan | undefined {
+  let ti = 0;
+  let ai = 0;
+  for (const e of played) {
+    const t = plan.turns[ti];
+    if (!t) return undefined;
+    if (e.kind === 'act') {
+      const a = t.actions[ai];
+      if (!a || !sameAction(a, e.action) || (e.outcome && (e.outcome.ours !== 'forecast' || (e.outcome.counter && e.outcome.counter !== 'forecast')))) return undefined;
+      ai++;
+    } else if (e.kind === 'enemy') {
+      if (ai < t.actions.length || !sameEnemy(t.enemy, e.actions)) return undefined;
+      ti++;
+      ai = 0;
+    } else return undefined;
+  }
+  const t = plan.turns[ti];
+  return { ...plan, turns: t ? [{ ...t, actions: t.actions.slice(ai) }, ...plan.turns.slice(ti + 1)] : [] };
+}
 
 // ---- the readout (pure) -----------------------------------------------------------------------------------------
 
@@ -99,13 +153,20 @@ export function heldBackNotes(plan: PositionPlan, heldBack: PositionContext['hel
 const pct = (x: number) => (x <= 0 ? '0%' : x < 0.001 ? 'under 0.1%' : `${(x * 100).toFixed(1)}%`);
 const listOf = (xs: readonly string[]) => (xs.length < 2 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}`);
 
-/** The headline: the hard line, the crit risk, the rout turn, and the held-back notes. */
-export function headline(plan: PositionPlan, notes: readonly HeldBackNote[], name: (id: string) => string, playTurns?: string): { readonly verdict: string; readonly ok: boolean; readonly lines: readonly string[] } {
-  const ok = plan.hardLine;
-  const verdict = ok ? 'No death without a crit' : `The hard line breaks on ${plan.brokenTurns.map((t) => `T${t}`).join(', ')}: this is the least-risk line`;
+/** The headline (#285): the rout and its proof, the risk against the budget, the play's estimate, the held-back notes. */
+export function headline(plan: PositionPlan, notes: readonly HeldBackNote[], name: (id: string) => string, playTurns?: string, budgetNote?: string): { readonly verdict: string; readonly ok: boolean; readonly lines: readonly string[] } {
+  const ok = plan.hardLine && plan.routTurn !== undefined;
+  const verdict = !plan.hardLine
+    ? 'Over the risk budget: this is the least-risk line'
+    : plan.routTurn === undefined
+      ? 'No rout found within the risk budget: this line gets furthest'
+      : plan.proven
+        ? `Proven: rout on turn ${plan.routTurn}`
+        : `Best found so far: rout on turn ${plan.routTurn}`;
+  const worth = (x: number) => (x === 0 ? '0' : x < 0.001 ? x.toExponential(1) : String(Math.round(x * 1000) / 1000));
   const lines = [
-    `Crit risk over the next ${plan.turns.length} turn${plan.turns.length === 1 ? '' : 's'}: ${pct(plan.critRisk)}`,
-    plan.routTurn ? `Rout on turn ${plan.routTurn}${playTurns ? ` (the play: ${playTurns})` : ''}` : `No rout within the outline${playTurns ? ` (the play: ${playTurns})` : ''}`,
+    `Risk: game over ${pct(plan.gameOver)} · expected worth lost ${worth(plan.worthLost)} of ${worth(plan.budget)}${budgetNote ? ` (${budgetNote})` : ''}`,
+    ...(playTurns ? [`The play estimated ${playTurns}`] : []),
     ...notes.map((n) => `The stance plan holds ${listOf(n.units.map(name))} back on T${n.turn}, but no formation keeps them all out of reach there (${listOf([...new Set(n.threats)])}). The play’s no-death chance assumes it anyway; this plan doesn’t.`),
   ];
   return { verdict, ok, lines };
@@ -115,10 +176,11 @@ export function headline(plan: PositionPlan, notes: readonly HeldBackNote[], nam
 export function turnLine(t: TurnPlan, name: (id: string) => string): string {
   const kills = t.actions.filter((a) => a.forecast?.targetHp === 0).length;
   const unsafe = t.safety.units.filter((u) => u.dies).map((u) => name(u.unit));
+  const risk = t.safety.units.reduce((n, u) => n + u.deathChance, 0);
   return [
     `T${t.turn}`,
-    t.safety.safe ? '✓ safe' : `✗ ${unsafe.length ? `${listOf(unsafe)} can die` : 'a counter can kill'}`,
-    t.safety.critRisk > 0 ? `crit ${pct(t.safety.critRisk)}` : '',
+    t.safety.safe ? '✓ no death without a crit' : `✗ ${unsafe.length ? `${listOf(unsafe)} can die` : 'a counter can kill'}`,
+    risk > 0 ? `death risk ${pct(risk)}` : '',
     kills ? `${kills} kill${kills > 1 ? 's' : ''}` : '',
     t.woke.length ? `wakes ${t.woke.length}` : '',
   ]
@@ -210,11 +272,22 @@ function remember(k: string, p: PositionPlan) {
   PLANS.set(k, p);
 }
 
-/** Solves in the worker (else here, after the page draws), then calls back. */
-function solve(k: string, board: Board, acted: readonly string[], pinned: PlannedAction | undefined, done: () => void): void {
-  const options = { acted, ...(pinned ? { pinned } : {}) };
+/** The line being followed per map and lineup, and the inputs it was solved at (#285). */
+const ACTIVE = new Map<string, { readonly events: readonly PositionEvent[]; readonly plan: PositionPlan }>();
+/** A running solve's progress, by plan key. */
+const PROGRESS = new Map<string, SearchProgress>();
+const isPrefix = (a: readonly PositionEvent[], b: readonly PositionEvent[]) => a.length <= b.length && JSON.stringify(a) === JSON.stringify(b.slice(0, a.length));
+
+/** Solves in the worker (else here, after the page draws), then calls back; progress redraws as it comes. */
+function solve(k: string, board: Board, acted: readonly string[], pinned: PlannedAction | undefined, risk: RiskBudget | undefined, done: () => void): void {
+  const options = { acted, ...(pinned ? { pinned } : {}), ...(risk && Object.keys(risk.worth).length ? { worth: risk.worth } : {}), ...(risk?.budget !== undefined ? { budget: risk.budget } : {}) };
   const stop = startSolve({ kind: 'positions', board, options, assumptions: {} as never, run: undefined as never, seed: 0 } as never, (reply) => {
+    if (reply.kind === 'positions-progress') {
+      PROGRESS.set(k, reply.progress);
+      return done();
+    }
     if (reply.kind !== 'positions') return;
+    PROGRESS.delete(k);
     remember(k, reply.plan);
     done();
   }, 'positions');
@@ -252,18 +325,32 @@ function content(ctx: PositionContext, start: Board, redraw: () => void): (HTMLE
     ui.stops = {};
     ctx.setRun(withPositionEvents(ctx.run, ctx.map, [...events, ...(Array.isArray(e) ? e : [e])]));
   };
+  // Played as planned, follow the line already solved; off it (or trying a move), solve from the real board (#285).
+  const lineKey = `${ctx.map}|${units}`;
+  const active = ACTIVE.get(lineKey);
   const k = planKey(ctx.map, events, ui.mine, units);
-  const plan = PLANS.get(k);
+  let plan = !ui.mine && active && isPrefix(active.events, events) ? planAhead(active.plan, events.slice(active.events.length)) : undefined;
   if (!plan) {
-    solve(k, board, acted, ui.mine, () => root());
-    return [h('h3', {}, 'Position plan'), h('p', { class: 'muted' }, 'Solving the next turns on the captured map…')];
+    plan = PLANS.get(k);
+    if (plan) ACTIVE.set(lineKey, { events, plan });
+  }
+  if (!plan) {
+    if (!PROGRESS.has(k)) {
+      PROGRESS.set(k, { expanded: 0, frontier: 1, bound: board.turn });
+      solve(k, board, acted, ui.mine, ctx.risk, () => root());
+    }
+    const p = PROGRESS.get(k)!;
+    return [
+      h('h3', {}, 'Position plan'),
+      h('p', { class: 'muted' }, `Searching every turn to the rout on the captured map… ${p.expanded} line${p.expanded === 1 ? '' : 's'} explored${p.bestRout ? ` · best so far: rout on turn ${p.bestRout}` : ''} · nothing routs before turn ${p.bound}`),
+    ];
   }
   function root() {
-    if (PLANS.has(k)) redraw();
+    redraw();
   }
   const notes = heldBackNotes(plan, ctx.heldBack);
   if (ctx.note) ctx.note.replaceChildren(...notes.map((n) => h('div', { class: 'small warn-t' }, `⚠ T${n.turn}: the play holds ${listOf(n.units.map(nm))} back, but on the map no formation keeps them all out of reach; the no-death chance above assumes it anyway.`)));
-  const head = headline(plan, notes, nm, ctx.playTurns);
+  const head = headline(plan, notes, nm, ctx.playTurns, ctx.risk?.note);
   const done = !liveEnemies(board).length;
   const turn = plan.turns[Math.min(ui.view, plan.turns.length - 1)];
   const current = plan.turns[0];
@@ -279,7 +366,7 @@ function content(ctx: PositionContext, start: Board, redraw: () => void): (HTMLE
     { class: `pos-head ${head.ok ? 'ok' : 'broken'}` },
     h('b', {}, `${head.ok ? '✓' : '✗'} ${head.verdict}`),
     ...head.lines.map((l) => h('div', { class: 'small' }, l)),
-    h('div', { class: 'muted small' }, `Board: turn ${board.turn}${events.length ? ` · ${events.length} input${events.length > 1 ? 's' : ''} kept` : ''} · every choice says why; each tap re-solves. `, events.length ? h('button', { class: 'linkish', title: 'Forget every input on this map and start from turn 1', onclick: reset }, 'Start over') : null),
+    h('div', { class: 'muted small' }, `Board: turn ${board.turn}${events.length ? ` · ${events.length} input${events.length > 1 ? 's' : ''} kept` : ''} · every choice says why; played as planned it follows this line, and a tap that leaves it re-solves. `, events.length ? h('button', { class: 'linkish', title: 'Forget every input on this map and start from turn 1', onclick: reset }, 'Start over') : null),
   );
   if (done) return [h('h3', {}, 'Position plan'), top, h('p', {}, '✓ Routed. Record results when the map ends.')];
 
@@ -296,7 +383,8 @@ function content(ctx: PositionContext, start: Board, redraw: () => void): (HTMLE
     ...(ui.view === 0 ? played.map((e) => h('li', { class: 'done muted' }, `✓ ${actionText(start, e.action)}${e.outcome && e.outcome.ours !== 'forecast' ? ` (${e.outcome.ours})` : ''}`)) : []),
     ...(turn ? turn.actions.map((a, i) => actionItem(turn.before, a, ui.view === 0 && i === 0 ? { push, ui, redraw } : undefined)) : []),
   );
-  const others = h('ul', { class: 'small pos-others' }, ...plan.turns.map((t, i) => (i === ui.view ? null : h('li', {}, turnLine(t, nm)))), ...plan.outline.map((o) => h('li', { class: 'muted' }, `T${o.turn} (outline): ${o.kills ? `${o.kills} kill${o.kills > 1 ? 's' : ''}, ` : ''}${o.left} left${o.woke ? `, wakes ${o.woke}` : ''}${o.safe ? '' : ' ✗'} · ${o.actions.join('; ')}`)));
+  // Every other turn of the line, one line each; a click opens it.
+  const others = h('ul', { class: 'small pos-others' }, ...plan.turns.map((t, i) => (i === ui.view ? null : h('li', {}, h('button', { class: 'linkish', title: 'Open this turn', onclick: () => ((ui.view = i), redraw()) }, turnLine(t, nm))))));
   const taps =
     ui.view === 0 && current && current.actions.length
       ? h(
@@ -697,8 +785,12 @@ function tryPanel(ctx: PositionContext, b: Board, acted: readonly string[], plan
   const k = planKey(ctx.map, events, t.action, units);
   const mine = PLANS.get(k);
   if (!mine) {
-    solve(k, b, acted, t.action, redraw);
-    return h('div', { class: 'small muted' }, `Re-solving the turn around ${actionText(b, t.action)}…`);
+    if (!PROGRESS.has(k)) {
+      PROGRESS.set(k, { expanded: 0, frontier: 1, bound: b.turn });
+      solve(k, b, acted, t.action, ctx.risk, redraw);
+    }
+    const p = PROGRESS.get(k)!;
+    return h('div', { class: 'small muted' }, `Solving to the rout around ${actionText(b, t.action)}… ${p.expanded} lines explored${p.bestRout ? ` · best so far: turn ${p.bestRout}` : ''}`);
   }
   const c = compare(mine, plan, nm);
   return h(

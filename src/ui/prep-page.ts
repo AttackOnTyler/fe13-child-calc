@@ -90,7 +90,8 @@ import { FIRST_GEN_UNITS, type UnitId } from '../game-data/units';
 import { h } from './dom';
 import { guide } from './guide';
 import { howToRun } from './maps-page';
-import { positionSection } from './position-plan';
+import { positionSection, riskBudget } from './position-plan';
+import { unitWorthOf } from './wishlist-page';
 import { capturedMap } from '../engine';
 
 export type PrepContext = {
@@ -242,6 +243,8 @@ export type PrepReadout = {
   readonly noPrep: boolean;
   readonly banner?: string;
   readonly head: { readonly noDeath: string; readonly flawless: string; readonly turns: string; readonly deploy: string; readonly detail: string };
+  /** The map's no-death chance as a number, for the position plan's risk budget (#285). */
+  readonly noDeath?: number;
   readonly cards: readonly PairCard[];
   readonly notFielded: readonly NotFielded[];
   /** The menu steps with actions, in the game's order; empty on a map with no preparations. */
@@ -737,6 +740,7 @@ export function prepReadout(engine: Engine, run: Run, map: string, input: PrepIn
       ? { banner: `No preparation phase: the game fields ${listOf(lineup.deployed.map((u) => name(u)))} and starts the map at once. Nothing here is done in menus; it’s a plan for the map itself.` }
       : {}),
     head,
+    ...(noDeath !== undefined ? { noDeath } : {}),
     cards,
     notFielded,
     before,
@@ -1130,6 +1134,8 @@ function body(ctx: PrepContext, plan: Plan, forecast: ExpForecast): HTMLElement 
     heldBack: r.heldBack,
     playTurns: r.head.turns,
     note,
+    // Deaths priced by the run plan's unit worth, the budget its expected loss here (#285); Chrom and Robin's is game over.
+    risk: riskBudget(Object.fromEntries(d.deployed.filter((u) => u !== 'chrom' && u !== 'robin').map((u) => [u, unitWorthOf(run, u)?.worth])), r.noDeath),
   });
   const main = h(
     'main',

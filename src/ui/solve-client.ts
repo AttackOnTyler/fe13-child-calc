@@ -6,7 +6,7 @@
  * edit never stops the search.
  * Where there's no Worker (tests), `startSolve` returns undefined and the page works the chance out itself.
  */
-import type { Board, PositionPlan, SolveOptions } from '../engine';
+import type { Board, PositionPlan, SearchProgress, SolveOptions } from '../engine';
 import type { Assumptions, Ceiling, CheckedRules, EditCost, EditListing, ExpForecast, RuleStake, SetupCheck, PinCost, Plan, PlanPin, Readings, ReservesCursor, ReservesStep, RobinCursor, RobinStep, RosterUnit, Run, RunSim, SolveCursor, SolveStep, StressCase, WhatItCost, WorthCursor, WorthStep } from '../engine';
 
 /** A unit's edit as the worker posts it (#203): its plan is built and costed in the worker. */
@@ -194,6 +194,7 @@ export type SolveReply =
   | { readonly id: number; readonly kind: 'setup-cost'; readonly rule: string; readonly cost: EditCost; readonly done: boolean }
   | { readonly id: number; readonly kind: 'stress'; readonly stress: StressCase; readonly chance: RunSim; readonly done: boolean }
   | { readonly id: number; readonly kind: 'positions'; readonly plan: PositionPlan; readonly done: boolean }
+  | { readonly id: number; readonly kind: 'positions-progress'; readonly progress: SearchProgress; readonly done: false }
   | { readonly id: number; readonly kind: 'why'; readonly chance: RunSim; /** The plan compared against's runs (with a unit: the plan's own). */ readonly base?: RunSim; readonly done: boolean };
 
 /**
