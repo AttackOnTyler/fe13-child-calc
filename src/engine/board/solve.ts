@@ -3,8 +3,10 @@
  * re-solved from any board (after each combat, around a pinned move).
  *
  * - **Commands:** move, then Attack (the weapon that kills, else the one with no counter, then the most damage), Staff
- *   (Heal), Items (a Vulnerary), Trade (free before acting: a Vulnerary from the back or an adjacent ally), Pair Up
- *   (onto an ally, who leads), Switch, Separate, or Wait.
+ *   (Heal), Items (a Vulnerary), Pair Up (onto an ally, who leads), Switch, Separate, or Wait. Before any of them, a
+ *   **Trade** (free, #283): one item taken from or given to the back or an adjacent ally, weapons included, when the
+ *   receiver can use it. After a command other than Attack, the weapon it ends holding (its enemy-phase counter).
+ *   Every reachable tile is tried, water included for the classes that can stand on it.
  * - **Order:** the hard line (the safety checker: no death without a crit, no lethal counter) > the least crit risk >
  *   fewest turns (enemy HP taken, kills, closing in) > the plan's goals (EXP priority) > weapon uses.
  * - **Search:** each player phase is a beam over the units' actions in any order; an option is ranked on the units that
@@ -30,6 +32,7 @@ import {
   strikeOrder,
   threatTiles,
   weaponOf,
+  canUse,
   withEnemy,
   withPieces,
   withPlayer,
@@ -51,8 +54,8 @@ export type Command =
   | { readonly kind: 'separate'; readonly to: Tile }
   | { readonly kind: 'wait' };
 
-/** A trade before acting: an item taken from a partner (the back or an adjacent ally). */
-export type Trade = { readonly with: string; readonly item: string };
+/** A trade before acting (#283): one item taken from a partner (the back or an adjacent ally), or given to it. */
+export type Trade = { readonly with: string; readonly item: string; readonly give?: true };
 
 /** A fight's forecast as the script shows it, and its predicted result. */
 export type ActionForecast = {
@@ -81,6 +84,8 @@ export type PlannedAction = {
   readonly to: Tile;
   readonly trade?: Trade;
   readonly command: Command;
+  /** The weapon it ends holding, after a command other than Attack (#283): its enemy-phase counter. */
+  readonly equip?: string;
   readonly forecast?: ActionForecast;
   /** Why this action, in words. */
   readonly why: string;
@@ -186,14 +191,40 @@ export function applyAction(b: Board, a: PlannedAction, outcome?: AttackOutcome)
   let next = withPlayer(b, u);
   if (u.back) next = withPlayer(next, { ...playerById(next, u.back)!, at: a.to });
   if (a.trade) {
-    const giver = playerById(next, a.trade.with);
-    if (giver && usesOf(giver, a.trade.item)) {
-      next = withPlayer(next, spend(giver, a.trade.item));
-      const have = u.items.find((i) => i.item === a.trade!.item);
-      u = { ...u, items: have ? u.items.map((i) => (i.item === a.trade!.item ? { ...i, uses: (i.uses ?? 0) + 1 } : i)) : [...u.items, { item: a.trade.item, uses: 1 }] };
-      next = withPlayer(next, u);
-    }
+    next = traded(next, a.unit, a.trade);
+    u = playerById(next, a.unit)!;
   }
+  const after = command(next, u, a, outcome);
+  if (!a.equip || a.command.kind === 'attack') return after;
+  const held = playerById(after, a.unit);
+  const w = held && weaponNamed(held, a.equip);
+  return held && w ? withPlayer(after, { ...held, fighter: { ...held.fighter, weapon: w } }) : after;
+}
+
+/**
+ * A trade played (#283): the whole item moves (a Vulnerary with all its uses, a weapon). A giver left without the
+ * weapon it held equips its next one; a receiver with none equips the one it got.
+ */
+export function traded(b: Board, unit: string, t: Trade): Board {
+  const me = playerById(b, unit);
+  const them = playerById(b, t.with);
+  if (!me || !them) return b;
+  const [from, to] = t.give ? [me, them] : [them, me];
+  const w = from.weapons.find((x) => x.item.name === t.item);
+  if (w) {
+    const left = from.weapons.filter((x) => x !== w);
+    const held = from.fighter.weapon?.item.name === t.item ? left[0] : from.fighter.weapon;
+    const giver: PlayerPiece = { ...from, weapons: left, fighter: { ...from.fighter, weapon: held } };
+    const taker: PlayerPiece = { ...to, weapons: [...to.weapons, w], fighter: { ...to.fighter, weapon: to.fighter.weapon ?? w } };
+    return withPlayer(withPlayer(b, giver), taker);
+  }
+  const i = from.items.find((x) => x.item === t.item && (x.uses ?? 1) > 0);
+  if (!i) return b;
+  return withPlayer(withPlayer(b, { ...from, items: from.items.filter((x) => x !== i) }), { ...to, items: [...to.items, i] });
+}
+
+/** The command of an action, on the board after its move and trade. */
+function command(next: Board, u: PlayerPiece, a: PlannedAction, outcome?: AttackOutcome): Board {
   const c = a.command;
   switch (c.kind) {
     case 'attack': {
@@ -268,76 +299,83 @@ type State = {
 const name = (b: Board, id: string) => playerById(b, id)?.name ?? enemyById(b, id)?.name ?? id;
 
 /** Every option of a unit on a state: its reachable tiles, each with the commands the game offers there. */
-function options(s: State, u: PlayerPiece, waitTiles: number): PlannedAction[] {
+function options(s: State, u: PlayerPiece): PlannedAction[] {
   const b = s.board;
   const tiles = [...movement(b, u).keys()];
   const enemies = liveEnemies(b);
   const allies = leads(b).filter((x) => x.id !== u.id);
   const out: PlannedAction[] = [];
-  const hurt = u.hp < u.fighter.stats.hp;
-  // A Vulnerary to take first, when the unit has none and is hurt: from its back, or an ally next to its tile.
-  const tradeFrom = (to: Tile): Trade | undefined => {
-    if (!hurt || usesOf(u, 'Vulnerary')) return undefined;
-    const partners = [...(u.back ? [playerById(b, u.back)!] : []), ...allies.filter((x) => manhattan(x.at, to) === 1)];
-    const p = partners.find((x) => usesOf(x, 'Vulnerary'));
-    return p ? { with: p.id, item: 'Vulnerary' } : undefined;
+  const back = u.back ? playerById(b, u.back) : undefined;
+  // Trades on a tile (#283): none, or one item taken from or given to the back or an ally next to the tile, when the
+  // receiver can use it.
+  const usable = (p: PlayerPiece, name: string) => canUse(p.fighter.className, itemByName(name), p.name);
+  const carried = (p: PlayerPiece) => [...p.weapons.map((w) => w.item.name), ...p.items.filter((i) => (i.uses ?? 1) > 0).map((i) => i.item)];
+  const tradesAt = (to: Tile): (Trade | undefined)[] => {
+    const partners = [...(back ? [back] : []), ...allies.filter((x) => manhattan(x.at, to) === 1)];
+    const ts: (Trade | undefined)[] = [undefined];
+    for (const p of partners) {
+      for (const n of carried(p)) if (usable(u, n)) ts.push({ with: p.id, item: n });
+      for (const n of carried(u)) if (usable(p, n)) ts.push({ with: p.id, item: n, give: true });
+    }
+    return ts;
   };
-  const threat = enemyThreat(b);
-  const scoreTile = (k: number) => {
-    const t: Tile = [k % 64, Math.floor(k / 64)];
-    const near = enemies.length ? Math.min(...enemies.map((e) => manhattan(e.at, t))) : 0;
-    return (threat.has(k) ? -1000 * threat.get(k)! : 0) - near;
-  };
-  const waits = tiles.sort((x, y) => scoreTile(y) - scoreTile(x)).slice(0, waitTiles);
   for (const k of tiles) {
     const to: Tile = [k % 64, Math.floor(k / 64)];
-    // Attacks: per target, the kill weapon, else the no-counter one, else the most damage.
-    for (const e of enemies) {
-      const d = manhattan(to, e.at);
-      const ws = u.weapons.filter((w) => reaches(w.item, d));
-      if (!ws.length) continue;
-      let best: { w: Weapon; key: number; f: ActionForecast } | undefined;
-      for (const w of ws) {
-        const f = attackForecast(b, u, e, to, w);
-        const key = (f.targetHp === 0 ? 1e6 : 0) + (f.countered ? 0 : 1e4) + f.damage * f.hits * 10 - (w.item.worth ?? 0) / 1000;
-        if (!best || key > best.key) best = { w, key, f };
+    for (const trade of tradesAt(to)) {
+      const tb = trade ? traded(b, u.id, trade) : b;
+      const v = trade ? playerById(tb, u.id)! : u;
+      const t = trade ? { trade } : {};
+      // Attacks: per target, the kill weapon, else the no-counter one, else the most damage.
+      for (const e of enemies) {
+        const d = manhattan(to, e.at);
+        const ws = v.weapons.filter((w) => reaches(w.item, d));
+        if (!ws.length) continue;
+        let best: { w: Weapon; key: number; f: ActionForecast } | undefined;
+        for (const w of ws) {
+          const f = attackForecast(tb, v, e, to, w);
+          const key = (f.targetHp === 0 ? 1e6 : 0) + (f.countered ? 0 : 1e4) + f.damage * f.hits * 10 - (w.item.worth ?? 0) / 1000;
+          if (!best || key > best.key) best = { w, key, f };
+        }
+        out.push({ unit: u.id, from: u.at, to, ...t, command: { kind: 'attack', target: e.id, weapon: best!.w.item.name }, forecast: best!.f, why: '' });
       }
-      out.push({ unit: u.id, from: u.at, to, command: { kind: 'attack', target: e.id, weapon: best!.w.item.name }, forecast: best!.f, why: '' });
-    }
-    // Staff: heal a hurt lead in reach. A staff reaches only the unit in front, never a pair's back.
-    const staff = u.items.find((i) => itemByName(i.item)?.kind === 'staff' && (i.uses ?? 1) > 0);
-    if (staff)
-      for (const t of allies) {
-        if (manhattan(t.at, to) !== 1 || t.hp >= t.fighter.stats.hp) continue;
-        out.push({ unit: u.id, from: u.at, to, command: { kind: 'heal', target: t.id, staff: staff.item }, why: '' });
+      // Any other command, each with the weapon it ends holding: as it is, or another it carries.
+      const holds = [undefined, ...v.weapons.filter((w) => w.item.name !== v.fighter.weapon?.item.name).map((w) => w.item.name)];
+      const push = (command: Command) => {
+        for (const equip of holds) out.push({ unit: u.id, from: u.at, to, ...t, command, ...(equip ? { equip } : {}), why: '' });
+      };
+      // Staff: heal a hurt lead in reach. A staff reaches only the unit in front, never a pair's back.
+      const staff = v.items.find((i) => itemByName(i.item)?.kind === 'staff' && (i.uses ?? 1) > 0);
+      if (staff)
+        for (const x of allies) {
+          if (manhattan(x.at, to) !== 1 || x.hp >= x.fighter.stats.hp) continue;
+          push({ kind: 'heal', target: x.id, staff: staff.item });
+        }
+      if (v.hp < v.fighter.stats.hp && usesOf(v, 'Vulnerary')) push({ kind: 'item', item: 'Vulnerary' });
+      if (!trade && back) {
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const drop: Tile = [to[0] + dx, to[1] + dy];
+          if (!occupant(b, drop) || sameTile(drop, u.at)) if (moveCost(b.map, drop, moveRow(back.fighter.className)) !== null) out.push({ unit: u.id, from: u.at, to, command: { kind: 'separate', to: drop }, why: '' });
+        }
       }
-    const trade = tradeFrom(to);
-    if (hurt && (usesOf(u, 'Vulnerary') || trade)) out.push({ unit: u.id, from: u.at, to, ...(trade ? { trade } : {}), command: { kind: 'item', item: 'Vulnerary' }, why: '' });
-    if (u.back) {
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-        const drop: Tile = [to[0] + dx, to[1] + dy];
-        const back = playerById(b, u.back)!;
-        if (!occupant(b, drop) || sameTile(drop, u.at)) if (moveCost(b.map, drop, moveRow(back.fighter.className)) !== null) out.push({ unit: u.id, from: u.at, to, command: { kind: 'separate', to: drop }, why: '' });
-      }
+      push({ kind: 'wait' });
     }
   }
   // Pair Up: onto an ally it can reach (the ally leads).
   if (!u.back)
-    for (const t of allies) {
-      if (t.back) continue;
-      const adj = tiles.some((k) => manhattan([k % 64, Math.floor(k / 64)], t.at) === 1);
-      if (adj) out.push({ unit: u.id, from: u.at, to: t.at, command: { kind: 'pair', with: t.id }, why: '' });
+    for (const x of allies) {
+      if (x.back) continue;
+      const adj = tiles.some((k) => manhattan([k % 64, Math.floor(k / 64)], x.at) === 1);
+      if (adj) out.push({ unit: u.id, from: u.at, to: x.at, command: { kind: 'pair', with: x.id }, why: '' });
     }
-  for (const k of waits) out.push({ unit: u.id, from: u.at, to: [k % 64, Math.floor(k / 64)], command: { kind: 'wait' }, why: '' });
   return out;
 }
 
 /** A unit's options, and a pair's with the back switched to the lead first. */
-function allOptions(s: State, u: PlayerPiece, waitTiles: number): PlannedAction[] {
-  const own = options(s, u, waitTiles);
+function allOptions(s: State, u: PlayerPiece): PlannedAction[] {
+  const own = options(s, u);
   if (!u.back) return own;
   const b = switched(s.board, u.back);
-  const other = options({ ...s, board: b }, playerById(b, u.back)!, waitTiles).filter((a) => a.command.kind !== 'wait' || own.length < 4);
+  const other = options({ ...s, board: b }, playerById(b, u.back)!).filter((a) => a.command.kind !== 'wait' || own.length < 4);
   return [...own, ...other.map((a) => ({ ...a, switched: true }))];
 }
 
@@ -521,7 +559,7 @@ function playerPhase(start: Board, acted: ReadonlySet<string>, prio: Readonly<Re
         continue;
       }
       for (const u of ready)
-        for (const a of allOptions(s, u, waitTiles)) {
+        for (const a of allOptions(s, u)) {
           const n = step(s, a, prio);
           const sig = signature(n.board) + [...n.acted].sort().join();
           if (seen.has(sig)) continue;
@@ -623,7 +661,7 @@ function whyOf(b: Board, a: PlannedAction): string {
       return `heals ${t.name}: +${hp - t.hp} (${t.hp} → ${hp})`;
     }
     case 'item':
-      return `${a.trade ? `takes ${name(b, a.trade.with)}’s Vulnerary and ` : ''}drinks a Vulnerary`;
+      return `${a.trade && !a.trade.give && a.trade.item === 'Vulnerary' ? `takes ${name(b, a.trade.with)}’s Vulnerary and ` : ''}drinks a Vulnerary`;
     case 'pair':
       return `pairs up behind ${name(b, c.with)}: its pair-up bonus and Dual Strike, and it can’t be attacked`;
     case 'separate':
@@ -637,10 +675,11 @@ function whyOf(b: Board, a: PlannedAction): string {
 export function actionText(b: Board, a: PlannedAction): string {
   const c = a.command;
   const move = sameTile(a.from, a.to) ? 'stays' : `→ (${a.to[0]},${a.to[1]})`;
-  const trade = a.trade ? `Trade (${a.trade.item} from ${name(b, a.trade.with)}), then ` : '';
+  const trade = a.trade ? (a.trade.give ? `Trade (gives ${name(b, a.trade.with)} the ${a.trade.item}), then ` : `Trade (${a.trade.item} from ${name(b, a.trade.with)}), then `) : '';
+  const held = a.equip && c.kind !== 'attack' ? `, holding the ${a.equip}` : '';
   const cmd =
     c.kind === 'attack' ? `Attack ${name(b, c.target)} (${c.weapon})` : c.kind === 'heal' ? `Staff: ${c.staff} on ${name(b, c.target)}` : c.kind === 'item' ? `Items: ${c.item}` : c.kind === 'pair' ? `Pair Up with ${name(b, c.with)}` : c.kind === 'separate' ? `Separate to (${c.to[0]},${c.to[1]})` : 'Wait';
-  return `${a.switched ? `Switch (${name(b, a.unit)} leads), then ` : ''}${name(b, a.unit)} ${move}: ${trade}${cmd}`;
+  return `${a.switched ? `Switch (${name(b, a.unit)} leads), then ` : ''}${name(b, a.unit)} ${move}: ${trade}${cmd}${held}`;
 }
 
 export type { GameItem };
@@ -658,7 +697,8 @@ export function menuAt(b: Board, unitId: string, tile: Tile): PlannedAction[] {
   const u = playerById(b, unitId);
   if (!u) return [];
   const s: State = { board: b, acted: new Set(), actions: [], attacks: [], goal: 0, spent: 0, miss: 0 };
-  const rest = options(s, u, 999).filter((a) => sameTile(a.to, tile) && a.command.kind !== 'attack');
+  // Its own attacks come below, every weapon; the options add the ones after a trade.
+  const rest = options(s, u).filter((a) => sameTile(a.to, tile) && (a.command.kind !== 'attack' || !!a.trade));
   const attacks: PlannedAction[] = [];
   for (const e of liveEnemies(b))
     for (const w of u.weapons)
