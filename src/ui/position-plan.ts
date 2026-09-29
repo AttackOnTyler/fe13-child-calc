@@ -752,8 +752,8 @@ function tryPanel(ctx: PositionContext, b: Board, acted: readonly string[], plan
   const u = playerById(b, t.unit);
   if (!u) return null;
   const back = h('button', { class: 'ghost mini', onclick: () => ((ui.trying = undefined), redraw()) }, 'Back');
-  // A pair: try it as it stands, or with the back leading after a Switch at the tile (#274, #291). A switched pair acts on its lead's action (a
-  // unit that paired up can still take the lead), so it's the lead that must not have acted.
+  // A pair: try it as it stands, or with the back leading after a Switch at the tile (#274, #291). A switched pair acts
+  // on its lead's action (a unit that paired up can still take the lead), so it's the lead that must not have acted.
   const lead = u.carriedBy ? playerById(b, u.carriedBy) : undefined;
   if (acted.includes(lead?.id ?? u.id)) return h('div', { ...guide('position-try'), class: 'small' }, `${lead?.name ?? u.name} has acted this turn. `, back);
   const partner = u.back ?? lead?.id;

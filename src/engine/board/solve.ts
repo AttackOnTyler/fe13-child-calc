@@ -3,10 +3,9 @@
  * re-solved from any board (after each combat, around a pinned move).
  *
  * - **Commands:** move, then Attack (the weapon that kills, else the one with no counter, then the most damage), Staff
- *   (Heal), Items (a Vulnerary), Pair Up (onto an ally, who leads), Switch (after the lead moves
- *   the pair: the game allows no move after it, #291), Separate, or Wait. Before any of them, a
- *   **Trade** (free, #283): one item taken from or given to the back or an adjacent ally, weapons included, when the
- *   receiver can use it. After a command other than Attack, the weapon it ends holding (its enemy-phase counter).
+ *   (Heal), Items (a Vulnerary), Pair Up (onto an ally, who leads), Switch (after the lead moves the pair: the game
+ *   allows no move after it, #291), Separate, or Wait. Before any of them, a **Trade** (free, #283): one item taken
+ *   from or given to the back or an adjacent ally, weapons included, when the receiver can use it. After a command other than Attack, the weapon it ends holding (its enemy-phase counter).
  *   Every reachable tile is tried, water included for the classes that can stand on it.
  * - **Order** (decision #278, each tier breaking ties in the one above): the game-over chance (Chrom's or Robin's death)
  *   at or under a small cap > the expected worth lost (death chance × unit worth, the death price, #282) within the
@@ -855,14 +854,20 @@ export type { GameItem };
  */
 export function menuAt(b: Board, unitId: string, tile: Tile): PlannedAction[] {
   if (playerById(b, unitId)?.carriedBy) {
-    const s = switched(b, unitId);
-    return menuAt(s, unitId, tile).map((a) => ({ ...a, switched: true, why: whyOf(b, { ...a, switched: true }) }));
+    const reach = actingTiles(b, unitId);
+    if (!reach.has(tileKey(tile))) return [];
+    return menuFrom(switched(b, unitId), unitId, tile, reach).map((a) => ({ ...a, switched: true, why: whyOf(b, { ...a, switched: true }) }));
   }
+  return menuFrom(b, unitId, tile);
+}
+
+/** A unit's menu at a tile, the tiles it moves on given for a switched back (its lead's reach). */
+function menuFrom(b: Board, unitId: string, tile: Tile, reach?: Iterable<number>): PlannedAction[] {
   const u = playerById(b, unitId);
   if (!u) return [];
   const s: State = { board: b, acted: new Set(), actions: [], attacks: [], goal: 0, spent: 0, miss: 0 };
   // Its own attacks come below, every weapon; the options add the ones after a trade.
-  const rest = options(s, u).filter((a) => sameTile(a.to, tile) && (a.command.kind !== 'attack' || !!a.trade));
+  const rest = options(s, u, reach).filter((a) => sameTile(a.to, tile) && (a.command.kind !== 'attack' || !!a.trade));
   const attacks: PlannedAction[] = [];
   for (const e of liveEnemies(b))
     for (const w of u.weapons)
