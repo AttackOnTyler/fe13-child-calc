@@ -7,14 +7,18 @@
  *   **Trade** (free, #283): one item taken from or given to the back or an adjacent ally, weapons included, when the
  *   receiver can use it. After a command other than Attack, the weapon it ends holding (its enemy-phase counter).
  *   Every reachable tile is tried, water included for the classes that can stand on it.
- * - **Order:** the hard line (the safety checker: no death without a crit, no lethal counter) > the least crit risk >
- *   fewest turns (enemy HP taken, kills, closing in) > the plan's goals (EXP priority) > weapon uses.
- * - **Search:** each player phase is a beam over the units' actions in any order; an option is ranked on the units that
- *   have acted only (the ones still to move would make every early choice look unsafe). The phase's ends are checked in
- *   full, the predicted enemy phase is played, and the next turn searched from there: 3 detailed turns, then a cheaper
- *   outline to the rout.
- * - **Outcomes** are predicted with the likeliest reading; the page re-solves from what really happened.
- * - When no line keeps the hard line, the least-risk line is returned, and the turns that break it are named.
+ * - **Order** (decision #278, each tier breaking ties in the one above): the game-over chance (Chrom's or Robin's death)
+ *   at or under a small cap > the expected worth lost (death chance × unit worth, the death price, #282) within the
+ *   map's budget > the fewest turns to the rout > less worth lost > the plan's kills more likely to land > EXP priority.
+ * - **Search** (#284): best-first over whole turns to the rout. A node is the board at a player phase's start; it is
+ *   expanded into its best few player-phase ends (a beam over the units' actions in any order, an option ranked on the
+ *   units that have acted), each priced and followed by its predicted enemy phase. Nodes are taken lowest optimistic
+ *   rout turn first (`routBound`), the most progress first among equals, so the search dives to a rout and then keeps
+ *   on until no open line could rout sooner: the rout is **proven** the fewest over the phase ends it tries. Lines over
+ *   the game-over cap or the budget are dropped. No time cap; `onProgress` reports as it goes.
+ * - **Outcomes** are predicted with the likeliest reading (a strike at 50% or more lands); the page re-solves from what
+ *   really happened.
+ * - When no line routs within the budget, the line that gets furthest is returned, not proven.
  */
 import { itemByName, type GameItem } from '../../game-data/items';
 import { pairUpBonus } from '../solver';
@@ -25,6 +29,8 @@ import {
   leads,
   liveEnemies,
   movement,
+  movOf,
+  reachOf,
   occupant,
   playFight,
   playerById,
@@ -44,7 +50,7 @@ import {
 } from './board';
 import { exchange } from '../sim/exchange';
 import { enemyPhase, type EnemyAction } from './enemy-phase';
-import { safety, type PlannedAttack, type Safety } from './safety';
+import { GAME_OVER_UNITS, priceDeaths, safety, type DeathPrice, type PlannedAttack, type Safety } from './safety';
 
 export type Command =
   | { readonly kind: 'attack'; readonly target: string; readonly weapon: string }
@@ -94,8 +100,9 @@ export type PlannedAction = {
 export type TurnPlan = {
   readonly turn: number;
   readonly actions: readonly PlannedAction[];
-  /** The hard line at the phase's end. */
+  /** The safety checker at the phase's end, and its deaths priced (#282). */
   readonly safety: Safety;
+  readonly price: DeathPrice;
   /** The predicted enemy phase after it, and who it wakes. */
   readonly enemy: readonly EnemyAction[];
   readonly woke: readonly string[];
@@ -107,26 +114,45 @@ export type TurnPlan = {
 export type OutlineTurn = { readonly turn: number; readonly kills: number; readonly left: number; readonly woke: number; readonly safe: boolean; readonly actions: readonly string[] };
 
 export type PositionPlan = {
-  /** The detailed turns (3 unless the rout comes sooner). */
+  /** Every turn of the line, from the board's to the rout (or as far as it gets). */
   readonly turns: readonly TurnPlan[];
-  /** Past them, turn by turn, to the rout (or the cap). */
+  /** Kept empty: the whole line is detailed now (#284). */
   readonly outline: readonly OutlineTurn[];
-  /** The turn the last enemy falls on predicted outcomes; undefined when the outline doesn't get there. */
+  /** The turn the last enemy falls on predicted outcomes; undefined when no line gets there. */
   readonly routTurn: number | undefined;
-  /** Every detailed and outlined turn keeps the hard line. */
+  /** No open line could rout sooner (over the phase ends the search tries). */
+  readonly proven: boolean;
+  /** The line's game-over chance and expected worth lost, summed over its turns, and the budget it keeps to. */
+  readonly gameOver: number;
+  readonly worthLost: number;
+  readonly budget: number;
+  /** Within the game-over cap and the budget. */
   readonly hardLine: boolean;
+  /** Turns where a unit's gang-up worst case kills it without a crit, or a planned attack's counter can. */
   readonly brokenTurns: readonly number[];
-  /** The summed crit risk over the detailed turns. */
+  /** Every unit's death chance summed over the line. */
   readonly critRisk: number;
+  /** Nodes the search expanded. */
+  readonly expanded: number;
 };
 
+/** How the search stands: nodes expanded and open, the lowest open rout bound, the best rout found. */
+export type SearchProgress = { readonly expanded: number; readonly frontier: number; readonly bound: number; readonly bestRout?: number };
+
 export type SolveOptions = {
-  /** Detailed turns (default 3), and the outline's cap in turns (default 12 more). */
+  /** How many turns ahead the search may go (default 30): 1 solves just this turn, ranked by progress. */
   readonly turns?: number;
-  readonly outlineCap?: number;
-  /** Beam widths: per action within a phase, and of whole turns carried to the next. */
+  /** The beam over a phase's actions (default 10), and the phase ends each node expands into (default 4). */
   readonly beam?: number;
-  readonly turnBeam?: number;
+  readonly phaseEnds?: number;
+  /** Unit worth in flawless points by unit (default 1 each: a death costs one), the map's budget of expected worth lost
+   * (default 0.2), and the game-over cap (default 1%). */
+  readonly worth?: Readonly<Record<string, number>>;
+  readonly budget?: number;
+  readonly gameOverCap?: number;
+  /** A bound on nodes (default none), and a report after each. */
+  readonly maxNodes?: number;
+  readonly onProgress?: (p: SearchProgress) => void;
   /** Units that already acted this turn (a re-solve after a combat). */
   readonly acted?: readonly string[];
   /** A move the player is trying: played first, the rest of the turn solved around it. */
@@ -405,6 +431,14 @@ function enemyThreat(b: Board): Map<number, number> {
 // ---- scoring ------------------------------------------------------------------------------------------------------
 
 const BROKEN = 1e7;
+/** A likely death's cost in a phase's beam, per point of the unit's worth (a game-over unit's is BROKEN). */
+const DEATH = 5e3;
+/** An expected death's cost when ranking a phase's ends, per point of worth: progress leads, risk breaks ties. */
+const RISK = 400;
+
+/** The worth and limits a search prices deaths by (#282), and what's left of them on a line. */
+type Pricing = { readonly worth: Readonly<Record<string, number>>; readonly budgetLeft: number; readonly capLeft: number };
+const deathCost = (p: Pricing, unit: string) => (GAME_OVER_UNITS.includes(unit) ? BROKEN : DEATH * (p.worth[unit] ?? 1));
 const CRIT = 2e5;
 const KILL = 400;
 const HP_TAKEN = 12;
@@ -446,8 +480,8 @@ function step(s: State, a: PlannedAction, prio: Readonly<Record<string, number>>
   return { board, acted, actions: [...s.actions, { ...a, why: a.why || whyOf(before, a) }], attacks, goal, spent, miss };
 }
 
-/** A partial phase's worth: the hard line on the units that have acted, then progress. Higher is better. */
-function partialScore(s: State, start: Board): number {
+/** A partial phase's worth: likely deaths of the units that have acted, priced, then progress. Higher is better. */
+function partialScore(s: State, start: Board, pricing: Pricing): number {
   const b = s.board;
   // Sleeping enemies woken by where the acted units stand.
   const acted = leads(b).filter((p) => s.acted.has(p.id));
@@ -463,7 +497,7 @@ function partialScore(s: State, start: Board): number {
         const m = forecast(b, p, e);
         total += m.worstHit * m.foeStrikes;
       }
-    if (total >= p.hp) score -= BROKEN + (total - p.hp) * 100;
+    if (total >= p.hp) score -= deathCost(pricing, p.id) + (total - p.hp) * 100;
     else score -= (total / p.hp) * 50;
   }
   for (const a of s.attacks) {
@@ -472,7 +506,7 @@ function partialScore(s: State, start: Board): number {
     if (!u || !e) continue;
     const f = forecast(start, { ...u, hp: a.hp ?? u.hp }, e, a.from, e.at, a.weapon);
     const d = manhattan(a.from, e.at);
-    if (reaches(weaponOf(e), d) && playFight(f, strikeOrder(f, 'player', true, true), a.hp ?? u.hp, e.hp, 'none', 'all').playerHp <= 0) score -= BROKEN;
+    if (reaches(weaponOf(e), d) && playFight(f, strikeOrder(f, 'player', true, true), a.hp ?? u.hp, e.hp, 'none', 'all').playerHp <= 0) score -= deathCost(pricing, a.unit);
   }
   return score + progress(start, b, acted) + s.goal * 60 - s.spent - s.miss * KILL * 2;
 }
@@ -490,13 +524,16 @@ function progress(start: Board, b: Board, acted: readonly PlayerPiece[]): number
   return score;
 }
 
-/** A finished phase's worth: the hard line in full, the crit risk, progress. */
-function phaseScore(s: State, start: Board): { score: number; line: number; safety: Safety } {
+/**
+ * A finished phase's worth: its deaths priced (over what's left of the cap or the budget, last), then progress, with
+ * the expected worth lost only a light cost (the search's tiers settle risk; this only picks which ends to expand).
+ */
+function phaseScore(s: State, start: Board, pricing: Pricing): { score: number; line: number; safety: Safety; price: DeathPrice } {
   const sf = safety(s.board, s.attacks);
-  const broken = sf.units.filter((u) => u.dies).length + sf.lethalCounters.length;
-  // What a line carries from the phase: the hard line, crit risk, goals and misses (progress is read off the board after).
-  const line = -broken * BROKEN - sf.critRisk * CRIT + s.goal * 60 - s.spent - s.miss * KILL * 2 - s.actions.filter((a) => a.switched).length;
-  return { score: line + progress(start, s.board, leads(s.board)) + healInReach(s.board), line, safety: sf };
+  const price = priceDeaths(sf, pricing.worth);
+  const over = price.gameOver > pricing.capLeft || price.worthLost > pricing.budgetLeft ? BROKEN : 0;
+  const line = -over - price.worthLost * RISK + s.goal * 60 - s.spent - s.miss * KILL * 2 - s.actions.filter((a) => a.switched).length;
+  return { score: line + progress(start, s.board, leads(s.board)) + healInReach(s.board), line, safety: sf, price };
 }
 
 const ARMY = 600;
@@ -542,10 +579,10 @@ const signature = (b: Board) =>
 
 // ---- the search -------------------------------------------------------------------------------------------------
 
-type PhaseEnd = { readonly state: State; readonly score: number; readonly line: number; readonly safety: Safety };
+type PhaseEnd = { readonly state: State; readonly score: number; readonly line: number; readonly safety: Safety; readonly price: DeathPrice };
 
 /** One player phase: a beam over the units' actions, the ends ranked in full. */
-function playerPhase(start: Board, acted: ReadonlySet<string>, prio: Readonly<Record<string, number>>, beam: number, waitTiles: number, pinned?: PlannedAction): PhaseEnd[] {
+function playerPhase(start: Board, acted: ReadonlySet<string>, prio: Readonly<Record<string, number>>, beam: number, pricing: Pricing, pinned?: PlannedAction): PhaseEnd[] {
   let states: State[] = [{ board: start, acted, actions: [], attacks: [], goal: 0, spent: 0, miss: 0 }];
   if (pinned) states = [step(states[0]!, pinned, prio)];
   const ends: State[] = [];
@@ -564,17 +601,15 @@ function playerPhase(start: Board, acted: ReadonlySet<string>, prio: Readonly<Re
           const sig = signature(n.board) + [...n.acted].sort().join();
           if (seen.has(sig)) continue;
           seen.add(sig);
-          next.push({ s: n, k: partialScore(n, start) });
+          next.push({ s: n, k: partialScore(n, start, pricing) });
         }
     }
     next.sort((x, y) => y.k - x.k);
     states = next.slice(0, beam).map((x) => x.s);
   }
   ends.push(...states);
-  return ends.map((s) => ({ state: s, ...phaseScore(s, start) })).sort((x, y) => y.score - x.score);
+  return ends.map((s) => ({ state: s, ...phaseScore(s, start, pricing) })).sort((x, y) => y.score - x.score);
 }
-
-type Line = { readonly turns: TurnPlan[]; readonly score: number; readonly board: Board };
 
 const victory = (b: Board) => liveEnemies(b).length === 0;
 
@@ -585,59 +620,187 @@ function endTurn(b: Board): { after: Board; enemy: EnemyAction[]; woke: string[]
   return { after: { ...ep.board, turn: b.turn + 1 }, enemy: ep.actions, woke: ep.woke };
 }
 
+const DEFAULT_WORTH = 1;
+const DEFAULT_BUDGET = 0.2;
+const DEFAULT_CAP = 0.01;
+
 /**
- * The position plan from a board (see the module comment): the detailed turns, the outline to the rout, and the hard
- * line's verdict.
+ * A lower bound on the turn the last enemy falls (#284): each foe needs one of our units within reach of it on a player
+ * phase, or itself within reach of us on an enemy phase (a counter), and the gap closes by at most our Mov and its own
+ * each turn (a foe that can't move closes none). Manhattan distance, terrain aside: optimistic, so admissible.
  */
-export function solvePositions(board: Board, opts: SolveOptions = {}): PositionPlan {
-  const turns = opts.turns ?? 3;
-  const beam = opts.beam ?? 10;
-  const turnBeam = opts.turnBeam ?? 3;
-  const prio = opts.expPriority ?? {};
-  let lines: Line[] = [{ turns: [], score: 0, board }];
-  for (let t = 0; t < turns; t++) {
-    const next: Line[] = [];
-    for (const line of lines) {
-      if (victory(line.board)) {
-        next.push(line);
-        continue;
-      }
-      const first = t === 0;
-      const ends = playerPhase(line.board, first ? new Set(opts.acted ?? []) : new Set(), prio, beam, 10, first ? opts.pinned : undefined);
-      for (const end of ends.slice(0, turnBeam)) {
-        const e = endTurn(end.state.board);
-        const plan: TurnPlan = { turn: line.board.turn, actions: end.state.actions, safety: end.safety, enemy: e.enemy, woke: e.woke, before: line.board, after: e.after };
-        // Later turns count a little less: the plan re-solves before it gets there.
-        next.push({ turns: [...line.turns, plan], score: line.score + end.line, board: e.after });
+export function routBound(b: Board): number {
+  const live = liveEnemies(b);
+  if (!live.length) return b.turn;
+  const ours = leads(b);
+  if (!ours.length) return Infinity;
+  const range = (ws: readonly Weapon[]) => Math.max(0, ...ws.map((w) => reachOf(w.item)?.[1] ?? 0));
+  const reachOfUnit = (p: PlayerPiece) => {
+    const back = p.back ? playerById(b, p.back) : undefined;
+    return movOf(b, p) + Math.max(range(p.weapons), back ? range(back.weapons) : 0);
+  };
+  const ourMov = Math.max(...ours.map((p) => movOf(b, p)));
+  const ourReach = Math.max(...ours.map(reachOfUnit));
+  let extra = 0;
+  for (const e of live) {
+    const d = Math.min(...ours.map((p) => manhattan(p.at, e.at)));
+    const theirMov = e.stationary ? 0 : e.mov;
+    const theirRange = reachOf(weaponOf(e))?.[1] ?? 0;
+    const threshold = Math.max(ourReach, ourMov + theirMov + theirRange);
+    const closing = Math.max(1, ourMov + theirMov);
+    extra = Math.max(extra, Math.max(0, Math.ceil((d - threshold) / closing)));
+  }
+  return b.turn + extra;
+}
+
+/** A line being searched: the board at a player phase's start, its turns so far, and what they cost and won. */
+type Node = {
+  readonly board: Board;
+  readonly turns: readonly TurnPlan[];
+  readonly gameOver: number;
+  readonly worthLost: number;
+  readonly miss: number;
+  readonly exp: number;
+  /** The rout can't come before this turn (`routBound`), and how far the line has got (higher is better). */
+  readonly bound: number;
+  readonly value: number;
+};
+
+/** A binary heap of nodes, the one to expand next on top. */
+class Frontier {
+  private readonly items: Node[] = [];
+  constructor(private readonly before: (a: Node, b: Node) => boolean) {}
+  get size() {
+    return this.items.length;
+  }
+  peek(): Node | undefined {
+    return this.items[0];
+  }
+  push(n: Node) {
+    const xs = this.items;
+    xs.push(n);
+    let i = xs.length - 1;
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (!this.before(xs[i]!, xs[p]!)) break;
+      [xs[i], xs[p]] = [xs[p]!, xs[i]!];
+      i = p;
+    }
+  }
+  pop(): Node | undefined {
+    const xs = this.items;
+    const top = xs[0];
+    const last = xs.pop();
+    if (xs.length && last) {
+      xs[0] = last;
+      let i = 0;
+      for (;;) {
+        const l = i * 2 + 1;
+        const r = l + 1;
+        let m = i;
+        if (l < xs.length && this.before(xs[l]!, xs[m]!)) m = l;
+        if (r < xs.length && this.before(xs[r]!, xs[m]!)) m = r;
+        if (m === i) break;
+        [xs[i], xs[m]] = [xs[m]!, xs[i]!];
+        i = m;
       }
     }
-    next.sort((x, y) => y.score + boardValue(y.board) - (x.score + boardValue(x.board)));
-    lines = next.slice(0, turnBeam);
+    return top;
   }
-  const best = lines[0]!;
-  // The outline: one cheap line to the rout.
-  const outline: OutlineTurn[] = [];
-  let b = best.board;
-  const cap = opts.outlineCap ?? 12;
-  while (!victory(b) && outline.length < cap) {
-    // The phase's best few ends, each read after its predicted enemy phase.
-    const { end, e } = playerPhase(b, new Set(), prio, beam, 10)
-      .slice(0, 4)
-      .map((x) => ({ end: x, e: endTurn(x.state.board) }))
-      .reduce((a, c) => (c.end.line + boardValue(c.e.after) > a.end.line + boardValue(a.e.after) ? c : a));
-    outline.push({ turn: b.turn, kills: liveEnemies(b).length - liveEnemies(end.state.board).length, left: liveEnemies(end.state.board).length, woke: e.woke.length, safe: end.safety.safe, actions: end.state.actions.map((a) => actionText(b, a)) });
-    b = e.after;
+}
+
+/** A routed line's rank after its turn (#278): less worth lost, then kills more likely to land, then EXP priority. */
+const betterRout = (a: Node, b: Node) => a.worthLost !== b.worthLost ? a.worthLost < b.worthLost : a.miss !== b.miss ? a.miss < b.miss : a.exp > b.exp;
+
+/**
+ * The position plan from a board (see the module comment): best-first to the fewest-turn rout within the game-over cap
+ * and the budget, every turn detailed.
+ */
+export function solvePositions(board: Board, opts: SolveOptions = {}): PositionPlan {
+  const beam = opts.beam ?? 10;
+  const k = opts.phaseEnds ?? 4;
+  const horizon = opts.turns ?? 30;
+  const maxNodes = opts.maxNodes ?? Infinity;
+  const prio = opts.expPriority ?? {};
+  const budget = opts.budget ?? DEFAULT_BUDGET;
+  const cap = opts.gameOverCap ?? DEFAULT_CAP;
+  const worth = Object.fromEntries(board.players.map((p) => [p.id, opts.worth?.[p.id] ?? DEFAULT_WORTH]));
+  const before = (a: Node, b: Node) => (a.bound !== b.bound ? a.bound < b.bound : a.value !== b.value ? a.value > b.value : a.turns.length > b.turns.length);
+  const frontier = new Frontier(before);
+  const root: Node = { board, turns: [], gameOver: 0, worthLost: 0, miss: 0, exp: 0, bound: routBound(board), value: boardValue(board) };
+  frontier.push(root);
+  const seen = new Set<string>();
+  let best: Node | undefined;
+  /** The furthest line that didn't rout (the fallback), and the least-risk one over the cap or budget (the last resort). */
+  let furthest: Node | undefined;
+  let leastRisk: Node | undefined;
+  let expanded = 0;
+  let proven = false;
+  for (;;) {
+    const n = frontier.pop();
+    if (!n) {
+      proven = true;
+      break;
+    }
+    if (best && n.bound >= best.turns.at(-1)!.turn) {
+      proven = true;
+      break;
+    }
+    if (expanded >= maxNodes) break;
+    expanded++;
+    const first = n.turns.length === 0;
+    const pricing: Pricing = { worth, budgetLeft: budget - n.worthLost, capLeft: 1 - (1 - cap) / (1 - n.gameOver) };
+    const ends = playerPhase(n.board, first ? new Set(opts.acted ?? []) : new Set(), prio, beam, pricing, first ? opts.pinned : undefined).slice(0, k);
+    for (const end of ends) {
+      const gameOver = 1 - (1 - n.gameOver) * (1 - end.price.gameOver);
+      const worthLost = n.worthLost + end.price.worthLost;
+      const e = endTurn(end.state.board);
+      const plan: TurnPlan = { turn: n.board.turn, actions: end.state.actions, safety: end.safety, price: end.price, enemy: e.enemy, woke: e.woke, before: n.board, after: e.after };
+      const child: Node = {
+        board: e.after,
+        turns: [...n.turns, plan],
+        gameOver,
+        worthLost,
+        miss: n.miss + end.state.miss,
+        exp: n.exp + end.state.goal,
+        bound: routBound(e.after),
+        value: boardValue(e.after),
+      };
+      if (gameOver > cap || worthLost > budget) {
+        // Over the cap or the budget: kept only as the least-risk line, should nothing else survive.
+        if (!leastRisk || gameOver < leastRisk.gameOver || (gameOver === leastRisk.gameOver && worthLost < leastRisk.worthLost)) leastRisk = child;
+        continue;
+      }
+      if (victory(end.state.board) || victory(e.after)) {
+        // Routed on this turn (its player phase, or a counter on its enemy phase).
+        const t = n.board.turn;
+        const bt = best?.turns.at(-1)!.turn;
+        if (!best || t < bt! || (t === bt && betterRout(child, best))) best = child;
+        continue;
+      }
+      if (!furthest || child.value > furthest.value || (child.value === furthest.value && child.turns.length < furthest.turns.length)) furthest = child;
+      if (child.turns.length >= horizon) continue;
+      const key = `${e.after.turn}/${signature(e.after)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      frontier.push(child);
+    }
+    opts.onProgress?.({ expanded, frontier: frontier.size, bound: frontier.peek()?.bound ?? n.bound, ...(best ? { bestRout: best.turns.at(-1)!.turn } : {}) });
   }
-  const detailedRout = best.turns.find((t) => victory(t.after) || liveEnemies(t.after).length === 0);
-  const routTurn = detailedRout ? detailedRout.turn : victory(b) ? outline.at(-1)?.turn : undefined;
-  const brokenTurns = [...best.turns.filter((t) => !t.safety.safe).map((t) => t.turn), ...outline.filter((o) => !o.safe).map((o) => o.turn)];
+  const line = best ?? furthest ?? leastRisk ?? root;
+  const turns = line.turns;
   return {
-    turns: best.turns,
-    outline,
-    routTurn,
-    hardLine: brokenTurns.length === 0,
-    brokenTurns,
-    critRisk: best.turns.reduce((n, t) => n + t.safety.critRisk, 0),
+    turns,
+    outline: [],
+    routTurn: best ? best.turns.at(-1)!.turn : undefined,
+    proven: proven && !!best,
+    gameOver: line.gameOver,
+    worthLost: line.worthLost,
+    budget,
+    hardLine: line.gameOver <= cap && line.worthLost <= budget,
+    brokenTurns: turns.filter((t) => !t.safety.safe).map((t) => t.turn),
+    critRisk: turns.reduce((n, t) => n + t.safety.units.reduce((m, u) => m + u.deathChance, 0), 0),
+    expanded,
   };
 }
 
