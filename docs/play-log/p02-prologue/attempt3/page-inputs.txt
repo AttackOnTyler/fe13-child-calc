@@ -1,0 +1,28 @@
+# The Prologue position plan's inputs in attempt 3, in order (run app `positions.prologue`, 26 events through EP8).
+# act <unit> <from>-><to> <command> [target] [(switched)] [outcome tap]; enemy <id> <from>-><to> [x<target> <targetHp>/<enemyHp>]
+act frederick 2,14->4,14 pair
+act frederick 4,14->8,12 attack e10 (switched)
+act chrom 3,13->1,13 pair
+act lissa 1,13->3,14 wait
+enemy e0 8,1->8,1; e6 10,6->10,11; e7 7,9->9,12 xfrederick 22/0; e8 4,10->7,12 xfrederick 22/0; e9 1,8->2,12
+act frederick 8,12->2,13 attack e9 forecast
+act chrom 3,14->3,12 attack e9 (switched) forecast
+enemy e0 8,1->8,1; e6 10,11->6,12
+act frederick 2,13->6,11 attack e6 forecast
+act chrom 3,12->6,10 wait
+enemy e0 8,1->8,1
+act frederick 6,11->7,9 wait
+act lissa 6,10->7,10 heal frederick (switched)
+enemy e0 8,1->8,1
+act lissa 7,10->7,10 heal frederick
+act frederick 7,9->7,9 wait
+enemy e0 8,1->8,1
+act frederick 7,9->9,4 attack e2 forecast
+act lissa 7,10->10,8 wait
+enemy e0 8,1->8,1; e1 7,3->9,3 xfrederick 28/0; e3 8,2->9,2 xfrederick 13/23; e4 6,2->9,3 xfrederick 7/5; e5 10,2->8,4 xfrederick 1/5
+act frederick 9,4->8,9 wait
+act lissa 10,8->8,10 heal frederick
+enemy e0 8,1->8,1; e3 9,2->9,7; e4 9,3->9,8; e5 8,4->9,6
+act lissa 8,10->4,10 wait
+act frederick 8,9->3,9 wait
+enemy e0 8,1->8,1; e3 9,7->5,8; e4 9,8->5,9; e5 9,6->5,7
