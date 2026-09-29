@@ -1,10 +1,10 @@
 /** The position solver on the Lunatic Prologue (#265). */
 import { describe, expect, it } from 'vitest';
 import { liveEnemies, movement, playerById } from './board';
-import { keyTile, manhattan } from './captured';
+import { keyTile, manhattan, sameTile, tileKey } from './captured';
 import { enemyPhase } from './enemy-phase';
 import { prologueBoard } from './prologue-fixture';
-import { applyAction, menuAt, solvePositions, type PlannedAction } from './solve';
+import { actionText, applyAction, menuAt, actingTiles, solvePositions, type PlannedAction } from './solve';
 
 describe('the position solver (#265)', () => {
   const plan = solvePositions(prologueBoard(), { phaseEnds: 3 });
@@ -85,6 +85,36 @@ describe('the position solver (#265)', () => {
     expect(playerById(after, 'lissa')).toMatchObject({ at: [3, 12], back: 'chrom' });
     // The lead's own menu isn't switched.
     expect(menuAt(b, 'chrom', [3, 12]).every((a) => !a.switched && a.unit === 'chrom')).toBe(true);
+  });
+
+  it('a pair moves on its lead’s reach: every switched move in the plan is one the lead could make (#291)', () => {
+    for (const t of plan.turns) {
+      let b = t.before;
+      for (const a of t.actions) {
+        if (a.switched) {
+          const lead = playerById(b, playerById(b, a.unit)!.carriedBy!)!;
+          expect(movement(b, lead).has(tileKey(a.to)), `T${t.turn}: ${a.unit} → (${a.to})`).toBe(true);
+        }
+        b = applyAction(b, a);
+      }
+    }
+  });
+
+  it('a pair’s back acts only where its lead can move, after a Switch there (#291)', () => {
+    // Attempt 4's T1: Frederick paired behind Lissa on (1,13). Lissa moves 6; (4,9) is 7 away.
+    const b = prologueBoard({ lissa: [1, 13] }, { lissa: 'frederick' });
+    const reach = actingTiles(b, 'frederick');
+    expect(reach.has(tileKey([4, 9]))).toBe(false);
+    expect(reach.has(tileKey([3, 10]))).toBe(true);
+    expect(reach).toEqual(actingTiles(b, 'lissa'));
+    const myrmidon = liveEnemies(b).find((e) => e.at[0] === 4 && e.at[1] === 10)!;
+    const attack = menuAt(b, 'frederick', [3, 10]).find((a) => a.command.kind === 'attack' && a.command.target === myrmidon.id);
+    expect(attack).toMatchObject({ unit: 'frederick', switched: true, from: [1, 13], to: [3, 10] });
+    // Said in the game's order: the lead moves, then Switch, then the back's command.
+    expect(actionText(b, attack!)).toBe('Lissa → (3,10), Switch (Frederick leads): Attack Myrmidon (Silver Lance)');
+    // The solver never offers the move the game forbids.
+    const t1 = solvePositions(b, { turns: 1 }).turns[0]!.actions;
+    expect(t1.some((a) => a.switched && sameTile(a.to, [4, 9]))).toBe(false);
   });
 
   it('a staff reaches a pair’s lead only, never its back', () => {

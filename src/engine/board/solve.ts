@@ -3,7 +3,8 @@
  * re-solved from any board (after each combat, around a pinned move).
  *
  * - **Commands:** move, then Attack (the weapon that kills, else the one with no counter, then the most damage), Staff
- *   (Heal), Items (a Vulnerary), Pair Up (onto an ally, who leads), Switch, Separate, or Wait. Before any of them, a
+ *   (Heal), Items (a Vulnerary), Pair Up (onto an ally, who leads), Switch (after the lead moves
+ *   the pair: the game allows no move after it, #291), Separate, or Wait. Before any of them, a
  *   **Trade** (free, #283): one item taken from or given to the back or an adjacent ally, weapons included, when the
  *   receiver can use it. After a command other than Attack, the weapon it ends holding (its enemy-phase counter).
  *   Every reachable tile is tried, water included for the classes that can stand on it.
@@ -84,7 +85,7 @@ export type ActionForecast = {
 export type PlannedAction = {
   /** The unit acting: a pair's lead (after the switch, when `switched`). */
   readonly unit: string;
-  /** Switch first (free, before moving): the back takes the lead and acts. */
+  /** The lead moves the pair (on its reach), then Switch: the back takes the lead and acts from `to` (#291). */
   readonly switched?: boolean;
   readonly from: Tile;
   readonly to: Tile;
@@ -312,10 +313,20 @@ type State = {
 
 const name = (b: Board, id: string) => playerById(b, id)?.name ?? enemyById(b, id)?.name ?? id;
 
-/** Every option of a unit on a state: its reachable tiles, each with the commands the game offers there. */
-function options(s: State, u: PlayerPiece): PlannedAction[] {
+/**
+ * The tiles a unit can act from this phase. A pair moves on its lead's reach: the game allows no move after a Switch,
+ * so a back acts where its lead can move, after a Switch there (#291).
+ */
+export function actingTiles(b: Board, unitId: string): Set<number> {
+  const u = playerById(b, unitId);
+  const lead = u?.carriedBy ? playerById(b, u.carriedBy) : u;
+  return new Set(lead ? movement(b, lead).keys() : []);
+}
+
+/** Every option of a unit on a state: its reachable tiles (or those given), each with the commands the game offers there. */
+function options(s: State, u: PlayerPiece, reach: Iterable<number> = movement(s.board, u).keys()): PlannedAction[] {
   const b = s.board;
-  const tiles = [...movement(b, u).keys()];
+  const tiles = [...reach];
   const enemies = liveEnemies(b);
   const allies = leads(b).filter((x) => x.id !== u.id);
   const out: PlannedAction[] = [];
@@ -389,12 +400,12 @@ function options(s: State, u: PlayerPiece): PlannedAction[] {
   return out;
 }
 
-/** A unit's options, and a pair's with the back switched to the lead first. */
+/** A unit's options, and a pair's with the back switched to the lead at a tile the lead moves it to (#291). */
 function allOptions(s: State, u: PlayerPiece): PlannedAction[] {
   const own = options(s, u);
   if (!u.back) return own;
   const b = switched(s.board, u.back);
-  const other = options({ ...s, board: b }, playerById(b, u.back)!).filter((a) => a.command.kind !== 'wait' || own.length < 4);
+  const other = options({ ...s, board: b }, playerById(b, u.back)!, actingTiles(s.board, u.id)).filter((a) => a.command.kind !== 'wait' || own.length < 4);
   return [...own, ...other.map((a) => ({ ...a, switched: true }))];
 }
 
@@ -828,7 +839,10 @@ export function actionText(b: Board, a: PlannedAction): string {
   const held = a.equip && c.kind !== 'attack' ? `, holding the ${a.equip}` : '';
   const cmd =
     c.kind === 'attack' ? `Attack ${name(b, c.target)} (${c.weapon})` : c.kind === 'heal' ? `Staff: ${c.staff} on ${name(b, c.target)}` : c.kind === 'item' ? `Items: ${c.item}` : c.kind === 'pair' ? `Pair Up with ${name(b, c.with)}` : c.kind === 'separate' ? `Separate to (${c.to[0]},${c.to[1]})` : 'Wait';
-  return `${a.switched ? `Switch (${name(b, a.unit)} leads), then ` : ''}${name(b, a.unit)} ${move}: ${trade}${cmd}${held}`;
+  if (!a.switched) return `${name(b, a.unit)} ${move}: ${trade}${cmd}${held}`;
+  // In the game's order: the lead moves the pair, then Switch, then the back's command (#291).
+  const lead = playerById(b, a.unit)?.carriedBy ?? b.players.find((p) => p.id !== a.unit && sameTile(p.at, a.from))?.id;
+  return `${lead ? name(b, lead) : 'The pair'} ${move}, Switch (${name(b, a.unit)} leads): ${trade}${cmd}${held}`;
 }
 
 export type { GameItem };
@@ -836,7 +850,8 @@ export type { GameItem };
 /**
  * The game's command menu for a unit at a tile (#266's try a move): each attack with each weapon that reaches (its
  * forecast), Staff, Items (a trade first when it needs one), Pair Up (the ally's tile), Separate, and Wait. A pair's
- * back gets its menu after a Switch (#274): it takes the lead first, and every action it offers plays switched.
+ * back gets its menu after a Switch (#274), at a tile its lead can move the pair to (`actingTiles`, #291): every
+ * action it offers plays switched.
  */
 export function menuAt(b: Board, unitId: string, tile: Tile): PlannedAction[] {
   if (playerById(b, unitId)?.carriedBy) {
