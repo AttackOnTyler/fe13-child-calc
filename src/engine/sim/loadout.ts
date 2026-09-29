@@ -15,6 +15,7 @@ import { forgedStats } from '../../game-data/items';
 import { classTypes, type Fighter, type Foe } from '../solver';
 import type { SimItem } from './sustain';
 import { potionHeal } from './sustain';
+import { trueHit } from './exchange';
 
 type Weapon = NonNullable<Fighter['weapon']>;
 
@@ -36,7 +37,7 @@ function expected(f: Fighter, w: Weapon, foe: Foe): number {
   const eff = item.effective && item.effective.some((e) => typesOf(foe.className).includes(e)) ? 3 : 1;
   const dmg = Math.max(0, (magic ? f.stats.mag : f.stats.str) + s.mt * eff - (magic ? foe.stats.res : foe.stats.def));
   const tri = foe.weapon ? (TRIANGLE[item.kind] === foe.weapon.kind ? 5 : TRIANGLE[foe.weapon.kind] === item.kind ? -5 : 0) : 0;
-  const hit = Math.max(0, Math.min(100, s.hit + (f.stats.skl * 3 + f.stats.lck) / 2 + tri - (foe.stats.spd * 3 + foe.stats.lck) / 2)) / 100;
+  const hit = trueHit(Math.max(0, Math.min(100, s.hit + (f.stats.skl * 3 + f.stats.lck) / 2 + tri - (foe.stats.spd * 3 + foe.stats.lck) / 2)));
   return dmg * (item.brave ? 2 : 1) * hit;
 }
 

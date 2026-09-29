@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createEngine, itemByName, matchup, resolveAssumptions, type Fighter, type Foe, type SimFoeGroup, type SimGroup, type SimMap, type SimUnit, type SupportLevel } from './index';
+import { trueHit } from './sim/exchange';
 
 /**
  * The map simulation (#181), on small hand-built chapters whose answer can be worked by hand: one unit or pair, one or
@@ -52,7 +53,7 @@ describe('the map simulation’s no-death chance (#181)', () => {
   it('multiplies the survival of every exposure, from the solver’s hit rates', () => {
     const m = matchup(hero, undefined, null, brute);
     expect([m.hit, m.crit, m.foeCrit, m.damage, m.hits, m.oneRounds]).toEqual([100, 0, 0, 10, 2, false]);
-    const q = m.foeHit / 100;
+    const q = trueHit(m.foeHit);
     expect(q).toBeGreaterThan(0);
     expect(q).toBeLessThan(1);
     // Attacking first would risk the Brute's counter (q) and then its enemy-phase attack (q again); waiting in its reach
@@ -72,7 +73,7 @@ describe('the map simulation’s no-death chance (#181)', () => {
   it('lets the back’s Dual Guard nullify a strike, at the solver’s rate', () => {
     const m = matchup(hero, shield, 'S', brute);
     expect(m.dualGuardRate).toBeGreaterThan(0);
-    const miss = 1 - (m.foeHit / 100) * (1 - m.dualGuardRate / 100);
+    const miss = 1 - trueHit(m.foeHit) * (1 - m.dualGuardRate / 100);
     const play = engine.playMap({ map: rout([group(brute)]), lineup: [{ lead: unit(hero), back: unit(shield), support: 'S' }] }, 1);
     expect(play.noDeath).toBeCloseTo(miss ** 2, 12);
     expect(play.units.hero!.together).toEqual({ shield: 2 });
@@ -263,7 +264,7 @@ describe('sustain, Dance, Rally and staff reach (#182)', () => {
   it('gives another action with a Dance: a foe felled before it can attack', () => {
     // Two foes the hero fells with one strike (no counter), each killing it with one hit on enemy phase.
     const glass: Foe = { ...brute, name: 'Glass', count: 2, stats: { ...brute.stats, hp: 10, def: 0 } };
-    const q = matchup(hero, undefined, null, glass).foeHit / 100;
+    const q = trueHit(matchup(hero, undefined, null, glass).foeHit);
     const two = rout([group(glass)]);
     const without = engine.playMap({ map: two, lineup: [solo(hero)] }, 1);
     expect(without.noDeath).toBeCloseTo(1 - q, 12);
@@ -693,7 +694,7 @@ describe('baits and bosses (realism pass)', () => {
     // both landing (30%) does. The stress case's second attacker reads the true risk.
     const heavy: Foe = { ...brute, name: 'Heavy', count: 2, stats: stats(60, 18, 0, 0, 0, 60, 15, 0) };
     const tank2: Fighter = { name: 'Tank', className: 'Myrmidon', stats: stats(30, 15, 0, 60, 30, 0, 10, 0), skills: [], weapon: weapon('Iron Sword') };
-    const q = matchup(tank2, undefined, null, heavy).foeHit / 100;
+    const q = trueHit(matchup(tank2, undefined, null, heavy).foeHit);
     const play = engine.playMap({ map: rout([group(heavy)]), lineup: [solo(tank2)], stress: 'two-attackers' }, 1);
     const first = play.log[0]!.fights.filter((f) => f.phase === 'enemy');
     expect(first).toHaveLength(2);

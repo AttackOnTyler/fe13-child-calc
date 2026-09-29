@@ -12,7 +12,7 @@ const engine = createEngine();
 const fresh = (difficulty: Difficulty) => runFromRoster(withRun(EMPTY_ROSTER, { route: 'main-story', difficulty, gender: 'M', asset: 'mag', flaw: 'hp' }));
 
 describe('realism anchors (the realism pass)', () => {
-  it('reads a fresh Normal Main story plan as a likely flawless run, each story chapter at 90% or more', () => {
+  it('reads a fresh Normal Main story plan as a likely flawless run, each story chapter at 85% or more', () => {
     const run = fresh('normal');
     const plan = engine.seedPlan(run);
     const r = engine.flawlessChance(run, { plan, runs: 6 });
@@ -22,7 +22,8 @@ describe('realism anchors (the realism pass)', () => {
     expect(r.chance).toBeGreaterThan(0.7);
     const story = r.maps.filter((m) => /^(prologue|chapter-\d+|endgame)$/.test(m.key) && m.noDeath !== undefined);
     expect(story.length).toBeGreaterThan(20);
-    for (const m of story) expect(m.noDeath!, m.key).toBeGreaterThanOrEqual(0.9);
+    // 85%, not 90%, since true hit (#281): Chapter 25's accurate foes land more often than their displayed Hit (87.5%).
+    for (const m of story) expect(m.noDeath!, m.key).toBeGreaterThanOrEqual(0.85);
     // Nothing on the way grinds to the turn cap.
     for (const m of r.maps) if (m.stalled !== undefined) expect(m.stalled, m.key).toBe(0);
   });

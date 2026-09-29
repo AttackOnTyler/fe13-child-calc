@@ -44,6 +44,16 @@ export function rangeOf(item: GameItem | undefined): readonly [number, number] |
   return r;
 }
 
+/**
+ * The true chance a displayed Hit lands (research #281): Awakening averages two random numbers (0–99) and hits when the
+ * average is under the displayed Hit, so 70 lands 82.3% and 30 lands 18.3%. Only the hit roll works this way; crit,
+ * Dual Strike, Dual Guard and skills roll once against the rate shown.
+ */
+export function trueHit(displayed: number): number {
+  const h = Math.max(0, Math.min(100, displayed));
+  return h <= 50 ? (h * (2 * h + 1)) / 10000 : 1 - ((100 - h) * (199 - 2 * h)) / 10000;
+}
+
 /** Each item's range, read once (every exchange asks). */
 const RANGES = new WeakMap<GameItem, readonly [number, number] | undefined>();
 
@@ -123,6 +133,12 @@ export function leadHpAfter(m: Matchup, leadWeapon: GameItem | undefined, leadHp
   return out;
 }
 
+/** Every ending of the exchange as (the lead's HP, the foe's HP, its chance), 0 for a side that fell. */
+export function exchangeEndings(m: Matchup, leadWeapon: GameItem | undefined, leadHp: number, foeHp: number, initiator: Initiator): { lead: number; foe: number; p: number }[] {
+  const { keys, probs } = endings(m, leadWeapon, leadHp, foeHp, initiator);
+  return keys.map((k, i) => ({ lead: Math.floor(k / K), foe: k % K, p: probs[i]! }));
+}
+
 /** States: lead HP × K + foe HP. */
 const K = 1024;
 
@@ -166,12 +182,12 @@ function endings(m: Matchup, leadWeapon: GameItem | undefined, leadHp: number, f
       SLOT[k] = nextKeys.length;
     }
   };
-  const hit = m.hit / 100;
+  const hit = trueHit(m.hit);
   const crit = m.crit / 100;
   const dual = m.backDamage > 0 && m.backHit > 0 ? m.dualStrikeRate / 100 : 0;
-  const bHit = m.backHit / 100;
+  const bHit = trueHit(m.backHit);
   const bCrit = m.backCrit / 100;
-  const fHit = m.foeHit / 100;
+  const fHit = trueHit(m.foeHit);
   const fCrit = m.foeCrit / 100;
   const guard = m.dualGuardRate / 100;
   for (const s of seq) {

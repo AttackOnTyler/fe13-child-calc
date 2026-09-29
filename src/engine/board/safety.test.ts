@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { liveEnemies, withEnemy, withPieces, type Board } from './board';
 import { prologueBoard } from './prologue-fixture';
-import { counterOn, safety } from './safety';
+import { counterOn, priceDeaths, safety } from './safety';
 
 const at = (b: Board, x: number, y: number) => liveEnemies(b).find((e) => e.at[0] === x && e.at[1] === y)!;
 const unit = (b: Board, id: string) => b.players.find((p) => p.id === id)!;
@@ -55,5 +55,68 @@ describe('the safety checker (#264)', () => {
     const s = safety(b, [{ unit: 'robin', enemy: myrm.id, from: [4, 11], weapon: sword, hp: 5 }]);
     expect(s.lethalCounters).toHaveLength(1);
     expect(s.safe).toBe(false);
+  });
+});
+
+describe('the tile-aware gang-up (#282)', () => {
+  /** Frederick alone at (5,13), walled in by Chrom (4,13), Robin (6,13) and Lissa (5,14): only (5,12) is free for melee. */
+  const choke = (firstHp: number) => {
+    const b = prologueBoard({ frederick: [5, 13], chrom: [4, 13], robin: [6, 13], lissa: [5, 14] });
+    const barbs = b.enemies.filter((e) => e.foe.className === 'Barbarian' && !e.boss).slice(0, 2);
+    const a = { ...barbs[0]!, at: [5, 10] as const, hp: firstHp, awake: true };
+    const c = { ...barbs[1]!, at: [6, 11] as const, awake: true };
+    return withPieces(b, b.players, [a, c]);
+  };
+
+  it('counts only the foes that find a free tile: two Barbarians in reach, one tile open, one attacks', () => {
+    const b = choke(30);
+    const fred = safety(b).units.find((u) => u.unit === 'frederick')!;
+    // Both reach, but Frederick's counter can't fell a 30 HP Barbarian without a crit: the first keeps the tile.
+    expect(fred.threats).toHaveLength(2);
+    const one = fred.threats[0]!.damage;
+    expect(fred.total).toBe(one);
+  });
+
+  it('lets a second foe step in when the first dies on the counter and frees the tile', () => {
+    const open = safety(choke(5)).units.find((u) => u.unit === 'frederick')!;
+    const held = safety(choke(30)).units.find((u) => u.unit === 'frederick')!;
+    expect(open.total).toBe(open.threats[0]!.damage + open.threats[1]!.damage);
+    expect(open.total).toBeGreaterThan(held.total);
+    expect(open.deathChance).toBeGreaterThanOrEqual(held.deathChance);
+  });
+
+  it('reads attempt 3’s EP6 as it went: four foes on Frederick at (9,4), 27 against 28, a death only by a crit', () => {
+    // After T6: Frederick (Robin behind) killed the bridge Myrmidon from (9,4); Lissa + Chrom at (10,8). The south is gone.
+    let b = prologueBoard({ frederick: [9, 4], lissa: [10, 8] }, { frederick: 'robin', lissa: 'chrom' });
+    b = withPieces(b, b.players, b.enemies.filter((e) => e.boss || (e.group === 1 && !(e.at[0] === 9 && e.at[1] === 3))).map((e) => ({ ...e, awake: true })));
+    const fred = safety(b).units.find((u) => u.unit === 'frederick')!;
+    expect(fred).toMatchObject({ hp: 28, total: 27, dies: false });
+    expect(fred.deathChance).toBeGreaterThan(0);
+    expect(fred.deathChance).toBeLessThan(0.2);
+  });
+});
+
+describe('pricing deaths by worth (#282)', () => {
+  it('adds a planned attack’s counter to the attacker’s death chance, at true odds', () => {
+    const b0 = prologueBoard({ robin: [4, 12] });
+    const myrm = at(b0, 4, 10);
+    // The Myrmidon alone, and asleep (it would double Robin on enemy phase): only the attack's counter can kill him.
+    const b = withPieces(b0, b0.players, [{ ...myrm, awake: false, ai: { ...myrm.ai, start: 'Null' } }]);
+    const sword = unit(b, 'robin').weapons.find((w) => w.item.name === 'Bronze Sword')!;
+    const quiet = safety(b).units.find((u) => u.unit === 'robin')!.deathChance;
+    const s = safety(b, [{ unit: 'robin', enemy: myrm.id, from: [4, 11], weapon: sword, hp: 5 }]);
+    expect(s.units.find((u) => u.unit === 'robin')!.deathChance).toBeGreaterThan(quiet);
+  });
+
+  it('prices a lead’s death by its worth, and Chrom’s or Robin’s as game over', () => {
+    const s = { units: [
+      { unit: 'chrom', hp: 20, total: 0, threats: [], dies: false, deathChance: 0.1 },
+      { unit: 'lissa', hp: 17, total: 0, threats: [], dies: false, deathChance: 0.5 },
+      { unit: 'frederick', hp: 28, total: 0, threats: [], dies: false, deathChance: 0.2 },
+    ], lethalCounters: [], safe: true, critRisk: 0, awake: [] };
+    const p = priceDeaths(s, { lissa: 4, frederick: 10 });
+    expect(p.gameOver).toBeCloseTo(0.1, 12);
+    // Lissa 0.5 × 4 + Frederick 0.2 × 10; Chrom's is game over, not worth.
+    expect(p.worthLost).toBeCloseTo(4, 12);
   });
 });

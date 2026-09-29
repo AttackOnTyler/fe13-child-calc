@@ -389,6 +389,18 @@ _Avoid_: Formation plan
 The chance nobody dies on one map, for the runs that reach it with the plan's lineup; the flawless chance is its product over the maps to the endpoint. Computed exactly per map; read near 100% as "loses a unit about 1 run in N".
 _Avoid_: Map chance, survival rate
 
+**True hit**:
+The real chance a displayed Hit lands: Awakening averages two random numbers, so 70 lands 82.3% and 30 lands 18.3% (50 stays about even). Only hit works this way; crit, Dual Strike, Dual Guard and skill procs roll once at the rate shown. Every chance the app computes uses it; every number it shows is the game's displayed one.
+_Avoid_: Real hit, 2RN (in the UI)
+
+**Gang-up worst case**:
+On the position plan, the most one unit can take on an enemy phase: the awake foes that can reach it attack one at a time in the worst order, each from a free tile it can reach and strike from; a foe that survives holds its tile, one felled by the counter frees it. Every non-crit hit lands. Targeting-free, so it holds whatever the AI picks.
+_Avoid_: Danger total, threat sum
+
+**Death price**:
+What a position plan's line risks, from each unit's death chance (the gang-up played at true odds, the worst order and tiles, plus its own planned attacks' counters): the **game-over chance** (Chrom's or Robin's death) and the **expected worth lost** (every other unit's death chance times its unit worth). A pawn's gambit costs little; a unit the run needs costs its worth.
+_Avoid_: Death penalty, risk score
+
 **Forced unit**:
 A unit the map always fields, which the player can't drop: Chrom on nearly every map, Robin too on Chapter 23 alone, and every unit on the map from its start. Naming Robin in the defeat condition doesn't force Robin.
 _Avoid_: Mandatory unit, lord (alone)

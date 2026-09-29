@@ -24,7 +24,7 @@
  * enemy acts on that board. Not modelled: healers and staves, Dual Guard and Dual Strike rolls in the prediction,
  * reinforcements, event flags, AI missions (villages, chests), Person-only attackers.
  */
-import { exchange } from '../sim/exchange';
+import { exchange, trueHit } from '../sim/exchange';
 import { NEIGHBOURS, keyTile, manhattan, moveCost, moveRow, sameTile, tileBonus, tileKey, type Tile } from './captured';
 import {
   forecast,
@@ -173,7 +173,7 @@ export function attackOptions(b: Board, e: EnemyPiece): AttackOption[] {
     const lethal = m.worstHit * strikes >= target.hp;
     const killChance = lethal ? 1 - exchange(best.countered ? m : { ...m, hits: 0 }, best.countered ? target.fighter.weapon?.item : undefined, target.hp, e.hp, 'enemy').survive : 0;
     const alternatives = tied.slice(1).map((t) => t.tile);
-    out.push({ enemy: e, target, tile: best.tile, alternatives, range: best.range, m, countered: best.countered, lethal, killChance, expected: (m.worstHit * strikes * m.foeHit) / 100 });
+    out.push({ enemy: e, target, tile: best.tile, alternatives, range: best.range, m, countered: best.countered, lethal, killChance, expected: m.worstHit * strikes * trueHit(m.foeHit) });
   }
   return out;
 }
