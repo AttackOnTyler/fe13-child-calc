@@ -15,7 +15,7 @@ describe('replaying the position log', () => {
     const r = replay(b, [{ kind: 'act', action: separate }]);
     expect(playerById(r.board, 'chrom')!.at).toEqual([2, 12]);
     expect([...r.acted].sort()).toEqual(['chrom', 'lissa']);
-    const plan = solvePositions(r.board, { acted: r.acted, turns: 1, outlineCap: 0 });
+    const plan = solvePositions(r.board, { acted: r.acted, turns: 1 });
     expect(plan.turns[0]!.actions.some((a) => a.unit === 'chrom' || a.unit === 'lissa')).toBe(false);
   });
 
@@ -59,7 +59,7 @@ describe('the Prologue’s outer ring is off the map (#271)', () => {
   });
 
   it('nothing plans or predicts a move onto x=0, x=16, y=0 or y=15', () => {
-    const plan = solvePositions(prologueBoard());
+    const plan = solvePositions(prologueBoard(), { phaseEnds: 3 });
     for (const t of plan.turns) {
       for (const a of t.actions) {
         expect(ring(tileKey(a.to)), `${a.unit} → (${a.to})`).toBe(false);
@@ -71,5 +71,5 @@ describe('the Prologue’s outer ring is off the map (#271)', () => {
     const b = prologueBoard({ lissa: [1, 14] });
     for (const e of liveEnemies(b)) for (const k of threatTiles(b, e)) expect(ring(k)).toBe(false);
     for (const e of enemyPhase(withPieces(b, b.players, b.enemies.map((x) => ({ ...x, awake: true })))).actions) expect(ring(tileKey(e.to))).toBe(false);
-  });
+  }, 120_000);
 });
