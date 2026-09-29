@@ -401,6 +401,14 @@ _Avoid_: Danger total, threat sum
 What a position plan's line risks, from each unit's death chance (the gang-up played at true odds, the worst order and tiles, plus its own planned attacks' counters): the **game-over chance** (Chrom's or Robin's death) and the **expected worth lost** (every other unit's death chance times its unit worth). A pawn's gambit costs little; a unit the run needs costs its worth.
 _Avoid_: Death penalty, risk score
 
+**Risk budget**:
+On the position plan, the expected worth a line may lose on a map: its death price's expected worth lost, kept within what the run plan already expects to lose there ((1 − the map's no-death chance) × the lineup's mean worth). Game over is capped apart, at 1% a map. When unit worth can't price a death (not costed yet, or a run at 0%), a default stands: a death costs 1, the budget is 0.2.
+_Avoid_: Risk tolerance, death allowance
+
+**Proven rout**:
+The position plan's rout turn when no open line could rout sooner: proven over the lines the search opens (the best few ways to play each turn), not over every move the game allows.
+_Avoid_: Optimal rout, minimum turns (unqualified)
+
 **Forced unit**:
 A unit the map always fields, which the player can't drop: Chrom on nearly every map, Robin too on Chapter 23 alone, and every unit on the map from its start. Naming Robin in the defeat condition doesn't force Robin.
 _Avoid_: Mandatory unit, lord (alone)

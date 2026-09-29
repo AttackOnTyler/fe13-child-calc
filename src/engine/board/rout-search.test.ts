@@ -13,10 +13,11 @@ describe('the rout search (#284)', () => {
 
   it('solves the Prologue from turn 1 to the rout: no game-over risk over the cap, the worth lost within budget', () => {
     const progress: number[] = [];
-    const plan = solvePositions(prologueBoard(), { phaseEnds: 3, onProgress: (p) => progress.push(p.expanded) });
-    expect(plan.routTurn).toBeDefined();
-    // Ellery's fast clears take 5–10: a proof above 10 would mean the move menu still misses something.
-    expect(plan.routTurn!).toBeLessThanOrEqual(10);
+    const plan = solvePositions(prologueBoard(), { onProgress: (p) => progress.push(p.expanded) });
+    // Proven over the phase ends each node tries: turn 6 (Ellery's fast clears take 5–10; a proof above 10 would mean
+    // the move menu still misses something).
+    expect(plan.proven).toBe(true);
+    expect(plan.routTurn).toBe(6);
     expect(plan.gameOver).toBeLessThanOrEqual(0.01);
     expect(plan.worthLost).toBeLessThanOrEqual(plan.budget);
     // The line is whole: every turn from 1 to the rout, and nothing left standing after it.

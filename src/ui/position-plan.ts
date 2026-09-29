@@ -155,8 +155,8 @@ const listOf = (xs: readonly string[]) => (xs.length < 2 ? (xs[0] ?? '') : `${xs
 
 /** The headline (#285): the rout and its proof, the risk against the budget, the play's estimate, the held-back notes. */
 export function headline(plan: PositionPlan, notes: readonly HeldBackNote[], name: (id: string) => string, playTurns?: string, budgetNote?: string): { readonly verdict: string; readonly ok: boolean; readonly lines: readonly string[] } {
-  const ok = plan.hardLine && plan.routTurn !== undefined;
-  const verdict = !plan.hardLine
+  const ok = plan.withinRisk && plan.routTurn !== undefined;
+  const verdict = !plan.withinRisk
     ? 'Over the risk budget: this is the least-risk line'
     : plan.routTurn === undefined
       ? 'No rout found within the risk budget: this line gets furthest'
@@ -208,7 +208,7 @@ export function compare(mine: PositionPlan, theirs: PositionPlan, name: (id: str
   const m = mine.turns[0];
   const t = theirs.turns[0];
   if (!m || !t) return { good, bad, same };
-  put('The hard line this turn', m.safety.safe ? 1 : 0, t.safety.safe ? 1 : 0, true, (x) => (x ? 'kept' : 'broken'));
+  put('No death without a crit this turn', m.safety.safe ? 1 : 0, t.safety.safe ? 1 : 0, true, (x) => (x ? 'kept' : 'broken'));
   put('Attacks whose counter can kill', m.safety.lethalCounters.length, t.safety.lethalCounters.length, false);
   const kills = (x: TurnPlan) => x.actions.filter((a) => a.forecast?.targetHp === 0).length;
   put('Kills this turn', kills(m), kills(t), true);
@@ -278,6 +278,15 @@ const ACTIVE = new Map<string, { readonly events: readonly PositionEvent[]; read
 const PROGRESS = new Map<string, SearchProgress>();
 const isPrefix = (a: readonly PositionEvent[], b: readonly PositionEvent[]) => a.length <= b.length && JSON.stringify(a) === JSON.stringify(b.slice(0, a.length));
 
+/** A solve's progress, starting it the first time it's asked for (a progress redraw must not restart it). */
+function solving(k: string, board: Board, acted: readonly string[], pinned: PlannedAction | undefined, risk: RiskBudget | undefined, done: () => void): SearchProgress {
+  if (!PROGRESS.has(k)) {
+    PROGRESS.set(k, { expanded: 0, bound: board.turn });
+    solve(k, board, acted, pinned, risk, done);
+  }
+  return PROGRESS.get(k)!;
+}
+
 /** Solves in the worker (else here, after the page draws), then calls back; progress redraws as it comes. */
 function solve(k: string, board: Board, acted: readonly string[], pinned: PlannedAction | undefined, risk: RiskBudget | undefined, done: () => void): void {
   const options = { acted, ...(pinned ? { pinned } : {}), ...(risk && Object.keys(risk.worth).length ? { worth: risk.worth } : {}), ...(risk?.budget !== undefined ? { budget: risk.budget } : {}) };
@@ -335,11 +344,7 @@ function content(ctx: PositionContext, start: Board, redraw: () => void): (HTMLE
     if (plan) ACTIVE.set(lineKey, { events, plan });
   }
   if (!plan) {
-    if (!PROGRESS.has(k)) {
-      PROGRESS.set(k, { expanded: 0, frontier: 1, bound: board.turn });
-      solve(k, board, acted, ui.mine, ctx.risk, () => root());
-    }
-    const p = PROGRESS.get(k)!;
+    const p = solving(k, board, acted, ui.mine, ctx.risk, () => root());
     return [
       h('h3', {}, 'Position plan'),
       h('p', { class: 'muted' }, `Searching every turn to the rout on the captured map… ${p.expanded} line${p.expanded === 1 ? '' : 's'} explored${p.bestRout ? ` · best so far: rout on turn ${p.bestRout}` : ''} · nothing routs before turn ${p.bound}`),
@@ -785,11 +790,7 @@ function tryPanel(ctx: PositionContext, b: Board, acted: readonly string[], plan
   const k = planKey(ctx.map, events, t.action, units);
   const mine = PLANS.get(k);
   if (!mine) {
-    if (!PROGRESS.has(k)) {
-      PROGRESS.set(k, { expanded: 0, frontier: 1, bound: b.turn });
-      solve(k, b, acted, t.action, ctx.risk, redraw);
-    }
-    const p = PROGRESS.get(k)!;
+    const p = solving(k, b, acted, t.action, ctx.risk, redraw);
     return h('div', { class: 'small muted' }, `Solving to the rout around ${actionText(b, t.action)}… ${p.expanded} lines explored${p.bestRout ? ` · best so far: turn ${p.bestRout}` : ''}`);
   }
   const c = compare(mine, plan, nm);

@@ -402,7 +402,8 @@ export const DEEPER: readonly DeeperEntry[] = [
     ],
     jump: { to: 'log', target: 'prepare' },
     terms: [
-      { term: 'hard line', def: 'No death without a crit: after each player phase no unit is killable by the enemy phase with every non-crit hit landing, and no planned attack’s counter can kill.' },
+      { term: 'risk budget', def: 'The expected worth the plan may lose on a map: each unit’s death chance times its worth to the run, summed, kept within the loss the run plan already expects there. Chrom’s or Robin’s death is game over and kept under 1% on its own.' },
+      { term: 'proven rout', def: 'No open line could rout sooner: the search tried every line it opened (the best few ways to play each turn) to the end.' },
       { term: 'gang-up worst case', def: 'The awake enemies that can reach a unit attack it in the worst order, each from a free tile next to it (or in range): a foe that survives holds its tile, one your counter fells frees it for the next. Every non-crit hit lands; targeting-free, so safe whatever the AI picks.' },
       { term: 'confirm or correct', def: 'Tapping how each fight and the enemy phase really went; the plan re-solves from the board that leaves.' },
     ],

@@ -54,9 +54,23 @@ describe('trades, held weapons and water (#283)', () => {
     expect(drop).toBeDefined();
     const after = applyAction(b, drop!);
     expect(playerById(after, 'robin')!.at).toEqual([11, 12]);
-    // Robin's own menu on a water tile offers Thunder at range 2.
-    const water: PlannedAction[] = menuAt(prologueBoard({ robin: [11, 11] }), 'robin', [11, 11]);
+    // Robin on the water at (11,12) Thunders the Myrmidon at (9,12) from 2: it can't follow him there.
+    const wb = prologueBoard({ robin: [11, 12] });
+    const myrm = liveEnemies(wb).find((e) => e.at[0] === 9 && e.at[1] === 12)!;
+    const water: PlannedAction[] = menuAt(wb, 'robin', [11, 12]);
+    expect(water.some((a) => a.command.kind === 'attack' && a.command.target === myrm.id && a.command.weapon === 'Thunder')).toBe(true);
     expect(water.some((a) => a.command.kind === 'wait')).toBe(true);
+  });
+
+  it('offers a trade before a Separate and before a Pair Up', () => {
+    // Frederick carries Robin: he can take Robin's Bronze Sword, then set him down.
+    const b = prologueBoard({ frederick: [10, 12] }, { frederick: 'robin' });
+    expect(menuAt(b, 'frederick', [10, 12]).some((a) => a.command.kind === 'separate' && a.trade?.with === 'robin' && a.trade.item === 'Bronze Sword')).toBe(true);
+    // Lissa pairs onto Chrom after giving him her Vulnerary.
+    const p = prologueBoard();
+    const pair = menuAt(p, 'lissa', [3, 13]).find((a) => a.command.kind === 'pair' && a.trade?.with === 'chrom' && a.trade.give && a.trade.item === 'Vulnerary');
+    expect(pair).toBeDefined();
+    expect(playerById(applyAction(p, pair!), 'chrom')!.items.filter((i) => i.item === 'Vulnerary')).toHaveLength(2);
   });
 });
 

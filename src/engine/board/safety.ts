@@ -6,15 +6,15 @@
  *   from. A foe that survives holds its tile; one our counter fells frees it for the next (both branches are tried where
  *   the counter can fell it). Every non-crit hit lands, doubles counted, with the cautious skills (random ones as rolled
  *   when known, else all) and its damage procs assumed to fire (Luna, Aether, Ignis, Vengeance, Astra; Lethality always
- *   kills). A unit whose total reaches its HP breaks the line. Foes pass through each other; our units block.
+ *   kills). A unit whose total reaches its HP breaks the line. Foes pass through each other, our units block, and a
+ *   foe that doesn't attack (asleep, or out of reach) holds its tile.
  * - **Lethal counters** on our own attacks: a planned attack whose foe's full non-crit counter kills the attacker (our
  *   strikes may all miss) breaks the line too.
  * - HP carries between phases: the board's HP is the unit's HP now.
  * - **Death chance**: the same gang-up with every roll played at its true odds (hit is two random numbers, #281; crits,
  *   the unit's counters, Dual Guard), the foes' order and tiles still the worst for the unit: the most likely death over
  *   the orders the game could pick. A planned attack adds its own counter's death chance. `priceDeaths` turns it into
- *   the game-over chance and the expected worth lost (#282); the crit risk is the death chance of the units the hard line
- *   calls safe.
+ *   the game-over chance and the expected worth lost (#282).
  */
 import { exchange, exchangeEndings } from '../sim/exchange';
 import type { Foe, Matchup } from '../solver';
@@ -45,13 +45,15 @@ export type UnitSafety = {
 export function gangUp(b: Board, lead: PlayerPiece, foes: readonly EnemyPiece[]): { total: number; deathChance: number } {
   if (!foes.length) return { total: 0, deathChance: 0 };
   // Each foe's strike tiles: where it can stand and reach the lead (its own tile when it can't move). Foes pass through
-  // each other, so each is moved on a board without the rest.
+  // each other, so each is moved on a board without the rest; a foe that won't attack holds its tile (#282 review).
+  const attacking = new Set(foes.map((e) => e.id));
+  const held = new Set(liveEnemies(b).filter((e) => !attacking.has(e.id)).map((e) => tileKey(e.at)));
   const index = new Map<number, number>();
   const tiles = foes.map((e) => {
     const w = weaponOf(e);
     const from = e.stationary ? [tileKey(e.at)] : [...movement(withPieces(b, b.players, [e]), e).keys()];
     return from
-      .filter((k) => reaches(w, Math.abs(keyTile(k)[0] - lead.at[0]) + Math.abs(keyTile(k)[1] - lead.at[1])))
+      .filter((k) => !held.has(k) && reaches(w, manhattan(keyTile(k), lead.at)))
       .map((k) => {
         if (!index.has(k)) index.set(k, index.size);
         return { tile: keyTile(k), bit: index.get(k)! };
@@ -64,12 +66,14 @@ export function gangUp(b: Board, lead: PlayerPiece, foes: readonly EnemyPiece[])
     if (!m) fights.set(key, (m = forecast(b, lead, foes[i]!, lead.at, t)));
     return m;
   };
+  // A foe's round on the lead doesn't depend on the tile it strikes from (its own tile gives it nothing in Awakening);
+  // the tile matters for our counter (its Def/Avo there) and whether we reach it.
   const worst = foes.map((e) => worstRoundOn(b, e, lead).damage);
   // Worst non-crit total: whose turn, from which free tile, and whether our full counter fells it (a branch when it can).
-  const wMemo = new Map<string, number>();
-  const w = (mask: number, occ: bigint): number => {
+  const totalMemo = new Map<string, number>();
+  const worstTotal = (mask: number, occ: bigint): number => {
     const key = `${mask}:${occ}`;
-    const got = wMemo.get(key);
+    const got = totalMemo.get(key);
     if (got !== undefined) return got;
     let best = 0;
     foes.forEach((e, i) => {
@@ -77,22 +81,22 @@ export function gangUp(b: Board, lead: PlayerPiece, foes: readonly EnemyPiece[])
       for (const { tile, bit } of tiles[i]!) {
         if (occ & (1n << BigInt(bit))) continue;
         const m = fight(i, tile);
-        const counters = reaches(lead.fighter.weapon?.item, Math.abs(tile[0] - lead.at[0]) + Math.abs(tile[1] - lead.at[1]));
+        const counters = reaches(lead.fighter.weapon?.item, manhattan(tile, lead.at));
         const felled = counters && playFight(m, strikeOrder(m, 'enemy', true, true), Infinity, e.hp, 'all', 'none').enemyHp <= 0;
         const next = mask | (1 << i);
-        let after = w(next, occ | (1n << BigInt(bit)));
-        if (felled) after = Math.max(after, w(next, occ));
+        let after = worstTotal(next, occ | (1n << BigInt(bit)));
+        if (felled) after = Math.max(after, worstTotal(next, occ));
         best = Math.max(best, worst[i]! + after);
       }
     });
-    wMemo.set(key, best);
+    totalMemo.set(key, best);
     return best;
   };
   // Death chance: the same choices, each fight's endings at their true odds (expectimax).
-  const pMemo = new Map<string, number>();
-  const p = (mask: number, occ: bigint, hp: number): number => {
+  const oddsMemo = new Map<string, number>();
+  const deathOdds = (mask: number, occ: bigint, hp: number): number => {
     const key = `${mask}:${occ}:${hp}`;
-    const got = pMemo.get(key);
+    const got = oddsMemo.get(key);
     if (got !== undefined) return got;
     let best = 0;
     foes.forEach((e, i) => {
@@ -102,15 +106,15 @@ export function gangUp(b: Board, lead: PlayerPiece, foes: readonly EnemyPiece[])
         let v = 0;
         for (const end of exchangeEndings(fight(i, tile), lead.fighter.weapon?.item, hp, e.hp, 'enemy')) {
           if (end.lead <= 0) v += end.p;
-          else v += end.p * p(mask | (1 << i), end.foe > 0 ? occ | (1n << BigInt(bit)) : occ, end.lead);
+          else v += end.p * deathOdds(mask | (1 << i), end.foe > 0 ? occ | (1n << BigInt(bit)) : occ, end.lead);
         }
         best = Math.max(best, v);
       }
     });
-    pMemo.set(key, best);
+    oddsMemo.set(key, best);
     return best;
   };
-  return { total: w(0, 0n), deathChance: p(0, 0n, lead.hp) };
+  return { total: worstTotal(0, 0n), deathChance: deathOdds(0, 0n, lead.hp) };
 }
 
 /** A planned attack whose full non-crit counter kills the attacker. */
@@ -119,10 +123,8 @@ export type LethalCounter = { readonly unit: string; readonly enemy: string; rea
 export type Safety = {
   readonly units: readonly UnitSafety[];
   readonly lethalCounters: readonly LethalCounter[];
-  /** The hard line holds: no unit dies in the worst case and no planned attack's counter can kill. */
+  /** No death without a crit: no unit dies in the worst case and no planned attack's counter can kill. */
   readonly safe: boolean;
-  /** The summed death chance with crits (see the module comment). */
-  readonly critRisk: number;
   /** The enemies awake for the phase (after the wake checks). */
   readonly awake: readonly string[];
 };
@@ -185,7 +187,7 @@ export function safety(board: Board, attacks: readonly PlannedAttack[] = []): Sa
   for (const a of attacks) {
     const u = board.players.find((x) => x.id === a.unit);
     const e = enemyById(board, a.enemy);
-    if (!u || !e || !reaches(weaponOf(e), Math.abs(a.from[0] - e.at[0]) + Math.abs(a.from[1] - e.at[1]))) continue;
+    if (!u || !e || !reaches(weaponOf(e), manhattan(a.from, e.at))) continue;
     const m = forecast(board, { ...u, hp: a.hp ?? u.hp }, e, a.from, e.at, a.weapon);
     const die = 1 - exchange(m, (a.weapon ?? u.fighter.weapon)?.item, a.hp ?? u.hp, e.hp, 'player').survive;
     if (die > 0) attackDeath.set(a.unit, 1 - (1 - (attackDeath.get(a.unit) ?? 0)) * (1 - die));
@@ -202,7 +204,6 @@ export function safety(board: Board, attacks: readonly PlannedAttack[] = []): Sa
     units: priced,
     lethalCounters,
     safe: priced.every((u) => !u.dies) && !lethalCounters.length,
-    critRisk: priced.filter((u) => !u.dies).reduce((n, u) => n + u.deathChance, 0),
     awake: awake.map((e) => e.id),
   };
 }
@@ -217,11 +218,11 @@ export type DeathPrice = { readonly gameOver: number; readonly worthLost: number
  * Prices a phase's death chances: Chrom's or Robin's death is game over (the chance any of them dies); every other
  * unit's costs its worth in flawless points, times its chance to die. A unit with no worth given costs nothing.
  */
-export function priceDeaths(s: Safety, worth: Readonly<Record<string, number>>, gameOverUnits: readonly string[] = GAME_OVER_UNITS): DeathPrice {
+export function priceDeaths(s: Safety, worth: Readonly<Record<string, number>>): DeathPrice {
   let alive = 1;
   let worthLost = 0;
   for (const u of s.units) {
-    if (gameOverUnits.includes(u.unit)) alive *= 1 - u.deathChance;
+    if (GAME_OVER_UNITS.includes(u.unit)) alive *= 1 - u.deathChance;
     else worthLost += u.deathChance * (worth[u.unit] ?? 0);
   }
   return { gameOver: 1 - alive, worthLost };
