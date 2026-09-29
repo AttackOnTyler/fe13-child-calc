@@ -29,13 +29,12 @@ import {
   playFight,
   reaches,
   strikeOrder,
-  switched,
+  actingTiles,
   holdBack,
   leads,
   lineupBoard,
   liveEnemies,
   menuAt,
-  movement,
   onMap,
   playerById,
   replay,
@@ -687,10 +686,9 @@ function boardView(b: Board, turn: TurnPlan | undefined, ui: UiState, redraw: ()
   const foeMoves = new Set((turn?.enemy ?? []).filter((a) => a.to[0] !== a.from[0] || a.to[1] !== a.from[1]).map((a) => tileKey(a.to)));
   // The equal tiles the game may pick instead (#273).
   const foeMaybe = new Set((turn?.enemy ?? []).flatMap((a) => (a.alternatives ?? []).map(tileKey)));
-  // Trying a pair's back: it moves as the lead after a Switch (#274).
+  // Trying a pair's back: its lead moves the pair, then Switch (#274, #291): the lead's reach either way.
   const trying = ui.trying?.unit ? playerById(b, ui.trying.unit) : undefined;
-  const moving = trying?.carriedBy ? switched(b, trying.id) : b;
-  const reach = trying ? new Set(movement(moving, playerById(moving, trying.id)!).keys()) : undefined;
+  const reach = trying ? actingTiles(b, trying.id) : undefined;
   const click = (at: Tile) => {
     // The outer ring isn't on the playable map (#271): nothing stands there.
     if (!live || !onMap(map, at)) return;
@@ -754,15 +752,15 @@ function tryPanel(ctx: PositionContext, b: Board, acted: readonly string[], plan
   const u = playerById(b, t.unit);
   if (!u) return null;
   const back = h('button', { class: 'ghost mini', onclick: () => ((ui.trying = undefined), redraw()) }, 'Back');
-  // A pair: try it as it stands, or Switch first so the back leads (#274). A switched pair acts on its lead's action (a
+  // A pair: try it as it stands, or with the back leading after a Switch at the tile (#274, #291). A switched pair acts on its lead's action (a
   // unit that paired up can still take the lead), so it's the lead that must not have acted.
   const lead = u.carriedBy ? playerById(b, u.carriedBy) : undefined;
   if (acted.includes(lead?.id ?? u.id)) return h('div', { ...guide('position-try'), class: 'small' }, `${lead?.name ?? u.name} has acted this turn. `, back);
   const partner = u.back ?? lead?.id;
   const switchButton = partner
-    ? h('button', { class: `mini${u.carriedBy ? ' on' : ''}`, onclick: () => ((ui.trying = { unit: partner }), redraw()) }, u.carriedBy ? `Switched: ${u.name} leads (undo)` : `Switch first (${nm(partner)} leads)`)
+    ? h('button', { class: `mini${u.carriedBy ? ' on' : ''}`, onclick: () => ((ui.trying = { unit: partner }), redraw()) }, u.carriedBy ? `Switched: ${u.name} leads (undo)` : `Switch at the tile (${nm(partner)} leads)`)
     : null;
-  if (!t.tile) return h('div', { ...guide('position-try'), class: 'small' }, `${u.name}${lead ? `, after a Switch (${lead.name} behind)` : ''}: click a tile it can reach (outlined). `, switchButton, back);
+  if (!t.tile) return h('div', { ...guide('position-try'), class: 'small' }, `${u.name}${lead ? `, after ${lead.name} moves the pair and Switches` : ''}: click a tile ${lead ? `${lead.name} can` : 'it can'} reach (outlined). `, switchButton, back);
   if (!t.action) {
     const menu = menuAt(b, u.id, t.tile);
     return h(

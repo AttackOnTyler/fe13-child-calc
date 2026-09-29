@@ -1264,7 +1264,7 @@ class MapState {
    * - A bonded pair (`MapPlayInput.bonds`: a couple still to marry) stays together while together has safe work, its
    *   support growing from each combat; a unit with a talk due (#184) keeps its action, in front.
    * The game's costs: Separate spends the front's action (its back, dropped beside it, still acts); Pair Up spends the
-   * mover's (the other acts, paired); Switch is free, once a turn, before the pair moves (it loses the move left).
+   * mover's (the other acts, paired); Switch is free, and the pair moves on the lead's reach, with no move after it (#291).
    */
   chooseStances() {
     const joining = this.joining('enemy-phase').map(([g, n]) => [this.groupIndex(g), n] as const);
