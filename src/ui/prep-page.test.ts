@@ -68,7 +68,7 @@ describe('the preparation page (#207): pair cards beside one checklist', () => {
     it('says what to do once play runs past the stance plan’s last turn, instead of going quiet', () => {
       const play = card().stances;
       expect(play.slice(0, -1).every((s) => /^T\d+(–\d+)?$/.test(s.turns))).toBe(true);
-      expect(play[play.length - 1]).toEqual({ turns: 'T3+', text: 'past the play (it ends on turn 2): hold the last stance, and check each attack’s counter below before you commit' });
+      expect(play[play.length - 1]).toEqual({ turns: 'T4+', text: 'past the play (it ends on turn 3): hold the last stance, and check each attack’s counter below before you commit' });
     });
 
     it('gives the stance each pair fights in, which the matchup table scores (#239): apart here, not together', () => {
@@ -78,14 +78,14 @@ describe('the preparation page (#207): pair cards beside one checklist', () => {
 
     it('warns when an attack leaves the foe standing and its counter can kill, with the hit chance and the safe order', () => {
       // Chrom’s Silver Sword leaves Validar standing; Grima’s Truth hits back for 21 at 82% (the game’s forecast, #239):
-      // from 21 HP, Chrom dies 82% of the time. Robin takes the counter first, and Chrom only finishes (one hit of 18
-      // kills before it answers, so only a miss lets it: 6% × 82%).
+      // from 21 HP, Chrom dies 93.7% of the time (82 displayed is 93.7% true hit, #281). Robin takes the counter first,
+      // and Chrom only finishes (one hit of 18 kills before it answers, so only a miss lets it).
       expect(card().counters).toContain(
-        'Chrom attacking Validar (Sorcerer): it can live, and its counter (21 damage, 82% hit) kills Chrom at 21 HP or less (82.0% there). At that HP: Robin (M) attacks first, and Chrom only finishes it (at 18 HP or less left: 4.9% there).',
+        'Chrom attacking Validar (Sorcerer): it can live, and its counter (21 damage, 82% hit) kills Chrom at 21 HP or less (93.7% there). At that HP: Robin (M) attacks first, and Chrom only finishes it (at 18 HP or less left: 0.6% there).',
       );
       // Each unit on the card is checked, the deadliest first.
       expect(card().counters).toHaveLength(2);
-      expect(card().counters[0]).toMatch(/^Robin \(M\) attacking Validar \(Sorcerer\): .* At that HP: Chrom attacks first, and Robin \(M\) only finishes it/);
+      expect(card().counters[1]).toMatch(/^Robin \(M\) attacking Validar \(Sorcerer\): .* At that HP: Chrom attacks first, and Robin \(M\) only finishes it/);
     });
   });
 

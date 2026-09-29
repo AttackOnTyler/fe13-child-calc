@@ -43,7 +43,7 @@
  */
 import type { GameItem } from '../../game-data/items';
 import { bestWeapon, matchup, type Fighter, type Foe, type Matchup, type SupportLevel } from '../solver';
-import { exchange, leadHpAfter, type Exchange, type Initiator } from './exchange';
+import { exchange, leadHpAfter, trueHit, type Exchange, type Initiator } from './exchange';
 import { createRng, type Rng } from './random';
 import type { BlindSpotId } from '../assumptions';
 import { dances, mergeRally, potionHeal, rallied, rallyKey, rallyOf, reachChance, staffEffect, type ArmySpread, type RallyBonus, type SimItem, type StaffEffect } from './sustain';
@@ -1133,7 +1133,7 @@ class MapState {
     const bonus = this.bonus[gi];
     const { m } = this.combatWith(bonus ? ralliedGroup(a.grp, bonus) : a.grp, a.rows, bonus ? 1 : 0, f);
     if (m.backDamage <= 0) return 0;
-    const p = (m.dualStrikeRate / 100) * (m.backHit / 100);
+    const p = (m.dualStrikeRate / 100) * trueHit(m.backHit);
     return 1 - (1 - p) ** Math.max(1, m.hits);
   }
 

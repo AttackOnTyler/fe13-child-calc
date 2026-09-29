@@ -158,8 +158,9 @@ describe('each number’s blind spots (#210)', () => {
 
 describe('the ceiling’s explanation (#210)', () => {
   it('splits what caps don’t fix between the endpoint’s fights', () => {
-    // A titan that threatens even a capped army (Str 39 and its A rank's +1 Attack, #239).
-    const titan: Foe = { name: 'Titan', className: 'Berserker', count: 3, stats: stats(60, 39, 0, 60, 60, 30, 20, 20), weapon: itemByName('Silver Axe'), skills: [], boss: false, level: 20 };
+    // A titan that threatens even a capped army (Str 45 and its A rank's +1 Attack, #239; Str 39 stopped threatening once
+    // true hit, #281, made the capped army's high Hit near-certain).
+    const titan: Foe = { name: 'Titan', className: 'Berserker', count: 3, stats: stats(60, 45, 0, 60, 60, 30, 20, 20), weapon: itemByName('Silver Axe'), skills: [], boss: false, level: 20 };
     const hard: RunSimInput = { ...input, maps: [step(rout('a', [brute])), step(rout('end', [titan]))] };
     const ctx = { input: hard, chance: engine.simulateRuns(hard, 1, 2), seed: 1 };
     const e = engine.explain('ceiling', ctx)!;

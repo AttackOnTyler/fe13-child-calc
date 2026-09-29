@@ -139,7 +139,7 @@ describe('the seed (#198)', () => {
     expect(['M', 'F']).toContain(plan.robin.gender);
     expect(plan.robin.asset).not.toBe(plan.robin.flaw);
     // Without a Robin the old path leaves Robin out; the plan fields its Robin in the Prologue.
-    expect(engine.flawlessChance(open, { runs: 1 }).maps[1]!.lineup?.deployed).not.toContain('robin');
+    expect(engine.flawlessChance(open, { runs: 1 }).maps[1]!.lineup?.deployed ?? []).not.toContain('robin');
     expect(engine.flawlessChance(open, { runs: 1, plan }).maps[1]!.lineup?.deployed).toContain('robin');
   });
 
