@@ -214,6 +214,25 @@ export const weaponsOf = (names: readonly string[]): Weapon[] =>
     return item && item.kind !== 'staff' && item.kind !== 'item' && reachOf(item) ? [{ item }] : [];
   });
 
+/**
+ * Whether a unit can use an item (#283's trades): any consumable, or a weapon or staff of a kind its class wields (the
+ * class bases' weapon kinds; weapon ranks aren't recorded, so any rank passes) that isn't locked to other units or
+ * classes (the item's "only": "Chrom and Marth", "Lord, Great Lord, and Lodestar"; an enemy-only item never).
+ */
+export function canUse(className: string, item: GameItem | undefined, unitName = ''): boolean {
+  if (!item) return false;
+  if (item.kind === 'item') return true;
+  const cls = className.replace(/ \([MF]\)$/, '');
+  if (item.only) {
+    const who = item.only.split(/;|,| and /).map((x) => x.trim()).filter(Boolean);
+    if (who.some((x) => /enemy/i.test(x)) || !who.some((x) => x === cls || x === unitName)) return false;
+  }
+  const id = classIdByName(cls);
+  const base = id ? CLASS_BASES[id] : undefined;
+  const kinds = (base?.any ?? base?.M ?? base?.F)?.weapons as readonly string[] | undefined;
+  return !!kinds?.includes(item.kind);
+}
+
 /** A class's base Mov (the class bases), 5 when unknown. */
 export function classMov(className: string): number {
   const id = classIdByName(className.replace(/ \([MF]\)$/, ''));

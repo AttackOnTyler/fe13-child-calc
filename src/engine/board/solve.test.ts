@@ -95,7 +95,8 @@ describe('the position solver (#265)', () => {
     expect(menuAt(b, 'lissa', [2, 12]).some((a) => a.command.kind === 'heal')).toBe(false);
     // Hurt the lead too: the heal is on Robin.
     b = { ...b, players: b.players.map((p) => (p.id === 'robin' ? { ...p, hp: 10 } : p)) };
-    const heals = menuAt(b, 'lissa', [2, 12]).filter((a) => a.command.kind === 'heal');
+    // Without a trade first (a trade before the heal is offered too, #283).
+    const heals = menuAt(b, 'lissa', [2, 12]).filter((a) => a.command.kind === 'heal' && !a.trade);
     expect(heals.map((a) => (a.command as { target: string }).target)).toEqual(['robin']);
   });
 });
